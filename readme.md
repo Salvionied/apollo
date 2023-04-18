@@ -114,6 +114,19 @@
     
 
 - [ ] TxBuilding
+    - [X] Basic Tx Building
+    - [X] Basic Smart Contract Interaction
+    - [ ] Advanced Smart Contract Interaction
+    - [ ] Coin Selectors
+        - [X] LargestFirst
+        - [ ] RandomImprove
+        - [ ] Greedy
+    - [ ] Utility Functions
+    - [ ] Backends
+        - [X] Blockfrost
+        - [ ] Ogmios + Kupo
+        - [ ] DBSync
+        - [ ] Carybdis
 
 - [ ] Protocols
     - [ ] Simple One Off Protocols
