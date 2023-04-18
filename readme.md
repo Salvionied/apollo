@@ -1,5 +1,9 @@
 # Apollo: Pure Golang Cardano Building blocks 
 
+## Pure Golang Cardano Serialization
+
+The Objective of this library is to give Developers Access to each and every needed resource for cardano development.
+The final goal is to be able to have this library interact directly with the node without intermediaries.
 
 
 ### TODO:
