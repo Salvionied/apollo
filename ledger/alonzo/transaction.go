@@ -1,12 +1,12 @@
 package alonzo
 
 import (
-	"Salvionied/apollo/ledger/common"
-	"Salvionied/apollo/ledger/shelley"
-	"Salvionied/apollo/serialization"
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/MultiAsset"
-	"Salvionied/apollo/serialization/Value"
+	"github.com/github.com/salvionied/apollo/ledger/common"
+	"github.com/github.com/salvionied/apollo/ledger/shelley"
+	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/github.com/salvionied/apollo/serialization/Address"
+	"github.com/github.com/salvionied/apollo/serialization/MultiAsset"
+	"github.com/github.com/salvionied/apollo/serialization/Value"
 )
 
 type Transaction struct {

@@ -1,18 +1,19 @@
 package CoinSelection
 
 import (
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/Amount"
-	"Salvionied/apollo/serialization/MultiAsset"
-	"Salvionied/apollo/serialization/TransactionOutput"
-	"Salvionied/apollo/serialization/UTxO"
-	"Salvionied/apollo/serialization/Value"
-	"Salvionied/apollo/txBuilding/Backend/Base"
-	"Salvionied/apollo/txBuilding/Utils"
 	"fmt"
 	"math"
 	"math/rand"
 	"sort"
+
+	"github.com/github.com/salvionied/apollo/serialization/Address"
+	"github.com/github.com/salvionied/apollo/serialization/Amount"
+	"github.com/github.com/salvionied/apollo/serialization/MultiAsset"
+	"github.com/github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/github.com/salvionied/apollo/serialization/Value"
+	"github.com/github.com/salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/github.com/salvionied/apollo/txBuilding/Utils"
 )
 
 func _reverse[S ~[]E, E any](s S) {

@@ -1,4 +1,4 @@
-module Salvionied/apollo
+module github.com/github.com/salvionied/apollo
 
 go 1.20
 

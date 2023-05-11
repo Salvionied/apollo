@@ -1,5 +1,5 @@
 package Withdrawal
 
-import "Salvionied/apollo/serialization"
+import "github.com/github.com/salvionied/apollo/serialization"
 
 type Withdrawal map[serialization.CustomBytes]int

@@ -1,14 +1,15 @@
 package TransactionOutput
 
 import (
-	"Salvionied/apollo/serialization"
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/PlutusData"
-	"Salvionied/apollo/serialization/Value"
 	"encoding/hex"
 	"fmt"
 	"log"
 	"reflect"
+
+	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/github.com/salvionied/apollo/serialization/Address"
+	"github.com/github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/github.com/salvionied/apollo/serialization/Value"
 
 	"github.com/Salvionied/cbor/v2"
 )

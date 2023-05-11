@@ -1,20 +1,21 @@
 package FixedChainContext
 
 import (
-	"Salvionied/apollo/serialization"
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/Asset"
-	"Salvionied/apollo/serialization/AssetName"
-	"Salvionied/apollo/serialization/MultiAsset"
-	"Salvionied/apollo/serialization/Policy"
-	"Salvionied/apollo/serialization/Redeemer"
-	"Salvionied/apollo/serialization/Transaction"
-	"Salvionied/apollo/serialization/TransactionInput"
-	"Salvionied/apollo/serialization/TransactionOutput"
-	"Salvionied/apollo/serialization/UTxO"
-	"Salvionied/apollo/serialization/Value"
-	"Salvionied/apollo/txBuilding/Backend/Base"
 	"reflect"
+
+	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/github.com/salvionied/apollo/serialization/Address"
+	"github.com/github.com/salvionied/apollo/serialization/Asset"
+	"github.com/github.com/salvionied/apollo/serialization/AssetName"
+	"github.com/github.com/salvionied/apollo/serialization/MultiAsset"
+	"github.com/github.com/salvionied/apollo/serialization/Policy"
+	"github.com/github.com/salvionied/apollo/serialization/Redeemer"
+	"github.com/github.com/salvionied/apollo/serialization/Transaction"
+	"github.com/github.com/salvionied/apollo/serialization/TransactionInput"
+	"github.com/github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/github.com/salvionied/apollo/serialization/Value"
+	"github.com/github.com/salvionied/apollo/txBuilding/Backend/Base"
 
 	"github.com/Salvionied/cbor/v2"
 )

@@ -1,8 +1,9 @@
 package Asset
 
 import (
-	"Salvionied/apollo/serialization/AssetName"
 	"reflect"
+
+	"github.com/github.com/salvionied/apollo/serialization/AssetName"
 )
 
 type Asset[V int64 | uint64] map[AssetName.AssetName]V

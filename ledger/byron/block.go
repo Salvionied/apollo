@@ -1,7 +1,7 @@
 package byron
 
 import (
-	"Salvionied/apollo/ledger/common"
+	"github.com/github.com/salvionied/apollo/ledger/common"
 
 	"github.com/Salvionied/cbor/v2"
 )

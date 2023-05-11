@@ -1,10 +1,10 @@
 package alonzo
 
 import (
-	"Salvionied/apollo/ledger/shelley"
-	"Salvionied/apollo/serialization/NativeScript"
-	"Salvionied/apollo/serialization/PlutusData"
-	"Salvionied/apollo/serialization/Redeemer"
+	"github.com/github.com/salvionied/apollo/ledger/shelley"
+	"github.com/github.com/salvionied/apollo/serialization/NativeScript"
+	"github.com/github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/github.com/salvionied/apollo/serialization/Redeemer"
 )
 
 type Block struct {

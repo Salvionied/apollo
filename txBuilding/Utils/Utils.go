@@ -1,12 +1,13 @@
 package Utils
 
 import (
-	"Salvionied/apollo/serialization"
-	"Salvionied/apollo/serialization/TransactionOutput"
-	"Salvionied/apollo/serialization/UTxO"
-	"Salvionied/apollo/txBuilding/Backend/Base"
 	"encoding/hex"
 	"log"
+
+	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/github.com/salvionied/apollo/txBuilding/Backend/Base"
 
 	"github.com/Salvionied/cbor/v2"
 )

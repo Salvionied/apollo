@@ -1,9 +1,10 @@
 package Errors
 
 import (
-	"Salvionied/apollo/serialization/TransactionOutput"
-	"Salvionied/apollo/serialization/UTxO"
 	"fmt"
+
+	"github.com/github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/github.com/salvionied/apollo/serialization/UTxO"
 )
 
 type InvalidTransactionException struct {

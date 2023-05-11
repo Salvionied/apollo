@@ -1,12 +1,13 @@
 package Value
 
 import (
-	"Salvionied/apollo/serialization/Amount"
-	"Salvionied/apollo/serialization/MultiAsset"
 	"errors"
 	"fmt"
 	"log"
 	"reflect"
+
+	"github.com/github.com/salvionied/apollo/serialization/Amount"
+	"github.com/github.com/salvionied/apollo/serialization/MultiAsset"
 
 	"github.com/Salvionied/cbor/v2"
 )

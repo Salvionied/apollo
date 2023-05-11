@@ -1,10 +1,10 @@
 package TransactionWitnessSet
 
 import (
-	"Salvionied/apollo/serialization/NativeScript"
-	"Salvionied/apollo/serialization/PlutusData"
-	"Salvionied/apollo/serialization/Redeemer"
-	"Salvionied/apollo/serialization/VerificationKeyWitness"
+	"github.com/github.com/salvionied/apollo/serialization/NativeScript"
+	"github.com/github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/github.com/salvionied/apollo/serialization/Redeemer"
+	"github.com/github.com/salvionied/apollo/serialization/VerificationKeyWitness"
 )
 
 type TransactionWitnessSet struct {

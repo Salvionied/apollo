@@ -1,12 +1,13 @@
 package Address
 
 import (
-	"Salvionied/apollo/crypto/bech32"
-	"Salvionied/apollo/serialization"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
+
+	"github.com/github.com/salvionied/apollo/crypto/bech32"
+	"github.com/github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 )

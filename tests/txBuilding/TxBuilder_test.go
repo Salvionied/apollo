@@ -1,17 +1,18 @@
 package txBuilding_test
 
 import (
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/Asset"
-	"Salvionied/apollo/serialization/AssetName"
-	"Salvionied/apollo/serialization/MultiAsset"
-	"Salvionied/apollo/serialization/Policy"
-	"Salvionied/apollo/serialization/TransactionOutput"
-	"Salvionied/apollo/serialization/Value"
-	"Salvionied/apollo/txBuilding/Backend/FixedChainContext"
-	"Salvionied/apollo/txBuilding/TxBuilder"
 	"reflect"
 	"testing"
+
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
+	"github.com/Salvionied/apollo/txBuilding/TxBuilder"
 )
 
 var decoded_address, _ = Address.DecodeAddress("addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg52x")

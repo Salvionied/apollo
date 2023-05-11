@@ -1,10 +1,11 @@
 package Key
 
 import (
-	"Salvionied/apollo/serialization"
 	"crypto/ed25519"
 	"encoding/hex"
 	"log"
+
+	"github.com/github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"

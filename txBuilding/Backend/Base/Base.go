@@ -1,11 +1,11 @@
 package Base
 
 import (
-	"Salvionied/apollo/serialization"
-	"Salvionied/apollo/serialization/Address"
-	"Salvionied/apollo/serialization/Redeemer"
-	"Salvionied/apollo/serialization/Transaction"
-	"Salvionied/apollo/serialization/UTxO"
+	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/github.com/salvionied/apollo/serialization/Address"
+	"github.com/github.com/salvionied/apollo/serialization/Redeemer"
+	"github.com/github.com/salvionied/apollo/serialization/Transaction"
+	"github.com/github.com/salvionied/apollo/serialization/UTxO"
 )
 
 type GenesisParameters struct {
