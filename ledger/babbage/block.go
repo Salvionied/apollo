@@ -1,10 +1,10 @@
 package babbage
 
 import (
-	"github.com/github.com/salvionied/apollo/ledger/shelley"
-	"github.com/github.com/salvionied/apollo/serialization/NativeScript"
-	"github.com/github.com/salvionied/apollo/serialization/PlutusData"
-	"github.com/github.com/salvionied/apollo/serialization/Redeemer"
+	"github.com/salvionied/apollo/ledger/shelley"
+	"github.com/salvionied/apollo/serialization/NativeScript"
+	"github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/salvionied/apollo/serialization/Redeemer"
 )
 
 type Block struct {

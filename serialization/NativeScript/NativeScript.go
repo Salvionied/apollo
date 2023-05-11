@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"

@@ -6,8 +6,8 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/github.com/salvionied/apollo/serialization/Amount"
-	"github.com/github.com/salvionied/apollo/serialization/MultiAsset"
+	"github.com/salvionied/apollo/serialization/Amount"
+	"github.com/salvionied/apollo/serialization/MultiAsset"
 
 	"github.com/Salvionied/cbor/v2"
 )

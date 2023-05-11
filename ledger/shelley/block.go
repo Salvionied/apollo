@@ -1,8 +1,8 @@
 package shelley
 
 import (
-	"github.com/github.com/salvionied/apollo/ledger/common"
-	"github.com/github.com/salvionied/apollo/serialization/NativeScript"
+	"github.com/salvionied/apollo/ledger/common"
+	"github.com/salvionied/apollo/serialization/NativeScript"
 )
 
 type ShelleyBlock struct {

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/github.com/salvionied/apollo/serialization"
+	"github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 

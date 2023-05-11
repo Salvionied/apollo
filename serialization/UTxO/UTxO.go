@@ -1,8 +1,8 @@
 package UTxO
 
 import (
-	"github.com/github.com/salvionied/apollo/serialization/TransactionInput"
-	"github.com/github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/salvionied/apollo/serialization/TransactionInput"
+	"github.com/salvionied/apollo/serialization/TransactionOutput"
 )
 
 type Container[T any] interface {

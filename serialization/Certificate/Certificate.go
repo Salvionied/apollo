@@ -1,6 +1,6 @@
 package Certificate
 
-import "github.com/github.com/salvionied/apollo/serialization"
+import "github.com/salvionied/apollo/serialization"
 
 type StakeCredential struct {
 	_          struct{} `cbor:"toarray"`

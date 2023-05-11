@@ -1,6 +1,6 @@
 package byron
 
-import "github.com/github.com/salvionied/apollo/ledger/common"
+import "github.com/salvionied/apollo/ledger/common"
 
 type TxWithWitness struct {
 	_         struct{} `cbor:",toarray"`

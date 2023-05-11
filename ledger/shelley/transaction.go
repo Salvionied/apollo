@@ -1,6 +1,6 @@
 package shelley
 
-import "github.com/github.com/salvionied/apollo/ledger/common"
+import "github.com/salvionied/apollo/ledger/common"
 
 type Transaction struct {
 	TransactionInputs  []TransactionInput  `cbor:"0,keyasint"`

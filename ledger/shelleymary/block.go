@@ -1,6 +1,6 @@
 package shelleymary
 
-import "github.com/github.com/salvionied/apollo/ledger/shelley"
+import "github.com/salvionied/apollo/ledger/shelley"
 
 type ShelleyMaryBlock struct {
 	_     struct{} `cbor:",toarray"`
