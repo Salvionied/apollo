@@ -16,7 +16,7 @@ import (
 
 type _Script struct {
 	_      struct{} `cbor:",toarray"`
-	script []byte
+	Script []byte
 }
 
 type _DatumOption struct {
@@ -25,7 +25,7 @@ type _DatumOption struct {
 }
 
 type ScriptRef struct {
-	script _Script
+	Script _Script
 }
 
 type CostModels map[serialization.CustomBytes]CM
@@ -48,7 +48,7 @@ func (cm CM) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(partial[1:])
 }
 
-var PLUTUSV1COSTMODEL = map[string]int{
+var PLUTUSV1COSTMODEL = CM{
 	"addInteger-cpu-arguments-intercept":                       205665,
 	"addInteger-cpu-arguments-slope":                           812,
 	"addInteger-memory-arguments-intercept":                    1,
@@ -411,7 +411,8 @@ var PLUTUSV2COSTMODEL = CostView{
 	"verifySchnorrSecp256k1Signature-memory-arguments":         10,
 }
 
-var COST_MODELS = map[int]CostView{1: PLUTUSV2COSTMODEL}
+var COST_MODELSV2 = map[int]cbor.Marshaler{1: PLUTUSV2COSTMODEL}
+var COST_MODELSV1 = map[serialization.CustomBytes]cbor.Marshaler{{Value: "00"}: PLUTUSV1COSTMODEL}
 
 type PlutusType int
 
@@ -650,6 +651,24 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
+func PlutusDataHash(pd PlutusData) serialization.DatumHash {
+	finalbytes := []byte{}
+	bytes, err := cbor.Marshal(pd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	finalbytes = append(finalbytes, bytes...)
+	hash, err := blake2b.New(32, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = hash.Write(finalbytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := serialization.DatumHash{hash.Sum(nil)}
+	return r
+}
 func HashDatum(d cbor.Marshaler) serialization.DatumHash {
 	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(d)
@@ -665,8 +684,7 @@ func HashDatum(d cbor.Marshaler) serialization.DatumHash {
 	if err != nil {
 		log.Fatal(err)
 	}
-	r := serialization.DatumHash{}
-	copy(r.Payload[:], hash.Sum(nil))
+	r := serialization.DatumHash{hash.Sum(nil)}
 	return r
 }
 

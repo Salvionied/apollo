@@ -1,11 +1,25 @@
 package Base
 
 import (
+	"encoding/hex"
+	"log"
+	"strconv"
+
 	"github.com/salvionied/apollo/serialization"
 	"github.com/salvionied/apollo/serialization/Address"
+	"github.com/salvionied/apollo/serialization/Amount"
+	"github.com/salvionied/apollo/serialization/Asset"
+	"github.com/salvionied/apollo/serialization/AssetName"
+	"github.com/salvionied/apollo/serialization/MultiAsset"
+	"github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/salvionied/apollo/serialization/Policy"
 	"github.com/salvionied/apollo/serialization/Redeemer"
 	"github.com/salvionied/apollo/serialization/Transaction"
+	"github.com/salvionied/apollo/serialization/TransactionOutput"
 	"github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/salvionied/apollo/serialization/Value"
+
+	"github.com/Salvionied/cbor/v2"
 )
 
 type GenesisParameters struct {
@@ -54,6 +68,94 @@ type ProtocolParameters struct {
 
 func (p ProtocolParameters) GetCoinsPerUtxoByte() int {
 	return 4310
+}
+
+type Input struct {
+	Address             string          `json:"address"`
+	Amount              []AddressAmount `json:"amount"`
+	OutputIndex         int             `json:"output_index"`
+	DataHash            string          `json:"data_hash"`
+	InlineDatum         string          `json:"inline_datum"`
+	ReferenceScriptHash string          `json:"reference_script_hash"`
+	Collateral          bool            `json:"collateral"`
+	Reference           bool            `json:"reference"`
+}
+
+type Output struct {
+	Address             string          `json:"address"`
+	Amount              []AddressAmount `json:"amount"`
+	OutputIndex         int             `json:"output_index"`
+	DataHash            string          `json:"data_hash"`
+	InlineDatum         string          `json:"inline_datum"`
+	Collateral          bool            `json:"collateral"`
+	ReferenceScriptHash string          `json:"reference_script_hash"`
+}
+
+func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, PlutusData.PlutusData) {
+	address, _ := Address.DecodeAddress(o.Address)
+	amount := o.Amount
+	lovelace_amount := 0
+	multi_assets := MultiAsset.MultiAsset[int64]{}
+	for _, item := range amount {
+		if item.Unit == "lovelace" {
+			amount, err := strconv.Atoi(item.Quantity)
+			if err != nil {
+				log.Fatal(err)
+			}
+			lovelace_amount += amount
+		} else {
+			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
+			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+			_, ok := multi_assets[policy_id]
+			if !ok {
+				multi_assets[policy_id] = Asset.Asset[int64]{}
+			}
+			multi_assets[policy_id][asset_name] = int64(asset_quantity)
+		}
+	}
+	final_amount := Value.Value{}
+	if len(multi_assets) > 0 {
+		final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
+	} else {
+		final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
+	}
+	datum_hash := serialization.DatumHash{}
+	if o.DataHash != "" && o.InlineDatum == "" {
+		decoded_hash, err := hex.DecodeString(o.DataHash)
+		if err != nil {
+			log.Fatal(err)
+		}
+		datum_hash = serialization.DatumHash{Payload: decoded_hash}
+	}
+	datum := PlutusData.PlutusData{}
+	if o.InlineDatum != "" {
+		decoded, err := hex.DecodeString(o.InlineDatum)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var x PlutusData.PlutusData
+		err = cbor.Unmarshal(decoded, &x)
+		if err != nil {
+			log.Fatal(err)
+		}
+		datum = x
+	}
+	tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
+		Address:   address,
+		Amount:    final_amount,
+		DatumHash: datum_hash,
+		HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+	return tx_out, datum
+}
+
+type TxUtxos struct {
+	TxHash  string   `json:"hash"`
+	Inputs  []Input  `json:"inputs"`
+	Outputs []Output `json:"outputs"`
 }
 
 type ChainContext interface {

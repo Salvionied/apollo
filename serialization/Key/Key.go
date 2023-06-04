@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log"
 
+	"github.com/salvionied/apollo/crypto/bip32"
 	"github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
@@ -16,6 +17,15 @@ type SigningKey struct {
 }
 
 func Sign(message []byte, sk []byte) []byte {
+	if len(sk) != ed25519.PrivateKeySize {
+		sk, err := bip32.NewXPrv(sk)
+		if err != nil {
+			log.Fatal(err)
+		}
+		signature := sk.Sign(message)
+		return signature
+
+	}
 	res := ed25519.Sign(sk, message)
 	return res
 }

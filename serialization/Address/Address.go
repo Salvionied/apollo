@@ -88,7 +88,10 @@ func (addr Address) Bytes() []byte {
 }
 
 func (addr Address) String() string {
-	byteaddress, _ := bech32.ConvertBits(addr.Bytes(), 8, 5, true)
+	byteaddress, err := bech32.ConvertBits(addr.Bytes(), 8, 5, true)
+	if err != nil {
+		log.Fatal(err)
+	}
 	result, _ := bech32.Encode(addr.Hrp, byteaddress)
 	return result
 }

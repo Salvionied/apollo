@@ -1,8 +1,9 @@
 package Metadata
 
 import (
-	"github.com/salvionied/apollo/serialization"
 	"github.com/salvionied/apollo/serialization/NativeScript"
+
+	"github.com/salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -11,7 +12,7 @@ type MinimalMetadata map[string]any
 
 type PoliciesMetadata map[string]MinimalMetadata
 
-type TagMetadata map[string]PoliciesMetadata
+type TagMetadata map[string]any
 
 type Metadata map[int]TagMetadata
 
@@ -19,6 +20,14 @@ type ShelleyMaryMetadata struct {
 	_             struct{}                    `cbor:",toarray,omitempty"`
 	Metadata      Metadata                    `cbor:",omitempty"`
 	NativeScripts []NativeScript.NativeScript `cbor:",omitempty"`
+}
+
+func (smm *ShelleyMaryMetadata) MarshalCBOR() ([]byte, error) {
+	if len(smm.NativeScripts) > 0 {
+		return cbor.Marshal(smm)
+	} else {
+		return cbor.Marshal(smm.Metadata)
+	}
 }
 
 type AlonzoMetadata struct {

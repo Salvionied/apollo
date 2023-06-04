@@ -36,6 +36,7 @@ import (
 	"github.com/salvionied/apollo/txBuilding/Utils"
 
 	"github.com/Salvionied/cbor/v2"
+	"golang.org/x/exp/slices"
 )
 
 var FAKE_ADDRESS, _ = Address.DecodeAddress("addr1v8xrqjtlfluk9axpmjj5enh0uw0cduwhz7txsqyl36m3ukgqdsn8w")
@@ -123,7 +124,7 @@ func (tb *TransactionBuilder) AddInputAddress(address Address.Address) {
 	tb.InputAddresses = append(tb.InputAddresses, address)
 }
 
-func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{}, datum *PlutusData.PlutusData, redeemer *Redeemer.Redeemer) error {
+func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{}, datum *PlutusData.PlutusData, redeemer *Redeemer.Redeemer, isV1 bool) error {
 	if utxo.Output.GetAddress().AddressType != 0b0001 &&
 		utxo.Output.GetAddress().AddressType != 0b0010 &&
 		utxo.Output.GetAddress().AddressType != 0b0011 &&
@@ -150,15 +151,37 @@ func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{},
 		}
 		tb.InputsToRedeemers[Utils.ToCbor(utxo)] = *redeemer
 	}
-
-	//TODO
-	// if utxo.Output.HasScript() {
-
-	// } else if script == nil {
-
-	// } else {
-
-	// }
+	if script != nil {
+		tb.InputsToScripts = make(map[string]PlutusData.ScriptHashable)
+	}
+	if utxo.Output.IsPostAlonzo && len(utxo.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
+		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script)
+		tb.ReferenceInputs = append(tb.ReferenceInputs, utxo.Input)
+		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script))
+	} else if script == nil {
+		for _, i := range tb.LoadedUtxos {
+			if i.Output.IsPostAlonzo && len(i.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
+				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script)
+				tb.ReferenceInputs = append(tb.ReferenceInputs, i.Input)
+				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script))
+				break
+			}
+		}
+	} else {
+		if isV1 {
+			val, ok := script.(PlutusData.PlutusV1Script)
+			if !ok {
+				return errors.New("script type error")
+			}
+			tb.InputsToScripts[Utils.ToCbor(utxo)] = val
+		} else {
+			val, ok := script.(PlutusData.PlutusV2Script)
+			if !ok {
+				return errors.New("script type error")
+			}
+			tb.InputsToScripts[Utils.ToCbor(utxo)] = val
+		}
+	}
 
 	tb.Inputs = append(tb.Inputs, utxo)
 	return nil
@@ -168,7 +191,7 @@ func (tb *TransactionBuilder) AddMintingScript(script interface{}, redeemer Rede
 	//TODO : implement
 }
 
-func (tb *TransactionBuilder) AddOutput(txOut TransactionOutput.TransactionOutput, datum *PlutusData.Datum, add_datum_to_witness bool) {
+func (tb *TransactionBuilder) AddOutput(txOut TransactionOutput.TransactionOutput, datum *PlutusData.PlutusData, add_datum_to_witness bool) {
 	if datum != nil {
 		txOut.SetDatum(*datum)
 	}
@@ -380,9 +403,9 @@ func (tb *TransactionBuilder) _EstimateFee() int64 {
 
 func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	if len(tb.Datums) > 0 || len(tb.Redeemers()) > 0 {
-		native, plutusV1, plutusV2 := tb.Scripts()
+		witnessSet := tb.BuildWitnessSet()
 		sdh := ScriptDataHash(
-			native, plutusV1, plutusV2, tb.Redeemers(), tb.Datums,
+			witnessSet,
 		)
 		return &serialization.ScriptDataHash{Payload: sdh.Payload}
 
@@ -390,10 +413,20 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	return nil
 }
 
-func ScriptDataHash(nativeScripts []NativeScript.NativeScript, PV1Scripts []PlutusData.PlutusV1Script, PV2Scripts []PlutusData.PlutusV2Script, redeemers []Redeemer.Redeemer, datums map[string]PlutusData.PlutusData) *serialization.ScriptDataHash {
-	cost_models := map[int]PlutusData.CostView{}
+func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) *serialization.ScriptDataHash {
+	cost_models := map[int]cbor.Marshaler{}
+	redeemers := witnessSet.Redeemer
+	PV1Scripts := witnessSet.PlutusV1Script
+	PV2Scripts := witnessSet.PlutusV2Script
+	datums := witnessSet.PlutusData
+
+	isV1 := len(PV1Scripts) > 0
 	if len(redeemers) > 0 {
-		cost_models = PlutusData.COST_MODELS
+		if len(PV2Scripts) > 0 {
+			cost_models = PlutusData.COST_MODELSV2
+		} else if !isV1 {
+			cost_models = PlutusData.COST_MODELSV2
+		}
 	}
 	if redeemers == nil {
 		redeemers = []Redeemer.Redeemer{}
@@ -404,20 +437,26 @@ func ScriptDataHash(nativeScripts []NativeScript.NativeScript, PV1Scripts []Plut
 	}
 	var datum_bytes []byte
 	if len(datums) > 0 {
-		datum_list := make([]PlutusData.PlutusData, 0)
-		for _, datum := range datums {
-			datum_list = append(datum_list, datum)
-		}
-		datum_bytes, err = cbor.Marshal(datum_list)
+
+		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		datum_bytes = []byte{}
 	}
-	cost_model_bytes, err := cbor.Marshal(cost_models)
-	if err != nil {
-		log.Fatal(err)
+	var cost_model_bytes []byte
+	if isV1 {
+		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	} else {
+		cost_model_bytes, err = cbor.Marshal(cost_models)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
@@ -454,6 +493,7 @@ func (tb *TransactionBuilder) _BuildTxBody() TransactionBody.TransactionBody {
 		Certificates:      tb.Certificates,
 		Withdrawals:       tb.Withdrawals,
 		CollateralReturn:  tb.CollateralReturn,
+		TotalCollateral:   int(tb.TotalCollateral),
 		ReferenceInputs:   tb.ReferenceInputs,
 	}
 }
@@ -574,7 +614,7 @@ func (tb *TransactionBuilder) _SetCollateralReturn(changeAddress *Address.Addres
 	if changeAddress == nil {
 		return
 	}
-	collateral_amount := tb.Context.MaxTxFee() * tb.Context.GetProtocolParams().CollateralPercent / 100
+	collateral_amount := 5_000_000 //tb.Context.MaxTxFee() * tb.Context.GetProtocolParams().CollateralPercent / 100
 	total_input := Value.Value{}
 	for _, utxo := range tb.Collaterals {
 		total_input = total_input.Add(utxo.Output.GetValue())
@@ -765,7 +805,6 @@ func (tb *TransactionBuilder) Copy() *TransactionBuilder {
 }
 
 func (tb *TransactionBuilder) _EstimateExecutionUnits(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) map[string]Redeemer.ExecutionUnits {
-
 	tmp_builder := tb.Copy()
 	tmp_builder.ShouldEstimateExecutionUnits = false
 	tx_body, _ := tmp_builder.Build(changeAddress, mergeChange, collateralChangeAddress)
@@ -807,10 +846,15 @@ func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
 
 func (tb *TransactionBuilder) _SetRedeemerIndex() {
 	sorted_inputs := SortInputs(tb.Inputs)
+	done := make([]string, 0)
 	for i, utxo := range sorted_inputs {
 		utxo_cbor := Utils.ToCbor(utxo)
+		if slices.Contains(done, utxo_cbor) {
+			continue
+		}
 		val, ok := tb.InputsToRedeemers[utxo_cbor]
 		if ok && val.Tag == Redeemer.SPEND {
+			done = append(done, utxo_cbor)
 			redeem := tb.InputsToRedeemers[utxo_cbor]
 			redeem.Index = i
 			tb.InputsToRedeemers[utxo_cbor] = redeem

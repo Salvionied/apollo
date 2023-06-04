@@ -32,25 +32,33 @@ import (
 )
 
 type BlockFrostChainContext struct {
-	client          *http.Client
-	_epoch_info     Base.Epoch
-	_epoch          int
-	_Network        int
-	_genesis_param  Base.GenesisParameters
-	_protocol_param Base.ProtocolParameters
-	_baseUrl        string
-	_projectId      string
-	ctx             context.Context
+	client                    *http.Client
+	_epoch_info               Base.Epoch
+	_epoch                    int
+	_Network                  int
+	_genesis_param            Base.GenesisParameters
+	_protocol_param           Base.ProtocolParameters
+	_baseUrl                  string
+	_projectId                string
+	ctx                       context.Context
+	CustomSubmissionEndpoints []string
 }
 
 func NewBlockfrostChainContext(projectId string, network int, baseUrl string) BlockFrostChainContext {
 	ctx := context.Background()
+	file, err := ioutil.ReadFile("config.ini")
+	var cse []string
+	if err == nil {
+		cse = strings.Split(string(file), "\n")
+	} else {
+		cse = []string{}
+	}
 	// latest_epochs, err := api.Epoch(ctx)
 	// if err != nil {
 	// 	log.Fatal(err, "LATEST EPOCH")
 	// }
 
-	bfc := BlockFrostChainContext{client: &http.Client{}, _Network: network, _baseUrl: baseUrl, _projectId: projectId, ctx: ctx}
+	bfc := BlockFrostChainContext{client: &http.Client{}, _Network: network, _baseUrl: baseUrl, _projectId: projectId, ctx: ctx, CustomSubmissionEndpoints: cse}
 	bfc.Init()
 	return bfc
 }
@@ -63,6 +71,23 @@ func (bfc *BlockFrostChainContext) Init() {
 	//init epoch
 	latest_params := bfc.LatestEpochParams()
 	bfc._protocol_param = latest_params
+}
+
+func (bfc *BlockFrostChainContext) TxOuts(txHash string) []Base.Output {
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/txs/%s/utxos", bfc._baseUrl, txHash), nil)
+	req.Header.Set("project_id", bfc._projectId)
+	res, err := bfc.client.Do(req)
+	if err != nil {
+		log.Fatal(err, "REQUEST PROTOCOL")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	var response Base.TxUtxos
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Fatal(err, "UNMARSHAL PROTOCOL")
+	}
+	return response.Outputs
+
 }
 
 func (bfc *BlockFrostChainContext) LatestBlock() Base.Block {
@@ -318,9 +343,65 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 	}
 	return utxos
 }
-
+func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, logger chan string) serialization.TransactionId {
+	txBytes, _ := cbor.Marshal(tx)
+	if bfc.CustomSubmissionEndpoints != nil {
+		logger <- ("Custom Submission Endpoints Found, submitting...")
+		for _, endpoint := range bfc.CustomSubmissionEndpoints {
+			logger <- fmt.Sprint("TRYING WITH:", endpoint)
+			req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(txBytes))
+			req.Header.Set("project_id", bfc._projectId)
+			req.Header.Set("Content-Type", "application/cbor")
+			res, err := bfc.client.Do(req)
+			if err != nil {
+				log.Fatal(err, "REQUEST PROTOCOL")
+			}
+			body, err := ioutil.ReadAll(res.Body)
+			var response any
+			err = json.Unmarshal(body, &response)
+			if err != nil {
+				log.Fatal(err, "UNMARSHAL PROTOCOL")
+			}
+			logger <- fmt.Sprint("RESPONSE:", response)
+		}
+	}
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/v0/tx/submit", bfc._baseUrl), bytes.NewBuffer(txBytes))
+	req.Header.Set("project_id", bfc._projectId)
+	req.Header.Set("Content-Type", "application/cbor")
+	res, err := bfc.client.Do(req)
+	if err != nil {
+		log.Fatal(err, "REQUEST PROTOCOL")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	var response any
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Fatal(err, "UNMARSHAL PROTOCOL")
+	}
+	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}
+}
 func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) serialization.TransactionId {
 	txBytes, _ := cbor.Marshal(tx)
+	if bfc.CustomSubmissionEndpoints != nil {
+		fmt.Println("Custom Submission Endpoints Found, submitting...")
+		for _, endpoint := range bfc.CustomSubmissionEndpoints {
+			fmt.Println("TRYING WITH:", endpoint)
+			req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(txBytes))
+			req.Header.Set("project_id", bfc._projectId)
+			req.Header.Set("Content-Type", "application/cbor")
+			res, err := bfc.client.Do(req)
+			if err != nil {
+				log.Fatal(err, "REQUEST PROTOCOL")
+			}
+			body, err := ioutil.ReadAll(res.Body)
+			var response any
+			err = json.Unmarshal(body, &response)
+			if err != nil {
+				log.Fatal(err, "UNMARSHAL PROTOCOL")
+			}
+			fmt.Println("RESPONSE:", response)
+		}
+	}
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/v0/tx/submit", bfc._baseUrl), bytes.NewBuffer(txBytes))
 	req.Header.Set("project_id", bfc._projectId)
 	req.Header.Set("Content-Type", "application/cbor")
