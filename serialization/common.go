@@ -38,6 +38,11 @@ const VERIFICATION_KEY_HASH_SIZE = 28
 
 type TransactionId ConstrainedBytes
 type ScriptHash [28]byte
+
+func (sh *ScriptHash) Bytes() []byte {
+	return sh[:]
+}
+
 type DatumHash ConstrainedBytes
 
 func (dh *DatumHash) Equal(other DatumHash) bool {

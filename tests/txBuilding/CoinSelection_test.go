@@ -55,8 +55,6 @@ func TestLargestFirstAdaOnly(t *testing.T) {
 
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(15_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, true)
-	fmt.Println(selected)
-	fmt.Println(change)
 	if len(selected) != 2 {
 		t.Errorf("Expected 2 utxos to be selected, got %d", len(selected))
 	}
@@ -73,14 +71,11 @@ func TestLargestFirstRequestOutputs(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(9_000_000)),
 		TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(6_000_000))}
 
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, true)
-	fmt.Println(selected)
-	fmt.Println(change)
 	if len(selected) != 2 {
 		t.Errorf("Expected 2 utxos to be selected, got %d", len(selected))
 	}
@@ -97,12 +92,9 @@ func TestFeeEffectLargestFirst(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(10_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, false)
-	fmt.Println(selected)
-	fmt.Println(change)
 	if len(selected) != 2 {
 		t.Errorf("Expected 2 utxos to be selected, got %d", len(selected))
 	}
@@ -119,12 +111,9 @@ func TestNoFeeEffectLargestFirst(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(10_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, false, false)
-	fmt.Println(selected)
-	fmt.Println(change)
 	if len(selected) != 1 {
 		t.Errorf("Expected 2 utxos to be selected, got %d", len(selected))
 	}
@@ -141,7 +130,6 @@ func TestInsufficientBalance(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(1_000_000_000))}
 	_, _, err := selector.Select(utxos, request, chain_context, -1, false, false)
@@ -155,7 +143,6 @@ func TestMaxInputCountLargestFirst(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(15000000))}
 	_, _, err := selector.Select(utxos, request, chain_context, 1, false, false)
@@ -169,7 +156,6 @@ func TestMultiAsset(t *testing.T) {
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
 	utxos := initUtxos()
-	//fmt.Println(utxos)
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address,
 		Value.SimpleValue(15000000, MultiAsset.MultiAsset[int64]{
@@ -182,7 +168,6 @@ func TestMultiAsset(t *testing.T) {
 	if len(selected) != 10 {
 		t.Errorf("Expected 10 utxos to be selected, got %d", len(selected))
 	}
-	fmt.Println(change)
 	if change.GetCoin() != 40_000_000 {
 		t.Errorf("Expected change to be 40_000_000, got %d", change.GetCoin())
 	}
@@ -194,7 +179,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(15_000_000))}
 
@@ -231,7 +215,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(9_000_000))}
 // 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, true)
@@ -251,7 +234,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(9_000_000))}
 // 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, false, false)
@@ -271,7 +253,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(5_000_000))}
 // 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, false, true)
@@ -291,7 +272,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(100_000_000))}
 // 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, false, false)
@@ -311,7 +291,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{serialization.SimpleTransactionOutput(decoded_address, serialization.PureLovelaceValue(9_000_000))}
 // 	selected, change, err := selector.Select(utxos, request, chain_context, 1, false, false)
@@ -334,7 +313,6 @@ func TestMultiAsset(t *testing.T) {
 // 	decoded_address, _ := serialization.DecodeAddress(Address)
 // 	selector := builder.RandomImproveMultiAsset{}
 // 	utxos := initUtxos()
-// 	//fmt.Println(utxos)
 // 	//ONlY ADA TEST
 // 	request := []serialization.TransactionOutput{
 // 		serialization.SimpleTransactionOutput(

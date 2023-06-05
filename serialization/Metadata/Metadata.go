@@ -23,10 +23,11 @@ type ShelleyMaryMetadata struct {
 }
 
 func (smm *ShelleyMaryMetadata) MarshalCBOR() ([]byte, error) {
+	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(smm.NativeScripts) > 0 {
-		return cbor.Marshal(smm)
+		return enc.Marshal(smm)
 	} else {
-		return cbor.Marshal(smm.Metadata)
+		return enc.Marshal(smm.Metadata)
 	}
 }
 
@@ -70,7 +71,7 @@ func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 }
 
 func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
-	enc, _ := cbor.EncOptions{Sort: cbor.SortCanonical}.EncMode()
+	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(ad._AlonzoMeta.Metadata) != 0 || len(ad._AlonzoMeta.NativeScripts) != 0 || len(ad._AlonzoMeta.PlutusScripts) != 0 {
 		return enc.Marshal(ad._AlonzoMeta)
 	}

@@ -383,9 +383,7 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) serialization.TransactionId {
 	txBytes, _ := cbor.Marshal(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
-		fmt.Println("Custom Submission Endpoints Found, submitting...")
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
-			fmt.Println("TRYING WITH:", endpoint)
 			req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(txBytes))
 			req.Header.Set("project_id", bfc._projectId)
 			req.Header.Set("Content-Type", "application/cbor")
@@ -399,7 +397,6 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) serializ
 			if err != nil {
 				log.Fatal(err, "UNMARSHAL PROTOCOL")
 			}
-			fmt.Println("RESPONSE:", response)
 		}
 	}
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/v0/tx/submit", bfc._baseUrl), bytes.NewBuffer(txBytes))
