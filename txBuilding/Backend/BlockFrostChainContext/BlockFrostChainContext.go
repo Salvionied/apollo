@@ -27,6 +27,7 @@ import (
 	"github.com/salvionied/apollo/serialization/UTxO"
 	"github.com/salvionied/apollo/serialization/Value"
 	"github.com/salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/salvionied/apollo/txBuilding/Backend/Cache"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -108,9 +109,9 @@ func (bfc *BlockFrostChainContext) LatestBlock() Base.Block {
 
 func (bfc *BlockFrostChainContext) LatestEpoch() Base.Epoch {
 	res := Base.Epoch{}
-	found := CacheGet[Base.Epoch]("latest_epoch", &res)
+	found := Cache.Get[Base.Epoch]("latest_epoch", &res)
 	timest := time.Time{}
-	foundTime := CacheGet[time.Time]("latest_epoch_time", &timest)
+	foundTime := Cache.Get[time.Time]("latest_epoch_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
 		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/epochs/latest", bfc._baseUrl), nil)
 		req.Header.Set("project_id", bfc._projectId)
@@ -124,9 +125,9 @@ func (bfc *BlockFrostChainContext) LatestEpoch() Base.Epoch {
 		if err != nil {
 			log.Fatal(err, "UNMARSHAL PROTOCOL")
 		}
-		CacheSet("latest_epoch", response)
+		Cache.Set("latest_epoch", response)
 		now := time.Now()
-		CacheSet("latest_epoch_time", now)
+		Cache.Set("latest_epoch_time", now)
 		return response
 	} else {
 		return res
@@ -175,9 +176,9 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) []B
 
 func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 	pm := Base.ProtocolParameters{}
-	found := CacheGet[Base.ProtocolParameters]("latest_epoch_params", &pm)
+	found := Cache.Get[Base.ProtocolParameters]("latest_epoch_params", &pm)
 	timest := time.Time{}
-	foundTime := CacheGet[time.Time]("latest_epoch_params_time", &timest)
+	foundTime := Cache.Get[time.Time]("latest_epoch_params_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
 		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/epochs/latest/parameters", bfc._baseUrl), nil)
 		req.Header.Set("project_id", bfc._projectId)
@@ -191,9 +192,9 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 		if err != nil {
 			log.Fatal(err, "UNMARSHAL PROTOCOL")
 		}
-		CacheSet("latest_epoch_params", response)
+		Cache.Set("latest_epoch_params", response)
 		now := time.Now()
-		CacheSet("latest_epoch_params_time", now)
+		Cache.Set("latest_epoch_params_time", now)
 		return response
 	} else {
 		return pm
@@ -202,9 +203,9 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 
 func (bfc *BlockFrostChainContext) GenesisParams() Base.GenesisParameters {
 	gp := Base.GenesisParameters{}
-	found := CacheGet[Base.GenesisParameters]("genesis_params", &gp)
+	found := Cache.Get[Base.GenesisParameters]("genesis_params", &gp)
 	timestamp := ""
-	foundTime := CacheGet[string]("genesis_params_time", &timestamp)
+	foundTime := Cache.Get[string]("genesis_params_time", &timestamp)
 	timest := time.Time{}
 	if timestamp != "" {
 		timest, _ = time.Parse(time.RFC3339, timestamp)
@@ -222,9 +223,9 @@ func (bfc *BlockFrostChainContext) GenesisParams() Base.GenesisParameters {
 		if err != nil {
 			log.Fatal(err, "UNMARSHAL PROTOCOL")
 		}
-		CacheSet("genesis_params", response)
+		Cache.Set("genesis_params", response)
 		now := time.Now()
-		CacheSet("genesis_params_time", now)
+		Cache.Set("genesis_params_time", now)
 		return response
 	} else {
 

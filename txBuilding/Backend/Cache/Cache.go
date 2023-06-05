@@ -1,4 +1,4 @@
-package BlockFrostChainContext
+package Cache
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func CacheGet[T any](key string, val interface{}) bool {
+func Get[T any](key string, val interface{}) bool {
 	dat, err := os.ReadFile(fmt.Sprintf("./tmp/%s.txt", key))
 	if err != nil {
 		return false
@@ -17,7 +17,7 @@ func CacheGet[T any](key string, val interface{}) bool {
 	return true
 }
 
-func CacheSet[T any](key string, value T) {
+func Set[T any](key string, value T) {
 	val, err := json.Marshal(value)
 	if err != nil {
 	}
