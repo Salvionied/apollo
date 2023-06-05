@@ -131,6 +131,7 @@ The final goal is to be able to have this library interact directly with the nod
         - [ ] Ogmios + Kupo
         - [ ] DBSync
         - [ ] Carybdis
+        - [ ] Koios
 
 - [ ] Protocols
     - [ ] Simple One Off Protocols
