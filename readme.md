@@ -133,14 +133,6 @@ The final goal is to be able to have this library interact directly with the nod
         - [ ] Carybdis
         - [ ] Koios
 
-- [ ] Protocols
-    - [ ] Simple One Off Protocols
-        - [ ] NTN
-        - [ ] NTC
-    - [ ] Mux Demux Protocols
-        - [ ] NTN
-        - [ ] NTC
-
 If you have any questions or requests feel free to drop into this discord and ask :) https://discord.gg/MH4CmJcg49
 
 By:
