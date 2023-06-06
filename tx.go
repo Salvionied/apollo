@@ -15,7 +15,7 @@ func (tx *ApolloTransaction) Submit() (serialization.TransactionId, error) {
 }
 
 func (tx *ApolloTransaction) Sign() *ApolloTransaction {
-	signatures := tx.Apollo.wallet.SignTx(tx.Tx)
+	signatures := tx.Apollo.Wallet.SignTx(tx.Tx)
 	tx.Tx.TransactionWitnessSet = signatures
 	return tx
 }

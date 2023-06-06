@@ -1,6 +1,9 @@
 package apollo
 
 import (
+	"encoding/json"
+	"os"
+
 	"github.com/salvionied/apollo/apollotypes"
 	"github.com/salvionied/apollo/serialization"
 	"github.com/salvionied/apollo/serialization/Address"
@@ -13,7 +16,7 @@ import (
 )
 
 type Apollo struct {
-	wallet  apollotypes.Wallet
+	Wallet  apollotypes.Wallet
 	backend apollotypes.Backend
 	network Network
 }
@@ -88,7 +91,7 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 
 	addr := Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
 	wallet := apollotypes.GenericWallet{SigningKey: signingKey, VerificationKey: verificationKey, Address: addr, StakeSigningKey: stakeSigningKey, StakeVerificationKey: stakeVerificationKey}
-	a.wallet = &wallet
+	a.Wallet = &wallet
 	return a
 
 }
@@ -98,6 +101,25 @@ func New(cc apollotypes.Backend, network Network) *Apollo {
 		backend: cc,
 		network: network,
 	}
+}
+
+func ReadAikenJson(filePath string) (*apollotypes.AikenPlutusJSON, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	res := apollotypes.AikenPlutusJSON{}
+	plutus_bytes := make([]byte, 4096)
+	_, err = f.Read(plutus_bytes)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(plutus_bytes, &res)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 func NewBlockfrostBackend(projectId string, network Network) apollotypes.Backend {

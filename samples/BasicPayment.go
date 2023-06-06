@@ -1,4 +1,4 @@
-package main
+package samples
 
 import (
 	"fmt"
@@ -6,12 +6,12 @@ import (
 	"github.com/salvionied/apollo"
 )
 
-func main() {
+func BasicPayment() {
 	backend := apollo.NewBlockfrostBackend("project_id", apollo.MAINNET)
 	apollo := apollo.New(backend, apollo.MAINNET)
 	SEED := "Your mnemonic here"
 
-	tx, err := apollo.SetWalletFromMnemonic(SEED).NewTx().Init().SetWalletAsInput().PayToAddressBech(
+	tx, err := apollo.SetWalletFromMnemonic(SEED).NewTx().Init().SetWalletAsInput().PayToAddressLovelaceBech32(
 		"The receiver address here",
 		1_000_000,
 	).Complete()

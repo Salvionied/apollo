@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/salvionied/apollo/serialization"
+	"github.com/salvionied/apollo/serialization/Address"
 
 	"github.com/Salvionied/cbor/v2"
 
@@ -698,6 +699,22 @@ func PlutusScriptHash(script ScriptHashable) serialization.ScriptHash {
 
 type PlutusV1Script []byte
 type PlutusV2Script []byte
+
+func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
+	hash := PlutusScriptHash(ps)
+	if stakingCredential == nil {
+		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+	} else {
+		return Address.Address{
+			PaymentPart: hash.Bytes(),
+			StakingPart: stakingCredential,
+			Network:     Address.MAINNET,
+			AddressType: Address.SCRIPT_KEY,
+			HeaderByte:  0b00010001,
+			Hrp:         "addr",
+		}
+	}
+}
 
 func (ps PlutusV1Script) Hash() serialization.ScriptHash {
 	finalbytes, err := hex.DecodeString("01")

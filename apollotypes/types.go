@@ -1,6 +1,7 @@
 package apollotypes
 
 import (
+	"github.com/salvionied/apollo/serialization"
 	serAddress "github.com/salvionied/apollo/serialization/Address"
 	"github.com/salvionied/apollo/serialization/Key"
 	"github.com/salvionied/apollo/serialization/Transaction"
@@ -12,6 +13,7 @@ import (
 type Wallet interface {
 	GetAddress() *serAddress.Address
 	SignTx(tx Transaction.Transaction) TransactionWitnessSet.TransactionWitnessSet
+	PkeyHash() serialization.PubKeyHash
 	//SignMessage(address serAddress.Address, message []uint8) []uint8
 }
 
@@ -21,6 +23,11 @@ type GenericWallet struct {
 	Address              serAddress.Address
 	StakeSigningKey      Key.StakeSigningKey
 	StakeVerificationKey Key.StakeVerificationKey
+}
+
+func (gw *GenericWallet) PkeyHash() serialization.PubKeyHash {
+	res, _ := gw.VerificationKey.Hash()
+	return res
 }
 
 func (gw *GenericWallet) GetAddress() *serAddress.Address {
