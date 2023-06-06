@@ -28,12 +28,12 @@ func (a *Apollo) SwitchNetwork(network Network) *Apollo {
 	return a
 }
 
-func (a *Apollo) NewTx(utils any) builder {
-	return builder{Apollo: a}
+func (a *Apollo) NewTx(utils any) *builder {
+	return &builder{Apollo: a}
 }
 
-func (a *Apollo) FromTx(tx any) builder {
-	return builder{Apollo: a}
+func (a *Apollo) FromTx(tx any) *builder {
+	return &builder{Apollo: a}
 }
 
 func (a *Apollo) UtxosAt(address Address.Address) []UTxO.UTxO {
