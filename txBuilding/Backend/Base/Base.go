@@ -166,7 +166,7 @@ type ChainContext interface {
 	MaxTxFee() int
 	LastBlockSlot() int
 	Utxos(address Address.Address) []UTxO.UTxO
-	SubmitTx(Transaction.Transaction) serialization.TransactionId
+	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
 	EvaluateTx([]uint8) map[string]Redeemer.ExecutionUnits
 }
 

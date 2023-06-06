@@ -121,8 +121,8 @@ func (f FixedChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 	return []UTxO.UTxO{{Input: tx_in1, Output: tx_out1}, {Input: tx_in2, Output: tx_out2}}
 }
 
-func (f FixedChainContext) SubmitTx(tx Transaction.Transaction) serialization.TransactionId {
-	return serialization.TransactionId{}
+func (f FixedChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
+	return serialization.TransactionId{}, nil
 }
 
 func (f FixedChainContext) EvaluateTx(tx []uint8) map[string]Redeemer.ExecutionUnits {

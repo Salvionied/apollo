@@ -381,7 +381,7 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 	}
 	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}
 }
-func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) serialization.TransactionId {
+func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	txBytes, _ := cbor.Marshal(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
@@ -411,9 +411,9 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) serializ
 	var response any
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return serialization.TransactionId{}, err
 	}
-	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}
+	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}, nil
 }
 
 type EvalResult struct {

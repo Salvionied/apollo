@@ -28,7 +28,7 @@ func (a *Apollo) SwitchNetwork(network Network) *Apollo {
 	return a
 }
 
-func (a *Apollo) NewTx(utils any) *builder {
+func (a *Apollo) NewTx() *builder {
 	return &builder{Apollo: a}
 }
 
