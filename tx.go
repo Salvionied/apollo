@@ -1,6 +1,6 @@
 package apollo
 
-import "github.com/Salvionied/apollo/serialization/Transaction"
+import "github.com/salvionied/apollo/serialization/Transaction"
 
 type ApolloTransaction struct {
 	Apollo *Apollo

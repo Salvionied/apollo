@@ -1,12 +1,12 @@
 package apollo
 
 import (
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/Salvionied/apollo/txBuilding/TxBuilder"
+	"github.com/salvionied/apollo/serialization/Address"
+	"github.com/salvionied/apollo/serialization/Transaction"
+	"github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/salvionied/apollo/serialization/Value"
+	"github.com/salvionied/apollo/txBuilding/TxBuilder"
 )
 
 type builder struct {

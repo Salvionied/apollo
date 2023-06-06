@@ -1,6 +1,6 @@
 package VerificationKeyWitness
 
-import "github.com/Salvionied/apollo/serialization/Key"
+import "github.com/salvionied/apollo/serialization/Key"
 
 type VerificationKeyWitness struct {
 	_         struct{} `cbor:",toarray"`

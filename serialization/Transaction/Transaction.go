@@ -1,10 +1,10 @@
 package Transaction
 
 import (
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Metadata"
-	"github.com/Salvionied/apollo/serialization/TransactionBody"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
+	"github.com/salvionied/apollo/serialization"
+	"github.com/salvionied/apollo/serialization/Metadata"
+	"github.com/salvionied/apollo/serialization/TransactionBody"
+	"github.com/salvionied/apollo/serialization/TransactionWitnessSet"
 )
 
 type Transaction struct {

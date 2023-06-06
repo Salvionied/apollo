@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/Salvionied/apollo/crypto/edwards25519"
+	"github.com/salvionied/apollo/crypto/edwards25519"
 )
 
 const (

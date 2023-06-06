@@ -1,8 +1,8 @@
 package TxBuilder
 
 import (
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
+	"github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/salvionied/apollo/serialization/Redeemer"
 )
 
 type MintingScriptToRedeemer struct {

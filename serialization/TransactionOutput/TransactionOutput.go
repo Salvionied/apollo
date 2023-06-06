@@ -6,10 +6,10 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/salvionied/apollo/serialization"
+	"github.com/salvionied/apollo/serialization/Address"
+	"github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/salvionied/apollo/serialization/Value"
 
 	"github.com/Salvionied/cbor/v2"
 )

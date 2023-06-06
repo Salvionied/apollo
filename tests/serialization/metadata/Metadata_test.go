@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Metadata"
 	"github.com/Salvionied/cbor/v2"
+	"github.com/salvionied/apollo/serialization/Metadata"
 )
 
 func TestAuxiliaryData(t *testing.T) {

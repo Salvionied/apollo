@@ -6,8 +6,8 @@ import (
 	"log"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/NativeScript"
 	"github.com/Salvionied/cbor/v2"
+	"github.com/salvionied/apollo/serialization/NativeScript"
 )
 
 func TestNativeScriptsSerializationAndHash(t *testing.T) {

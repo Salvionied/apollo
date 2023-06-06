@@ -3,8 +3,8 @@ package MultiAsset
 import (
 	"reflect"
 
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/salvionied/apollo/serialization/Asset"
+	"github.com/salvionied/apollo/serialization/Policy"
 )
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
