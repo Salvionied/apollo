@@ -5,6 +5,38 @@
 The Objective of this library is to give Developers Access to each and every needed resource for cardano development.
 The final goal is to be able to have this library interact directly with the node without intermediaries.
 
+Little Sample Usage:
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/salvionied/apollo"
+)
+
+func main() {
+	backend := apollo.NewBlockfrostBackend("project_id", apollo.MAINNET)
+	apollo := apollo.New(backend, apollo.MAINNET)
+	SEED := "Your mnemonic here"
+
+	tx, err := apollo.SetWalletFromMnemonic(SEED).NewTx().Init().SetWalletAsInput().PayToAddressBech(
+		"The receiver address here",
+		1_000_000,
+	).Complete()
+	tx = tx.Sign()
+	fmt.Println(tx)
+	if err != nil {
+		panic(err)
+	}
+	tx_hash, err := tx.Submit()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(tx_hash)
+}
+
+```
 
 ### TODO:
 - [ ] Ledger 
