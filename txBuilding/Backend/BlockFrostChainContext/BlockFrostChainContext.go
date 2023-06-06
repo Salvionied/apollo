@@ -74,6 +74,16 @@ func (bfc *BlockFrostChainContext) Init() {
 	bfc._protocol_param = latest_params
 }
 
+func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+	txOuts := bfc.TxOuts(txHash)
+	for _, txOut := range txOuts {
+		if txOut.OutputIndex == index {
+			return txOut.ToUTxO(txHash)
+		}
+	}
+	return nil
+}
+
 func (bfc *BlockFrostChainContext) TxOuts(txHash string) []Base.Output {
 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/txs/%s/utxos", bfc._baseUrl, txHash), nil)
 	req.Header.Set("project_id", bfc._projectId)

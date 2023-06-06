@@ -2,6 +2,7 @@ package apollo
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"os"
 
 	"github.com/salvionied/apollo/apollotypes"
@@ -41,6 +42,15 @@ func (a *Apollo) FromTx(tx any) *builder {
 
 func (a *Apollo) UtxosAt(address Address.Address) []UTxO.UTxO {
 	return a.backend.Utxos(address)
+}
+
+func (a *Apollo) UTxOFromRef(txHash string, txIndex int) *UTxO.UTxO {
+	utxo := a.backend.GetUtxoFromRef(txHash, txIndex)
+	if utxo == nil {
+		return nil
+	}
+	return utxo
+
 }
 
 func (a *Apollo) UtxosByAsset(asset string) []UTxO.UTxO {
@@ -110,8 +120,7 @@ func ReadAikenJson(filePath string) (*apollotypes.AikenPlutusJSON, error) {
 	}
 	defer f.Close()
 	res := apollotypes.AikenPlutusJSON{}
-	plutus_bytes := make([]byte, 4096)
-	_, err = f.Read(plutus_bytes)
+	plutus_bytes, err := ioutil.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}

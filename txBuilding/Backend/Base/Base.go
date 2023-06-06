@@ -15,6 +15,7 @@ import (
 	"github.com/salvionied/apollo/serialization/Policy"
 	"github.com/salvionied/apollo/serialization/Redeemer"
 	"github.com/salvionied/apollo/serialization/Transaction"
+	"github.com/salvionied/apollo/serialization/TransactionInput"
 	"github.com/salvionied/apollo/serialization/TransactionOutput"
 	"github.com/salvionied/apollo/serialization/UTxO"
 	"github.com/salvionied/apollo/serialization/Value"
@@ -89,6 +90,19 @@ type Output struct {
 	InlineDatum         string          `json:"inline_datum"`
 	Collateral          bool            `json:"collateral"`
 	ReferenceScriptHash string          `json:"reference_script_hash"`
+}
+
+func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
+	txOut, _ := o.ToTransactionOutput()
+	decodedTxHash, _ := hex.DecodeString(txHash)
+	utxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: decodedTxHash,
+			Index:         o.OutputIndex,
+		},
+		Output: txOut,
+	}
+	return &utxo
 }
 
 func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, PlutusData.PlutusData) {
@@ -168,6 +182,7 @@ type ChainContext interface {
 	Utxos(address Address.Address) []UTxO.UTxO
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
 	EvaluateTx([]uint8) map[string]Redeemer.ExecutionUnits
+	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
 }
 
 type Epoch struct {

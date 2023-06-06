@@ -3,8 +3,10 @@ package apollo
 import (
 	"encoding/hex"
 
+	"github.com/salvionied/apollo/serialization"
 	"github.com/salvionied/apollo/serialization/Address"
 	"github.com/salvionied/apollo/serialization/PlutusData"
+	"github.com/salvionied/apollo/serialization/Redeemer"
 	"github.com/salvionied/apollo/serialization/Transaction"
 	"github.com/salvionied/apollo/serialization/TransactionOutput"
 	"github.com/salvionied/apollo/serialization/UTxO"
@@ -74,4 +76,18 @@ func (b *builder) Complete() (*ApolloTransaction, error) {
 			Valid:                 true,
 			AuxiliaryData:         b.txBuilder.AuxiliaryData}}
 	return &fullTx, nil
+}
+
+func (b *builder) AddRequiredSigners(requiredSigners []serialization.PubKeyHash) *builder {
+	if b.txBuilder.RequiredSigners == nil {
+		b.txBuilder.RequiredSigners = requiredSigners
+	} else {
+		b.txBuilder.RequiredSigners = append(b.txBuilder.RequiredSigners, requiredSigners...)
+	}
+	return b
+}
+
+func (b *builder) CollectFromScriptUtxo(inputUtxo UTxO.UTxO, redeemer *Redeemer.Redeemer, script *PlutusData.PlutusV2Script, datum *PlutusData.PlutusData) *builder {
+	b.txBuilder.AddScriptInput(inputUtxo, script, datum, redeemer, false)
+	return b
 }
