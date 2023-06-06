@@ -41,7 +41,7 @@ func Lock(
 
 func HelloAiken() {
 	backend := apollo.NewBlockfrostBackend("project_id", apollo.MAINNET)
-	SEED := "area decide toilet salad avocado horn early oak glove black all orbit clean pigeon grant grace subject enforce train year front rule noise kick"
+	SEED := "Your mnemonic here"
 	builder := apollo.New(backend, apollo.MAINNET).SetWalletFromMnemonic(SEED)
 	AikenJenJSON, err := apollo.ReadAikenJson("apollo/samples/plutus.json")
 	if err != nil {
