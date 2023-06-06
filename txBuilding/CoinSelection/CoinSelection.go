@@ -6,14 +6,14 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/salvionied/apollo/serialization/Address"
-	"github.com/salvionied/apollo/serialization/Amount"
-	"github.com/salvionied/apollo/serialization/MultiAsset"
-	"github.com/salvionied/apollo/serialization/TransactionOutput"
-	"github.com/salvionied/apollo/serialization/UTxO"
-	"github.com/salvionied/apollo/serialization/Value"
-	"github.com/salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/salvionied/apollo/txBuilding/Utils"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Amount"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/txBuilding/Utils"
 )
 
 func _reverse[S ~[]E, E any](s S) {

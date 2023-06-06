@@ -4,12 +4,12 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/salvionied/apollo/serialization/Amount"
-	"github.com/salvionied/apollo/serialization/Asset"
-	"github.com/salvionied/apollo/serialization/AssetName"
-	"github.com/salvionied/apollo/serialization/MultiAsset"
-	"github.com/salvionied/apollo/serialization/Policy"
-	"github.com/salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/serialization/Amount"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/serialization/Value"
 )
 
 func TestMarshalCBOR(t *testing.T) {
