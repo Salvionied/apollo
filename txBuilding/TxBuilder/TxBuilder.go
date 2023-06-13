@@ -39,6 +39,8 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+//SOON TO BE DEPRECATED
+
 var FAKE_ADDRESS, _ = Address.DecodeAddress("addr1v8xrqjtlfluk9axpmjj5enh0uw0cduwhz7txsqyl36m3ukgqdsn8w")
 var fake_vkey_decoded, err = hex.DecodeString("5797dc2cc919dfec0bb849551ebdf30d96e5cbe0f33f734a87fe826db30f7ef9")
 
@@ -46,6 +48,10 @@ var fake_vkey = Key.VerificationKey{Payload: fake_vkey_decoded}
 
 var fake_tx_signature, _ = hex.DecodeString("577ccb5b487b64e396b0976c6f71558e52e44ad254db7d06dfb79843e5441a5d763dd42a")
 
+/**
+* TransactionBuilder
+* This is the main object used to build a transaction. Soon To Be Deprecated
+**/
 type TransactionBuilder struct {
 	Context                      Base.ChainContext
 	UtxoSelectors                []CoinSelection.UTxOSelector
@@ -490,11 +496,11 @@ func (tb *TransactionBuilder) _BuildTxBody() TransactionBody.TransactionBody {
 		RequiredSigners:   tb.RequiredSigners,
 		ValidityStart:     tb.ValidityStart,
 		Collateral:        collaterals,
-		Certificates:      tb.Certificates,
-		Withdrawals:       tb.Withdrawals,
-		CollateralReturn:  tb.CollateralReturn,
-		TotalCollateral:   int(tb.TotalCollateral),
-		ReferenceInputs:   tb.ReferenceInputs,
+		// Certificates:      tb.Certificates,
+		// Withdrawals:       tb.Withdrawals,
+		CollateralReturn: tb.CollateralReturn,
+		TotalCollateral:  int(tb.TotalCollateral),
+		ReferenceInputs:  tb.ReferenceInputs,
 	}
 }
 

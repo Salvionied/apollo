@@ -35,7 +35,31 @@ func initUtxos() []UTxO.UTxO {
 		assets := MultiAsset.MultiAsset[int64]{policy: Asset}
 		value := Value.SimpleValue(int64((i+1)*1000000),
 			assets)
+		tx_out := TransactionOutput.SimpleTransactionOutput(
+			Addr, value)
+		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
+	}
+	return utxos
+}
+func initUtxosDifferentiated() []UTxO.UTxO {
+	utxos := make([]UTxO.UTxO, 0)
+	for i := 0; i < 10; i++ {
+		tx_in := TransactionInput.TransactionInput{
+			TransactionId: make([]byte, 32),
+			Index:         i,
+		}
 
+		Addr, _ := Address.DecodeAddress(TESTADDRESS)
+		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
+		singleasset := Asset.Asset[int64]{}
+		for j := 0; j < i; j++ {
+			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
+			singleasset[asset_name] = int64((i + 1) * 100)
+		}
+
+		assets := MultiAsset.MultiAsset[int64]{policy: singleasset}
+		value := Value.SimpleValue(int64((i+1)*1000000),
+			assets)
 		tx_out := TransactionOutput.SimpleTransactionOutput(
 			Addr, value)
 		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})

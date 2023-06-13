@@ -12,5 +12,7 @@ type StakeCredential struct {
 type Certificate struct {
 	_               struct{} `cbor:"toarray"`
 	_CODE           int
-	StakeCredential StakeCredential
+	StakeCredential *StakeCredential
 }
+
+type Certificates []*Certificate

@@ -1,6 +1,9 @@
 package UTxO
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"github.com/salvionied/apollo/serialization/TransactionInput"
 	"github.com/salvionied/apollo/serialization/TransactionOutput"
 )
@@ -13,6 +16,10 @@ type UTxO struct {
 	_      struct{} `cbor:",toarray"`
 	Input  TransactionInput.TransactionInput
 	Output TransactionOutput.TransactionOutput
+}
+
+func (u UTxO) GetKey() string {
+	return fmt.Sprintf("%s:%d", hex.EncodeToString(u.Input.TransactionId), u.Input.Index)
 }
 
 func (u UTxO) Clone() UTxO {

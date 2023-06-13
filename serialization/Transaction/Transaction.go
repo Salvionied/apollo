@@ -1,6 +1,7 @@
 package Transaction
 
 import (
+	"github.com/Salvionied/cbor/v2"
 	"github.com/salvionied/apollo/serialization"
 	"github.com/salvionied/apollo/serialization/Metadata"
 	"github.com/salvionied/apollo/serialization/TransactionBody"
@@ -12,7 +13,15 @@ type Transaction struct {
 	TransactionBody       TransactionBody.TransactionBody
 	TransactionWitnessSet TransactionWitnessSet.TransactionWitnessSet
 	Valid                 bool
-	AuxiliaryData         Metadata.AuxiliaryData
+	AuxiliaryData         *Metadata.AuxiliaryData
+}
+
+func (tx *Transaction) Bytes() []byte {
+	cborred, err := cbor.Marshal(tx)
+	if err != nil {
+		panic(err)
+	}
+	return cborred
 }
 
 func (tx *Transaction) Id() serialization.TransactionId {

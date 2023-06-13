@@ -33,7 +33,7 @@ func (ma Asset[V]) Less(other Asset[V]) bool {
 func (ma Asset[V]) Greater(other Asset[V]) bool {
 	for asset, amount := range ma {
 		otherAmount, ok := other[asset]
-		if !ok || amount < otherAmount {
+		if ok && amount < otherAmount {
 			return false
 		}
 	}

@@ -698,6 +698,23 @@ func PlutusScriptHash(script ScriptHashable) serialization.ScriptHash {
 }
 
 type PlutusV1Script []byte
+
+func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
+	hash := PlutusScriptHash(ps)
+	if stakingCredential == nil {
+		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+	} else {
+		return Address.Address{
+			PaymentPart: hash.Bytes(),
+			StakingPart: stakingCredential,
+			Network:     Address.MAINNET,
+			AddressType: Address.SCRIPT_KEY,
+			HeaderByte:  0b00010001,
+			Hrp:         "addr",
+		}
+	}
+}
+
 type PlutusV2Script []byte
 
 func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
@@ -722,7 +739,7 @@ func (ps PlutusV1Script) Hash() serialization.ScriptHash {
 		log.Fatal(err)
 	}
 	finalbytes = append(finalbytes, ps...)
-	hash, err := blake2b.New(32, nil)
+	hash, err := blake2b.New(28, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -740,7 +757,7 @@ func (ps PlutusV2Script) Hash() serialization.ScriptHash {
 		log.Fatal(err)
 	}
 	finalbytes = append(finalbytes, ps...)
-	hash, err := blake2b.New(32, nil)
+	hash, err := blake2b.New(28, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

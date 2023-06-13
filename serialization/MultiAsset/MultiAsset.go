@@ -4,10 +4,25 @@ import (
 	"reflect"
 
 	"github.com/salvionied/apollo/serialization/Asset"
+	"github.com/salvionied/apollo/serialization/AssetName"
 	"github.com/salvionied/apollo/serialization/Policy"
 )
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
+
+func (ma MultiAsset[V]) GetByPolicyAndId(pol Policy.PolicyId, asset_name AssetName.AssetName) V {
+	for policy, asset := range ma {
+
+		if policy.String() == pol.String() {
+			for assetName, amount := range asset {
+				if assetName.String() == asset_name.String() {
+					return amount
+				}
+			}
+		}
+	}
+	return 0
+}
 
 func (ma MultiAsset[V]) RemoveZeroAssets() MultiAsset[V] {
 	result := make(MultiAsset[V])
@@ -49,10 +64,9 @@ func (ma MultiAsset[V]) Less(other MultiAsset[V]) bool {
 
 }
 func (ma MultiAsset[V]) Greater(other MultiAsset[V]) bool {
-
 	for policy, asset := range ma {
 		otherAsset, ok := other[policy]
-		if !ok || !asset.Greater(otherAsset) {
+		if ok && !asset.Greater(otherAsset) && !asset.Equal(otherAsset) {
 			return false
 		}
 	}

@@ -103,6 +103,7 @@ func (val Value) GetAssets() MultiAsset.MultiAsset[int64] {
 	}
 	return nil
 }
+
 func (val Value) Add(other Value) Value {
 	res := val.Clone()
 	if other.HasAssets {
@@ -151,6 +152,8 @@ func (val Value) LessOrEqual(other Value) bool {
 	return val.Equal(other) || val.Less(other)
 }
 func (val Value) Greater(other Value) bool {
+	// fmt.Println(val.GetCoin(), other.GetCoin(), val.GetAssets(), other.GetAssets(),
+	// 	val.GetCoin() >= other.GetCoin(), val.GetAssets().Greater(other.GetAssets()))
 	return val.GetCoin() >= other.GetCoin() && val.GetAssets().Greater(other.GetAssets())
 
 }
@@ -187,12 +190,14 @@ func (val *Value) UnmarshalCBOR(value []byte) error {
 func (val *Value) MarshalCBOR() ([]byte, error) {
 	if val.HasAssets {
 		if val.Am.Coin < 0 {
+			fmt.Println(val)
 			return nil, errors.New("invalid coin value")
 		}
 		em, _ := cbor.CanonicalEncOptions().EncMode()
 		return em.Marshal(val.Am)
 	} else {
 		if val.Coin < 0 {
+			fmt.Println(val)
 			return nil, errors.New("invalid coin value")
 		}
 		return cbor.Marshal(val.Coin)

@@ -17,6 +17,23 @@ type Wallet interface {
 	//SignMessage(address serAddress.Address, message []uint8) []uint8
 }
 
+type ExternalWallet struct {
+	Address serAddress.Address
+}
+
+func (ew *ExternalWallet) GetAddress() *serAddress.Address {
+	return &ew.Address
+}
+
+func (ew *ExternalWallet) SignTx(tx Transaction.Transaction) TransactionWitnessSet.TransactionWitnessSet {
+	return tx.TransactionWitnessSet
+}
+
+func (ew *ExternalWallet) PkeyHash() serialization.PubKeyHash {
+	res := serialization.PubKeyHash(ew.Address.PaymentPart)
+	return res
+}
+
 type GenericWallet struct {
 	SigningKey           Key.SigningKey
 	VerificationKey      Key.VerificationKey
