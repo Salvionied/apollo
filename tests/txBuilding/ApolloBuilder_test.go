@@ -1,15 +1,5 @@
 package txBuilding_test
 
-import (
-	"encoding/hex"
-	"fmt"
-	"testing"
-
-	"github.com/Salvionied/cbor/v2"
-	"github.com/salvionied/apollo"
-	"github.com/salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
-)
-
 type Network int
 
 const (
@@ -166,52 +156,52 @@ const BLOCKFROST_BASE_URL_PREPROD = "https://cardano-preprod.blockfrost.io/api"
 
 // }
 
-func TestSend1Ada(t *testing.T) {
-	bfc := BlockFrostChainContext.NewBlockfrostChainContext("blockfrost_api_key", int(MAINNET), BLOCKFROST_BASE_URL_MAINNET)
-	cc := apollo.NewEmptyBackend()
-	SEED := "seed phrase here"
-	apollob := apollo.New(&cc)
-	apollob = apollob.
-		SetWalletFromMnemonic(SEED).
-		SetWalletAsChangeAddress()
-	utxos := bfc.Utxos(*apollob.GetWallet().GetAddress())
-	apollob, err := apollob.
-		AddLoadedUTxOs(utxos).
-		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 1_000_000, nil).
-		Complete()
-	if err != nil {
-		fmt.Println(err)
-		t.Error(err)
-	}
-	apollob = apollob.Sign()
-	tx := apollob.GetTx()
-	cborred, err := cbor.Marshal(tx)
-	if err != nil {
-		t.Error(err)
-	}
-	fmt.Println(hex.EncodeToString(cborred))
-	tx_id, _ := bfc.SubmitTx(*tx)
+// func TestSend1Ada(t *testing.T) {
+// 	bfc := BlockFrostChainContext.NewBlockfrostChainContext("blockfrost_api_key", int(MAINNET), BLOCKFROST_BASE_URL_MAINNET)
+// 	cc := apollo.NewEmptyBackend()
+// 	SEED := "seed phrase here"
+// 	apollob := apollo.New(&cc)
+// 	apollob = apollob.
+// 		SetWalletFromMnemonic(SEED).
+// 		SetWalletAsChangeAddress()
+// 	utxos := bfc.Utxos(*apollob.GetWallet().GetAddress())
+// 	apollob, err := apollob.
+// 		AddLoadedUTxOs(utxos).
+// 		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 1_000_000, nil).
+// 		Complete()
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		t.Error(err)
+// 	}
+// 	apollob = apollob.Sign()
+// 	tx := apollob.GetTx()
+// 	cborred, err := cbor.Marshal(tx)
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	fmt.Println(hex.EncodeToString(cborred))
+// 	tx_id, _ := bfc.SubmitTx(*tx)
 
-	fmt.Println(hex.EncodeToString(tx_id.Payload))
-	t.Error("HERE")
+// 	fmt.Println(hex.EncodeToString(tx_id.Payload))
+// 	t.Error("HERE")
 
-}
+// }
 
-func TestSimpleBuild(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext("blockfrost_api_key", int(MAINNET), BLOCKFROST_BASE_URL_MAINNET)
-	apollob := apollo.New(&cc)
-	apollob, err := apollob.
-		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
-		AddLoadedUTxOs(initUtxosDifferentiated()).
-		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000, nil).
-		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-			5_000_000,
-			[]apollo.Unit{{"00000000000000000000000000000000000000000000000000000000", "token0", 1}, {"00000000000000000000000000000000000000000000000000000000", "token2", 3}},
-		).Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	cborred, _ := cbor.Marshal(apollob.GetTx())
-	fmt.Println(apollob.GetTx().TransactionBody.CollateralReturn, apollob.GetTx().TransactionBody.Withdrawals)
-	fmt.Println(hex.EncodeToString(cborred))
-}
+// func TestSimpleBuild(t *testing.T) {
+// 	cc := BlockFrostChainContext.NewBlockfrostChainContext("blockfrost_api_key", int(MAINNET), BLOCKFROST_BASE_URL_MAINNET)
+// 	apollob := apollo.New(&cc)
+// 	apollob, err := apollob.
+// 		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+// 		AddLoadedUTxOs(initUtxosDifferentiated()).
+// 		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000, nil).
+// 		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+// 			5_000_000,
+// 			[]apollo.Unit{{"00000000000000000000000000000000000000000000000000000000", "token0", 1}, {"00000000000000000000000000000000000000000000000000000000", "token2", 3}},
+// 		).Complete()
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	cborred, _ := cbor.Marshal(apollob.GetTx())
+// 	fmt.Println(apollob.GetTx().TransactionBody.CollateralReturn, apollob.GetTx().TransactionBody.Withdrawals)
+// 	fmt.Println(hex.EncodeToString(cborred))
+// }

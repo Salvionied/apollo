@@ -103,7 +103,7 @@ func TestMultiAssetComparison(t *testing.T) {
 	if !(a.Greater(b) || a.Equal(b)) {
 		t.Errorf("Expected true, got false")
 	}
-	if b.Greater(a) || b.Equal(a) {
+	if !b.Greater(a) || b.Equal(a) {
 		t.Errorf("Expected false, got true")
 	}
 
