@@ -118,6 +118,21 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 	return b
 }
 
+func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
+	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
+	selectedValue := utxo.Output.GetAmount()
+	for _, payment := range payments {
+		selectedValue = selectedValue.Sub(Value.SimpleValue(0, payment.ToValue().GetAssets()))
+	}
+	if selectedValue.Less(Value.Value{}) {
+		panic("selected value is negative")
+	}
+	b.payments = append(b.payments, payments...)
+	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
+	b.payments = append(b.payments, p)
+	return b
+}
+
 func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	b.utxos = append(b.utxos, utxos...)
 	return b
@@ -204,7 +219,7 @@ func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymen
 func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	outputs := make([]TransactionOutput.TransactionOutput, 0)
 	for _, payment := range b.payments {
-		outputs = append(outputs, *payment.ToTxOut())
+		outputs = append(outputs, *payment.ToTxOut(&b.Context))
 	}
 	return outputs
 

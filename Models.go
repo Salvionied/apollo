@@ -9,6 +9,8 @@ import (
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/txBuilding/Utils"
 )
 
 type Unit struct {
@@ -36,7 +38,7 @@ func NewUnit(policyId string, name string, quantity int) Unit {
 }
 
 type PaymentI interface {
-	ToTxOut() *TransactionOutput.TransactionOutput
+	ToTxOut(*Base.ChainContext) *TransactionOutput.TransactionOutput
 	ToValue() Value.Value
 }
 
@@ -116,9 +118,14 @@ func (p *Payment) ToValue() Value.Value {
 	return v
 }
 
-func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
-
+func (p *Payment) ToTxOut(cc *Base.ChainContext) *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
+	if txOut.GetAmount().GetCoin() == 0 {
+		coins := Utils.MinLovelacePostAlonzo(txOut, *cc)
+		val := txOut.GetAmount()
+		val.SetLovelace(coins)
+		txOut.SetAmount(val)
+	}
 	if p.IsInline {
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
