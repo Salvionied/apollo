@@ -10,30 +10,41 @@ Little Sample Usage:
 package main
 
 import (
-	"fmt"
+    "encoding/hex"
+    "fmt"
 
-	"github.com/Salvionied/apollo"
+    "github.com/Salvionied/cbor/v2"
+    "github.com/Salvionied/apollo"
+    "github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )
 
 func main() {
-	backend := apollo.NewBlockfrostBackend("project_id", apollo.MAINNET)
-	apollo := apollo.New(backend, apollo.MAINNET)
-	SEED := "Your mnemonic here"
+    bfc := BlockFrostChainContext.NewBlockfrostChainContext("blockfrost_api_key", int(apollo.MAINNET), apollo.BLOCKFROST_BASE_URL_MAINNET)
+    cc := apollo.NewEmptyBackend()
+    SEED := "your mnemonic here"
+    apollob := apollo.New(&cc)
+    apollob = apollob.
+        SetWalletFromMnemonic(SEED).
+        SetWalletAsChangeAddress()
+    utxos := bfc.Utxos(*apollob.GetWallet().GetAddress())
+    apollob, err := apollob.
+        AddLoadedUTxOs(utxos).
+        PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 1_000_000, nil).
+        Complete()
+    if err != nil {
+        fmt.Println(err)
+    }
+    apollob = apollob.Sign()
+    tx := apollob.GetTx()
+    cborred, err := cbor.Marshal(tx)
+    if err != nil {
+        fmt.Println(err)
+    }
+    fmt.Println(hex.EncodeToString(cborred))
+    tx_id, _ := bfc.SubmitTx(*tx)
 
-	tx, err := apollo.SetWalletFromMnemonic(SEED).NewTx().Init().SetWalletAsInput().PayToAddressBech(
-		"The receiver address here",
-		1_000_000,
-	).Complete()
-	tx = tx.Sign()
-	fmt.Println(tx)
-	if err != nil {
-		panic(err)
-	}
-	tx_hash, err := tx.Submit()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(tx_hash)
+    fmt.Println(hex.EncodeToString(tx_id.Payload))
+
 }
 
 ```
