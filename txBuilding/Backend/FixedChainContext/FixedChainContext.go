@@ -121,7 +121,7 @@ func (f FixedChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 	}
 
 	tx_out1 := TransactionOutput.SimpleTransactionOutput(address, Value.PureLovelaceValue(5000000))
-	tx_out2 := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(6000000, MultiAsset.MultiAsset[int64]{Policy.PolicyId{Value: "11111111111111111111111111111111111111111111111111111111", Tp: "string"}: Asset.Asset[int64]{AssetName.NewAssetNameFromString("Token1"): 1, AssetName.NewAssetNameFromString("Token2"): 2}}))
+	tx_out2 := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(6000000, MultiAsset.MultiAsset[int64]{Policy.PolicyId{Value: "11111111111111111111111111111111111111111111111111111111"}: Asset.Asset[int64]{AssetName.NewAssetNameFromString("Token1"): 1, AssetName.NewAssetNameFromString("Token2"): 2}}))
 	return []UTxO.UTxO{{Input: tx_in1, Output: tx_out1}, {Input: tx_in2, Output: tx_out2}}
 }
 

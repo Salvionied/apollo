@@ -10,7 +10,6 @@ import (
 
 type PolicyId struct {
 	Value string
-	Tp    string
 }
 
 func New(value string) (*PolicyId, error) {
@@ -19,7 +18,6 @@ func New(value string) (*PolicyId, error) {
 	}
 	return &PolicyId{
 		Value: value,
-		Tp:    "string",
 	}, nil
 }
 
@@ -29,7 +27,6 @@ func FromBytes(value []byte) (*PolicyId, error) {
 	}
 	return &PolicyId{
 		Value: hex.EncodeToString(value),
-		Tp:    "string",
 	}, nil
 }
 
@@ -38,18 +35,6 @@ func (policyId PolicyId) String() string {
 }
 
 func (policyId *PolicyId) MarshalCBOR() ([]byte, error) {
-	// if policyId.Value == "40" || policyId.Value == "625b5d" {
-	// 	return cbor.Marshal(make([]byte, 0))
-	// }
-	if policyId.Tp == "string" {
-		if len(policyId.Value) != 56 {
-			return nil, errors.New("invalid length of a policy id")
-		}
-		if policyId.Value == "[]" {
-			return cbor.Marshal(make([]byte, 0))
-		}
-		return cbor.Marshal(policyId.Value)
-	}
 	res, err := hex.DecodeString(policyId.Value)
 	if err != nil {
 		return nil, err
@@ -58,9 +43,9 @@ func (policyId *PolicyId) MarshalCBOR() ([]byte, error) {
 		return nil, errors.New("invalid length of a policy id")
 	}
 
-	// if len(res) == 0 {
-	// 	return cbor.Marshal(make([]byte, 0))
-	// }
+	if len(res) == 0 {
+		return cbor.Marshal(make([]byte, 0))
+	}
 	return cbor.Marshal(res)
 
 }
@@ -71,20 +56,18 @@ func (policyId *PolicyId) UnmarshalCBOR(value []byte) error {
 		log.Fatal(err, "HERE")
 		return err
 	}
-	switch res.(type) {
+	switch res := res.(type) {
 	case []byte:
-		hexString := hex.EncodeToString(res.([]byte))
+		hexString := hex.EncodeToString(res)
 		if len(hexString) != 56 {
 			return errors.New("invalid length of a policy id")
 		}
-		policyId.Tp = "bytes"
 		policyId.Value = hexString
 	case string:
-		hexString := res.(string)
+		hexString := res
 		if len(hexString) != 56 {
 			return errors.New("invalid length of a policy id")
 		}
-		policyId.Tp = "string"
 		policyId.Value = hexString
 	default:
 		log.Fatal("Unknown type")
