@@ -1,8 +1,8 @@
 package apollo
 
 import (
-	"github.com/salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
-	"github.com/salvionied/apollo/txBuilding/Backend/FixedChainContext"
+	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
+	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 )
 
 func NewEmptyBackend() FixedChainContext.FixedChainContext {

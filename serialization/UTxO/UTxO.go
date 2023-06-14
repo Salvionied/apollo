@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/salvionied/apollo/serialization/TransactionInput"
-	"github.com/salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 )
 
 type Container[T any] interface {

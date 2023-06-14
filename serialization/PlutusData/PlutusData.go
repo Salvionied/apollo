@@ -1,14 +1,15 @@
 package PlutusData
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
 	"reflect"
 	"sort"
 
-	"github.com/salvionied/apollo/serialization"
-	"github.com/salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
 
 	"github.com/Salvionied/cbor/v2"
 
@@ -550,6 +551,12 @@ type PlutusData struct {
 	Value          any
 }
 
+func (pd *PlutusData) Equal(other PlutusData) bool {
+	marshaledThis, _ := cbor.Marshal(pd)
+	marshaledOther, _ := cbor.Marshal(other)
+	return bytes.Equal(marshaledThis, marshaledOther)
+}
+
 func (pd *PlutusData) ToDatum() Datum {
 
 	var res Datum
@@ -652,7 +659,7 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func PlutusDataHash(pd PlutusData) serialization.DatumHash {
+func PlutusDataHash(pd *PlutusData) serialization.DatumHash {
 	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(pd)
 	if err != nil {

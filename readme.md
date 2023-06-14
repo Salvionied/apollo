@@ -12,7 +12,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/salvionied/apollo"
+	"github.com/Salvionied/apollo"
 )
 
 func main() {

@@ -6,31 +6,31 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Salvionied/apollo/apollotypes"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Amount"
+	"github.com/Salvionied/apollo/serialization/Certificate"
+	"github.com/Salvionied/apollo/serialization/HDWallet"
+	"github.com/Salvionied/apollo/serialization/Key"
+	"github.com/Salvionied/apollo/serialization/Metadata"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/NativeScript"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Redeemer"
+	"github.com/Salvionied/apollo/serialization/Transaction"
+	"github.com/Salvionied/apollo/serialization/TransactionBody"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
+	"github.com/Salvionied/apollo/serialization/Withdrawal"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
+	"github.com/Salvionied/apollo/txBuilding/Utils"
 	"github.com/Salvionied/cbor/v2"
-	"github.com/salvionied/apollo/apollotypes"
-	"github.com/salvionied/apollo/serialization"
-	"github.com/salvionied/apollo/serialization/Address"
-	"github.com/salvionied/apollo/serialization/Amount"
-	"github.com/salvionied/apollo/serialization/Certificate"
-	"github.com/salvionied/apollo/serialization/HDWallet"
-	"github.com/salvionied/apollo/serialization/Key"
-	"github.com/salvionied/apollo/serialization/Metadata"
-	"github.com/salvionied/apollo/serialization/MultiAsset"
-	"github.com/salvionied/apollo/serialization/NativeScript"
-	"github.com/salvionied/apollo/serialization/PlutusData"
-	"github.com/salvionied/apollo/serialization/Redeemer"
-	"github.com/salvionied/apollo/serialization/Transaction"
-	"github.com/salvionied/apollo/serialization/TransactionBody"
-	"github.com/salvionied/apollo/serialization/TransactionInput"
-	"github.com/salvionied/apollo/serialization/TransactionOutput"
-	"github.com/salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/salvionied/apollo/serialization/UTxO"
-	"github.com/salvionied/apollo/serialization/Value"
-	"github.com/salvionied/apollo/serialization/VerificationKeyWitness"
-	"github.com/salvionied/apollo/serialization/Withdrawal"
-	"github.com/salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
-	"github.com/salvionied/apollo/txBuilding/Utils"
 	"golang.org/x/exp/slices"
 )
 
@@ -98,7 +98,27 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 	return b.wallet
 }
 
-func (b *Apollo) AddLoadedUTxOs(utxos []UTxO.UTxO) *Apollo {
+func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
+	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
+	return b
+}
+
+func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
+	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
+	selectedValue := utxo.Output.GetAmount()
+	for _, payment := range payments {
+		selectedValue = selectedValue.Sub(payment.ToValue())
+	}
+	if selectedValue.Less(Value.Value{}) {
+		panic("selected value is negative")
+	}
+	b.payments = append(b.payments, payments...)
+	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
+	b.payments = append(b.payments, p)
+	return b
+}
+
+func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	b.utxos = append(b.utxos, utxos...)
 	return b
 }
@@ -119,23 +139,23 @@ func (b *Apollo) AddPayment(payment PaymentI) *Apollo {
 	return b
 }
 
-func (b *Apollo) PayToAddressBech32(address string, lovelace int, units []Unit) *Apollo {
+func (b *Apollo) PayToAddressBech32(address string, lovelace int, units ...Unit) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
-	return b.AddPayment(&Payment{lovelace, decoded_addr, units, nil, nil})
+	return b.AddPayment(&Payment{lovelace, decoded_addr, units, nil, nil, false})
 }
 
-func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units []Unit) *Apollo {
-	return b.AddPayment(&Payment{lovelace, address, units, nil, nil})
+func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units ...Unit) *Apollo {
+	return b.AddPayment(&Payment{lovelace, address, units, nil, nil, false})
 }
 
 func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
-	hash := hex.EncodeToString(PlutusData.PlutusDataHash(*pd).Payload)
+	hash := hex.EncodeToString(PlutusData.PlutusDataHash(pd).Payload)
 	b.datums[hash] = *pd
 	return b
 }
 
-func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, units []Unit) *Apollo {
-	b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil})
+func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo {
+	b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
 	if pd != nil {
 		b = b.AddDatum(pd)
 	}
@@ -264,7 +284,7 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
-	return &serialization.ScriptDataHash{serialization.Blake2bHash(total_bytes)}
+	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
 
 }
 
@@ -410,50 +430,6 @@ func (b *Apollo) setCollateral() *Apollo {
 	return b
 }
 
-func (b *Apollo) inputVerificationKeys() []VerificationKeyWitness.VerificationKeyWitness {
-	verificationKeys := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
-	for range b.preselectedUtxos {
-		verificationKeys = append(verificationKeys, VerificationKeyWitness.VerificationKeyWitness{
-			Vkey: FAKE_VKEY, Signature: FAKE_SIGNATURE})
-	}
-	return verificationKeys
-}
-
-func (b *Apollo) nativeScriptsVerificationKeys() []VerificationKeyWitness.VerificationKeyWitness {
-	verificationKeys := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
-	for range b.nativescripts {
-		verificationKeys = append(verificationKeys, VerificationKeyWitness.VerificationKeyWitness{
-			Vkey: FAKE_VKEY, Signature: FAKE_SIGNATURE})
-	}
-	return verificationKeys
-}
-
-func (b *Apollo) requiredSignersVerificationKeys() []VerificationKeyWitness.VerificationKeyWitness {
-	verificationKeys := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
-	for range b.requiredSigners {
-		verificationKeys = append(verificationKeys, VerificationKeyWitness.VerificationKeyWitness{
-			Vkey: FAKE_VKEY, Signature: FAKE_SIGNATURE})
-	}
-	return verificationKeys
-}
-
-func (b *Apollo) fakeWitness() *Apollo {
-	if b.tx == nil {
-		return b
-	}
-	// if b.tx.TransactionWitnessSet == nil {
-	// 	witnessSet := b.buildWitnessSet()
-	// 	b.tx.TransactionWitnessSet = witnessSet
-	// }
-
-	b.tx.TransactionWitnessSet.VkeyWitnesses = make([]VerificationKeyWitness.VerificationKeyWitness, 0)
-	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, b.inputVerificationKeys()...)
-	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, b.nativeScriptsVerificationKeys()...)
-	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, b.requiredSignersVerificationKeys()...)
-
-	return b
-}
-
 func (b *Apollo) Clone() *Apollo {
 	clone := *b
 	return &clone
@@ -530,7 +506,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 						}
 					}
 					if !found {
-						return nil, errors.New("Missing required assets")
+						return nil, errors.New("missing required assets")
 					}
 
 				}
@@ -538,13 +514,13 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		}
 		for {
 
-			if selectedAmount.Greater(requestedAmount.Add(Value.Value{Amount.Amount{}, 1_000_000, false})) {
+			if selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})) {
 				break
 			}
 			if len(available_utxos) == 0 {
-				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Amount.Amount{}, 1_000_000, false})))
+				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
 				fmt.Println("HERE")
-				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Amount.Amount{}, 1_000_000, false}))
+				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
 
 				return nil, errors.New("not enough funds")
 			}
@@ -674,7 +650,7 @@ func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 	case *BlockFrostChainContext.BlockFrostChainContext:
 
 		utxos := b.Context.Utxos(*b.wallet.GetAddress())
-		b = b.AddLoadedUTxOs(utxos)
+		b = b.AddLoadedUTxOs(utxos...)
 	default:
 	}
 	b.inputAddresses = append(b.inputAddresses, *b.wallet.GetAddress())
@@ -711,5 +687,19 @@ func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
 
 func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.VerificationKeyWitness) *Apollo {
 	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, vkw)
+	return b
+}
+
+func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
+	addr, err := Address.DecodeAddress(address)
+	if err != nil {
+		panic(err)
+	}
+	b.inputAddresses = append(b.inputAddresses, addr)
+	return b
+}
+
+func (b *Apollo) SetChangeAddress(address Address.Address) *Apollo {
+	b.inputAddresses = append(b.inputAddresses, address)
 	return b
 }

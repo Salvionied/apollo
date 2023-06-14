@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/salvionied/apollo/crypto/bech32"
-	"github.com/salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/crypto/bech32"
+	"github.com/Salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 )

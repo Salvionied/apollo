@@ -6,19 +6,19 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/salvionied/apollo/serialization"
-	"github.com/salvionied/apollo/serialization/Address"
-	"github.com/salvionied/apollo/serialization/PlutusData"
-	"github.com/salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Value"
 
 	"github.com/Salvionied/cbor/v2"
 )
 
 type TransactionOutputAlonzo struct {
-	Address   Address.Address       `cbor:"0, keyasint"`
-	Amount    Value.Value           `cbor:"1,keyasint"`
-	Datum     PlutusData.PlutusData `cbor:"2,keyasint,omitempty"`
-	ScriptRef PlutusData.ScriptRef  `cbor:"3,keyasint,omitempty"`
+	Address   Address.Address        `cbor:"0, keyasint"`
+	Amount    Value.Value            `cbor:"1,keyasint"`
+	Datum     *PlutusData.PlutusData `cbor:"2,keyasint,omitempty"`
+	ScriptRef PlutusData.ScriptRef   `cbor:"3,keyasint,omitempty"`
 }
 
 func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
@@ -158,7 +158,7 @@ func SimpleTransactionOutput(address Address.Address, value Value.Value) Transac
 	}
 }
 
-func (to *TransactionOutput) SetDatum(datum PlutusData.PlutusData) {
+func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 	if to.IsPostAlonzo {
 		to.PostAlonzo.Datum = datum
 	} else {
@@ -191,11 +191,11 @@ func (to *TransactionOutput) GetDatumHash() *serialization.DatumHash {
 	}
 }
 
-func (to *TransactionOutput) GetDatum() PlutusData.PlutusData {
+func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Datum
 	} else {
-		return PlutusData.PlutusData{}
+		return &PlutusData.PlutusData{}
 	}
 }
 func (to *TransactionOutput) GetScriptRef() PlutusData.ScriptRef {

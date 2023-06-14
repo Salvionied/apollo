@@ -3,7 +3,7 @@ package apollo
 import (
 	"sort"
 
-	"github.com/salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/UTxO"
 )
 
 func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {

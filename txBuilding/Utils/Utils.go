@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"log"
 
-	"github.com/salvionied/apollo/serialization"
-	"github.com/salvionied/apollo/serialization/TransactionOutput"
-	"github.com/salvionied/apollo/serialization/UTxO"
-	"github.com/salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 
 	"github.com/Salvionied/cbor/v2"
 )

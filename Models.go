@@ -1,13 +1,14 @@
 package apollo
 
 import (
-	"github.com/salvionied/apollo/serialization/Address"
-	"github.com/salvionied/apollo/serialization/AssetName"
-	"github.com/salvionied/apollo/serialization/MultiAsset"
-	"github.com/salvionied/apollo/serialization/PlutusData"
-	"github.com/salvionied/apollo/serialization/Policy"
-	"github.com/salvionied/apollo/serialization/TransactionOutput"
-	"github.com/salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/Value"
 )
 
 type Unit struct {
@@ -26,6 +27,14 @@ func (u *Unit) ToValue() Value.Value {
 	return val
 }
 
+func NewUnit(policyId string, name string, quantity int) Unit {
+	return Unit{
+		PolicyId: policyId,
+		Name:     name,
+		Quantity: quantity,
+	}
+}
+
 type PaymentI interface {
 	ToTxOut() *TransactionOutput.TransactionOutput
 	ToValue() Value.Value
@@ -37,6 +46,65 @@ type Payment struct {
 	Units     []Unit
 	Datum     *PlutusData.PlutusData
 	DatumHash []byte
+	IsInline  bool
+}
+
+func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
+	payment := &Payment{
+		Receiver: txOut.GetAddress(),
+		Lovelace: int(txOut.GetAmount().GetCoin()),
+		IsInline: false,
+	}
+	hasDatumHash := false
+	hasInlineDatum := false
+	if txOut.GetDatumHash() != nil {
+		payment.DatumHash = txOut.GetDatumHash().Payload
+		hasDatumHash = true
+	}
+	if !txOut.GetDatum().Equal(PlutusData.PlutusData{}) {
+		payment.Datum = txOut.GetDatum()
+		hasInlineDatum = true
+	}
+	if hasDatumHash && hasInlineDatum {
+		payment.IsInline = true
+	}
+
+	for policyId, assets := range txOut.GetAmount().GetAssets() {
+		for assetName, quantity := range assets {
+			payment.Units = append(payment.Units, Unit{
+				PolicyId: policyId.Value,
+				Name:     assetName.String(),
+				Quantity: int(quantity),
+			})
+		}
+	}
+	return payment
+}
+
+func NewPayment(receiver string, lovelace int, units []Unit) *Payment {
+	decoded_address, _ := Address.DecodeAddress(receiver)
+	return &Payment{
+		Lovelace: lovelace,
+		Receiver: decoded_address,
+		Units:    units,
+	}
+}
+
+func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment {
+	payment := &Payment{
+		Receiver: receiver,
+		Lovelace: int(value.GetCoin()),
+	}
+	for policyId, assets := range value.GetAssets() {
+		for assetName, quantity := range assets {
+			payment.Units = append(payment.Units, Unit{
+				PolicyId: policyId.Value,
+				Name:     assetName.String(),
+				Quantity: int(quantity),
+			})
+		}
+	}
+	return payment
 }
 
 func (p *Payment) ToValue() Value.Value {
@@ -51,8 +119,14 @@ func (p *Payment) ToValue() Value.Value {
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
-	if p.Datum != nil {
-		txOut.SetDatum(*p.Datum)
+	if p.IsInline {
+		if p.Datum != nil {
+			txOut.SetDatum(p.Datum)
+		}
+	} else {
+		if p.DatumHash != nil {
+			txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
+		}
 	}
 
 	return &txOut
