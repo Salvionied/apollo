@@ -1,9 +1,9 @@
-module github.com/Salvionied/apollo
+module github.com/SundaeSwap-finance/apollo
 
 go 1.20
 
 require (
-	github.com/Salvionied/cbor/v2 v2.6.0
+	github.com/SundaeSwap-finance/cbor/v2 v2.6.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/text v0.9.0
