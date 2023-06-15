@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/SundaeSwap-finance/apollo/serialization"
+	"github.com/SundaeSwap-finance/apollo/serialization/Address"
 
 	"github.com/Salvionied/cbor/v2"
 

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Salvionied/apollo/crypto/bip32"
+	"github.com/SundaeSwap-finance/apollo/crypto/bip32"
 
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/pbkdf2"

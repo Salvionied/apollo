@@ -1,6 +1,6 @@
 package Redeemer
 
-import "github.com/Salvionied/apollo/serialization/PlutusData"
+import "github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 
 type RedeemerTag int
 

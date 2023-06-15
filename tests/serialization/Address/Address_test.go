@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/SundaeSwap-finance/apollo/serialization/Address"
 )
 
 func TestDecodeAddress(t *testing.T) {

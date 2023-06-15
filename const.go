@@ -1,6 +1,6 @@
 package apollo
 
-import "github.com/Salvionied/apollo/serialization/Key"
+import "github.com/SundaeSwap-finance/apollo/serialization/Key"
 
 type Network int
 

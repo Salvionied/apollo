@@ -1,6 +1,6 @@
 package Amount
 
-import "github.com/Salvionied/apollo/serialization/MultiAsset"
+import "github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
 
 type Amount struct {
 	_     struct{} `cbor:",toarray"`

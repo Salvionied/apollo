@@ -1,13 +1,13 @@
 package apollotypes
 
 import (
-	"github.com/Salvionied/apollo/serialization"
-	serAddress "github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Key"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/SundaeSwap-finance/apollo/serialization"
+	serAddress "github.com/SundaeSwap-finance/apollo/serialization/Address"
+	"github.com/SundaeSwap-finance/apollo/serialization/Key"
+	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
+	"github.com/SundaeSwap-finance/apollo/serialization/TransactionWitnessSet"
+	"github.com/SundaeSwap-finance/apollo/serialization/VerificationKeyWitness"
+	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 )
 
 type Wallet interface {
