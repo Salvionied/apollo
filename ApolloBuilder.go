@@ -590,11 +590,13 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	}
 	for policy, assets := range change.GetAssets() {
 		for asset, amt := range assets {
-			payment.Units = append(payment.Units, Unit{
-				PolicyId: policy.String(),
-				Name:     asset.String(),
-				Quantity: int(amt),
-			})
+			if amt > 0 {
+				payment.Units = append(payment.Units, Unit{
+					PolicyId: policy.String(),
+					Name:     asset.String(),
+					Quantity: int(amt),
+				})
+			}
 		}
 	}
 	b.payments = append(b.payments, &payment)
