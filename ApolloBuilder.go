@@ -219,7 +219,7 @@ func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymen
 func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	outputs := make([]TransactionOutput.TransactionOutput, 0)
 	for _, payment := range b.payments {
-		outputs = append(outputs, *payment.ToTxOut(&b.Context))
+		outputs = append(outputs, *payment.ToTxOut())
 	}
 	return outputs
 
@@ -494,6 +494,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	// }
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
+		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	requestedAmount.AddLovelace(b.estimateFee())
