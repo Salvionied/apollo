@@ -38,7 +38,8 @@ func NewUnit(policyId string, name string, quantity int) Unit {
 }
 
 type PaymentI interface {
-	ToTxOut(*Base.ChainContext) *TransactionOutput.TransactionOutput
+	EnsureMinUTXO(cc Base.ChainContext)
+	ToTxOut() *TransactionOutput.TransactionOutput
 	ToValue() Value.Value
 }
 
@@ -118,14 +119,16 @@ func (p *Payment) ToValue() Value.Value {
 	return v
 }
 
-func (p *Payment) ToTxOut(cc *Base.ChainContext) *TransactionOutput.TransactionOutput {
-	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
-	if txOut.GetAmount().GetCoin() == 0 {
-		coins := Utils.MinLovelacePostAlonzo(txOut, *cc)
-		val := txOut.GetAmount()
-		val.SetLovelace(coins)
-		txOut.SetAmount(val)
+func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
+	txOut := p.ToTxOut()
+	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
+	if int64(p.Lovelace) < coins {
+		p.Lovelace = int(coins)
 	}
+}
+
+func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
+	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
 	if p.IsInline {
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
