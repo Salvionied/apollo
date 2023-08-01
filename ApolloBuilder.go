@@ -57,6 +57,7 @@ type Apollo struct {
 	mint               []Unit
 	collaterals        []UTxO.UTxO
 	Fee                int64
+	FeePadding         int64
 	Ttl                int64
 	ValidityStart      int64
 	totalCollateral    int
@@ -89,6 +90,7 @@ func New(cc Base.ChainContext) *Apollo {
 		mint:               make([]Unit, 0),
 		collaterals:        make([]UTxO.UTxO, 0),
 		Fee:                0,
+		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
@@ -213,6 +215,11 @@ func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymen
 		b.requiredSigners = append(b.requiredSigners, pkh)
 
 	}
+	return b
+}
+
+func (b *Apollo) SetFeePadding(padding int64) *Apollo {
+	b.FeePadding = padding
 	return b
 }
 
@@ -375,6 +382,7 @@ func (b *Apollo) estimateFee() int64 {
 	}
 	fakeTxBytes := fftx.Bytes()
 	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem)
+	estimatedFee += b.FeePadding
 	return estimatedFee
 
 }
