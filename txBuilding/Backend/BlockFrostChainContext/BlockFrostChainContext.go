@@ -45,7 +45,7 @@ type BlockFrostChainContext struct {
 	CustomSubmissionEndpoints []string
 }
 
-func NewBlockfrostChainContext(projectId string, network int, baseUrl string) BlockFrostChainContext {
+func NewBlockfrostChainContext(baseUrl string, network int, projectId string) BlockFrostChainContext {
 	ctx := context.Background()
 	file, err := ioutil.ReadFile("config.ini")
 	var cse []string
