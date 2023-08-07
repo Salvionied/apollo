@@ -243,7 +243,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
-		PlutusData:     plutusdata,
+		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
 }
@@ -275,7 +275,7 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 		log.Fatal(err)
 	}
 	var datum_bytes []byte
-	if len(datums) > 0 {
+	if datums.Len() > 0 {
 
 		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
@@ -718,5 +718,25 @@ func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
 
 func (b *Apollo) SetChangeAddress(address Address.Address) *Apollo {
 	b.inputAddresses = append(b.inputAddresses, address)
+	return b
+}
+
+func (b *Apollo) SetTtl(ttl int64) *Apollo {
+	b.Ttl = ttl
+	return b
+}
+
+func (b *Apollo) SetValidityStart(invalidBefore int64) *Apollo {
+	b.ValidityStart = invalidBefore
+	return b
+}
+
+func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apollo {
+	if b.auxiliaryData == nil {
+		b.auxiliaryData = &Metadata.AuxiliaryData{}
+		b.auxiliaryData.SetShelleyMetadata(metadata)
+	} else {
+		b.auxiliaryData.SetShelleyMetadata(metadata)
+	}
 	return b
 }

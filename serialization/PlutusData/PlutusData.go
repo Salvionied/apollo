@@ -426,7 +426,19 @@ const (
 	PlutusShortArray
 )
 
+type PlutusList interface {
+	Len() int
+}
 type PlutusIndefArray []PlutusData
+type PlutusDefArray []PlutusData
+
+func (pia PlutusIndefArray) Len() int {
+	return len(pia)
+}
+
+func (pia PlutusDefArray) Len() int {
+	return len(pia)
+}
 
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 	var ret PlutusIndefArray
@@ -436,11 +448,11 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 	return ret
 }
 
-func (pia *PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
+func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
 	res = append(res, 0x9f)
 
-	for _, el := range *pia {
+	for _, el := range pia {
 		bytes, err := cbor.Marshal(el)
 		if err != nil {
 			log.Fatal(err)
