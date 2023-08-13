@@ -63,9 +63,12 @@ func (ad *AuxiliaryData) Hash() []byte {
 }
 
 func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
-	err := cbor.Unmarshal(value, &ad._ShelleyMeta)
-	if err != nil {
-		return err
+	err_shelley := cbor.Unmarshal(value, &ad._ShelleyMeta)
+	if err_shelley != nil {
+		err_basic_meta := cbor.Unmarshal(value, &ad._basicMeta)
+		if err_basic_meta != nil {
+			return err_basic_meta
+		}
 	}
 	return nil
 }
