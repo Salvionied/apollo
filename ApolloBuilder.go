@@ -171,7 +171,12 @@ func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 }
 
 func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo {
-	b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
+	if isInline || pd == nil {
+		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
+	} else {
+		dataHash := PlutusData.PlutusDataHash(pd)
+		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline})
+	}
 	if pd != nil {
 		b = b.AddDatum(pd)
 	}
