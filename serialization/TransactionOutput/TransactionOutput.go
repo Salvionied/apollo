@@ -16,7 +16,7 @@ import (
 
 type TransactionOutputAlonzo struct {
 	Address   Address.Address        `cbor:"0, keyasint"`
-	Amount    Value.Value            `cbor:"1,keyasint"`
+	Amount    Value.AlonzoValue      `cbor:"1,keyasint"`
 	Datum     *PlutusData.PlutusData `cbor:"2,keyasint,omitempty"`
 	ScriptRef PlutusData.ScriptRef   `cbor:"3,keyasint,omitempty"`
 }
@@ -137,7 +137,7 @@ func (to *TransactionOutput) EqualTo(other TransactionOutput) bool {
 }
 func (to *TransactionOutput) GetAmount() Value.Value {
 	if to.IsPostAlonzo {
-		return to.PostAlonzo.Amount
+		return to.PostAlonzo.Amount.ToValue()
 	} else {
 		return to.PreAlonzo.Amount
 	}
@@ -261,7 +261,7 @@ func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 
 func (txo *TransactionOutput) SetAmount(amount Value.Value) {
 	if txo.IsPostAlonzo {
-		txo.PostAlonzo.Amount = amount
+		txo.PostAlonzo.Amount = amount.ToAlonzoValue()
 	} else {
 		txo.PreAlonzo.Amount = amount
 	}
