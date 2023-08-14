@@ -130,6 +130,12 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
 	if p.IsInline {
+		txO := TransactionOutput.TransactionOutput{}
+		txO.IsPostAlonzo = true
+		txO.PostAlonzo.Datum = p.Datum
+		txO.PostAlonzo.Address = p.Receiver
+		txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()
+
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
 		}

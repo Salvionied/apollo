@@ -8,6 +8,33 @@ type Amount struct {
 	Value MultiAsset.MultiAsset[int64]
 }
 
+func (amt Amount) ToAlonzo() AlonzoAmount {
+	return AlonzoAmount{
+		Coin:  amt.Coin,
+		Value: amt.Value.Clone(),
+	}
+}
+
+func (amtAl AlonzoAmount) ToShelley() Amount {
+	return Amount{
+		Coin:  amtAl.Coin,
+		Value: amtAl.Value.Clone(),
+	}
+}
+
+type AlonzoAmount struct {
+	_     struct{} `cbor:",toarray"`
+	Coin  int64
+	Value MultiAsset.MultiAsset[int64]
+}
+
+func (am AlonzoAmount) Clone() AlonzoAmount {
+	return AlonzoAmount{
+		Coin:  am.Coin,
+		Value: am.Value.Clone(),
+	}
+}
+
 func (am Amount) RemoveZeroAssets() Amount {
 	res := am.Clone()
 	res.Value = res.Value.RemoveZeroAssets()

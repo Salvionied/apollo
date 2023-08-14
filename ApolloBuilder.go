@@ -179,7 +179,7 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
 	} else {
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, nil, isInline})
 	}
-	if pd != nil {
+	if pd != nil && !isInline {
 		b = b.AddDatum(pd)
 	}
 	return b
