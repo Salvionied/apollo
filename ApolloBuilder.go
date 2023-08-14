@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/Salvionied/apollo/apollotypes"
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Amount"
@@ -575,7 +576,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	b.Fee = b.estimateFee()
-	requestedAmount.AddLovelace(b.Fee)
+	requestedAmount.AddLovelace(b.Fee + constants.MIN_LOVELACE)
 	change := providedAmount.Sub(requestedAmount)
 	if change.GetCoin() < Utils.MinLovelacePostAlonzo(
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], change),
