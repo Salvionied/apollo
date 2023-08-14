@@ -33,7 +33,7 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 			Address:   output.GetAddress(),
 			Amount:    output.GetValue().ToAlonzoValue(),
 			Datum:     output.GetDatum(),
-			ScriptRef: &output.GetScriptRef(),
+			ScriptRef: output.GetScriptRef(),
 		},
 	}
 	encoded, err := cbor.Marshal(tmp_out)
