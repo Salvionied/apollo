@@ -31,7 +31,7 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 		IsPostAlonzo: true,
 		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 			Address:   output.GetAddress(),
-			Amount:    output.GetValue(),
+			Amount:    output.GetValue().ToAlonzoValue(),
 			Datum:     output.GetDatum(),
 			ScriptRef: output.GetScriptRef(),
 		},
