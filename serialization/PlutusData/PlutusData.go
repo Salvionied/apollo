@@ -605,16 +605,21 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			res, err := cbor.Marshal(ok.Content)
-			if err != nil {
-				return err
+			if value[2] == 0x9f {
+				y := PlutusIndefArray{}
+				err = cbor.Unmarshal(value[2:], &y)
+				if err != nil {
+					return err
+				}
+				pd.Value = y
+			} else {
+				y := PlutusDefArray{}
+				err = cbor.Unmarshal(value[2:], &y)
+				if err != nil {
+					return err
+				}
+				pd.Value = y
 			}
-			y := PlutusIndefArray{}
-			err = cbor.Unmarshal(res, &y)
-			if err != nil {
-				return err
-			}
-			pd.Value = y
 
 		default:
 			//TODO SKIP
@@ -623,14 +628,25 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	} else {
 		switch x.(type) {
 		case []interface{}:
-			y := PlutusIndefArray{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				return err
+			if value[0] == 0x9f {
+				y := PlutusIndefArray{}
+				err = cbor.Unmarshal(value, &y)
+				if err != nil {
+					return err
+				}
+				pd.PlutusDataType = PlutusArray
+				pd.Value = y
+				pd.TagNr = 0
+			} else {
+				y := PlutusDefArray{}
+				err = cbor.Unmarshal(value, &y)
+				if err != nil {
+					return err
+				}
+				pd.PlutusDataType = PlutusArray
+				pd.Value = y
+				pd.TagNr = 0
 			}
-			pd.PlutusDataType = PlutusArray
-			pd.Value = y
-			pd.TagNr = 0
 		case uint64:
 			pd.PlutusDataType = PlutusInt
 			pd.Value = x

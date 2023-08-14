@@ -37,7 +37,6 @@ func TestUnmarshal(t *testing.T) {
 	fmt.Println(tx.AuxiliaryData)
 	remarshaled, _ := cbor.Marshal(tx)
 	fmt.Println(hex.EncodeToString(remarshaled))
-	t.Error(":OL")
 	if tx.AuxiliaryData == nil {
 		t.Error("AuxiliaryData is nil")
 	}
