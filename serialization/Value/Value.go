@@ -24,6 +24,24 @@ type AlonzoValue struct {
 	HasAssets bool
 }
 
+func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
+	var rec any
+	_ = cbor.Unmarshal(value, &rec)
+	if reflect.ValueOf(rec).Type().String() == "uint64" {
+		ok, _ := rec.(uint64)
+		val.Coin = int64(ok)
+	} else {
+		am := Amount.Amount{}
+		err := cbor.Unmarshal(value, &am)
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Am = am.ToAlonzo()
+		val.HasAssets = true
+	}
+	return nil
+}
+
 func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
 	if alVal.HasAssets {
 		if alVal.Am.Coin < 0 {

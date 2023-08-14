@@ -620,8 +620,13 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 				}
 				pd.Value = y
 			}
+		case []uint8:
+			pd.TagNr = ok.Number
+			pd.PlutusDataType = PlutusBytes
+			pd.Value = ok.Content
 
 		default:
+			fmt.Println("HERE")
 			//TODO SKIP
 			return nil
 		}
