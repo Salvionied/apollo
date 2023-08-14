@@ -75,6 +75,9 @@ func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 
 func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
 	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
+	if len(ad._basicMeta) != 0 {
+		return enc.Marshal(ad._basicMeta)
+	}
 	if len(ad._AlonzoMeta.Metadata) != 0 || len(ad._AlonzoMeta.NativeScripts) != 0 || len(ad._AlonzoMeta.PlutusScripts) != 0 {
 		return enc.Marshal(ad._AlonzoMeta)
 	}
