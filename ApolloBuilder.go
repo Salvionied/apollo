@@ -498,7 +498,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
-	requestedAmount.AddLovelace(b.estimateFee())
+	requestedAmount.AddLovelace(b.estimateFee() + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
@@ -576,7 +576,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	b.Fee = b.estimateFee()
-	requestedAmount.AddLovelace(b.Fee + constants.MIN_LOVELACE)
+	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
 	if change.GetCoin() < Utils.MinLovelacePostAlonzo(
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], change),
