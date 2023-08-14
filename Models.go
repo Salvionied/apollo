@@ -139,6 +139,7 @@ func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
 		}
+		return &txO
 	} else {
 		if p.DatumHash != nil {
 			txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
