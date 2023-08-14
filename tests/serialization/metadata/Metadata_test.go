@@ -37,5 +37,4 @@ func TestAuxiliaryData(t *testing.T) {
 	if hex.EncodeToString(aux.Hash()) != "9ef720ec820d751e0b7d18534b37a19c2fea055ed49d496b5865d27e8ed34def" {
 		t.Errorf("Invalid Hashing Of AuxiliaryData expected %s got %s", "9ef720ec820d751e0b7d18534b37a19c2fea055ed49d496b5865d27e8ed34def", hex.EncodeToString(aux.Hash()))
 	}
-
 }

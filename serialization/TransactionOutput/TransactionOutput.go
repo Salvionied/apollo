@@ -78,9 +78,10 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		txo.Address = val.Address
 		txo.Amount = val.Amount
 		if len(val.DatumHash) > 0 {
-			dthash := new(serialization.DatumHash)
-			copy(dthash.Payload[:], val.DatumHash)
-			txo.DatumHash = *dthash
+
+			dthash := serialization.DatumHash{Payload: val.DatumHash}
+			txo.DatumHash = dthash
+
 		}
 	} else {
 		val := new(TxOWithoutDatum)

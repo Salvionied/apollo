@@ -429,6 +429,7 @@ const (
 type PlutusList interface {
 	Len() int
 }
+
 type PlutusIndefArray []PlutusData
 type PlutusDefArray []PlutusData
 
