@@ -517,6 +517,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
 					found := false
+					selectedSoFar := int64(0)
 					for idx, utxo := range available_utxos {
 						ma := utxo.Output.GetValue().GetAssets()
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
@@ -526,6 +527,21 @@ func (b *Apollo) Complete() (*Apollo, error) {
 							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
 							found = true
 							break
+						} else {
+							selectedUtxos = append(selectedUtxos, utxo)
+							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
+							if idx+1 < len(available_utxos) {
+								available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+							} else {
+								available_utxos = available_utxos[:idx]
+							}
+							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
+							fmt.Println(selectedSoFar, amt)
+							if selectedSoFar > amt {
+								found = true
+								break
+							}
 						}
 					}
 					if !found {
