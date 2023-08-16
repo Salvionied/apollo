@@ -523,7 +523,11 @@ func (b *Apollo) Complete() (*Apollo, error) {
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+							if idx+1 < len(available_utxos) {
+								available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+							} else {
+								available_utxos = available_utxos[:idx]
+							}
 							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
 							found = true
 							break
