@@ -541,7 +541,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 							}
 							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
-							fmt.Println(selectedSoFar, amt)
 							if selectedSoFar > amt {
 								found = true
 								break
