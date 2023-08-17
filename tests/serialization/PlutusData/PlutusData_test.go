@@ -2,6 +2,7 @@ package plutusdata_test
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
@@ -82,3 +83,112 @@ func TestSerializeAndDeserializePlutusData(t *testing.T) {
 // 		t.Error("Invalid script hash", hex.EncodeToString(hash[:]), "Expected, 36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2")
 // 	}
 // }
+
+func TestPlutusDataFromJson(t *testing.T) {
+	PlutusJson := `{
+		"fields": [
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": "18d725dc0ac9223cac9e91946378dd11df46a58686c2e1e5d7f7eff2"
+							}
+						]
+					},
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"constructor": 0,
+								"fields": [
+									{
+										"constructor": 0,
+										"fields": [
+											{
+												"bytes": "a99a2b452e240cc8f538936c549d62813bcaba54f8e6334ee9436578"
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": "18d725dc0ac9223cac9e91946378dd11df46a58686c2e1e5d7f7eff2"
+							}
+						]
+					},
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"constructor": 0,
+								"fields": [
+									{
+										"constructor": 0,
+										"fields": [
+											{
+												"bytes": "a99a2b452e240cc8f538936c549d62813bcaba54f8e6334ee9436578"
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"constructor": 1,
+				"fields": []
+			},
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": ""
+							},
+							{
+								"bytes": ""
+							}
+						]
+					},
+					{
+						"int": 18781299
+					}
+				]
+			},
+			{
+				"int": 2000000
+			},
+			{
+				"int": 2000000
+			}
+		]
+	}
+	`
+	p := PlutusData.PlutusData{}
+	err := json.Unmarshal([]byte(PlutusJson), &p)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = cbor.Marshal(p)
+	if err != nil {
+		t.Error(err)
+	}
+
+}
