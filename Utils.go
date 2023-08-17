@@ -11,7 +11,7 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	copy(res, utxos)
 	for i := 0; i < len(res); i++ {
 		for j := i + 1; j < len(res); j++ {
-			if res[i].Output.GetAmount().Greater(res[j].Output.GetAmount()) {
+			if res[i].Output.GetAmount().Less(res[j].Output.GetAmount()) {
 				res[i], res[j] = res[j], res[i]
 			}
 		}

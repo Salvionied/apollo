@@ -1,6 +1,8 @@
 package Transaction
 
 import (
+	"fmt"
+
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Metadata"
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
@@ -19,7 +21,7 @@ type Transaction struct {
 func (tx *Transaction) Bytes() []byte {
 	cborred, err := cbor.Marshal(tx)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	return cborred
 }

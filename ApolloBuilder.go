@@ -111,7 +111,8 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 		selectedValue = selectedValue.Sub(payment.ToValue())
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		fmt.Println("selected value is negative")
+		return b
 	}
 	b.payments = append(b.payments, payments...)
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
@@ -126,7 +127,8 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 		selectedValue = selectedValue.Sub(Value.SimpleValue(0, payment.ToValue().GetAssets()))
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		fmt.Println("selected value is negative")
+		return b
 	}
 	b.payments = append(b.payments, payments...)
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
@@ -608,7 +610,8 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], change),
 		b.Context,
 	) {
-		panic("not enough funds")
+		fmt.Println("not enough funds")
+		//TODO FIX
 	}
 	payment := Payment{
 		Receiver: b.inputAddresses[0],
@@ -680,7 +683,8 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		return a
 	}
 	a.wallet = &apollotypes.ExternalWallet{Address: addr}
 	return a
@@ -688,7 +692,8 @@ func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 
 func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 	if b.wallet == nil {
-		panic("Wallet not set")
+		fmt.Println("Wallet not set")
+		return b
 	}
 	switch b.Context.(type) {
 	case *BlockFrostChainContext.BlockFrostChainContext:
@@ -737,7 +742,7 @@ func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.Verificati
 func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	b.inputAddresses = append(b.inputAddresses, addr)
 	return b
