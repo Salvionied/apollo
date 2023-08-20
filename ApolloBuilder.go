@@ -190,16 +190,11 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
 func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, addStakingPart bool) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
 	if addPaymentPart {
-		pkh, err := Key.VerificationKey{Payload: decoded_addr.PaymentPart}.Hash()
-		if err == nil {
-			b.requiredSigners = append(b.requiredSigners, pkh)
-		}
+		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]))
+
 	}
 	if addStakingPart {
-		pkh, err := Key.VerificationKey{Payload: decoded_addr.StakingPart}.Hash()
-		if err == nil {
-			b.requiredSigners = append(b.requiredSigners, pkh)
-		}
+		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]))
 	}
 	return b
 
@@ -428,6 +423,9 @@ func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo {
 }
 
 func (b *Apollo) setCollateral() *Apollo {
+	if len(b.collaterals) > 0 {
+		return b
+	}
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
