@@ -776,3 +776,8 @@ func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apol
 func (b *Apollo) GetUsedUTxOs() []string {
 	return b.usedUtxos
 }
+
+func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
+	b.isEstimateRequired = true
+	return b
+}

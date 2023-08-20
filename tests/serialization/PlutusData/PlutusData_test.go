@@ -3,6 +3,7 @@ package plutusdata_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
@@ -76,14 +77,114 @@ func TestSerializeAndDeserializePlutusData(t *testing.T) {
 // 	}
 // }
 
-// func TestPlutusScript(t *testing.T) {
-// 	plutusScript := PlutusData.PlutusV1Script([]byte("test_script"))
-// 	hash := PlutusData.PlutusScriptHash(plutusScript)
-// 	if hex.EncodeToString(hash[:]) != "36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2" {
-// 		t.Error("Invalid script hash", hex.EncodeToString(hash[:]), "Expected, 36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2")
-// 	}
-// }
+//	func TestPlutusScript(t *testing.T) {
+//		plutusScript := PlutusData.PlutusV1Script([]byte("test_script"))
+//		hash := PlutusData.PlutusScriptHash(plutusScript)
+//		if hex.EncodeToString(hash[:]) != "36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2" {
+//			t.Error("Invalid script hash", hex.EncodeToString(hash[:]), "Expected, 36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2")
+//		}
+//	}
+func GetMinSwapPlutusData() PlutusData.PlutusData {
+	// PkhStruct :=
+	SkhStruct := PlutusData.PlutusData{
+		PlutusData.PlutusArray,
+		121,
+		PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				121,
+				PlutusData.PlutusIndefArray{
+					PlutusData.PlutusData{
+						PlutusData.PlutusArray,
+						121,
+						PlutusData.PlutusIndefArray{
+							PlutusData.PlutusData{
+								PlutusData.PlutusBytes,
+								0,
+								[]byte{}}},
+					},
+				},
+			},
+		},
+	}
 
+	pkhStruct := PlutusData.PlutusData{
+		PlutusData.PlutusArray,
+		121,
+		PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				121,
+				PlutusData.PlutusIndefArray{
+					PlutusData.PlutusData{
+						PlutusData.PlutusBytes,
+						0,
+						[]byte{},
+					},
+				},
+			},
+			SkhStruct,
+		},
+	}
+	policy_bytes := []byte{}
+	asset_bytes := []byte{}
+	AssetStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusBytes,
+				0,
+				policy_bytes,
+			},
+			PlutusData.PlutusData{
+				PlutusData.PlutusBytes,
+				0,
+				asset_bytes,
+			},
+		},
+		TagNr: 121,
+	}
+	BuyOrderStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			AssetStruct,
+			PlutusData.PlutusData{
+				PlutusData.PlutusInt,
+				0,
+				0}},
+		TagNr: 121,
+	}
+
+	Fee := PlutusData.PlutusData{
+		PlutusData.PlutusInt,
+		0,
+		2_000_000,
+	}
+	Bribe := PlutusData.PlutusData{
+		PlutusData.PlutusInt,
+		0,
+		0,
+	}
+
+	FullStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			pkhStruct,
+			pkhStruct,
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				122,
+				[]PlutusData.PlutusData{},
+			},
+			BuyOrderStruct,
+			Bribe,
+			Fee,
+		},
+		TagNr: 121,
+	}
+
+	return FullStruct
+}
 func TestPlutusDataFromJson(t *testing.T) {
 	PlutusJson := `{
 		"fields": [
@@ -186,9 +287,20 @@ func TestPlutusDataFromJson(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = cbor.Marshal(p)
+	cborred, err := cbor.Marshal(p)
 	if err != nil {
 		t.Error(err)
 	}
+	fmt.Println(hex.EncodeToString(cborred))
+	datum := GetMinSwapPlutusData()
+	receborred, err := cbor.Marshal(datum)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(hex.EncodeToString(receborred))
+	if hex.EncodeToString(cborred) == hex.EncodeToString(receborred) {
+		t.Error("Not the same")
+	}
+	t.Error("test")
 
 }
