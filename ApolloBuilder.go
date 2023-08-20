@@ -782,3 +782,13 @@ func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 	b.isEstimateRequired = true
 	return b
 }
+
+func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
+	decodedHash, _ := hex.DecodeString(txHash)
+	input := TransactionInput.TransactionInput{
+		TransactionId: decodedHash,
+		Index:         index,
+	}
+	b.referenceInputs = append(b.referenceInputs, input)
+	return b
+}
