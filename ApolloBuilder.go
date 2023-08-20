@@ -479,6 +479,10 @@ func (b *Apollo) updateExUnits() *Apollo {
 		for _, redeemer := range b.redeemersToUTxO {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
+	} else {
+		for _, redeemer := range b.redeemersToUTxO {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
 	}
 	return b
 }
@@ -637,7 +641,6 @@ func (b *Apollo) CollectFrom(
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
-	b.redeemers = append(b.redeemers, redeemer)
 	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)] = redeemer
 	return b
 }
