@@ -183,6 +183,7 @@ type ChainContext interface {
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
 	EvaluateTx([]uint8) map[string]Redeemer.ExecutionUnits
 	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
+	GetContractCbor(scriptHash string) string
 }
 
 type Epoch struct {

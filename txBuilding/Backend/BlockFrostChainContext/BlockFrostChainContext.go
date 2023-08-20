@@ -461,3 +461,23 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Exe
 	}
 	return final_result
 }
+
+type BlockfrostContractCbor struct {
+	Cbor string `json:"cbor"`
+}
+
+func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) string {
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/scripts/%s/cbor", bfc._baseUrl, scriptHash), nil)
+	req.Header.Set("project_id", bfc._projectId)
+	res, err := bfc.client.Do(req)
+	if err != nil {
+		log.Fatal(err, "REQUEST PROTOCOL")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	var response BlockfrostContractCbor
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Fatal(err, "UNMARSHAL PROTOCOL")
+	}
+	return response.Cbor
+}
