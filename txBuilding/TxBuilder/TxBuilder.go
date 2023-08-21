@@ -598,12 +598,11 @@ func (tb *TransactionBuilder) BuildWitnessSet() TransactionWitnessSet.Transactio
 			Redeemer:       tb.Redeemers(),
 		}
 	}
-	pd := PlutusData.PlutusIndefArray(plutusdata)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  nativeScripts,
 		PlutusV1Script: plutusV1Scripts,
 		PlutusV2Script: plutusV2Scripts,
-		PlutusData:     &pd,
+		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       tb.Redeemers(),
 	}
 }

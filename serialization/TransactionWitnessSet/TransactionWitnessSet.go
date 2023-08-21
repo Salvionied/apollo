@@ -23,7 +23,7 @@ type TransactionWitnessSet struct {
 	BootstrapWitnesses []any                                           `cbor:"2,keyasint,omitempty"`
 	PlutusV1Script     []PlutusData.PlutusV1Script                     `cbor:"3,keyasint,omitempty"`
 	PlutusV2Script     []PlutusData.PlutusV2Script                     `cbor:"6,keyasint,omitempty"`
-	PlutusData         *PlutusData.PlutusIndefArray                    `cbor:"4,keyasint,omitempty"`
+	PlutusData         PlutusData.PlutusIndefArray                     `cbor:"4,keyasint,omitempty"`
 	Redeemer           []Redeemer.Redeemer                             `cbor:"5,keyasint,omitempty"`
 }
 
@@ -45,7 +45,7 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 			BootstrapWitnesses: tws.BootstrapWitnesses,
 			PlutusV1Script:     tws.PlutusV1Script,
 			PlutusV2Script:     tws.PlutusV2Script,
-			PlutusData:         tws.PlutusData,
+			PlutusData:         nil,
 			Redeemer:           tws.Redeemer,
 		})
 	}
@@ -55,7 +55,7 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 		BootstrapWitnesses: tws.BootstrapWitnesses,
 		PlutusV1Script:     tws.PlutusV1Script,
 		PlutusV2Script:     tws.PlutusV2Script,
-		PlutusData:         tws.PlutusData,
+		PlutusData:         &tws.PlutusData,
 		Redeemer:           tws.Redeemer,
 	})
 

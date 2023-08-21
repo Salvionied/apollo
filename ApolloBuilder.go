@@ -235,21 +235,11 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	for _, datum := range b.datums {
 		plutusdata = append(plutusdata, datum)
 	}
-	if len(plutusdata) == 0 {
-		return TransactionWitnessSet.TransactionWitnessSet{
-			NativeScripts:  b.nativescripts,
-			PlutusV1Script: b.v1scripts,
-			PlutusV2Script: b.v2scripts,
-			Redeemer:       b.redeemers,
-			PlutusData:     nil,
-		}
-	}
-	pd := PlutusData.PlutusIndefArray(plutusdata)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
-		PlutusData:     &pd,
+		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
 }
