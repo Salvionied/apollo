@@ -244,11 +244,12 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 			PlutusData:     nil,
 		}
 	}
+	pd := PlutusData.PlutusIndefArray(plutusdata)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &pd,
 		Redeemer:       b.redeemers,
 	}
 }
@@ -789,6 +790,9 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 		TransactionId: decodedHash,
 		Index:         index,
 	}
+	utxo := b.UtxoFromRef(txHash, index)
+	ref := utxo.Output.GetScriptRef()
+	fmt.Println(ref)
 	b.referenceInputs = append(b.referenceInputs, input)
 	return b
 }

@@ -301,6 +301,6 @@ func TestPlutusDataFromJson(t *testing.T) {
 	if hex.EncodeToString(cborred) == hex.EncodeToString(receborred) {
 		t.Error("Not the same")
 	}
-	t.Error("test")
+	//t.Error("test")
 
 }

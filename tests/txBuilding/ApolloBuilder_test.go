@@ -113,7 +113,7 @@ func TestComplexTxBuild(t *testing.T) {
 	fmt.Println("OUTPUT VAL", outputVal)
 
 	// fmt.Println(apollob.GetTx().TransactionBody.Outputs)
-	t.Error("STOP")
+	//t.Error("STOP")
 	if err != nil {
 		t.Error(err)
 	}

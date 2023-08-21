@@ -589,11 +589,21 @@ func (tb *TransactionBuilder) BuildWitnessSet() TransactionWitnessSet.Transactio
 	for _, datum := range tb.Datums {
 		plutusdata = append(plutusdata, datum)
 	}
+	if len(plutusdata) == 0 {
+		return TransactionWitnessSet.TransactionWitnessSet{
+			NativeScripts:  nativeScripts,
+			PlutusV1Script: plutusV1Scripts,
+			PlutusV2Script: plutusV2Scripts,
+			PlutusData:     nil,
+			Redeemer:       tb.Redeemers(),
+		}
+	}
+	pd := PlutusData.PlutusIndefArray(plutusdata)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  nativeScripts,
 		PlutusV1Script: plutusV1Scripts,
 		PlutusV2Script: plutusV2Scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &pd,
 		Redeemer:       tb.Redeemers(),
 	}
 }
