@@ -786,3 +786,8 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	b.referenceInputs = append(b.referenceInputs, input)
 	return b
 }
+
+func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
+	b.isEstimateRequired = false
+	return b
+}
