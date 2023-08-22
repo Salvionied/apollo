@@ -49,7 +49,7 @@ type Apollo struct {
 	preselectedUtxos   []UTxO.UTxO
 	inputAddresses     []Address.Address
 	tx                 *Transaction.Transaction
-	datums             map[string]PlutusData.PlutusData
+	datums             []PlutusData.PlutusData
 	requiredSigners    []serialization.PubKeyHash
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
@@ -81,7 +81,7 @@ func New(cc Base.ChainContext) *Apollo {
 		preselectedUtxos:   []UTxO.UTxO{},
 		inputAddresses:     []Address.Address{},
 		tx:                 nil,
-		datums:             make(map[string]PlutusData.PlutusData),
+		datums:             make([]PlutusData.PlutusData, 0),
 		requiredSigners:    make([]serialization.PubKeyHash, 0),
 		v1scripts:          make([]PlutusData.PlutusV1Script, 0),
 		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
@@ -167,8 +167,7 @@ func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units ...Un
 }
 
 func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
-	hash := hex.EncodeToString(PlutusData.PlutusDataHash(pd).Payload)
-	b.datums[hash] = *pd
+	b.datums = append(b.datums, *pd)
 	return b
 }
 
@@ -232,8 +231,8 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	plutusdata := make([]PlutusData.PlutusData, 0)
-	for _, datum := range b.datums {
-		plutusdata = append(plutusdata, datum)
+	for idx := range b.datums {
+		plutusdata = append(plutusdata, b.datums[idx])
 	}
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
@@ -272,7 +271,6 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	}
 	var datum_bytes []byte
 	if datums.Len() > 0 {
-
 		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
 			log.Fatal(err)
@@ -407,9 +405,7 @@ func (b *Apollo) setRedeemerIndexes() *Apollo {
 }
 
 func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo {
-	hash := PlutusData.HashDatum(datum)
-
-	b.datums[hex.EncodeToString(hash.Payload)] = *datum
+	b.datums = append(b.datums, *datum)
 	return b
 }
 
@@ -776,9 +772,6 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 		TransactionId: decodedHash,
 		Index:         index,
 	}
-	utxo := b.UtxoFromRef(txHash, index)
-	ref := utxo.Output.GetScriptRef()
-	fmt.Println(ref)
 	b.referenceInputs = append(b.referenceInputs, input)
 	return b
 }
