@@ -513,29 +513,20 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				for asset, amt := range assets {
 					found := false
 					selectedSoFar := int64(0)
+					usedIdxs := make([]int, 0)
 					for idx, utxo := range available_utxos {
 						ma := utxo.Output.GetValue().GetAssets()
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							if idx == 0 {
-								available_utxos = available_utxos[idx:]
-
-							} else {
-								available_utxos = append(available_utxos[:idx-1], available_utxos[idx:]...)
-							}
+							usedIdxs = append(usedIdxs, idx)
 							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
 							found = true
 							break
 						} else if ma.GetByPolicyAndId(pol, asset) > 0 {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							if idx == 0 {
-								available_utxos = available_utxos[idx:]
-
-							} else {
-								available_utxos = append(available_utxos[:idx-1], available_utxos[idx:]...)
-							}
+							usedIdxs = append(usedIdxs, idx)
 							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
 							if selectedSoFar >= amt {
@@ -543,6 +534,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 								break
 							}
 						}
+					}
+					for _, idx := range usedIdxs {
+						available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
 					}
 					if !found {
 						return nil, errors.New("missing required assets")
