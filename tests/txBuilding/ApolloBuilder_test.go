@@ -51,6 +51,54 @@ func TestUnmarshal(t *testing.T) {
 
 }
 
+func TestEnsureTxIsBalanced(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	apollob := apollo.New(&cc)
+	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
+	SampleUtxos := `["8282582023fca3d654c1194e776949626b3794db80a81d66cd3490b04e55268baaf7d392078258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1b00000003c2f30419"]`
+	jsonutxos := make([]string, 0)
+	_ = json.Unmarshal([]byte(SampleUtxos), &jsonutxos)
+	utxos := make([]UTxO.UTxO, 0)
+	for _, utxo := range jsonutxos {
+		var loadedUtxo UTxO.UTxO
+		decodedUtxo, _ := hex.DecodeString(utxo)
+		err := cbor.Unmarshal(decodedUtxo, &loadedUtxo)
+		if err != nil {
+			t.Error(err)
+		}
+		utxos = append(utxos, loadedUtxo)
+	}
+	fmt.Println(utxos)
+	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
+		SetTtl(0 + 300)
+	apollob, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(hex.EncodeToString(apollob.GetTx().Bytes()))
+	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, input := range apollob.GetTx().TransactionBody.Inputs {
+		for _, utxo := range utxos {
+			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {
+				//fmt.Println("INPUT", idx, utxo)
+				inputVal = inputVal.Add(utxo.Output.GetAmount())
+			}
+		}
+	}
+	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, output := range apollob.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(output.GetAmount())
+	}
+	outputVal.AddLovelace(apollob.Fee)
+	fmt.Println("INPUT VAL", inputVal)
+	fmt.Println("OUTPUT VAL", outputVal)
+	fmt.Println("FEE", apollob.Fee)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Tx is not balanced")
+	}
+}
+
 func TestComplexTxBuild(t *testing.T) {
 	cc := FixedChainContext.InitFixedChainContext()
 	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"

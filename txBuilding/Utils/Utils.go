@@ -53,7 +53,7 @@ func ToCbor(x interface{}) string {
 
 func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
 	pm := context.GetProtocolParams()
-	fee := int64(txSize*3*pm.MinFeeCoefficient +
+	fee := int64(txSize*pm.MinFeeCoefficient +
 		pm.MinFeeConstant +
 		int(float32(steps)*pm.PriceStep) +
 		int(float32(mem)*pm.PriceMem))

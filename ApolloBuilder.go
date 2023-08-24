@@ -350,7 +350,9 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	witness := b.buildWitnessSet()
 	tx := Transaction.Transaction{
 		TransactionBody:       txBody,
-		TransactionWitnessSet: witness}
+		TransactionWitnessSet: witness,
+		Valid:                 true,
+		AuxiliaryData:         b.auxiliaryData}
 	bytes := tx.Bytes()
 	if len(bytes) > b.Context.GetProtocolParams().MaxTxSize {
 		return nil, errors.New("transaction too large")
@@ -368,7 +370,7 @@ func (b *Apollo) estimateFee() int64 {
 		return 0
 	}
 	fakeTxBytes := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes)+500, pExU.Steps, pExU.Mem)
+	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem)
 	return estimatedFee
 
 }
@@ -548,7 +550,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 			}
 			if len(available_utxos) == 0 {
 				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
-				fmt.Println("HERE")
 				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
 
 				return nil, errors.New("not enough funds")
@@ -614,7 +615,16 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 			}
 		}
 	}
+	pp := b.payments[:]
 	b.payments = append(b.payments, &payment)
+
+	newestFee := b.estimateFee()
+	if newestFee > b.Fee {
+		difference := newestFee - b.Fee
+		payment.Lovelace -= int(difference)
+		b.payments = append(pp, &payment)
+		b.Fee = newestFee
+	}
 	return b
 }
 
