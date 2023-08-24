@@ -243,6 +243,30 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	}
 }
 
+func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
+	plutusdata := make([]PlutusData.PlutusData, 0)
+	for idx := range b.datums {
+		plutusdata = append(plutusdata, b.datums[idx])
+	}
+	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
+	fakeVkWitnesses = append(fakeVkWitnesses, VerificationKeyWitness.VerificationKeyWitness{
+		Vkey:      FAKE_VKEY,
+		Signature: FAKE_SIGNATURE})
+	for range b.requiredSigners {
+		fakeVkWitnesses = append(fakeVkWitnesses, VerificationKeyWitness.VerificationKeyWitness{
+			Vkey:      FAKE_VKEY,
+			Signature: FAKE_SIGNATURE})
+	}
+	return TransactionWitnessSet.TransactionWitnessSet{
+		NativeScripts:  b.nativescripts,
+		PlutusV1Script: b.v1scripts,
+		PlutusV2Script: b.v2scripts,
+		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		Redeemer:       b.redeemers,
+		VkeyWitnesses:  fakeVkWitnesses,
+	}
+}
+
 func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	if len(b.datums) == 0 && len(b.redeemers) == 0 {
 		return nil
@@ -347,7 +371,7 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	if txBody.Fee == 0 {
 		txBody.Fee = int64(b.Context.MaxTxFee())
 	}
-	witness := b.buildWitnessSet()
+	witness := b.buildFakeWitnessSet()
 	tx := Transaction.Transaction{
 		TransactionBody:       txBody,
 		TransactionWitnessSet: witness,
