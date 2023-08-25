@@ -442,7 +442,7 @@ func (b *Apollo) setCollateral() *Apollo {
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
-		len(b.referenceScripts) == 0 {
+		len(b.referenceInputs) == 0 {
 		return b
 	}
 	availableUtxos := b.getAvailableUtxos()
