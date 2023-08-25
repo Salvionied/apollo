@@ -38,7 +38,7 @@ type WithRedeemerNoScripts struct {
 }
 
 func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
-	if len(tws.PlutusV1Script) == 0 && len(tws.Redeemer) > 0 {
+	if len(tws.PlutusV1Script) == 0 && len(tws.Redeemer) > 0 && len(tws.PlutusData) == 0 {
 		return cbor.Marshal(WithRedeemerNoScripts{
 			VkeyWitnesses:      tws.VkeyWitnesses,
 			NativeScripts:      tws.NativeScripts,
