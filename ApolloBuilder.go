@@ -69,6 +69,7 @@ type Apollo struct {
 	usedUtxos          []string
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
+	scriptHashes       []string
 }
 
 func New(cc Base.ChainContext) *Apollo {
@@ -413,16 +414,13 @@ func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
 	done := make([]string, 0)
 	for i, utxo := range sorted_inputs {
-		utxo_cbor := Utils.ToCbor(utxo)
-		if slices.Contains(done, utxo_cbor) {
-			continue
-		}
-		val, ok := b.redeemersToUTxO[utxo_cbor]
+		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
+		val, ok := b.redeemersToUTxO[key]
 		if ok && val.Tag == Redeemer.SPEND {
-			done = append(done, utxo_cbor)
-			redeem := b.redeemersToUTxO[utxo_cbor]
+			done = append(done, key)
+			redeem := b.redeemersToUTxO[key]
 			redeem.Index = i
-			b.redeemersToUTxO[utxo_cbor] = redeem
+			b.redeemersToUTxO[key] = redeem
 		} else if ok && val.Tag == Redeemer.MINT {
 			//TODO: IMPLEMENT FOR MINTS
 		}
@@ -658,18 +656,31 @@ func (b *Apollo) CollectFrom(
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
-	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)] = redeemer
+	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = redeemer
 	return b
 }
 
 func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
 	b.v1scripts = append(b.v1scripts, script)
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 
 	return b
 }
 func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
 	b.v2scripts = append(b.v2scripts, script)
-
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
 
