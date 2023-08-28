@@ -331,12 +331,12 @@ func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {
 	return ma
 }
 
-func (b *Apollo) mintAssets(mintUnit Unit) *Apollo {
+func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 	b.mint = append(b.mint, mintUnit)
 	return b
 }
 
-func (b *Apollo) mintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
+func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
 	b.mint = append(b.mint, mintUnit)
 	b.redeemers = append(b.redeemers, redeemer)
 	return b
