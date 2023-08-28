@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/Salvionied/apollo/apollotypes"
 	"github.com/Salvionied/apollo/constants"
@@ -602,6 +603,14 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	return b, nil
 }
 
+func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainContext) bool {
+	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
+	encoded, _ := cbor.Marshal(txOutput)
+	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
+	return len(encoded) > maxValSize
+
+}
+
 func (b *Apollo) addChangeAndFee() *Apollo {
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
@@ -624,6 +633,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
 		return b.addChangeAndFee()
 	}
+
 	payment := Payment{
 		Receiver: b.inputAddresses[0],
 		Lovelace: int(change.GetCoin()),
