@@ -833,6 +833,15 @@ func (b *Apollo) Sign() *Apollo {
 	return b
 }
 
+func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) *Apollo {
+	witness_set := b.GetTx().TransactionWitnessSet
+	txHash := b.GetTx().TransactionBody.Hash()
+	signature := skey.Sign(txHash)
+	witness_set.VkeyWitnesses = append(witness_set.VkeyWitnesses, VerificationKeyWitness.VerificationKeyWitness{Vkey: vkey, Signature: signature})
+	b.GetTx().TransactionWitnessSet = witness_set
+	return b
+}
+
 func (b *Apollo) Submit() (serialization.TransactionId, error) {
 	return b.Context.SubmitTx(*b.tx)
 }
