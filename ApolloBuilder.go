@@ -614,12 +614,18 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	b.Fee = b.estimateFee()
 	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
+	fmt.Println(change.GetCoin(), Utils.MinLovelacePostAlonzo(
+		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
+		b.Context,
+	))
 	if change.GetCoin() < Utils.MinLovelacePostAlonzo(
-		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], change),
+		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
 		b.Context,
 	) {
-		fmt.Println("not enough funds")
-		//TODO FIX
+		sortedUtxos := SortUtxos(b.getAvailableUtxos())
+		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
+		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
+		return b.addChangeAndFee()
 	}
 	payment := Payment{
 		Receiver: b.inputAddresses[0],
