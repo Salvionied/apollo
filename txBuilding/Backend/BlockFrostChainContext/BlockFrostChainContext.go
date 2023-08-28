@@ -19,6 +19,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Asset"
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
@@ -333,23 +334,30 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 			datum_hash = serialization.DatumHash{}
 			copy(datum_hash.Payload[:], result.DataHash[:])
 		}
-		// if result.InlineDatum != "" {
-		// 	decoded, err := hex.DecodeString(result.InlineDatum)
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	var x serialization.PlutusData
-		// 	err = cbor.Unmarshal(decoded, &x)
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	datum := x
-		// }
-		tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
-			Address:   address,
-			Amount:    final_amount,
-			DatumHash: datum_hash,
-			HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+		var tx_out TransactionOutput.TransactionOutput
+		if result.InlineDatum != "" {
+			decoded, err := hex.DecodeString(result.InlineDatum)
+			if err != nil {
+				log.Fatal(err)
+			}
+			var x PlutusData.PlutusData
+			err = cbor.Unmarshal(decoded, &x)
+			if err != nil {
+				log.Fatal(err)
+			}
+			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
+				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+					Address: address,
+					Amount:  final_amount.ToAlonzoValue(),
+					Datum:   &x},
+			}
+		} else {
+			tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
+				Address:   address,
+				Amount:    final_amount,
+				DatumHash: datum_hash,
+				HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+		}
 		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
 	}
 	return utxos
