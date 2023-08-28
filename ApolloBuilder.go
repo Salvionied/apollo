@@ -331,6 +331,17 @@ func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {
 	return ma
 }
 
+func (b *Apollo) mintAssets(mintUnit Unit) *Apollo {
+	b.mint = append(b.mint, mintUnit)
+	return b
+}
+
+func (b *Apollo) mintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
+	b.mint = append(b.mint, mintUnit)
+	b.redeemers = append(b.redeemers, redeemer)
+	return b
+}
+
 func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 	inputs := make([]TransactionInput.TransactionInput, 0)
 	for _, utxo := range b.preselectedUtxos {
