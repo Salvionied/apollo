@@ -607,7 +607,58 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
 	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
 	encoded, _ := cbor.Marshal(txOutput)
 	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
+	//fmt.Println(len(encoded), maxValSize)
 	return len(encoded) > maxValSize
+
+}
+
+func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Payment {
+	lovelace := c.GetCoin()
+	assets := c.GetAssets()
+	payments := make([]*Payment, 0)
+	newPayment := new(Payment)
+	newPayment.Receiver = a
+	newPayment.Lovelace = 0
+	newPayment.Units = make([]Unit, 0)
+	for policy, assets := range assets {
+		for asset, amt := range assets {
+			if !isOverUtxoLimit(newPayment.ToValue(), a, b) {
+				if amt > 0 {
+					newPayment.Units = append(newPayment.Units, Unit{
+						PolicyId: policy.String(),
+						Name:     asset.String(),
+						Quantity: int(amt),
+					})
+				}
+			} else {
+
+				minLovelace := Utils.MinLovelacePostAlonzo(
+					*newPayment.ToTxOut(), b)
+				newPayment.Lovelace = int(minLovelace)
+				lovelace -= minLovelace
+				payments = append(payments, newPayment)
+				newPayment = new(Payment)
+				newPayment.Receiver = a
+				newPayment.Lovelace = 0
+				newPayment.Units = make([]Unit, 0)
+				if amt > 0 {
+					newPayment.Units = append(newPayment.Units, Unit{
+						PolicyId: policy.String(),
+						Name:     asset.String(),
+						Quantity: int(amt),
+					})
+				}
+			}
+		}
+	}
+	payments = append(payments, newPayment)
+
+	payments[len(payments)-1].Lovelace += int(lovelace)
+	totalCoin := 0
+	for _, payment := range payments {
+		totalCoin += payment.Lovelace
+	}
+	return payments
 
 }
 
@@ -633,32 +684,50 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
 		return b.addChangeAndFee()
 	}
-
-	payment := Payment{
-		Receiver: b.inputAddresses[0],
-		Lovelace: int(change.GetCoin()),
-		Units:    make([]Unit, 0),
-	}
-	for policy, assets := range change.GetAssets() {
-		for asset, amt := range assets {
-			if amt > 0 {
-				payment.Units = append(payment.Units, Unit{
-					PolicyId: policy.String(),
-					Name:     asset.String(),
-					Quantity: int(amt),
-				})
+	if isOverUtxoLimit(change, b.inputAddresses[0], b.Context) {
+		adjustedPayments := splitPayments(change, b.inputAddresses[0], b.Context)
+		pp := b.payments[:]
+		for _, payment := range adjustedPayments {
+			b.payments = append(b.payments, payment)
+		}
+		newestFee := b.estimateFee()
+		if newestFee > b.Fee {
+			difference := newestFee - b.Fee
+			adjustedPayments[len(adjustedPayments)-1].Lovelace -= int(difference)
+			b.Fee = newestFee
+			b.payments = pp
+			for _, payment := range adjustedPayments {
+				b.payments = append(b.payments, payment)
 			}
 		}
-	}
-	pp := b.payments[:]
-	b.payments = append(b.payments, &payment)
 
-	newestFee := b.estimateFee()
-	if newestFee > b.Fee {
-		difference := newestFee - b.Fee
-		payment.Lovelace -= int(difference)
-		b.payments = append(pp, &payment)
-		b.Fee = newestFee
+	} else {
+		payment := Payment{
+			Receiver: b.inputAddresses[0],
+			Lovelace: int(change.GetCoin()),
+			Units:    make([]Unit, 0),
+		}
+		for policy, assets := range change.GetAssets() {
+			for asset, amt := range assets {
+				if amt > 0 {
+					payment.Units = append(payment.Units, Unit{
+						PolicyId: policy.String(),
+						Name:     asset.String(),
+						Quantity: int(amt),
+					})
+				}
+			}
+		}
+		pp := b.payments[:]
+		b.payments = append(b.payments, &payment)
+
+		newestFee := b.estimateFee()
+		if newestFee > b.Fee {
+			difference := newestFee - b.Fee
+			payment.Lovelace -= int(difference)
+			b.payments = append(pp, &payment)
+			b.Fee = newestFee
+		}
 	}
 	return b
 }
