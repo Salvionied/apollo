@@ -121,6 +121,9 @@ func (p *Payment) ToValue() Value.Value {
 
 func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	txOut := p.ToTxOut()
+	am := txOut.GetAmount()
+	am.SetLovelace(0)
+	txOut.SetAmount(am)
 	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
 	if int64(p.Lovelace) < coins {
 		p.Lovelace = int(coins)
