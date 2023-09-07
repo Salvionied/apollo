@@ -22,7 +22,7 @@ func Contains[T UTxO.Container[any]](container []T, contained T) bool {
 }
 
 func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context Base.ChainContext) int64 {
-	constantOverhead := 160
+	constantOverhead := 200
 	amt := output.GetValue()
 	if amt.Coin == 0 {
 		amt.Coin = 1_000_000
