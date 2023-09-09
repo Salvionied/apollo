@@ -568,7 +568,11 @@ func (b *Apollo) Complete() (*Apollo, error) {
 						}
 					}
 					for _, idx := range usedIdxs {
-						available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+						if idx == len(available_utxos)-1 {
+							available_utxos = available_utxos[:idx]
+						} else {
+							available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+						}
 					}
 					if !found {
 						return nil, errors.New("missing required assets")
