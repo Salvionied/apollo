@@ -567,13 +567,13 @@ func (b *Apollo) Complete() (*Apollo, error) {
 							}
 						}
 					}
-					for _, idx := range usedIdxs {
-						if idx == len(available_utxos)-1 {
-							available_utxos = available_utxos[:idx]
-						} else {
-							available_utxos = append(available_utxos[:idx], available_utxos[idx+1:]...)
+					newAvailUtxos := make([]UTxO.UTxO, 0)
+					for idx, availutxo := range available_utxos {
+						if !slices.Contains(usedIdxs, idx) {
+							newAvailUtxos = append(newAvailUtxos, availutxo)
 						}
 					}
+					available_utxos = newAvailUtxos
 					if !found {
 						return nil, errors.New("missing required assets")
 					}
