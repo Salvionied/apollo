@@ -442,7 +442,7 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) *ser
 		log.Fatal(err)
 	}
 	var datum_bytes []byte
-	if len(datums) > 0 {
+	if datums.Len() > 0 {
 
 		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
@@ -589,11 +589,20 @@ func (tb *TransactionBuilder) BuildWitnessSet() TransactionWitnessSet.Transactio
 	for _, datum := range tb.Datums {
 		plutusdata = append(plutusdata, datum)
 	}
+	if len(plutusdata) == 0 {
+		return TransactionWitnessSet.TransactionWitnessSet{
+			NativeScripts:  nativeScripts,
+			PlutusV1Script: plutusV1Scripts,
+			PlutusV2Script: plutusV2Scripts,
+			PlutusData:     nil,
+			Redeemer:       tb.Redeemers(),
+		}
+	}
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  nativeScripts,
 		PlutusV1Script: plutusV1Scripts,
 		PlutusV2Script: plutusV2Scripts,
-		PlutusData:     plutusdata,
+		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       tb.Redeemers(),
 	}
 }

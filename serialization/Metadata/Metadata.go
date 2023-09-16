@@ -63,15 +63,21 @@ func (ad *AuxiliaryData) Hash() []byte {
 }
 
 func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
-	err := cbor.Unmarshal(value, &ad._ShelleyMeta)
-	if err != nil {
-		return err
+	err_shelley := cbor.Unmarshal(value, &ad._ShelleyMeta)
+	if err_shelley != nil {
+		err_basic_meta := cbor.Unmarshal(value, &ad._basicMeta)
+		if err_basic_meta != nil {
+			return err_basic_meta
+		}
 	}
 	return nil
 }
 
 func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
 	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
+	if len(ad._basicMeta) != 0 {
+		return enc.Marshal(ad._basicMeta)
+	}
 	if len(ad._AlonzoMeta.Metadata) != 0 || len(ad._AlonzoMeta.NativeScripts) != 0 || len(ad._AlonzoMeta.PlutusScripts) != 0 {
 		return enc.Marshal(ad._AlonzoMeta)
 	}

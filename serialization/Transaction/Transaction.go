@@ -1,6 +1,8 @@
 package Transaction
 
 import (
+	"fmt"
+
 	"github.com/Salvionied/cbor/v2"
 	"github.com/SundaeSwap-finance/apollo/serialization"
 	"github.com/SundaeSwap-finance/apollo/serialization/Metadata"
@@ -19,7 +21,7 @@ type Transaction struct {
 func (tx *Transaction) Bytes() []byte {
 	cborred, err := cbor.Marshal(tx)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	return cborred
 }

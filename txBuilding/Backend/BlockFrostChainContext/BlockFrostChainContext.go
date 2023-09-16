@@ -19,6 +19,7 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Asset"
 	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
 	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
+	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 	"github.com/SundaeSwap-finance/apollo/serialization/Policy"
 	"github.com/SundaeSwap-finance/apollo/serialization/Redeemer"
 	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
@@ -45,7 +46,7 @@ type BlockFrostChainContext struct {
 	CustomSubmissionEndpoints []string
 }
 
-func NewBlockfrostChainContext(projectId string, network int, baseUrl string) BlockFrostChainContext {
+func NewBlockfrostChainContext(baseUrl string, network int, projectId string) BlockFrostChainContext {
 	ctx := context.Background()
 	file, err := ioutil.ReadFile("config.ini")
 	var cse []string
@@ -333,23 +334,30 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 			datum_hash = serialization.DatumHash{}
 			copy(datum_hash.Payload[:], result.DataHash[:])
 		}
-		// if result.InlineDatum != "" {
-		// 	decoded, err := hex.DecodeString(result.InlineDatum)
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	var x serialization.PlutusData
-		// 	err = cbor.Unmarshal(decoded, &x)
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	datum := x
-		// }
-		tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
-			Address:   address,
-			Amount:    final_amount,
-			DatumHash: datum_hash,
-			HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+		var tx_out TransactionOutput.TransactionOutput
+		if result.InlineDatum != "" {
+			decoded, err := hex.DecodeString(result.InlineDatum)
+			if err != nil {
+				log.Fatal(err)
+			}
+			var x PlutusData.PlutusData
+			err = cbor.Unmarshal(decoded, &x)
+			if err != nil {
+				log.Fatal(err)
+			}
+			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
+				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+					Address: address,
+					Amount:  final_amount.ToAlonzoValue(),
+					Datum:   &x},
+			}
+		} else {
+			tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
+				Address:   address,
+				Amount:    final_amount,
+				DatumHash: datum_hash,
+				HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+		}
 		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
 	}
 	return utxos
@@ -460,4 +468,24 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Exe
 		final_result[k] = Redeemer.ExecutionUnits{Steps: int64(v["steps"]), Mem: int64(v["memory"])}
 	}
 	return final_result
+}
+
+type BlockfrostContractCbor struct {
+	Cbor string `json:"cbor"`
+}
+
+func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) string {
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/v0/scripts/%s/cbor", bfc._baseUrl, scriptHash), nil)
+	req.Header.Set("project_id", bfc._projectId)
+	res, err := bfc.client.Do(req)
+	if err != nil {
+		log.Fatal(err, "REQUEST PROTOCOL")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	var response BlockfrostContractCbor
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Fatal(err, "UNMARSHAL PROTOCOL")
+	}
+	return response.Cbor
 }

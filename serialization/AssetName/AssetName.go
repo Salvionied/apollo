@@ -34,6 +34,10 @@ func (an AssetName) String() string {
 	return string(decoded)
 }
 
+func (an AssetName) HexString() string {
+	return an.value
+}
+
 func (an *AssetName) MarshalCBOR() ([]byte, error) {
 	if an.value == "[]" || an.value == "" {
 		return cbor.Marshal(make([]byte, 0))

@@ -41,7 +41,7 @@ type Redeemer struct {
 	_       struct{} `cbor:",toarray"`
 	Tag     RedeemerTag
 	Index   int
-	Data    PlutusData.Datum
+	Data    PlutusData.PlutusData
 	ExUnits ExecutionUnits
 }
 

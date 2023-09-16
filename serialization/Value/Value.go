@@ -18,6 +18,68 @@ type Value struct {
 	HasAssets bool
 }
 
+type AlonzoValue struct {
+	Am        Amount.AlonzoAmount
+	Coin      int64
+	HasAssets bool
+}
+
+func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
+	var rec any
+	_ = cbor.Unmarshal(value, &rec)
+	if reflect.ValueOf(rec).Type().String() == "uint64" {
+		ok, _ := rec.(uint64)
+		val.Coin = int64(ok)
+	} else {
+		am := Amount.Amount{}
+		err := cbor.Unmarshal(value, &am)
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Am = am.ToAlonzo()
+		val.HasAssets = true
+	}
+	return nil
+}
+
+func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
+	if alVal.HasAssets {
+		if alVal.Am.Coin < 0 {
+			return nil, errors.New("invalid coin value")
+		}
+		em, _ := cbor.CanonicalEncOptions().EncMode()
+		return em.Marshal(alVal.Am)
+	} else {
+		if alVal.Coin < 0 {
+			return nil, errors.New("invalid coin value")
+		}
+		return cbor.Marshal([]any{alVal.Coin, map[any]any{}})
+	}
+}
+
+func (alVal AlonzoValue) Clone() AlonzoValue {
+	return AlonzoValue{
+		Am:        alVal.Am.Clone(),
+		Coin:      alVal.Coin,
+		HasAssets: alVal.HasAssets,
+	}
+}
+func (val Value) ToAlonzoValue() AlonzoValue {
+	return AlonzoValue{
+		Am:        val.Am.ToAlonzo(),
+		Coin:      val.Coin,
+		HasAssets: val.HasAssets,
+	}
+}
+
+func (alVal AlonzoValue) ToValue() Value {
+	return Value{
+		Am:        alVal.Am.ToShelley(),
+		Coin:      alVal.Coin,
+		HasAssets: alVal.HasAssets,
+	}
+}
+
 func (val Value) RemoveZeroAssets() Value {
 	res := val.Clone()
 	if res.HasAssets {
@@ -103,7 +165,6 @@ func (val Value) GetAssets() MultiAsset.MultiAsset[int64] {
 	}
 	return nil
 }
-
 func (val Value) Add(other Value) Value {
 	res := val.Clone()
 	if other.HasAssets {
@@ -152,8 +213,6 @@ func (val Value) LessOrEqual(other Value) bool {
 	return val.Equal(other) || val.Less(other)
 }
 func (val Value) Greater(other Value) bool {
-	// fmt.Println(val.GetCoin(), other.GetCoin(), val.GetAssets(), other.GetAssets(),
-	// 	val.GetCoin() >= other.GetCoin(), val.GetAssets().Greater(other.GetAssets()))
 	return val.GetCoin() >= other.GetCoin() && val.GetAssets().Greater(other.GetAssets())
 
 }
@@ -190,14 +249,12 @@ func (val *Value) UnmarshalCBOR(value []byte) error {
 func (val *Value) MarshalCBOR() ([]byte, error) {
 	if val.HasAssets {
 		if val.Am.Coin < 0 {
-			fmt.Println(val)
 			return nil, errors.New("invalid coin value")
 		}
 		em, _ := cbor.CanonicalEncOptions().EncMode()
 		return em.Marshal(val.Am)
 	} else {
 		if val.Coin < 0 {
-			fmt.Println(val)
 			return nil, errors.New("invalid coin value")
 		}
 		return cbor.Marshal(val.Coin)

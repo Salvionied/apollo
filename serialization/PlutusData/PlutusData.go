@@ -3,6 +3,7 @@ package PlutusData
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"reflect"
@@ -426,7 +427,20 @@ const (
 	PlutusShortArray
 )
 
+type PlutusList interface {
+	Len() int
+}
+
 type PlutusIndefArray []PlutusData
+type PlutusDefArray []PlutusData
+
+func (pia PlutusIndefArray) Len() int {
+	return len(pia)
+}
+
+func (pia PlutusDefArray) Len() int {
+	return len(pia)
+}
 
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 	var ret PlutusIndefArray
@@ -436,11 +450,11 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 	return ret
 }
 
-func (pia *PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
+func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
 	res = append(res, 0x9f)
 
-	for _, el := range *pia {
+	for _, el := range pia {
 		bytes, err := cbor.Marshal(el)
 		if err != nil {
 			log.Fatal(err)
@@ -580,6 +594,55 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 	}
 }
+func (pd *PlutusData) UnmarshalJSON(value []byte) error {
+	var x any
+	err := json.Unmarshal(value, &x)
+	if err != nil {
+		return err
+	}
+	switch x.(type) {
+	case []interface{}:
+		y := new([]PlutusData)
+		err = json.Unmarshal(value, y)
+		if err != nil {
+			return err
+		}
+		pd.PlutusDataType = PlutusArray
+		pd.Value = PlutusIndefArray(*y)
+		pd.TagNr = 0
+	case map[string]interface{}:
+		val := x.(map[string]interface{})
+		_, ok := val["fields"]
+		if ok {
+			contents, _ := json.Marshal(val["fields"])
+			var tag int
+			constructor, ok := val["constructor"]
+			if ok {
+				tag = int(121 + constructor.(float64))
+			} else {
+				tag = 0
+			}
+			y := new(PlutusData)
+			err = json.Unmarshal(contents, y)
+			if err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusMap
+			pd.Value = y
+			pd.TagNr = uint64(tag)
+		} else if _, ok := val["bytes"]; ok {
+			pd.PlutusDataType = PlutusBytes
+			pd.Value, _ = hex.DecodeString(val["bytes"].(string))
+		} else if _, ok := val["int"]; ok {
+			pd.PlutusDataType = PlutusInt
+			pd.Value = uint64(val["int"].(float64))
+		} else {
+			fmt.Println("Invalid Nested Struct in plutus data")
+		}
+	}
+	return nil
+}
+
 func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	var x any
 	err := cbor.Unmarshal(value, &x)
@@ -592,16 +655,25 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			res, err := cbor.Marshal(ok.Content)
-			if err != nil {
-				return err
+			if value[2] == 0x9f {
+				y := PlutusIndefArray{}
+				err = cbor.Unmarshal(value[2:], &y)
+				if err != nil {
+					return err
+				}
+				pd.Value = y
+			} else {
+				y := PlutusDefArray{}
+				err = cbor.Unmarshal(value[2:], &y)
+				if err != nil {
+					return err
+				}
+				pd.Value = y
 			}
-			y := PlutusIndefArray{}
-			err = cbor.Unmarshal(res, &y)
-			if err != nil {
-				return err
-			}
-			pd.Value = y
+		case []uint8:
+			pd.TagNr = ok.Number
+			pd.PlutusDataType = PlutusBytes
+			pd.Value = ok.Content
 
 		default:
 			//TODO SKIP
@@ -610,14 +682,25 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	} else {
 		switch x.(type) {
 		case []interface{}:
-			y := PlutusIndefArray{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				return err
+			if value[0] == 0x9f {
+				y := PlutusIndefArray{}
+				err = cbor.Unmarshal(value, &y)
+				if err != nil {
+					return err
+				}
+				pd.PlutusDataType = PlutusArray
+				pd.Value = y
+				pd.TagNr = 0
+			} else {
+				y := PlutusDefArray{}
+				err = cbor.Unmarshal(value, &y)
+				if err != nil {
+					return err
+				}
+				pd.PlutusDataType = PlutusArray
+				pd.Value = y
+				pd.TagNr = 0
 			}
-			pd.PlutusDataType = PlutusArray
-			pd.Value = y
-			pd.TagNr = 0
 		case uint64:
 			pd.PlutusDataType = PlutusInt
 			pd.Value = x

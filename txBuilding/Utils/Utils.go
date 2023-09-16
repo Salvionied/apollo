@@ -22,7 +22,7 @@ func Contains[T UTxO.Container[any]](container []T, contained T) bool {
 }
 
 func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context Base.ChainContext) int64 {
-	constantOverhead := 160
+	constantOverhead := 200
 	amt := output.GetValue()
 	if amt.Coin == 0 {
 		amt.Coin = 1_000_000
@@ -31,7 +31,7 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 		IsPostAlonzo: true,
 		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 			Address:   output.GetAddress(),
-			Amount:    output.GetValue(),
+			Amount:    output.GetValue().ToAlonzoValue(),
 			Datum:     output.GetDatum(),
 			ScriptRef: output.GetScriptRef(),
 		},
@@ -53,10 +53,10 @@ func ToCbor(x interface{}) string {
 
 func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
 	pm := context.GetProtocolParams()
-	fee := int64(txSize*3*pm.MinFeeCoefficient +
-		pm.MinFeeConstant +
-		int(float32(steps)*pm.PriceStep) +
-		int(float32(mem)*pm.PriceMem))
+	fee := int64(txSize*pm.MinFeeCoefficient+
+		pm.MinFeeConstant+
+		int(float32(steps)*pm.PriceStep)+
+		int(float32(mem)*pm.PriceMem)) + 10_000
 	return fee
 }
 

@@ -120,6 +120,9 @@ func (p *Payment) ToValue() Value.Value {
 }
 
 func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
+	if len(p.Units) == 0 && p.Lovelace >= 1_000_000 {
+		return
+	}
 	txOut := p.ToTxOut()
 	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
 	if int64(p.Lovelace) < coins {
@@ -130,12 +133,21 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
 	if p.IsInline {
+		txO := TransactionOutput.TransactionOutput{}
+		txO.IsPostAlonzo = true
+		txO.PostAlonzo.Datum = p.Datum
+		txO.PostAlonzo.Address = p.Receiver
+		txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()
+
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
 		}
+		return &txO
 	} else {
 		if p.DatumHash != nil {
 			txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
+			txOut.PreAlonzo.HasDatum = true
+
 		}
 	}
 

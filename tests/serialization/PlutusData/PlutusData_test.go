@@ -1,5 +1,15 @@
 package plutusdata_test
 
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"testing"
+
+	"github.com/Salvionied/cbor/v2"
+	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
+)
+
 // func TestScriptDataHash(t *testing.T) {
 // 	unit := new(PlutusData.PlutusData)
 // 	redeemer := new(Redeemer.Redeemer)
@@ -25,11 +35,26 @@ package plutusdata_test
 
 // func TestScriptDataHashDatumOnly(t *testing.T) {
 // 	unit := PlutusData.PlutusData{PlutusData.PlutusArray, 121, []any{}}
-// 	data_hash := TxBuilder.ScriptDataHash(nil, nil, nil, []Redeemer.Redeemer{}, map[string]PlutusData.PlutusData{"l": unit})
+// 	tws := TransactionWitnessSet.TransactionWitnessSet{
+// 		Redeemer:   []Redeemer.Redeemer{},
+// 		PlutusData: PlutusData.PlutusIndefArray{unit},
+// 	}
+// 	data_hash := TxBuilder.ScriptDataHash(tws)
 // 	if hex.EncodeToString(data_hash.Payload) != "2f50ea2546f8ce020ca45bfcf2abeb02ff18af2283466f888ae489184b3d2d39" {
 // 		t.Error("Invalid data hash", hex.EncodeToString(data_hash.Payload), "Expected, 2f50ea2546f8ce020ca45bfcf2abeb02ff18af2283466f888ae489184b3d2d39")
 // 	}
 // }
+
+func TestSerializeAndDeserializePlutusData(t *testing.T) {
+	cborHex := "d8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c47534f4349455459ff1b00002cc16be02b37ff1a001e84801a001e8480ff"
+	decoded_cbor, _ := hex.DecodeString(cborHex)
+	var pd PlutusData.PlutusData
+	cbor.Unmarshal(decoded_cbor, &pd)
+	marshaled, _ := cbor.Marshal(pd)
+	if hex.EncodeToString(marshaled) != cborHex {
+		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", cborHex)
+	}
+}
 
 // func TestScriptDataHashRedeemerOnlyOnly2(t *testing.T) {
 // 	data_hash := TxBuilder.ScriptDataHash(nil, nil, nil, []Redeemer.Redeemer{}, map[string]PlutusData.PlutusData{})
@@ -52,10 +77,230 @@ package plutusdata_test
 // 	}
 // }
 
-// func TestPlutusScript(t *testing.T) {
-// 	plutusScript := PlutusData.PlutusV1Script([]byte("test_script"))
-// 	hash := PlutusData.PlutusScriptHash(plutusScript)
-// 	if hex.EncodeToString(hash[:]) != "36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2" {
-// 		t.Error("Invalid script hash", hex.EncodeToString(hash[:]), "Expected, 36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2")
-// 	}
-// }
+//	func TestPlutusScript(t *testing.T) {
+//		plutusScript := PlutusData.PlutusV1Script([]byte("test_script"))
+//		hash := PlutusData.PlutusScriptHash(plutusScript)
+//		if hex.EncodeToString(hash[:]) != "36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2" {
+//			t.Error("Invalid script hash", hex.EncodeToString(hash[:]), "Expected, 36c198e1a9d05461945c1f1db2ffb927c2dfc26dd01b59ea93b678b2")
+//		}
+//	}
+func GetMinSwapPlutusData() PlutusData.PlutusData {
+	// PkhStruct :=
+	SkhStruct := PlutusData.PlutusData{
+		PlutusData.PlutusArray,
+		121,
+		PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				121,
+				PlutusData.PlutusIndefArray{
+					PlutusData.PlutusData{
+						PlutusData.PlutusArray,
+						121,
+						PlutusData.PlutusIndefArray{
+							PlutusData.PlutusData{
+								PlutusData.PlutusBytes,
+								0,
+								[]byte{}}},
+					},
+				},
+			},
+		},
+	}
+
+	pkhStruct := PlutusData.PlutusData{
+		PlutusData.PlutusArray,
+		121,
+		PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				121,
+				PlutusData.PlutusIndefArray{
+					PlutusData.PlutusData{
+						PlutusData.PlutusBytes,
+						0,
+						[]byte{},
+					},
+				},
+			},
+			SkhStruct,
+		},
+	}
+	policy_bytes := []byte{}
+	asset_bytes := []byte{}
+	AssetStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusData.PlutusBytes,
+				0,
+				policy_bytes,
+			},
+			PlutusData.PlutusData{
+				PlutusData.PlutusBytes,
+				0,
+				asset_bytes,
+			},
+		},
+		TagNr: 121,
+	}
+	BuyOrderStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			AssetStruct,
+			PlutusData.PlutusData{
+				PlutusData.PlutusInt,
+				0,
+				0}},
+		TagNr: 121,
+	}
+
+	Fee := PlutusData.PlutusData{
+		PlutusData.PlutusInt,
+		0,
+		2_000_000,
+	}
+	Bribe := PlutusData.PlutusData{
+		PlutusData.PlutusInt,
+		0,
+		0,
+	}
+
+	FullStruct := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray{
+			pkhStruct,
+			pkhStruct,
+			PlutusData.PlutusData{
+				PlutusData.PlutusArray,
+				122,
+				[]PlutusData.PlutusData{},
+			},
+			BuyOrderStruct,
+			Bribe,
+			Fee,
+		},
+		TagNr: 121,
+	}
+
+	return FullStruct
+}
+func TestPlutusDataFromJson(t *testing.T) {
+	PlutusJson := `{
+		"fields": [
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": "18d725dc0ac9223cac9e91946378dd11df46a58686c2e1e5d7f7eff2"
+							}
+						]
+					},
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"constructor": 0,
+								"fields": [
+									{
+										"constructor": 0,
+										"fields": [
+											{
+												"bytes": "a99a2b452e240cc8f538936c549d62813bcaba54f8e6334ee9436578"
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": "18d725dc0ac9223cac9e91946378dd11df46a58686c2e1e5d7f7eff2"
+							}
+						]
+					},
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"constructor": 0,
+								"fields": [
+									{
+										"constructor": 0,
+										"fields": [
+											{
+												"bytes": "a99a2b452e240cc8f538936c549d62813bcaba54f8e6334ee9436578"
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"constructor": 1,
+				"fields": []
+			},
+			{
+				"constructor": 0,
+				"fields": [
+					{
+						"constructor": 0,
+						"fields": [
+							{
+								"bytes": ""
+							},
+							{
+								"bytes": ""
+							}
+						]
+					},
+					{
+						"int": 18781299
+					}
+				]
+			},
+			{
+				"int": 2000000
+			},
+			{
+				"int": 2000000
+			}
+		]
+	}
+	`
+	p := PlutusData.PlutusData{}
+	err := json.Unmarshal([]byte(PlutusJson), &p)
+	if err != nil {
+		t.Error(err)
+	}
+	cborred, err := cbor.Marshal(p)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(hex.EncodeToString(cborred))
+	datum := GetMinSwapPlutusData()
+	receborred, err := cbor.Marshal(datum)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(hex.EncodeToString(receborred))
+	if hex.EncodeToString(cborred) == hex.EncodeToString(receborred) {
+		t.Error("Not the same")
+	}
+	//t.Error("test")
+
+}

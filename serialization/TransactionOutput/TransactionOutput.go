@@ -15,10 +15,10 @@ import (
 )
 
 type TransactionOutputAlonzo struct {
-	Address   Address.Address        `cbor:"0, keyasint"`
-	Amount    Value.Value            `cbor:"1,keyasint"`
+	Address   Address.Address        `cbor:"0,keyasint"`
+	Amount    Value.AlonzoValue      `cbor:"1,keyasint"`
 	Datum     *PlutusData.PlutusData `cbor:"2,keyasint,omitempty"`
-	ScriptRef PlutusData.ScriptRef   `cbor:"3,keyasint,omitempty"`
+	ScriptRef *PlutusData.ScriptRef  `cbor:"3,keyasint,omitempty"`
 }
 
 func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
@@ -30,7 +30,7 @@ func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
 }
 
 func (txo TransactionOutputAlonzo) String() string {
-	return fmt.Sprintf("%s:%s Datum ", txo.Address, txo.Amount)
+	return fmt.Sprintf("%s:%s Datum ", txo.Address.String(), txo.Amount.ToValue().String())
 }
 
 type TransactionOutputShelley struct {
@@ -78,9 +78,10 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		txo.Address = val.Address
 		txo.Amount = val.Amount
 		if len(val.DatumHash) > 0 {
-			dthash := new(serialization.DatumHash)
-			copy(dthash.Payload[:], val.DatumHash)
-			txo.DatumHash = *dthash
+
+			dthash := serialization.DatumHash{Payload: val.DatumHash}
+			txo.DatumHash = dthash
+
 		}
 	} else {
 		val := new(TxOWithoutDatum)
@@ -136,7 +137,7 @@ func (to *TransactionOutput) EqualTo(other TransactionOutput) bool {
 }
 func (to *TransactionOutput) GetAmount() Value.Value {
 	if to.IsPostAlonzo {
-		return to.PostAlonzo.Amount
+		return to.PostAlonzo.Amount.ToValue()
 	} else {
 		return to.PreAlonzo.Amount
 	}
@@ -198,18 +199,17 @@ func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 		return &PlutusData.PlutusData{}
 	}
 }
-func (to *TransactionOutput) GetScriptRef() PlutusData.ScriptRef {
+func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.ScriptRef
 	} else {
-		return PlutusData.ScriptRef{}
+		return new(PlutusData.ScriptRef)
 	}
 }
 
 func (to *TransactionOutput) GetValue() Value.Value {
 	if to.IsPostAlonzo {
-		//todo
-		return Value.Value{}
+		return to.PostAlonzo.Amount.ToValue()
 	} else {
 		return to.PreAlonzo.Amount
 	}
@@ -217,8 +217,7 @@ func (to *TransactionOutput) GetValue() Value.Value {
 
 func (to *TransactionOutput) Lovelace() int64 {
 	if to.IsPostAlonzo {
-		//TODO
-		return 0
+		return to.PostAlonzo.Amount.Coin
 	} else {
 		if to.PreAlonzo.Amount.HasAssets {
 			return to.PreAlonzo.Amount.Am.Coin
@@ -246,6 +245,12 @@ func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 			log.Fatal(err)
 		}
 
+	} else {
+		txo.IsPostAlonzo = true
+		err := cbor.Unmarshal(value, &txo.PostAlonzo)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	return nil
 }
@@ -260,7 +265,7 @@ func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 
 func (txo *TransactionOutput) SetAmount(amount Value.Value) {
 	if txo.IsPostAlonzo {
-		txo.PostAlonzo.Amount = amount
+		txo.PostAlonzo.Amount = amount.ToAlonzoValue()
 	} else {
 		txo.PreAlonzo.Amount = amount
 	}
