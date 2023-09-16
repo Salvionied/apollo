@@ -240,9 +240,7 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	plutusdata := make([]PlutusData.PlutusData, 0)
-	for idx := range b.datums {
-		plutusdata = append(plutusdata, b.datums[idx])
-	}
+	plutusdata = append(plutusdata, b.datums...)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
@@ -254,9 +252,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 
 func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	plutusdata := make([]PlutusData.PlutusData, 0)
-	for idx := range b.datums {
-		plutusdata = append(plutusdata, b.datums[idx])
-	}
+	plutusdata = append(plutusdata, b.datums...)
 	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
 	fakeVkWitnesses = append(fakeVkWitnesses, VerificationKeyWitness.VerificationKeyWitness{
 		Vkey:      FAKE_VKEY,

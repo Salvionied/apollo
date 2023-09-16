@@ -13,7 +13,7 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	sort.Slice(res, func(i, j int) bool {
 		if !res[i].Output.GetValue().HasAssets && !res[j].Output.GetValue().HasAssets {
 			return res[i].Output.Lovelace() > res[j].Output.Lovelace()
-		} else if res[j].Output.GetValue().HasAssets && res[j].Output.GetValue().HasAssets {
+		} else if res[i].Output.GetValue().HasAssets && res[j].Output.GetValue().HasAssets {
 			return res[i].Output.GetAmount().Greater(res[j].Output.GetAmount())
 		} else {
 			return res[j].Output.GetAmount().HasAssets
