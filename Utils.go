@@ -23,8 +23,8 @@ func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
 	hashes := make([]string, 0)
 	relationMap := map[string]UTxO.UTxO{}
 	for _, utxo := range inputs {
-		hashes = append(hashes, string(utxo.Input.TransactionId))
-		relationMap[string(utxo.Input.TransactionId)] = utxo
+		hashes = append(hashes, string(utxo.Input.String()))
+		relationMap[string(utxo.Input.String())] = utxo
 	}
 	sort.Strings(hashes)
 	sorted_inputs := make([]UTxO.UTxO, 0)
