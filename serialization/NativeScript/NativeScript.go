@@ -1,7 +1,6 @@
 package NativeScript
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/Salvionied/apollo/serialization"
@@ -121,7 +120,6 @@ func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
 		ns.After = tmp.Value
 		return err
 	default:
-		fmt.Print("here")
 		return nil
 	}
 }
