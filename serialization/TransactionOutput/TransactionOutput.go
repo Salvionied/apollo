@@ -72,7 +72,7 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		val := new(TxOWithDatum)
 		err := cbor.Unmarshal(value, &val)
 		if err != nil {
-			log.Fatal(err, "HERE")
+			log.Fatal(err)
 		}
 		txo.HasDatum = true
 		txo.Address = val.Address

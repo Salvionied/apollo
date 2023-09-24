@@ -85,7 +85,7 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	var res any
 	err := cbor.Unmarshal(value, &res)
 	if err != nil {
-		log.Fatal(err, "HERE")
+		log.Fatal(err)
 		return err
 	}
 	switch res.(type) {
