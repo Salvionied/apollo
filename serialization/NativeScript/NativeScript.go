@@ -53,6 +53,12 @@ type SerialHash struct {
 	Value []byte
 }
 
+/**
+	Hash computes the script hash for the NativeScript.
+
+	Returns:
+		serialization.ScriptHash: The computed script hash.
+*/
 func (ns NativeScript) Hash() serialization.ScriptHash {
 	finalbytes := []byte{0}
 	bytes, err := cbor.Marshal(ns)
@@ -73,6 +79,16 @@ func (ns NativeScript) Hash() serialization.ScriptHash {
 	return ret
 }
 
+/**
+	UnmarshalCBOR decodes the CBOR-encoded data and populates
+	the NativeScript fields.
+
+	Params:
+		value []byte: The CBOR-encoded data to encode.
+
+	Returns:
+		error: An error if decoding fails, nil otherwise.
+*/
 func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
 	var tmp = make([]any, 0)
 	err := cbor.Unmarshal(value, &tmp)
@@ -124,6 +140,13 @@ func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
 	}
 }
 
+/**
+	MarshalCBOR encodes the NativeScript into CBOR format.
+
+	Returns:
+		[]uint8: The CBOR-encoded data.
+		error: An error if encoding fails, nil otherwise.
+*/
 func (ns *NativeScript) MarshalCBOR() ([]uint8, error) {
 	switch ns.Tag {
 	case 0:

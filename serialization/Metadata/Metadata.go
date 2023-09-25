@@ -22,6 +22,13 @@ type ShelleyMaryMetadata struct {
 	NativeScripts []NativeScript.NativeScript `cbor:",omitempty"`
 }
 
+/**
+	MarshalCBOR marshals a ShelleyMaryMetadata instance into CBOR-encoded data.
+
+	Returns:
+		([]byte, error): The CBOR-encoded data and an error if marshaling fails,
+						 nil otherwise.
+*/
 func (smm *ShelleyMaryMetadata) MarshalCBOR() ([]byte, error) {
 	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(smm.NativeScripts) > 0 {
@@ -43,16 +50,33 @@ type AuxiliaryData struct {
 	_AlonzoMeta  AlonzoMetadata
 }
 
+/**
+	SetBasicMetadata sets the basic metadata for the AuxiliaryData.
+*/
 func (ad *AuxiliaryData) SetBasicMetadata(value Metadata) {
 	ad._basicMeta = value
 }
+
+/**
+	SetAlonzoMetadata sets the Alonzo metadata for the AuxiliaryData.
+*/
 func (ad *AuxiliaryData) SetAlonzoMetadata(value AlonzoMetadata) {
 	ad._AlonzoMeta = value
 }
+
+/**
+	SetShelleyMetadata sets the Shelley metadata for the AuxiliaryData.
+*/
 func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
 	ad._ShelleyMeta = value
 }
 
+/**
+	Hash computes computes the has of the AuxiliaryData.
+
+	Returns:
+		[]byte: The computed hash or nil if all metadata fileds are empty.
+*/
 func (ad *AuxiliaryData) Hash() []byte {
 	if len(ad._basicMeta) != 0 || len(ad._ShelleyMeta.Metadata) != 0 || len(ad._AlonzoMeta.Metadata) != 0 {
 		marshaled, _ := cbor.Marshal(ad)
@@ -62,6 +86,15 @@ func (ad *AuxiliaryData) Hash() []byte {
 	}
 }
 
+/**
+	UnmarshalCBOR deserializes the AuxiliaryData from a CBOR-encoded byte slice.
+
+	Params:
+		value []byte: The CBOR-encoded data to deserialize.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
 func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 	err_shelley := cbor.Unmarshal(value, &ad._ShelleyMeta)
 	if err_shelley != nil {
@@ -73,6 +106,13 @@ func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
+/**
+	MarshalCBOR serializes the AUxiliaryData to a CBOR byte slice.
+
+	Returns:
+		[]byte: The CBOR-serialized AuxiliaryData.
+		error: An error if serialization fails.
+*/
 func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
 	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(ad._basicMeta) != 0 {

@@ -37,6 +37,13 @@ type WithRedeemerNoScripts struct {
 	Redeemer           []Redeemer.Redeemer                             `cbor:"5,keyasint,omitempty"`
 }
 
+/**
+	MarshalCBOR serializes the TransactionWitnessSet to a CBOR byte slice.
+
+	Returns:
+		[]byte: The CBOR-serialized TransactionWitnessSet.
+		error: An error if serialization fails.
+*/
 func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 	if len(tws.PlutusV1Script) == 0 && len(tws.Redeemer) > 0 && len(tws.PlutusData) == 0 {
 		return cbor.Marshal(WithRedeemerNoScripts{

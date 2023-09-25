@@ -39,14 +39,39 @@ type Address struct {
 	Hrp         string
 }
 
+/**
+	This function check if the current address is equal to another address.
+
+	Params:
+		addr (*Address): A pointer to the current address.
+		other (*Address): A pointer to the other address for comparison.
+	
+	Returns:
+		bool: true if the addresses are equal, false otherwise.
+*/
 func (addr *Address) Equal(other *Address) bool {
 	return addr.String() == other.String()
 }
 
+/**
+	Debug method returns a formatted string representation of the address for debugging
+
+	Returns:
+		string: A formatted debug string representing the address.
+*/
 func (addr *Address) Debug() string {
 	return fmt.Sprintf("{\nPaymentPart: %v\nStakingPart: %v\nNetwork: %v\nAddressType: %v\nHeaderByte: %v\nHrp: %s\n}", addr.PaymentPart, addr.StakingPart, addr.Network, addr.AddressType, addr.HeaderByte, addr.Hrp)
 }
 
+/**
+	It converts an address to its CBOR (Concise Binary Object Representation) format and returns
+	it as a hexadecimal string. This function marshals the address into its binary representation
+	using the CBOR encoding. In case of success, it returns the binary data encoded as a 
+	hexadecimal string, otherwise a fatal error is logged.
+
+	Returns:
+		string: A hexadecimal string representation of the address in CBOR format.
+*/
 func (addr *Address) ToCbor() string {
 	b, err := cbor.Marshal(addr.Bytes())
 	if err != nil {
@@ -54,9 +79,27 @@ func (addr *Address) ToCbor() string {
 	}
 	return hex.EncodeToString(b)
 }
+
+/**
+	MarshalCBOR encodes an address to its CBOR (Concise Binary Object Representation) format.
+
+	Returns:
+	   	[]byte: A slice of bytes representing the address in CBOR format.
+  		error: An error, if any, encountered during the encoding process.
+*/
 func (addr *Address) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(addr.Bytes())
 }
+
+/**
+	UnmarshalCBOR decodes a CBOR (Concise Binary Object Representation) encoded address from a byte slice.
+
+	Params:
+		value ([]byte): A byte slice containing the CBOR-encoded address.
+
+	Returns:
+		error: An error, if any, encountered during the decoding process.
+*/
 func (addr *Address) UnmarshalCBOR(value []byte) error {
 	res := make([]byte, 0)
 	err := cbor.Unmarshal(value, &res)
@@ -71,6 +114,14 @@ func (addr *Address) UnmarshalCBOR(value []byte) error {
 	return err
 }
 
+/**
+	This function returns the binary representation of the address. It
+	constructs and returns the binary representation of teh address containing
+	the header byte, payment part, and staking part (if present).
+
+	Returns:
+		[]byte: A byte slice representing the binary data of the address.
+*/
 func (addr Address) Bytes() []byte {
 	var payment []byte
 	var staking []byte
@@ -87,6 +138,12 @@ func (addr Address) Bytes() []byte {
 
 }
 
+/**
+	This function returns the string representation of the address.
+
+	Returns:
+		string: A string representing the address in Bech32 format.
+*/
 func (addr Address) String() string {
 	byteaddress, err := bech32.ConvertBits(addr.Bytes(), 8, 5, true)
 	if err != nil {
@@ -96,6 +153,17 @@ func (addr Address) String() string {
 	return result
 }
 
+/**
+	ComputeHrp computes the human-readable part (Hrp) for an address
+	based on its address type and network.
+
+	Params:
+	 	address_type (uint8): The type of the address.
+		network (uint8): The network identifier (1 for mainnet, 0 for testnet).
+
+	Returns:
+		string: The computed Hrp for address encoding.
+*/
 func ComputeHrp(address_type uint8, network uint8) string {
 	var prefix string
 	if address_type == NONE_KEY || address_type == NONE_SCRIPT {
@@ -113,6 +181,17 @@ func ComputeHrp(address_type uint8, network uint8) string {
 
 }
 
+
+/** 
+	This function decodes a string representation of an address into its corresponding Address structure.
+
+	Parameters:
+		value (string): The string representation of the address to decode.
+
+	Returns:
+		Address: The decoded Address structure.
+		error: An error, if any, encountered during the decoding process.
+*/
 func DecodeAddress(value string) (Address, error) {
 	_, data, err := bech32.Decode(value)
 	if err != nil {

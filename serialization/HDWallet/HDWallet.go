@@ -30,6 +30,15 @@ func tweak_bits(seed []byte) []byte {
 	return seed
 }
 
+/**
+	NewHDWalletFromSeed creates a new HDWallet instance from a seed string.
+
+	Params:
+		seed (string): The input seed string.
+	
+	Returns:
+		*HDWallet: A new HDWallet instance.
+*/
 func NewHDWalletFromSeed(seed string) *HDWallet {
 	seed_converted, err := hex.DecodeString(seed)
 	if err != nil {
@@ -52,6 +61,16 @@ func NewHDWalletFromSeed(seed string) *HDWallet {
 
 }
 
+/**
+	GenerateSeed generates a seed string from a mnemonic and passphrase.
+
+	Params:
+		mnemonic (string): The mnemonic for seed generation. 
+		passphrase (string): The passphrase for seed generation.
+
+	Returns:
+		string: The seed string in hexadecimal format.
+*/
 func GenerateSeed(mnemonic string, passphrase string) string {
 	seed, err := bip39.NewSeedWithErrorChecking(mnemonic, passphrase)
 	if err != nil {
@@ -65,6 +84,17 @@ func generateSeedFromEntropy(passphrase string, entropy []byte) string {
 	return hex.EncodeToString(res)
 }
 
+/**
+	NewHDWalletFromMnemonic creates a new HDWallet instance from a
+	mnemonic and passphrase.
+
+	Params:
+		mnemonic (string): The mnemonic for wallet generation. 
+		passphrase (string): The passphrase for wallet generation.
+	
+	Returns:
+		*HDWallet: A new HDWallet instance.
+*/
 func NewHDWalletFromMnemonic(mnemonic string, passphrase string) *HDWallet {
 	mnemo := norm.NFKD.String(mnemonic)
 	entropy, error := bip39.EntropyFromMnemonic(mnemonic)
@@ -96,6 +126,16 @@ func (hd *HDWallet) copy() *HDWallet {
 	}
 }
 
+/**
+	DerivePath derives a new HDWallet from the current wallet based on 
+	the path.
+
+	Params:
+		path (string): The derivation path in the format "m/".
+
+	Returns:
+		*HDWallet: A new HDWallet derived based on the path.
+*/
 func (hd *HDWallet) DerivePath(path string) *HDWallet {
 	if path[:2] != "m/" {
 		panic("Invalid path")
@@ -124,6 +164,17 @@ func (hd *HDWallet) DerivePath(path string) *HDWallet {
 	return derived_wallet
 }
 
+/**
+	Derive function derives a new HDWallet from the current wallet
+	based on an index and a flag.
+
+	Params:
+		index (uint32): The index for derivation.
+		hardened (bool): A flag indicating whether to perform a hardened derivation.
+
+	Returns:
+		*HDWallet: A new HDWallet derived based on the index and hardening flag.
+*/
 func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
 	if hardened {
 		index += 1 << 31
@@ -141,6 +192,12 @@ func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
 
 }
 
+/**
+	GenerateMnemonic function generate a random mnemonic.
+
+	Returns:
+		string: A random mnemonic phrase.
+*/
 func GenerateMnemonic() string {
 	entropy, error := bip39.NewEntropy(256)
 	if error != nil {
@@ -154,6 +211,15 @@ func GenerateMnemonic() string {
 
 }
 
+/**
+	IsMnemonic checks if a given mnemonic pgrase is valid.
+
+	Params:
+		mnemonic (string): The mnemonic phrase to validate.
+
+	Returns:
+		bool: true if the mnemonic is valid, false otherwise.
+*/
 func IsMnemonic(mnemonic string) bool {
 	return bip39.IsMnemonicValid(mnemonic)
 }
