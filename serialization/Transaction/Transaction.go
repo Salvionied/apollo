@@ -18,6 +18,14 @@ type Transaction struct {
 	AuxiliaryData         *Metadata.AuxiliaryData
 }
 
+/**
+	Bytes returns the CBOR-encoded byte representation
+	of the Transaction.
+
+	Returns:
+		[]byte: The CBOR-encoded transaction bytes.
+		error: An error if the Bytes fails.
+*/
 func (tx *Transaction) Bytes() ([]byte, error) {
 	cborred, err := cbor.Marshal(tx)
 	if err != nil {
@@ -26,6 +34,12 @@ func (tx *Transaction) Bytes() ([]byte, error) {
 	return cborred, nil
 }
 
+/**
+	Id returns the unique identifier for the transaction.
+
+	Returns:
+		serialization.TransactionId: The transaction ID.
+*/
 func (tx *Transaction) Id() serialization.TransactionId {
 	txId, _ := tx.TransactionBody.Id()
 	return txId

@@ -19,6 +19,12 @@ type Unit struct {
 	Quantity int
 }
 
+/**
+	ToValue converts a Unit to a Value object.
+
+	Returns:
+		Value: The constructed Value object representing the asset.
+*/
 func (u *Unit) ToValue() Value.Value {
 	val := Value.Value{}
 	policyId := Policy.PolicyId{Value: u.PolicyId}
@@ -29,6 +35,17 @@ func (u *Unit) ToValue() Value.Value {
 	return val
 }
 
+/**
+	NewUnit creates a new Unit with the provided information.
+
+	Params:
+		policyId (string): The policy ID of the asset.
+		name (string): The name of the asset.
+		quantity (int): The quantity of the asset.
+
+	Returns:
+		Unit: The newly created Unit instance.
+*/
 func NewUnit(policyId string, name string, quantity int) Unit {
 	return Unit{
 		PolicyId: policyId,
@@ -52,6 +69,15 @@ type Payment struct {
 	IsInline  bool
 }
 
+/**
+	PaymentFromTxOut creates a Payment object from a TransactionOutput.
+
+	Params:
+		txOut (*TransactionOutput.TransactionOutput): The TransactionOutput to create the Payment.
+
+	Returns:
+		*Payment: The created Payment object.
+*/
 func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
 	payment := &Payment{
 		Receiver: txOut.GetAddress(),
@@ -84,6 +110,17 @@ func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
 	return payment
 }
 
+/**
+	NewPayment creates a new Payment object.
+
+	Params: 
+		receiver (string): The receiver's address.
+		lovelace (int): The amount in Lovelace.
+		units ([]Unit): The assets units to be included.
+
+	Returns:
+		*Payment: The newly created Payment object.
+*/
 func NewPayment(receiver string, lovelace int, units []Unit) *Payment {
 	decoded_address, _ := Address.DecodeAddress(receiver)
 	return &Payment{
@@ -93,6 +130,17 @@ func NewPayment(receiver string, lovelace int, units []Unit) *Payment {
 	}
 }
 
+/**
+	NewPaymentFromValue creates a new Payment object from an Address
+	and Value object.
+
+	Params:
+		receiver (Address.Address): The receiver's address.
+		value (Value.Value): The value object containing payment details.
+
+	Returns:
+		*Payment: The newly created Payment object.
+*/
 func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment {
 	payment := &Payment{
 		Receiver: receiver,
@@ -110,6 +158,12 @@ func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment {
 	return payment
 }
 
+/**
+	ToValue converts a Payment to a Value object.
+
+	Returns:
+		Value.Value: The constructed Value object representing the payment.
+*/
 func (p *Payment) ToValue() Value.Value {
 	v := Value.Value{}
 	for _, unit := range p.Units {
@@ -119,6 +173,12 @@ func (p *Payment) ToValue() Value.Value {
 	return v
 }
 
+/**
+	EnsureMinUTXO ensures that the payment amount meets the minimun UTXO requirement.
+
+	Params:
+		cc (Base.ChainContext): The chain context.
+*/
 func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	if len(p.Units) == 0 && p.Lovelace >= 1_000_000 {
 		return
@@ -130,6 +190,12 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	}
 }
 
+/**
+	ToTxOut converts a Payment object to a TransactionOutput object.
+
+	Returns:
+   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
+*/
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
 	if p.IsInline {
