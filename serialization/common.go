@@ -9,16 +9,16 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-func Blake2bHash(data []byte) []byte {
+func Blake2bHash(data []byte) ([]byte, error) {
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	_, err = hash.Write(data)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return hash.Sum(nil)
+	return hash.Sum(nil), nil
 }
 
 type ConstrainedBytes struct {
@@ -85,7 +85,6 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	var res any
 	err := cbor.Unmarshal(value, &res)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 	switch res.(type) {

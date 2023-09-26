@@ -53,8 +53,8 @@ func (gw *GenericWallet) GetAddress() *serAddress.Address {
 
 func (wallet *GenericWallet) SignTx(tx Transaction.Transaction) TransactionWitnessSet.TransactionWitnessSet {
 	witness_set := tx.TransactionWitnessSet
-	txHash := tx.TransactionBody.Hash()
-	signature := wallet.SigningKey.Sign(txHash)
+	txHash, _ := tx.TransactionBody.Hash()
+	signature, _ := wallet.SigningKey.Sign(txHash)
 	witness_set.VkeyWitnesses = append(witness_set.VkeyWitnesses, VerificationKeyWitness.VerificationKeyWitness{Vkey: wallet.VerificationKey, Signature: signature})
 	return witness_set
 }

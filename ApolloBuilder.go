@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/Salvionied/apollo/apollotypes"
@@ -113,8 +112,7 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 		selectedValue = selectedValue.Sub(payment.ToValue())
 	}
 	if selectedValue.Less(Value.Value{}) {
-		fmt.Println("selected value is negative")
-		return b
+		panic("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
@@ -129,7 +127,7 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 		selectedValue = selectedValue.Sub(Value.SimpleValue(0, payment.ToValue().GetAssets()))
 	}
 	if selectedValue.Less(Value.Value{}) {
-		fmt.Println("selected value is negative")
+		panic("selected value is negative")
 		return b
 	}
 	b.payments = append(b.payments, payments...)
@@ -177,7 +175,7 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
 	if isInline {
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
 	} else if pd != nil {
-		dataHash := PlutusData.PlutusDataHash(pd)
+		dataHash, _ := PlutusData.PlutusDataHash(pd)
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline})
 	} else {
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, nil, isInline})
@@ -269,9 +267,9 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 	}
 }
 
-func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
+func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if len(b.datums) == 0 && len(b.redeemers) == 0 {
-		return nil
+		return nil, nil
 	}
 	witnessSet := b.buildWitnessSet()
 	cost_models := map[int]cbor.Marshaler{}
@@ -293,13 +291,13 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	}
 	redeemer_bytes, err := cbor.Marshal(redeemers)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	var datum_bytes []byte
 	if datums.Len() > 0 {
 		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 	} else {
 		datum_bytes = []byte{}
@@ -308,18 +306,22 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	if isV1 {
 		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 
 	} else {
 		cost_model_bytes, err = cbor.Marshal(cost_models)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
-	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
+	hashBytes, err := serialization.Blake2bHash(total_bytes)
+	if err != nil {
+		return nil, err
+	}
+	return &serialization.ScriptDataHash{Payload: hashBytes}, nil
 
 }
 
@@ -342,7 +344,7 @@ func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeeme
 	return b
 }
 
-func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
+func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 	inputs := make([]TransactionInput.TransactionInput, 0)
 	for _, utxo := range b.preselectedUtxos {
 		inputs = append(inputs, utxo.Input)
@@ -351,7 +353,10 @@ func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 	for _, utxo := range b.collaterals {
 		collaterals = append(collaterals, utxo.Input)
 	}
-	dataHash := b.scriptDataHash()
+	dataHash, err := b.scriptDataHash()
+	if err != nil {
+		return TransactionBody.TransactionBody{}, err
+	}
 	scriptDataHash := make([]byte, 0)
 	if dataHash != nil {
 		scriptDataHash = dataHash.Payload
@@ -376,11 +381,14 @@ func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 		txb.TotalCollateral = b.totalCollateral
 		txb.CollateralReturn = b.collateralReturn
 	}
-	return txb
+	return txb, nil
 }
 
 func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
-	txBody := b.buildTxBody()
+	txBody, err := b.buildTxBody()
+	if err != nil {
+		return nil, err
+	}
 	if txBody.Fee == 0 {
 		txBody.Fee = int64(b.Context.MaxTxFee())
 	}
@@ -390,7 +398,7 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 		TransactionWitnessSet: witness,
 		Valid:                 true,
 		AuxiliaryData:         b.auxiliaryData}
-	bytes := tx.Bytes()
+	bytes, _ := tx.Bytes()
 	if len(bytes) > b.Context.GetProtocolParams().MaxTxSize {
 		return nil, errors.New("transaction too large")
 	}
@@ -406,7 +414,7 @@ func (b *Apollo) estimateFee() int64 {
 	if err != nil {
 		return 0
 	}
-	fakeTxBytes := fftx.Bytes()
+	fakeTxBytes, _ := fftx.Bytes()
 	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem)
 	return estimatedFee
 
@@ -458,12 +466,14 @@ func (b *Apollo) setCollateral() *Apollo {
 	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
 	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) > collateral_amount && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-
+		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
 			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
 			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
 			if min_lovelace > return_amount {
 				continue
+			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
+				b.collaterals = append(b.collaterals, utxo)
+				return b
 			} else {
 				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
 				b.collaterals = append(b.collaterals, utxo)
@@ -587,9 +597,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				break
 			}
 			if len(available_utxos) == 0 {
-				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
-				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
-
 				return nil, errors.New("not enough funds")
 			}
 			utxo := available_utxos[0]
@@ -610,9 +617,15 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//UPDATE EXUNITS
 	b = b.updateExUnits()
 	//ADDCHANGEANDFEE
-	b = b.addChangeAndFee()
+	b, err := b.addChangeAndFee()
+	if err != nil {
+		return nil, err
+	}
 	//FINALIZE TX
-	body := b.buildTxBody()
+	body, err := b.buildTxBody()
+	if err != nil {
+		return nil, err
+	}
 	witnessSet := b.buildWitnessSet()
 	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
 	return b, nil
@@ -622,7 +635,6 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
 	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
 	encoded, _ := cbor.Marshal(txOutput)
 	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
-	//fmt.Println(len(encoded), maxValSize)
 	return len(encoded) > maxValSize
 
 }
@@ -677,7 +689,7 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 
 }
 
-func (b *Apollo) addChangeAndFee() *Apollo {
+func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
 		providedAmount = providedAmount.Add(utxo.Output.GetValue())
@@ -694,6 +706,9 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
 		b.Context,
 	) {
+		if len(b.preselectedUtxos) == 0 {
+			return b, errors.New("No Remaining UTxOs")
+		}
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
@@ -744,7 +759,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 			b.Fee = newestFee
 		}
 	}
-	return b
+	return b, nil
 }
 
 func (b *Apollo) CollectFrom(
@@ -781,14 +796,23 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	return b
 }
 
-func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
+func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
 	paymentPath := "m/1852'/1815'/0'/0/0"
 	stakingPath := "m/1852'/1815'/0'/2/0"
-	hdWall := HDWallet.NewHDWalletFromMnemonic(mnemonic, "")
-	paymentKeyPath := hdWall.DerivePath(paymentPath)
+	hdWall, err := HDWallet.NewHDWalletFromMnemonic(mnemonic, "")
+	if err != nil {
+		return a, err
+	}
+	paymentKeyPath, err := hdWall.DerivePath(paymentPath)
+	if err != nil {
+		return a, err
+	}
 	verificationKey_bytes := paymentKeyPath.XPrivKey.PublicKey()
 	signingKey_bytes := paymentKeyPath.XPrivKey.Bytes()
-	stakingKeyPath := hdWall.DerivePath(stakingPath)
+	stakingKeyPath, err := hdWall.DerivePath(stakingPath)
+	if err != nil {
+		return a, err
+	}
 	stakeVerificationKey_bytes := stakingKeyPath.XPrivKey.PublicKey()
 	stakeSigningKey_bytes := stakingKeyPath.XPrivKey.Bytes()
 	//stake := stakingKeyPath.RootXprivKey.Bytes()
@@ -803,13 +827,12 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 	addr := Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
 	wallet := apollotypes.GenericWallet{SigningKey: signingKey, VerificationKey: verificationKey, Address: addr, StakeSigningKey: stakeSigningKey, StakeVerificationKey: stakeVerificationKey}
 	a.wallet = &wallet
-	return a
+	return a, nil
 }
 
 func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
-		fmt.Println(err)
 		return a
 	}
 	a.wallet = &apollotypes.ExternalWallet{Address: addr}
@@ -818,7 +841,7 @@ func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 
 func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 	if b.wallet == nil {
-		fmt.Println("Wallet not set")
+		panic("wallet not set")
 		return b
 	}
 	switch b.Context.(type) {
@@ -837,13 +860,19 @@ func (b *Apollo) Sign() *Apollo {
 	return b
 }
 
-func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) *Apollo {
+func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) (*Apollo, error) {
 	witness_set := b.GetTx().TransactionWitnessSet
-	txHash := b.GetTx().TransactionBody.Hash()
-	signature := skey.Sign(txHash)
+	txHash, err := b.GetTx().TransactionBody.Hash()
+	if err != nil {
+		return b, err
+	}
+	signature, err := skey.Sign(txHash)
+	if err != nil {
+		return b, err
+	}
 	witness_set.VkeyWitnesses = append(witness_set.VkeyWitnesses, VerificationKeyWitness.VerificationKeyWitness{Vkey: vkey, Signature: signature})
 	b.GetTx().TransactionWitnessSet = witness_set
-	return b
+	return b, nil
 }
 
 func (b *Apollo) Submit() (serialization.TransactionId, error) {
@@ -877,7 +906,7 @@ func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.Verificati
 func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
-		fmt.Println(err)
+		return b
 	}
 	b.inputAddresses = append(b.inputAddresses, addr)
 	return b

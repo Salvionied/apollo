@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"sort"
 
@@ -457,7 +457,7 @@ func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	for _, el := range pia {
 		bytes, err := cbor.Marshal(el)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		res = append(res, bytes...)
 	}
@@ -637,7 +637,7 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			pd.PlutusDataType = PlutusInt
 			pd.Value = uint64(val["int"].(float64))
 		} else {
-			fmt.Println("Invalid Nested Struct in plutus data")
+			return errors.New("invalid Nested Struct in plutus data")
 		}
 	}
 	return nil
@@ -722,7 +722,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 
 		default:
-			fmt.Println("Invalid Nested Struct in plutus data", reflect.TypeOf(x))
+			fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
 		}
 
 	}
@@ -734,57 +734,58 @@ type RawPlutusData struct {
 	//TODO
 }
 
-func ToCbor(x interface{}) string {
+func ToCbor(x interface{}) (string, error) {
 	bytes, err := cbor.Marshal(x)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(bytes), nil
 }
 
-func PlutusDataHash(pd *PlutusData) serialization.DatumHash {
+func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(pd)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	_, err = hash.Write(finalbytes)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	r := serialization.DatumHash{hash.Sum(nil)}
-	return r
+	return r, nil
 }
-func HashDatum(d cbor.Marshaler) serialization.DatumHash {
+func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
 	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(d)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	_, err = hash.Write(finalbytes)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.DatumHash{}, err
 	}
 	r := serialization.DatumHash{hash.Sum(nil)}
-	return r
+	return r, nil
 }
 
 type ScriptHashable interface {
-	Hash() serialization.ScriptHash
+	Hash() (serialization.ScriptHash, error)
 }
 
 func PlutusScriptHash(script ScriptHashable) serialization.ScriptHash {
-	return script.Hash()
+	hash, _ := script.Hash()
+	return hash
 }
 
 type PlutusV1Script []byte
@@ -823,39 +824,39 @@ func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
 	}
 }
 
-func (ps PlutusV1Script) Hash() serialization.ScriptHash {
+func (ps PlutusV1Script) Hash() (serialization.ScriptHash, error) {
 	finalbytes, err := hex.DecodeString("01")
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	finalbytes = append(finalbytes, ps...)
 	hash, err := blake2b.New(28, nil)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	_, err = hash.Write(finalbytes)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	r := serialization.ScriptHash{}
 	copy(r[:], hash.Sum(nil))
-	return r
+	return r, nil
 }
-func (ps PlutusV2Script) Hash() serialization.ScriptHash {
+func (ps PlutusV2Script) Hash() (serialization.ScriptHash, error) {
 	finalbytes, err := hex.DecodeString("02")
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	finalbytes = append(finalbytes, ps...)
 	hash, err := blake2b.New(28, nil)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	_, err = hash.Write(finalbytes)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	r := serialization.ScriptHash{}
 	copy(r[:], hash.Sum(nil))
-	return r
+	return r, nil
 }

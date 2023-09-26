@@ -18,14 +18,15 @@ type Transaction struct {
 	AuxiliaryData         *Metadata.AuxiliaryData
 }
 
-func (tx *Transaction) Bytes() []byte {
+func (tx *Transaction) Bytes() ([]byte, error) {
 	cborred, err := cbor.Marshal(tx)
 	if err != nil {
-		fmt.Println(err)
+		return nil, fmt.Errorf("error marshaling transaction, %s", err)
 	}
-	return cborred
+	return cborred, nil
 }
 
 func (tx *Transaction) Id() serialization.TransactionId {
-	return tx.TransactionBody.Id()
+	txId, _ := tx.TransactionBody.Id()
+	return txId
 }

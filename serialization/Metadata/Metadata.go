@@ -56,7 +56,11 @@ func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
 func (ad *AuxiliaryData) Hash() []byte {
 	if len(ad._basicMeta) != 0 || len(ad._ShelleyMeta.Metadata) != 0 || len(ad._AlonzoMeta.Metadata) != 0 {
 		marshaled, _ := cbor.Marshal(ad)
-		return serialization.Blake2bHash(marshaled)
+		hash, err := serialization.Blake2bHash(marshaled)
+		if err != nil {
+			return nil
+		}
+		return hash
 	} else {
 		return nil
 	}

@@ -2,7 +2,6 @@ package Base
 
 import (
 	"encoding/hex"
-	"log"
 	"strconv"
 
 	"github.com/Salvionied/apollo/serialization"
@@ -112,16 +111,11 @@ func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, Plut
 	multi_assets := MultiAsset.MultiAsset[int64]{}
 	for _, item := range amount {
 		if item.Unit == "lovelace" {
-			amount, err := strconv.Atoi(item.Quantity)
-			if err != nil {
-				log.Fatal(err)
-			}
+			amount, _ := strconv.Atoi(item.Quantity)
 			lovelace_amount += amount
 		} else {
-			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
+			asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
+
 			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
 			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
 			_, ok := multi_assets[policy_id]
@@ -139,23 +133,17 @@ func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, Plut
 	}
 	datum_hash := serialization.DatumHash{}
 	if o.DataHash != "" && o.InlineDatum == "" {
-		decoded_hash, err := hex.DecodeString(o.DataHash)
-		if err != nil {
-			log.Fatal(err)
-		}
+		decoded_hash, _ := hex.DecodeString(o.DataHash)
+
 		datum_hash = serialization.DatumHash{Payload: decoded_hash}
 	}
 	datum := PlutusData.PlutusData{}
 	if o.InlineDatum != "" {
-		decoded, err := hex.DecodeString(o.InlineDatum)
-		if err != nil {
-			log.Fatal(err)
-		}
+		decoded, _ := hex.DecodeString(o.InlineDatum)
+
 		var x PlutusData.PlutusData
-		err = cbor.Unmarshal(decoded, &x)
-		if err != nil {
-			log.Fatal(err)
-		}
+		cbor.Unmarshal(decoded, &x)
+
 		datum = x
 	}
 	tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{

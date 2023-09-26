@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -137,14 +136,16 @@ func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{},
 		utxo.Output.GetAddress().AddressType != 0b0101 {
 		return errors.New("expect the output address of utxo to of script type")
 	}
-	if datum != nil &&
+
+	if datumHash, _ := PlutusData.HashDatum(datum); datum != nil &&
 		utxo.Output.GetDatumHash() != nil &&
-		!utxo.Output.GetDatumHash().Equal(PlutusData.HashDatum(datum)) {
-		return fmt.Errorf("datum hash in transaction output is %s, but actual datum hash from input datum is %s", hex.EncodeToString(utxo.Output.GetDatumHash().Payload[:]), hex.EncodeToString(PlutusData.HashDatum(datum).Payload))
+		!utxo.Output.GetDatumHash().Equal(datumHash) {
+		return fmt.Errorf("datum hash in transaction output is %s, but actual datum hash from input datum is %s", hex.EncodeToString(utxo.Output.GetDatumHash().Payload[:]), hex.EncodeToString(datumHash.Payload))
 	}
 
 	if datum != nil {
-		x := hex.EncodeToString(PlutusData.HashDatum(datum).Payload)
+		datumHash, _ := PlutusData.HashDatum(datum)
+		x := hex.EncodeToString(datumHash.Payload)
 		if tb.Datums == nil {
 			tb.Datums = make(map[string]PlutusData.PlutusData)
 		}
@@ -410,7 +411,7 @@ func (tb *TransactionBuilder) _EstimateFee() int64 {
 func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	if len(tb.Datums) > 0 || len(tb.Redeemers()) > 0 {
 		witnessSet := tb.BuildWitnessSet()
-		sdh := ScriptDataHash(
+		sdh, _ := ScriptDataHash(
 			witnessSet,
 		)
 		return &serialization.ScriptDataHash{Payload: sdh.Payload}
@@ -419,7 +420,7 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	return nil
 }
 
-func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) *serialization.ScriptDataHash {
+func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
 	cost_models := map[int]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
@@ -439,14 +440,14 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) *ser
 	}
 	redeemer_bytes, err := cbor.Marshal(redeemers)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	var datum_bytes []byte
 	if datums.Len() > 0 {
 
 		datum_bytes, err = cbor.Marshal(datums)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 	} else {
 		datum_bytes = []byte{}
@@ -455,18 +456,22 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) *ser
 	if isV1 {
 		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 
 	} else {
 		cost_model_bytes, err = cbor.Marshal(cost_models)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
-	return &serialization.ScriptDataHash{serialization.Blake2bHash(total_bytes)}
+	hash, err := serialization.Blake2bHash(total_bytes)
+	if err != nil {
+		return nil, err
+	}
+	return &serialization.ScriptDataHash{hash}, nil
 
 }
 
@@ -618,16 +623,16 @@ func (tb *TransactionBuilder) _EnsureNoInputExclusionConflict() error {
 	return nil
 }
 
-func (tb *TransactionBuilder) _SetCollateralReturn(changeAddress *Address.Address) {
+func (tb *TransactionBuilder) _SetCollateralReturn(changeAddress *Address.Address) error {
 	witnesses := tb._BuildFakeWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
 		len(tb.ReferenceScripts) == 0 {
-		return
+		return nil
 	}
 
 	if changeAddress == nil {
-		return
+		return nil
 	}
 	collateral_amount := 5_000_000 //tb.Context.MaxTxFee() * tb.Context.GetProtocolParams().CollateralPercent / 100
 	total_input := Value.Value{}
@@ -635,17 +640,18 @@ func (tb *TransactionBuilder) _SetCollateralReturn(changeAddress *Address.Addres
 		total_input = total_input.Add(utxo.Output.GetValue())
 	}
 	if int64(collateral_amount) > total_input.GetCoin() {
-		panic("Not enough collateral to cover fee")
+		return errors.New("Not enough collateral to cover fee")
 	}
 	return_amount := total_input.GetCoin() - int64(collateral_amount)
 	min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(*changeAddress, Value.PureLovelaceValue(return_amount)), tb.Context)
 	if min_lovelace > return_amount {
-		panic("Not enough collateral to cover fee")
+		return errors.New("Not enough collateral to cover fee")
 	} else {
 		returnOutput := TransactionOutput.SimpleTransactionOutput(*changeAddress, Value.PureLovelaceValue(return_amount))
 		tb.CollateralReturn = &returnOutput
 		tb.TotalCollateral = int64(collateral_amount)
 	}
+	return nil
 }
 
 func (tb *TransactionBuilder) Build(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) (TransactionBody.TransactionBody, error) {
@@ -774,7 +780,7 @@ func (tb *TransactionBuilder) Build(changeAddress *Address.Address, mergeChange 
 
 	err = tb._AddChangeAndFee(changeAddress, mergeChange)
 	if err != nil {
-		log.Fatal(err)
+		return TransactionBody.TransactionBody{}, err
 	}
 	tx_body := tb._BuildTxBody()
 	return tx_body, nil

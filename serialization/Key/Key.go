@@ -3,7 +3,7 @@ package Key
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	"log"
+	"fmt"
 
 	"github.com/Salvionied/apollo/crypto/bip32"
 	"github.com/Salvionied/apollo/serialization"
@@ -16,24 +16,27 @@ type SigningKey struct {
 	Payload []byte
 }
 
-func Sign(message []byte, sk []byte) []byte {
+func Sign(message []byte, sk []byte) ([]byte, error) {
 	if len(sk) != ed25519.PrivateKeySize {
 		sk, err := bip32.NewXPrv(sk)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("error creating signing key from bytes, %s", err)
 		}
 		signature := sk.Sign(message)
-		return signature
+		return signature, nil
 
 	}
 	res := ed25519.Sign(sk, message)
-	return res
+	return res, nil
 }
 
-func (sk SigningKey) Sign(data []byte) []byte {
+func (sk SigningKey) Sign(data []byte) ([]byte, error) {
 	pk := sk.Payload
-	signature := Sign(data, pk)
-	return signature
+	signature, err := Sign(data, pk)
+	if err != nil {
+		return nil, err
+	}
+	return signature, nil
 }
 
 type VerificationKey struct {
@@ -44,7 +47,7 @@ func (vk *VerificationKey) UnmarshalCBOR(data []byte) error {
 	final_data := make([]byte, 0)
 	err := cbor.Unmarshal(data, &final_data)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	vk.Payload = final_data
 	return nil
@@ -81,12 +84,12 @@ type PaymentKeyPair struct {
 	SigningKey      SigningKey
 }
 
-func PaymentKeyPairGenerate() PaymentKeyPair {
+func PaymentKeyPairGenerate() (*PaymentKeyPair, error) {
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return PaymentKeyPair{VerificationKey{publicKey}, SigningKey{privateKey}}
+	return &PaymentKeyPair{VerificationKey{publicKey}, SigningKey{privateKey}}, nil
 }
 
 type PaymentSigningKey SigningKey

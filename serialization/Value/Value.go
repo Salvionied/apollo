@@ -3,7 +3,6 @@ package Value
 import (
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/Salvionied/apollo/serialization/Amount"
@@ -34,7 +33,7 @@ func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
 		am := Amount.Amount{}
 		err := cbor.Unmarshal(value, &am)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		val.Am = am.ToAlonzo()
 		val.HasAssets = true
@@ -238,7 +237,7 @@ func (val *Value) UnmarshalCBOR(value []byte) error {
 		am := Amount.Amount{}
 		err := cbor.Unmarshal(value, &am)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		val.Am = am
 		val.HasAssets = true
