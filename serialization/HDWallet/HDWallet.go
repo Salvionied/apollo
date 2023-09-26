@@ -3,6 +3,7 @@ package HDWallet
 import (
 	"crypto/sha512"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -30,15 +31,15 @@ func tweak_bits(seed []byte) []byte {
 	return seed
 }
 
-func NewHDWalletFromSeed(seed string) *HDWallet {
+func NewHDWalletFromSeed(seed string) (*HDWallet, error) {
 	seed_converted, err := hex.DecodeString(seed)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	seed_modified := tweak_bits(seed_converted)
 	privKey, err := bip32.NewXPrv(seed_modified)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return &HDWallet{
 		RootXprivKey: privKey,
@@ -48,16 +49,16 @@ func NewHDWalletFromSeed(seed string) *HDWallet {
 		Mnemonic:     "",
 		Passphrase:   "",
 		Entropy:      "",
-	}
+	}, nil
 
 }
 
-func GenerateSeed(mnemonic string, passphrase string) string {
+func GenerateSeed(mnemonic string, passphrase string) (string, error) {
 	seed, err := bip39.NewSeedWithErrorChecking(mnemonic, passphrase)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return hex.EncodeToString(seed)
+	return hex.EncodeToString(seed), nil
 }
 
 func generateSeedFromEntropy(passphrase string, entropy []byte) string {
@@ -65,23 +66,26 @@ func generateSeedFromEntropy(passphrase string, entropy []byte) string {
 	return hex.EncodeToString(res)
 }
 
-func NewHDWalletFromMnemonic(mnemonic string, passphrase string) *HDWallet {
+func NewHDWalletFromMnemonic(mnemonic string, passphrase string) (*HDWallet, error) {
 	mnemo := norm.NFKD.String(mnemonic)
 	entropy, error := bip39.EntropyFromMnemonic(mnemonic)
 	if error != nil {
-		panic(error)
+		return nil, error
 	}
 	if !bip39.IsMnemonicValid(mnemo) {
-		panic("Invalid Mnemonic")
+		return nil, error
 	}
 	seed := generateSeedFromEntropy(passphrase, entropy)
-	wallet := NewHDWalletFromSeed(seed)
+	wallet, err := NewHDWalletFromSeed(seed)
+	if err != nil {
+		return nil, err
+	}
 	wallet.Seed = []byte(seed)
 	wallet.Mnemonic = mnemonic
 	wallet.Passphrase = passphrase
 
 	wallet.Entropy = hex.EncodeToString(entropy)
-	return wallet
+	return wallet, nil
 }
 
 func (hd *HDWallet) copy() *HDWallet {
@@ -96,9 +100,9 @@ func (hd *HDWallet) copy() *HDWallet {
 	}
 }
 
-func (hd *HDWallet) DerivePath(path string) *HDWallet {
+func (hd *HDWallet) DerivePath(path string) (*HDWallet, error) {
 	if path[:2] != "m/" {
-		panic("Invalid path")
+		return nil, errors.New("Invalid path")
 	}
 	derived_wallet := hd.copy()
 	for _, index := range strings.Split(strings.TrimLeft(path, "m/"), "/") {
@@ -106,7 +110,7 @@ func (hd *HDWallet) DerivePath(path string) *HDWallet {
 			ind_val, err := strconv.Atoi(string(index[:len(index)-1]))
 
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			derived_wallet = derived_wallet.Derive(
 				uint32(ind_val), true,
@@ -114,14 +118,14 @@ func (hd *HDWallet) DerivePath(path string) *HDWallet {
 		} else {
 			ind_val, err := strconv.Atoi(index)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			derived_wallet = derived_wallet.Derive(
 				uint32(ind_val), false,
 			)
 		}
 	}
-	return derived_wallet
+	return derived_wallet, nil
 }
 
 func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
@@ -141,16 +145,16 @@ func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
 
 }
 
-func GenerateMnemonic() string {
-	entropy, error := bip39.NewEntropy(256)
-	if error != nil {
-		panic(error)
+func GenerateMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(256)
+	if err != nil {
+		return "", err
 	}
 	mnemo, err := bip39.NewMnemonic(entropy)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return mnemo
+	return mnemo, nil
 
 }
 

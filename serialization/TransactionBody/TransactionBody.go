@@ -1,14 +1,12 @@
 package TransactionBody
 
 import (
-	"log"
-
-	"github.com/SundaeSwap-finance/apollo/serialization"
-	"github.com/SundaeSwap-finance/apollo/serialization/Certificate"
-	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
-	"github.com/SundaeSwap-finance/apollo/serialization/Withdrawal"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Certificate"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/Withdrawal"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"
@@ -34,23 +32,27 @@ type TransactionBody struct {
 	ReferenceInputs   []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
 }
 
-func (tx *TransactionBody) Hash() []byte {
+func (tx *TransactionBody) Hash() ([]byte, error) {
 	bytes, err := cbor.Marshal(tx)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	_, err = hash.Write(bytes)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return hash.Sum(nil)
+	return hash.Sum(nil), nil
 
 }
 
-func (tx *TransactionBody) Id() serialization.TransactionId {
-	return serialization.TransactionId{tx.Hash()}
+func (tx *TransactionBody) Id() (serialization.TransactionId, error) {
+	bytes, err := tx.Hash()
+	if err != nil {
+		return serialization.TransactionId{}, err
+	}
+	return serialization.TransactionId{bytes}, nil
 }

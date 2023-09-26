@@ -3,7 +3,6 @@ package Policy
 import (
 	"encoding/hex"
 	"errors"
-	"log"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -53,7 +52,6 @@ func (policyId *PolicyId) UnmarshalCBOR(value []byte) error {
 	var res any
 	err := cbor.Unmarshal(value, &res)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 	switch res := res.(type) {
@@ -70,7 +68,7 @@ func (policyId *PolicyId) UnmarshalCBOR(value []byte) error {
 		}
 		policyId.Value = hexString
 	default:
-		log.Fatal("Unknown type")
+		return errors.New("invalid type of a policy id")
 	}
 	return nil
 }

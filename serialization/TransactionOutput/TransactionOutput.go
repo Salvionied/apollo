@@ -3,7 +3,6 @@ package TransactionOutput
 import (
 	"encoding/hex"
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
@@ -72,7 +71,7 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		val := new(TxOWithDatum)
 		err := cbor.Unmarshal(value, &val)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		txo.HasDatum = true
 		txo.Address = val.Address
@@ -87,7 +86,7 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		val := new(TxOWithoutDatum)
 		err := cbor.Unmarshal(value, &val)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		txo.HasDatum = false
 		txo.Address = val.Address
@@ -164,7 +163,11 @@ func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 		l := PlutusData.DatumOptionInline(datum)
 		to.PostAlonzo.Datum = &l
 	} else {
-		to.PreAlonzo.DatumHash = PlutusData.PlutusDataHash(datum)
+		dataHash, err := PlutusData.PlutusDataHash(datum)
+		if err != nil {
+			return
+		}
+		to.PreAlonzo.DatumHash = dataHash
 		to.PreAlonzo.HasDatum = true
 	}
 }
@@ -260,14 +263,14 @@ func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 		txo.IsPostAlonzo = false
 		err := cbor.Unmarshal(value, &txo.PreAlonzo)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 	} else {
 		txo.IsPostAlonzo = true
 		err := cbor.Unmarshal(value, &txo.PostAlonzo)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
 	return nil

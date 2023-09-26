@@ -1,9 +1,7 @@
 package NativeScript
 
 import (
-	"log"
-
-	"github.com/SundaeSwap-finance/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"
@@ -53,24 +51,24 @@ type SerialHash struct {
 	Value []byte
 }
 
-func (ns NativeScript) Hash() serialization.ScriptHash {
+func (ns NativeScript) Hash() (serialization.ScriptHash, error) {
 	finalbytes := []byte{0}
 	bytes, err := cbor.Marshal(ns)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(28, nil)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	_, err = hash.Write(finalbytes)
 	if err != nil {
-		log.Fatal(err)
+		return serialization.ScriptHash{}, err
 	}
 	ret := serialization.ScriptHash{}
 	copy(ret[:], hash.Sum(nil))
-	return ret
+	return ret, nil
 }
 
 func (ns *NativeScript) UnmarshalCBOR(value []byte) error {

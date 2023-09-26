@@ -303,16 +303,11 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		multi_assets := MultiAsset.MultiAsset[int64]{}
 		for _, item := range amount {
 			if item.Unit == "lovelace" {
-				amount, err := strconv.Atoi(item.Quantity)
-				if err != nil {
-					log.Fatal(err)
-				}
+				amount, _ := strconv.Atoi(item.Quantity)
+
 				lovelace_amount += amount
 			} else {
-				asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
+				asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
 				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
 				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
 				_, ok := multi_assets[policy_id]
@@ -336,12 +331,9 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		}
 		var tx_out TransactionOutput.TransactionOutput
 		if result.InlineDatum != "" {
-			decoded, err := hex.DecodeString(result.InlineDatum)
-			if err != nil {
-				log.Fatal(err)
-			}
+			decoded, _ := hex.DecodeString(result.InlineDatum)
 			var x PlutusData.PlutusData
-			err = cbor.Unmarshal(decoded, &x)
+			err := cbor.Unmarshal(decoded, &x)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -398,7 +390,8 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 	if err != nil {
 		log.Fatal(err, "UNMARSHAL PROTOCOL")
 	}
-	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}
+	hash, _ := tx.TransactionBody.Hash()
+	return serialization.TransactionId{Payload: hash}
 }
 func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	txBytes, _ := cbor.Marshal(tx)
@@ -432,7 +425,11 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 	if err != nil {
 		return serialization.TransactionId{}, err
 	}
-	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}, nil
+	hash, err := tx.TransactionBody.Hash()
+	if err != nil {
+		return serialization.TransactionId{}, err
+	}
+	return serialization.TransactionId{Payload: hash}, nil
 }
 
 type EvalResult struct {

@@ -126,7 +126,11 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 
 func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	//TODO
-	return serialization.TransactionId{Payload: tx.TransactionBody.Hash()}, nil
+	hash, err := tx.TransactionBody.Hash()
+	if err != nil {
+		return serialization.TransactionId{}, err
+	}
+	return serialization.TransactionId{Payload: hash}, nil
 }
 
 type EvalResult struct {

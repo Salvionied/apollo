@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/SundaeSwap-finance/apollo/constants"
 	"github.com/SundaeSwap-finance/apollo/crypto/bech32"
@@ -69,12 +68,12 @@ func (addr *Address) Debug() string {
 	return fmt.Sprintf("{\nPaymentPart: %v\nStakingPart: %v\nNetwork: %v\nAddressType: %v\nHeaderByte: %v\nHrp: %s\n}", addr.PaymentPart, addr.StakingPart, addr.Network, addr.AddressType, addr.HeaderByte, addr.Hrp)
 }
 
-func (addr *Address) ToCbor() string {
+func (addr *Address) ToCbor() (string, error) {
 	b, err := cbor.Marshal(addr.Bytes())
 	if err != nil {
-		log.Fatal("unable to marshal that address")
+		return "", fmt.Errorf("error marshalling address to cbor, %s", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 func (addr *Address) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(addr.Bytes())
@@ -112,7 +111,7 @@ func (addr Address) Bytes() []byte {
 func (addr Address) String() string {
 	byteaddress, err := bech32.ConvertBits(addr.Bytes(), 8, 5, true)
 	if err != nil {
-		log.Fatal(err)
+		return ""
 	}
 	result, _ := bech32.Encode(addr.Hrp, byteaddress)
 	return result

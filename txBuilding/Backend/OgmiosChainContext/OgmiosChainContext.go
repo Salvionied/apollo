@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SundaeSwap-finance/apollo/serialization"
-	"github.com/SundaeSwap-finance/apollo/serialization/Address"
-	"github.com/SundaeSwap-finance/apollo/serialization/Amount"
-	"github.com/SundaeSwap-finance/apollo/serialization/Asset"
-	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
-	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
-	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
-	"github.com/SundaeSwap-finance/apollo/serialization/Policy"
-	"github.com/SundaeSwap-finance/apollo/serialization/Redeemer"
-	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
-	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
-	"github.com/SundaeSwap-finance/apollo/serialization/Value"
-	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Amount"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/serialization/Redeemer"
+	"github.com/Salvionied/apollo/serialization/Transaction"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
 	chainsyncv5 "github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6"
@@ -601,12 +601,13 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 
 func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	ctx := context.Background()
-	bytes := tx.Bytes()
-	err := occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+	bytes, err := tx.Bytes()
+	err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
 	}
-	return tx.TransactionBody.Id(), nil
+	txId, _ := tx.TransactionBody.Id()
+	return txId, nil
 }
 
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
