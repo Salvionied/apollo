@@ -40,7 +40,7 @@ func TestIsMnemonicFail(t *testing.T) {
 }
 
 func TestMnemonicGeneration(t *testing.T) {
-	mnemo := HDWallet.GenerateMnemonic()
+	mnemo, _ := HDWallet.GenerateMnemonic()
 	res := HDWallet.IsMnemonic(mnemo)
 	if res != true {
 		t.Errorf("GenerateMnemonic() failed")
@@ -48,8 +48,8 @@ func TestMnemonicGeneration(t *testing.T) {
 }
 
 func TestPaymentAddress12Reward(t *testing.T) {
-	hd := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
-	hdWallet_stake := hd.DerivePath("m/1852'/1815'/0'/2/0")
+	hd, _ := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
+	hdWallet_stake, _ := hd.DerivePath("m/1852'/1815'/0'/2/0")
 	stake_public_key := hdWallet_stake.XPrivKey.PublicKey()
 	vkh, err := Key.VerificationKey{Payload: stake_public_key}.Hash()
 	if err != nil {
