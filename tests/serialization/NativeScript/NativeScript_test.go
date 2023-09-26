@@ -25,7 +25,7 @@ func TestNativeScriptsSerializationAndHash(t *testing.T) {
 	if hex.EncodeToString(result) != cborHex {
 		t.Errorf("InvalidReserialization")
 	}
-	hash := nativeScript.Hash()
+	hash, _ := nativeScript.Hash()
 	if fmt.Sprint(hex.EncodeToString(hash.Bytes())) != "1d8b26107c604d36e24963be3ba26f264245cae0e10c7fa15846efd2" {
 		t.Errorf("Invalid Hashing Of NativeScript")
 	}

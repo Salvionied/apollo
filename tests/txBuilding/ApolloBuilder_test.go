@@ -76,7 +76,8 @@ func TestEnsureTxIsBalanced(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(hex.EncodeToString(apollob.GetTx().Bytes()))
+	txBytes, err := apollob.GetTx().Bytes()
+	fmt.Println(hex.EncodeToString(txBytes))
 	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
 	for _, input := range apollob.GetTx().TransactionBody.Inputs {
 		for _, utxo := range utxos {
@@ -143,7 +144,8 @@ func TestComplexTxBuild(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(hex.EncodeToString(apollob.GetTx().Bytes()))
+	txBytes, err := apollob.GetTx().Bytes()
+	fmt.Println(hex.EncodeToString(txBytes))
 	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
 	for _, input := range apollob.GetTx().TransactionBody.Inputs {
 		for _, utxo := range utxos {

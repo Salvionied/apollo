@@ -318,7 +318,7 @@ func TestToCbor(t *testing.T) {
 
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
-			result := testCase.input.ToCbor()
+			result, _ := testCase.input.ToCbor()
 			if result != testCase.expected {
 				t.Errorf("\ntest: %v\nexpected: %v\nresult: %v", name, testCase.expected, result)
 			}
