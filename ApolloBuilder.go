@@ -484,7 +484,7 @@ func (b *Apollo) setCollateral() *Apollo {
 				b.totalCollateral = collateral_amount
 				return b
 			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
+				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
 				b.collaterals = append(b.collaterals, utxo)
 				b.collateralReturn = &returnOutput
 				b.totalCollateral = collateral_amount
