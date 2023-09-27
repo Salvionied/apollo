@@ -1,3 +1,7 @@
+<div align="center">
+    <img src="./assets/logo.jpg" alt="apollo logo" width="480">
+</div>
+
 # Apollo: Pure Golang Cardano Building blocks 
 
 ## Pure Golang Cardano Serialization
