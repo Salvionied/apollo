@@ -474,9 +474,9 @@ func (b *Apollo) setCollateral() *Apollo {
 	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
 	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
+		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount && len(utxo.Output.GetValue().GetAssets()) <= 5 {
 			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
+			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets())), b.Context)
 			if min_lovelace > return_amount {
 				continue
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
