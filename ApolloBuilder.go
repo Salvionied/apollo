@@ -461,15 +461,15 @@ func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo {
 	return b
 }
 
-func (b *Apollo) setCollateral() *Apollo {
+func (b *Apollo) setCollateral() (*Apollo, error) {
 	if len(b.collaterals) > 0 {
-		return b
+		return b, nil
 	}
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
 		len(b.referenceInputs) == 0 {
-		return b
+		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
@@ -482,17 +482,38 @@ func (b *Apollo) setCollateral() *Apollo {
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
 				b.collaterals = append(b.collaterals, utxo)
 				b.totalCollateral = collateral_amount
-				return b
+				return b, nil
 			} else {
 				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
 				b.collaterals = append(b.collaterals, utxo)
 				b.collateralReturn = &returnOutput
 				b.totalCollateral = collateral_amount
-				return b
+				return b, nil
 			}
 		}
 	}
-	return b
+	for _, utxo := range availableUtxos {
+		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
+			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
+			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets())), b.Context)
+			if min_lovelace > return_amount && return_amount != 0 {
+				continue
+			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
+				b.collaterals = append(b.collaterals, utxo)
+				b.totalCollateral = collateral_amount
+				return b, nil
+			} else {
+				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
+				b.collaterals = append(b.collaterals, utxo)
+				b.collateralReturn = &returnOutput
+				b.totalCollateral = collateral_amount
+				return b, nil
+			}
+		} else {
+			fmt.Println("invalid utxo")
+		}
+	}
+	return b, errors.New("NoCollateral")
 }
 
 func (b *Apollo) Clone() *Apollo {
@@ -632,11 +653,14 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET REDEEMER INDEXES
 	b = b.setRedeemerIndexes()
 	//SET COLLATERAL
-	b = b.setCollateral()
+	b, err := b.setCollateral()
+	if err != nil {
+		return nil, err
+	}
 	//UPDATE EXUNITS
 	b = b.updateExUnits()
 	//ADDCHANGEANDFEE
-	b, err := b.addChangeAndFee()
+	b, err = b.addChangeAndFee()
 	if err != nil {
 		return nil, err
 	}
