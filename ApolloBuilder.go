@@ -509,8 +509,6 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 				b.totalCollateral = collateral_amount
 				return b, nil
 			}
-		} else {
-			fmt.Println("invalid utxo")
 		}
 	}
 	return b, errors.New("NoCollateral")
