@@ -65,7 +65,7 @@ type Apollo struct {
 	totalCollateral    int
 	referenceInputs    []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
-	withdrawals        []*Withdrawal.Withdrawal
+	withdrawals        Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
 	nativescripts      []NativeScript.NativeScript
 	usedUtxos          []string
@@ -92,6 +92,7 @@ func New(cc Base.ChainContext) *Apollo {
 		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
 		mint:               make([]Unit, 0),
 		collaterals:        make([]UTxO.UTxO, 0),
+		withdrawals:        Withdrawal.New(),
 		Fee:                0,
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
@@ -373,7 +374,7 @@ func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 		ValidityStart:     b.ValidityStart,
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
-		Withdrawals:       b.withdrawals,
+		Withdrawals:       &b.withdrawals,
 		ReferenceInputs:   b.referenceInputs}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
@@ -528,9 +529,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		selectedAmount = selectedAmount.Add(mintUnit.ToValue())
 	}
 
-	// for _, withdrawal := range b.withdrawals {
-	// 	//TODO
-	// }
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
@@ -933,5 +931,27 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 
 func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 	b.isEstimateRequired = false
+	return b
+}
+
+func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData PlutusData.PlutusData) *Apollo {
+	var stakeAddr [29]byte
+	stakeAddr[0] = address.HeaderByte
+	if len(address.StakingPart) != 28 {
+		fmt.Printf("AddWithdrawal: address has invalid or missing staking part: %v\n", address.StakingPart)
+	}
+	copy(stakeAddr[1:], address.StakingPart)
+	err := b.withdrawals.Add(stakeAddr, amount)
+	if err != nil {
+		fmt.Printf("AddWithdrawal: %v\n", err)
+		return b
+	}
+	newRedeemer := Redeemer.Redeemer{
+		Tag:     Redeemer.REWARD,
+		Index:   b.withdrawals.Size() - 1, // We just added a withdrawal
+		Data:    redeemerData,
+		ExUnits: Redeemer.ExecutionUnits{}, // This will be filled in when we eval later
+	}
+	b.redeemers = append(b.redeemers, newRedeemer)
 	return b
 }
