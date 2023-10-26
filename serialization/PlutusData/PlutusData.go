@@ -22,9 +22,63 @@ type _Script struct {
 	Script []byte
 }
 
-type _DatumOption struct {
-	_     struct{} `cbor:",toarray"`
-	datum []byte
+type DatumType byte
+
+const (
+	DatumTypeHash    DatumType = 0
+	DatumTypeLiteral DatumType = 1
+)
+
+type DatumOption struct {
+	_         struct{} `cbor:",toarray"`
+	DatumType DatumType
+	Hash      []byte
+	Literal   *PlutusData
+}
+
+func DatumOptionHash(hash []byte) DatumOption {
+	return DatumOption{
+		DatumType: DatumTypeHash,
+		Hash:      hash,
+	}
+}
+
+func DatumOptionLiteral(pd *PlutusData) DatumOption {
+	return DatumOption{
+		DatumType: DatumTypeLiteral,
+		Literal:   pd,
+	}
+}
+
+func (d DatumOption) MarshalCBOR() ([]byte, error) {
+	var format struct {
+		_       struct{} `cbor:",toarray"`
+		Tag     DatumType
+		Content *PlutusData
+	}
+	switch d.DatumType {
+	case DatumTypeHash:
+		format.Tag = DatumTypeHash
+		format.Content = &PlutusData{
+			PlutusDataType: PlutusBytes,
+			TagNr:          0,
+			Value:          d.Hash,
+		}
+	case DatumTypeLiteral:
+		format.Tag = DatumTypeLiteral
+		bytes, err := cbor.Marshal(d.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
+		}
+		format.Content = &PlutusData{
+			PlutusDataType: PlutusBytes,
+			TagNr:          24,
+			Value:          bytes,
+		}
+	default:
+		return nil, fmt.Errorf("Invalid DatumOption: %v", d)
+	}
+	return cbor.Marshal(format)
 }
 
 type ScriptRef struct {
