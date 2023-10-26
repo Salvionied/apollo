@@ -1065,3 +1065,8 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
 	b.stakeRedeemers[fmt.Sprint(b.withdrawals.Size()-1)] = newRedeemer
 	return b
 }
+
+func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
+	b.collaterals = append(b.collaterals, utxo)
+	return b
+}
