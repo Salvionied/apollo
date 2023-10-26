@@ -983,3 +983,8 @@ func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 	b.isEstimateRequired = false
 	return b
 }
+
+func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
+	b.collaterals = append(b.collaterals, utxo)
+	return b
+}
