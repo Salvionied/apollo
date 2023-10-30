@@ -56,6 +56,7 @@ type Apollo struct {
 	v2scripts          []PlutusData.PlutusV2Script
 	redeemers          []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
+	stakeRedeemers     map[string]Redeemer.Redeemer
 	mint               []Unit
 	collaterals        []UTxO.UTxO
 	Fee                int64
@@ -90,6 +91,7 @@ func New(cc Base.ChainContext) *Apollo {
 		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
 		redeemers:          make([]Redeemer.Redeemer, 0),
 		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
+		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
 		mint:               make([]Unit, 0),
 		collaterals:        make([]UTxO.UTxO, 0),
 		withdrawals:        Withdrawal.New(),
@@ -504,11 +506,24 @@ func (b *Apollo) updateExUnits() *Apollo {
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
+		for k, redeemer := range b.stakeRedeemers {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.stakeRedeemers[k] = redeemer
+			}
+		}
 		for _, redeemer := range b.redeemersToUTxO {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.stakeRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	} else {
 		for _, redeemer := range b.redeemersToUTxO {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.stakeRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	}
@@ -952,6 +967,6 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
 		Data:    redeemerData,
 		ExUnits: Redeemer.ExecutionUnits{}, // This will be filled in when we eval later
 	}
-	b.redeemers = append(b.redeemers, newRedeemer)
+	b.stakeRedeemers[fmt.Sprint(b.withdrawals.Size()-1)] = newRedeemer
 	return b
 }
