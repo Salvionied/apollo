@@ -36,6 +36,52 @@ type DatumOption struct {
 	Literal   *PlutusData
 }
 
+func (d *DatumOption) UnmarshalCBOR(b []byte) error {
+	var cborDatumOption struct {
+		_         struct{} `cbor:",toarray"`
+		DatumType DatumType
+		Content   cbor.RawMessage
+	}
+	err := cbor.Unmarshal(b, &cborDatumOption)
+	if err != nil {
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+	}
+	if cborDatumOption.DatumType == DatumTypeLiteral {
+		var cborDatumLiteral PlutusData
+		errLiteral := cbor.Unmarshal(cborDatumOption.Content, &cborDatumLiteral)
+		if errLiteral != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errLiteral)
+		}
+		if cborDatumLiteral.TagNr != 24 {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeLiteral but Tag was not 24: %v", cborDatumLiteral.TagNr)
+		}
+		taggedBytes, valid := cborDatumLiteral.Value.([]byte)
+		if !valid {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
+		}
+		var inline PlutusData
+		err = cbor.Unmarshal(taggedBytes, &inline)
+		if err != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+		}
+		d.DatumType = DatumTypeLiteral
+		d.Literal = &inline
+		return nil
+	} else if cborDatumOption.DatumType == DatumTypeHash {
+		var cborDatumHash []byte
+		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
+		if errHash != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errHash)
+		}
+		d.DatumType = DatumTypeHash
+		d.Hash = cborDatumHash
+		return nil
+	} else {
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: Unknown tag: %v", cborDatumOption.DatumType)
+	}
+
+}
+
 func DatumOptionHash(hash []byte) DatumOption {
 	return DatumOption{
 		DatumType: DatumTypeHash,
