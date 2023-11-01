@@ -15,10 +15,10 @@ import (
 )
 
 type TransactionOutputAlonzo struct {
-	Address   Address.Address        `cbor:"0,keyasint"`
-	Amount    Value.AlonzoValue      `cbor:"1,keyasint"`
-	Datum     *PlutusData.PlutusData `cbor:"2,keyasint,omitempty"`
-	ScriptRef *PlutusData.ScriptRef  `cbor:"3,keyasint,omitempty"`
+	Address   Address.Address         `cbor:"0,keyasint"`
+	Amount    Value.AlonzoValue       `cbor:"1,keyasint"`
+	Datum     *PlutusData.DatumOption `cbor:"2,keyasint,omitempty"`
+	ScriptRef *PlutusData.ScriptRef   `cbor:"3,keyasint,omitempty"`
 }
 
 func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
@@ -161,7 +161,8 @@ func SimpleTransactionOutput(address Address.Address, value Value.Value) Transac
 
 func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 	if to.IsPostAlonzo {
-		to.PostAlonzo.Datum = datum
+		l := PlutusData.DatumOptionInline(datum)
+		to.PostAlonzo.Datum = &l
 	} else {
 		to.PreAlonzo.DatumHash = PlutusData.PlutusDataHash(datum)
 		to.PreAlonzo.HasDatum = true
@@ -194,11 +195,28 @@ func (to *TransactionOutput) GetDatumHash() *serialization.DatumHash {
 
 func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 	if to.IsPostAlonzo {
-		return to.PostAlonzo.Datum
+		switch d := to.PostAlonzo.Datum; d.DatumType {
+		case PlutusData.DatumTypeHash:
+			return nil
+		case PlutusData.DatumTypeInline:
+			return d.Inline
+		default:
+			return nil
+		}
 	} else {
-		return &PlutusData.PlutusData{}
+		return nil
 	}
 }
+
+func (to *TransactionOutput) GetDatumOption() *PlutusData.DatumOption {
+	if to.IsPostAlonzo {
+		return to.PostAlonzo.Datum
+	} else {
+		d := PlutusData.DatumOptionHash(to.PreAlonzo.DatumHash.Payload)
+		return &d
+	}
+}
+
 func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.ScriptRef

@@ -345,11 +345,12 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 			if err != nil {
 				log.Fatal(err)
 			}
+			l := PlutusData.DatumOptionInline(&x)
 			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
 				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 					Address: address,
 					Amount:  final_amount.ToAlonzoValue(),
-					Datum:   &x},
+					Datum:   &l},
 			}
 		} else {
 			tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
