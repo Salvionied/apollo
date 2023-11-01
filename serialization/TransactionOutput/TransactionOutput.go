@@ -204,7 +204,7 @@ func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 			return nil
 		}
 	} else {
-		return &PlutusData.PlutusData{}
+		return nil
 	}
 }
 

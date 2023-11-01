@@ -25,7 +25,7 @@ type _Script struct {
 type DatumType byte
 
 const (
-	DatumTypeHash    DatumType = 0
+	DatumTypeHash   DatumType = 0
 	DatumTypeInline DatumType = 1
 )
 
@@ -33,7 +33,7 @@ type DatumOption struct {
 	_         struct{} `cbor:",toarray"`
 	DatumType DatumType
 	Hash      []byte
-	Inline   *PlutusData
+	Inline    *PlutusData
 }
 
 func (d *DatumOption) UnmarshalCBOR(b []byte) error {
@@ -92,7 +92,7 @@ func DatumOptionHash(hash []byte) DatumOption {
 func DatumOptionInline(pd *PlutusData) DatumOption {
 	return DatumOption{
 		DatumType: DatumTypeInline,
-		Inline:   pd,
+		Inline:    pd,
 	}
 }
 
