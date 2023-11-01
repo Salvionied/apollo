@@ -26,14 +26,14 @@ type DatumType byte
 
 const (
 	DatumTypeHash    DatumType = 0
-	DatumTypeLiteral DatumType = 1
+	DatumTypeInline DatumType = 1
 )
 
 type DatumOption struct {
 	_         struct{} `cbor:",toarray"`
 	DatumType DatumType
 	Hash      []byte
-	Literal   *PlutusData
+	Inline   *PlutusData
 }
 
 func (d *DatumOption) UnmarshalCBOR(b []byte) error {
@@ -46,16 +46,16 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
 	}
-	if cborDatumOption.DatumType == DatumTypeLiteral {
-		var cborDatumLiteral PlutusData
-		errLiteral := cbor.Unmarshal(cborDatumOption.Content, &cborDatumLiteral)
-		if errLiteral != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errLiteral)
+	if cborDatumOption.DatumType == DatumTypeInline {
+		var cborDatumInline PlutusData
+		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
+		if errInline != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
 		}
-		if cborDatumLiteral.TagNr != 24 {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeLiteral but Tag was not 24: %v", cborDatumLiteral.TagNr)
+		if cborDatumInline.TagNr != 24 {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
 		}
-		taggedBytes, valid := cborDatumLiteral.Value.([]byte)
+		taggedBytes, valid := cborDatumInline.Value.([]byte)
 		if !valid {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
 		}
@@ -64,8 +64,8 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		if err != nil {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
 		}
-		d.DatumType = DatumTypeLiteral
-		d.Literal = &inline
+		d.DatumType = DatumTypeInline
+		d.Inline = &inline
 		return nil
 	} else if cborDatumOption.DatumType == DatumTypeHash {
 		var cborDatumHash []byte
@@ -89,10 +89,10 @@ func DatumOptionHash(hash []byte) DatumOption {
 	}
 }
 
-func DatumOptionLiteral(pd *PlutusData) DatumOption {
+func DatumOptionInline(pd *PlutusData) DatumOption {
 	return DatumOption{
-		DatumType: DatumTypeLiteral,
-		Literal:   pd,
+		DatumType: DatumTypeInline,
+		Inline:   pd,
 	}
 }
 
@@ -110,9 +110,9 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 			TagNr:          0,
 			Value:          d.Hash,
 		}
-	case DatumTypeLiteral:
-		format.Tag = DatumTypeLiteral
-		bytes, err := cbor.Marshal(d.Literal)
+	case DatumTypeInline:
+		format.Tag = DatumTypeInline
+		bytes, err := cbor.Marshal(d.Inline)
 		if err != nil {
 			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
 		}

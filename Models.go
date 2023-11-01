@@ -135,7 +135,7 @@ func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	if p.IsInline {
 		txO := TransactionOutput.TransactionOutput{}
 		txO.IsPostAlonzo = true
-		l := PlutusData.DatumOptionLiteral(p.Datum)
+		l := PlutusData.DatumOptionInline(p.Datum)
 		txO.PostAlonzo.Datum = &l
 		txO.PostAlonzo.Address = p.Receiver
 		txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()

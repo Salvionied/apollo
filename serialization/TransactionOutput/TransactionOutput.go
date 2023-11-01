@@ -161,7 +161,7 @@ func SimpleTransactionOutput(address Address.Address, value Value.Value) Transac
 
 func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 	if to.IsPostAlonzo {
-		l := PlutusData.DatumOptionLiteral(datum)
+		l := PlutusData.DatumOptionInline(datum)
 		to.PostAlonzo.Datum = &l
 	} else {
 		to.PreAlonzo.DatumHash = PlutusData.PlutusDataHash(datum)
@@ -198,8 +198,8 @@ func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 		switch d := to.PostAlonzo.Datum; d.DatumType {
 		case PlutusData.DatumTypeHash:
 			return nil
-		case PlutusData.DatumTypeLiteral:
-			return d.Literal
+		case PlutusData.DatumTypeInline:
+			return d.Inline
 		default:
 			return nil
 		}
