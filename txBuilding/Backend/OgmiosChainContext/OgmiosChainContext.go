@@ -30,8 +30,8 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -104,8 +104,29 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 	}
 }
 
-func datum_OgmigoToApollo(d string, dh string) PlutusData.PlutusData {
-	return PlutusData.PlutusData{}
+func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
+	if d != "" {
+		datumBytes, err := hex.DecodeString(d)
+		if err != nil {
+			log.Fatal(err, "OgmiosChainContext: Failed to decode datum from hex: %v", d)
+		}
+		var pd PlutusData.PlutusData
+		err = cbor.Unmarshal(datumBytes, &pd)
+		if err != nil {
+			log.Fatal(err, "OgmiosChainContext: datum is not valid plutus data: %v", d)
+		}
+		res := PlutusData.DatumOptionInline(&pd)
+		return &res
+	}
+	if dh != "" {
+		datumHashBytes, err := hex.DecodeString(dh)
+		if err != nil {
+			log.Fatal(err, "OgmiosChainContext: Failed to decode datum hash from hex: %v", dh)
+		}
+		res := PlutusData.DatumOptionHash(datumHashBytes)
+		return &res
+	}
+	return nil
 }
 
 func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, error) {
@@ -129,7 +150,6 @@ func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
 		log.Fatal(err, "Failed to decode ogmigo address")
 	}
 	datum := datum_OgmigoToApollo(u.Datum, u.DatumHash)
-	l := PlutusData.DatumOptionInline(&datum)
 	v := value_OgmigoToApollo(u.Value)
 	scriptRef, err := scriptRef_OgmigoToApollo(u.Script)
 	if err != nil {
@@ -144,7 +164,7 @@ func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 				Address:   addr,
 				Amount:    v,
-				Datum:     &l,
+				Datum:     datum,
 				ScriptRef: scriptRef,
 			},
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
