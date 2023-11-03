@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Salvionied/apollo"
+	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Transaction"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
+	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 	"github.com/Salvionied/cbor/v2"
-	"github.com/SundaeSwap-finance/apollo"
-	"github.com/SundaeSwap-finance/apollo/serialization/Address"
-	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
-	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
-	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
-	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
-	"github.com/SundaeSwap-finance/apollo/serialization/Value"
-	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/FixedChainContext"
 )
 
 type Network int
@@ -361,3 +362,20 @@ func TestComplexTxBuild(t *testing.T) {
 // 	fmt.Println(apollob.GetTx().TransactionBody.CollateralReturn, apollob.GetTx().TransactionBody.Withdrawals)
 // 	fmt.Println(hex.EncodeToString(cborred))
 // }
+
+func TestFailedSubmissionThrows(t *testing.T) {
+	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	apollob := apollo.New(&cc)
+	apollob, err := apollob.
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(initUtxosDifferentiated()...).
+		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000).
+		Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = cc.SubmitTx(*apollob.GetTx())
+	if err == nil {
+		t.Error("DIDNT THROW")
+	}
+}
