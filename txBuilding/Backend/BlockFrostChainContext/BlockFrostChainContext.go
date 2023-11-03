@@ -422,6 +422,10 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 	if err != nil {
 		return serialization.TransactionId{}, err
 	}
+	fmt.Println(res.Status)
+	if res.Status != "200 OK" {
+		return serialization.TransactionId{}, fmt.Errorf("error submitting tx: %v", response)
+	}
 	hash, err := tx.TransactionBody.Hash()
 	if err != nil {
 		return serialization.TransactionId{}, err
