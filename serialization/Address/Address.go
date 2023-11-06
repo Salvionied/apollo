@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/SundaeSwap-finance/apollo/constants"
 	"github.com/SundaeSwap-finance/apollo/crypto/bech32"
 	"github.com/SundaeSwap-finance/apollo/serialization"
 
@@ -37,6 +38,27 @@ type Address struct {
 	AddressType byte
 	HeaderByte  byte
 	Hrp         string
+}
+
+func WalletAddressFromBytes(payment []byte, staking []byte, network constants.Network) *Address {
+	var addr Address
+	addr.PaymentPart = payment
+	addr.StakingPart = staking
+	if network == constants.MAINNET {
+		addr.Network = MAINNET
+	} else {
+		addr.Network = TESTNET
+	}
+	if len(payment) == 0 {
+		return nil
+	} else if len(staking) == 0 {
+		addr.AddressType = KEY_NONE
+	} else {
+		addr.AddressType = KEY_KEY
+	}
+	addr.HeaderByte = (addr.AddressType << 4) | addr.Network
+	addr.Hrp = ComputeHrp(addr.AddressType, addr.Network)
+	return &addr
 }
 
 func (addr *Address) Equal(other *Address) bool {
