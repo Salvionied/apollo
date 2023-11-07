@@ -1,9 +1,8 @@
-module github.com/SundaeSwap-finance/apollo
+module github.com/Salvionied/apollo
 
 go 1.20
 
 require (
-	github.com/Salvionied/apollo v1.0.4
 	github.com/Salvionied/cbor/v2 v2.6.0
 	github.com/SundaeSwap-finance/kugo v0.1.5
 	github.com/SundaeSwap-finance/ogmigo v0.8.0

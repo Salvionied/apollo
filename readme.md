@@ -22,8 +22,8 @@ import (
     "fmt"
 
     "github.com/Salvionied/cbor/v2"
-    "github.com/SundaeSwap-finance/apollo"
-    "github.com/SundaeSwap-finance/apollo/txBuilding/Backend/BlockFrostChainContext"
+    "github.com/Salvionied/apollo"
+    "github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )
 
 func main() {

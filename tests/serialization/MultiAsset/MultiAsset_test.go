@@ -3,11 +3,11 @@ package serialization_test
 import (
 	"testing"
 
-	"github.com/SundaeSwap-finance/apollo/serialization/Asset"
-	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
-	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
-	"github.com/SundaeSwap-finance/apollo/serialization/Policy"
-	"github.com/SundaeSwap-finance/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/serialization/Value"
 )
 
 func TestMultiAssetAddition(t *testing.T) {

@@ -3,8 +3,8 @@ package Errors
 import (
 	"fmt"
 
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
-	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/UTxO"
 )
 
 type InvalidTransactionException struct {

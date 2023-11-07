@@ -30,13 +30,13 @@ func NewBlockfrostBackend(
 			int(constants.TESTNET),
 			projectId,
 		), nil
-	case PREVIEW:
+	case constants.PREVIEW:
 		return BlockFrostChainContext.NewBlockfrostChainContext(
 			constants.BLOCKFROST_BASE_URL_PREVIEW,
 			int(constants.TESTNET),
 			projectId,
 		), nil
-	case PREPROD:
+	case constants.PREPROD:
 		return BlockFrostChainContext.NewBlockfrostChainContext(
 			constants.BLOCKFROST_BASE_URL_PREPROD,
 			int(constants.TESTNET),

@@ -1,8 +1,8 @@
 package TxBuilder
 
 import (
-	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
-	"github.com/SundaeSwap-finance/apollo/serialization/Redeemer"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Redeemer"
 )
 
 type MintingScriptToRedeemer struct {

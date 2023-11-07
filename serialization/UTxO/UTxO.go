@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
-	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 )
 
 type Container[T any] interface {
