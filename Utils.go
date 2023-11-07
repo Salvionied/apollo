@@ -6,6 +6,16 @@ import (
 	"github.com/Salvionied/apollo/serialization/UTxO"
 )
 
+/**
+	SortUtxos sorts a slice of UTxO objects in descending order
+	based on their amounts.
+
+	Params:
+		utxos ([]UTxO.UTxO): A slice of UTxO objects to be sorted.
+
+	Returns:
+		[]UTxO.UTxO: A new slice of UTxO objects sorted by descending amounts.
+*/	
 func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	res := make([]UTxO.UTxO, len(utxos))
 	copy(res, utxos)
@@ -19,6 +29,15 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	return res
 }
 
+/**
+	SortInputs sorts a slice of UTxO objects based on their strings.
+
+	Params:
+		inputs ([]UTxO.UTxO): A slice of UTxO objects to be sorted.
+
+	Returns:
+		[]UTxO.UTxO: A new slice of UTxO objects sorted based on input strings.
+*/
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
 	hashes := make([]string, 0)
 	relationMap := map[string]UTxO.UTxO{}

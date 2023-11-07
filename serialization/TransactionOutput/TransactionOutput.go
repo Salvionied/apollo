@@ -20,6 +20,12 @@ type TransactionOutputAlonzo struct {
 	ScriptRef *PlutusData.ScriptRef  `cbor:"3,keyasint,omitempty"`
 }
 
+/**
+	Clone returns a dep copy of the TransactionOutputAlonzo.
+
+	Returns:
+		TransactionOutputAlonzo: A deep copy of the TransactionOutputAlonzo.
+*/
 func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
 	return TransactionOutputAlonzo{
 		Address: t.Address,
@@ -28,6 +34,13 @@ func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
 	}
 }
 
+/**
+	String returns a string representation of the TransactionOutputAlonzo,
+	which includes the address and amount indicator.
+
+	Returns:
+		string: The string representation of TransactionOutputAlonzo.
+*/
 func (txo TransactionOutputAlonzo) String() string {
 	return fmt.Sprintf("%s:%s Datum ", txo.Address.String(), txo.Amount.ToValue().String())
 }
@@ -39,6 +52,12 @@ type TransactionOutputShelley struct {
 	HasDatum  bool
 }
 
+/**
+	Clone returns a deep copy of the TransactionOutputShelley.
+
+	Returns:
+		TransactionOutputShelley: A deep copy of the TransactionOutputShelley.
+*/
 func (t TransactionOutputShelley) Clone() TransactionOutputShelley {
 	return TransactionOutputShelley{
 		Address:   t.Address,
@@ -48,6 +67,13 @@ func (t TransactionOutputShelley) Clone() TransactionOutputShelley {
 	}
 }
 
+/**
+	String returns a string representation of the TransactionOutputShelley,
+	which includes the address, amount and datum information in hexadecimal format.
+
+	Returns:
+		string: The string representation of TransactionOutputShelley.
+*/
 func (txo TransactionOutputShelley) String() string {
 	return fmt.Sprintf("%s:%s DATUM: %s", fmt.Sprint(txo.Address), txo.Amount, hex.EncodeToString(txo.DatumHash.Payload[:]))
 }
@@ -64,6 +90,16 @@ type TxOWithoutDatum struct {
 	Amount  Value.Value
 }
 
+/**
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a TransactionOutputShelley,
+	which determines whether the output has DATUM information and decodes accordingly.
+
+	Params:
+		value ([]byte): A CBOR-encoded byte slice representing the TransactionOutputShelley.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
 func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 	var x []interface{}
 	_ = cbor.Unmarshal(value, &x)
@@ -95,6 +131,14 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
+/**
+	MarshalCBOR serializes the TransactionOutputShelley into a CBOR-encoded byte slice,
+	which is based on the DATUM information.
+
+	Returns:
+  		[]byte: A CBOR-encoded byte slice representing the TransactionOutputShelley.
+	   	error: An error if serialization fails.
+*/
 func (txo *TransactionOutputShelley) MarshalCBOR() ([]byte, error) {
 	if txo.HasDatum {
 		val := new(TxOWithDatum)
@@ -117,6 +161,12 @@ type TransactionOutput struct {
 	IsPostAlonzo bool
 }
 
+/**
+	Clone creates a deep copy of the TransactionOutput.
+
+	Returns:
+		TransactionOutput: A deep copy of the TransactionOutput.
+*/
 func (to TransactionOutput) Clone() TransactionOutput {
 	return TransactionOutput{
 		IsPostAlonzo: to.IsPostAlonzo,
@@ -124,6 +174,15 @@ func (to TransactionOutput) Clone() TransactionOutput {
 		PreAlonzo:    to.PreAlonzo.Clone()}
 }
 
+/**
+	EqualTo checks if the current TransactionOutput is equal to another one.
+
+	Params:
+		other (TransactionOutput): The other TransactionOutput to compare.
+
+	Returns:
+		bool: True if the TransactionOutputs are equal, false otherwise.
+*/
 func (to *TransactionOutput) EqualTo(other TransactionOutput) bool {
 	if to.IsPostAlonzo != other.IsPostAlonzo {
 		return false
@@ -134,6 +193,13 @@ func (to *TransactionOutput) EqualTo(other TransactionOutput) bool {
 		return reflect.DeepEqual(to.PreAlonzo, other.PreAlonzo)
 	}
 }
+
+/**
+	GetAmount retrieves the value of the TransactionOutput as a Value object.
+
+	Returns:
+		Value.Value: The value of the TransactionOutput as a Value object.
+*/
 func (to *TransactionOutput) GetAmount() Value.Value {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Amount.ToValue()
@@ -142,11 +208,31 @@ func (to *TransactionOutput) GetAmount() Value.Value {
 	}
 }
 
+/**
+	LessThan compares the TransactionOutput's value to another
+	TransactionOutput's value.
+
+	Params:
+		other (TransactionOutput): The other TransactionOutput to compare.
+
+	Returns:
+		bool: True if the TransactionOutput's value is less than the other's, false otherwise.
+*/
 func (to *TransactionOutput) LessThan(other TransactionOutput) bool {
 	return to.GetAmount().Less(other.GetAmount())
 
 }
 
+/**
+	SimpleTransactionOutput creates a simple TransactionOutput with a given address and value.
+
+	Params:
+		address (Address.Address): The recipinet address.
+		value (Value.value): The value to send.
+
+	Returns:
+		TransactionOutput: A simple TransactionOutput.
+*/
 func SimpleTransactionOutput(address Address.Address, value Value.Value) TransactionOutput {
 	return TransactionOutput{
 		IsPostAlonzo: false,
@@ -158,6 +244,14 @@ func SimpleTransactionOutput(address Address.Address, value Value.Value) Transac
 	}
 }
 
+/**
+	SetDatum sets the Datum of the TransactionOutput.
+	If it is a post Alonzo, it sets the Datum directly,
+	otherwise it sets the DatumHash.
+
+	Params:
+		datum (*PlutusData.PlutusData): The Datum to set.
+*/
 func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 	if to.IsPostAlonzo {
 		to.PostAlonzo.Datum = datum
@@ -171,6 +265,12 @@ func (to *TransactionOutput) SetDatum(datum *PlutusData.PlutusData) {
 	}
 }
 
+/**
+	GetAddress retrieves the recipient address of the TransactionOutput.
+
+	Returns:
+		Address.Address: The recipient address.
+*/
 func (to *TransactionOutput) GetAddress() Address.Address {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Address
@@ -179,6 +279,12 @@ func (to *TransactionOutput) GetAddress() Address.Address {
 	}
 }
 
+/**
+	GetAddressPointer retrieves a pointer to the recipient address of the TransactionOutput.
+
+	Returns:
+		*Address.Address: A pointer to the recipient address.
+*/
 func (to *TransactionOutput) GetAddressPointer() *Address.Address {
 	if to.IsPostAlonzo {
 		return &to.PostAlonzo.Address
@@ -187,6 +293,12 @@ func (to *TransactionOutput) GetAddressPointer() *Address.Address {
 	}
 }
 
+/**
+	GetDatumHash retrieves, if available, the DatumHash of the TransactionOutput.
+
+	Returns:
+		*serialization.DatumHash: The DatumHash of the TransictionOutput or nil.
+*/
 func (to *TransactionOutput) GetDatumHash() *serialization.DatumHash {
 	if to.IsPostAlonzo {
 		return nil
@@ -195,6 +307,12 @@ func (to *TransactionOutput) GetDatumHash() *serialization.DatumHash {
 	}
 }
 
+/**
+	GetAddressPointer retrieves, if available, the Datum of the TransactionOutput.
+
+	Returns:
+		*PlutusData.PlutusData: The Datum of the TransictionOutput or an empty PlutusData.PlutusData.
+*/
 func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Datum
@@ -202,6 +320,13 @@ func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 		return &PlutusData.PlutusData{}
 	}
 }
+
+/**
+	GetScriptRef retrieves, if available, the ScriptRef of the TransactionOutput.
+
+	Returns:
+		*PlutusData.PlutusData: The ScriptRef of the TransictionOutput or an empty PlutusData.ScriptRef.
+*/
 func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.ScriptRef
@@ -210,6 +335,12 @@ func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	}
 }
 
+/**
+	GetValue retrieves the value of the TransactionOutput as a value object.
+
+	Returns:
+		Value.Value: The value of the TransactionOutput as a Value object.
+*/
 func (to *TransactionOutput) GetValue() Value.Value {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Amount.ToValue()
@@ -218,6 +349,12 @@ func (to *TransactionOutput) GetValue() Value.Value {
 	}
 }
 
+/**
+	Lovelace retireves the amount in Lovelace of the TransactionOutput.
+
+	Returns:
+		int64: The amount in Lovelace.
+*/
 func (to *TransactionOutput) Lovelace() int64 {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.Amount.Coin
@@ -230,6 +367,12 @@ func (to *TransactionOutput) Lovelace() int64 {
 	}
 }
 
+/**
+	String returns a string representation of the TransactionOutput.
+
+	Returns:
+		string: A string representation of the TransactionOutput.
+*/
 func (txo TransactionOutput) String() string {
 	if txo.IsPostAlonzo {
 		return fmt.Sprint(txo.PostAlonzo)
@@ -238,6 +381,16 @@ func (txo TransactionOutput) String() string {
 	}
 }
 
+/**
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a TransactionOutput,
+	which determines the format of the output (pre- or post-Alonzo) and decodes accordingly.
+
+ 	Params:
+   		value ([]byte): A CBOR-encoded byte slice representing the TransactionOutput.
+
+ 	Returns:
+	   	error: An error if deserialization fails.
+*/
 func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 	var x any
 	_ = cbor.Unmarshal(value, &x)
@@ -258,6 +411,14 @@ func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
+/** 
+	MarshalCBOR serializes the TransactionOutput into a CBOR-encoded byte slice, which
+	encodes the output based on whether it is pre- or post- Alonzo.
+ 	
+	Returns:
+   		[]byte: A CBOR-encoded byte slice representing the TransactionOutput.
+   		error: An error if serialization fails.
+*/
 func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 	if txo.IsPostAlonzo {
 		return cbor.Marshal(txo.PostAlonzo)
@@ -266,6 +427,13 @@ func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 	}
 }
 
+/** 
+	SetAmount sets the amount of the TransactionOutput. In case of a post-Alonzo output,
+	the amount is set directly, otherwise the amount is set.
+
+ 	Params:
+  		amount Value.Value: The amount to set.
+*/
 func (txo *TransactionOutput) SetAmount(amount Value.Value) {
 	if txo.IsPostAlonzo {
 		txo.PostAlonzo.Amount = amount.ToAlonzoValue()
