@@ -75,6 +75,16 @@ type Apollo struct {
 	scriptHashes       []string
 }
 
+/**
+	New creates and initializes a new Apollo instance with the specified chain context,
+	in which sets up various internal data structures for building and handling transactions.
+
+	Params:
+		cc (Base.ChainContext): The chain context to use for transaction building.
+
+	Returns:
+		*Apollo: A pointer to the initialized Apollo instance.
+*/
 func New(cc Base.ChainContext) *Apollo {
 	return &Apollo{
 		Context:            cc,
@@ -102,15 +112,41 @@ func New(cc Base.ChainContext) *Apollo {
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
 }
 
+/**
+	GetWallet returns the wallet associated with the Apollo instance.
+
+	Returns:
+		apollotypes.Wallet: The wallet associated with the Apollo instance.
+*/
 func (b *Apollo) GetWallet() apollotypes.Wallet {
 	return b.wallet
 }
 
+/**
+	AddInput appends one or more UTxOs to the list of preselected
+	UTxOs for transaction inputs.
+
+	Params:
+		utxos (...UTxO.UTxO): A set of UTxOs to be added as inputs.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
 	return b
 }
 
+/**
+	ConsumeUTxO adds a UTxO as an input to the transaction and deducts the specified payments from it.
+
+	Params:
+		utxo (UTxO.UTxO): The UTxO to be consumed as an input.
+		payments (...PaymentI): A sett of payments to be deducted from the UTxO.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
@@ -126,6 +162,16 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 	return b
 }
 
+/** 
+	ConsumeAssetsFromUtxo adds a UTxO as an input to the transaction and deducts the specified asset payments from it.
+
+ 	Params:
+   		utxo (UTxO.UTxO): The UTxO to be consumed as an input.
+   		payments (...PaymentI): Asset payments to be deducted from the UTxO.
+
+ 	Returns:
+	   	*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
@@ -142,41 +188,126 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 	return b
 }
 
+/**
+	AddLoadedUTxOs appends one or more UTxOs to the list of loaded UTxOs.
+
+	Params:
+		utxos (...UTxO.UTxO): A set of UTxOs to be added to the loaded UTxOs.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	b.utxos = append(b.utxos, utxos...)
 	return b
 }
 
+/**
+	AddInputAddress appends an input address to the list of input addresses for the transaction.
+
+	Params:
+		address (Address.Address): The input address to be added.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) AddInputAddress(address Address.Address) *Apollo {
 	b.inputAddresses = append(b.inputAddresses, address)
 	return b
 
 }
+
+/**
+	AddInputAddressFromBech32 decodes a Bech32 address and
+	appends it to the list of input addresses for the transaction.
+
+	Params:
+		address (string): The Bech32 address to be decoded and added
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance.
+*/
 func (b *Apollo) AddInputAddressFromBech32(address string) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
 	b.inputAddresses = append(b.inputAddresses, decoded_addr)
 	return b
 }
 
+/**
+	AddPayment appends a payment to the list of payments for the transaction.
+
+	Params:
+		payment (PaymentI): The payment to be added.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the payment added.
+*/
 func (b *Apollo) AddPayment(payment PaymentI) *Apollo {
 	b.payments = append(b.payments, payment)
 	return b
 }
 
+/**
+	PayToAddressBech32 creates a payment to the specified Bech32 address
+	with the given lovelace and units.
+
+	Params:
+		address (string): The Bech32 address to which the payment will be made.
+		lovelace (int): The amount in lovelace to be paid.
+		units (...Unit): The units (assets) to be paid along with the lovelace.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the payment added.
+*/
 func (b *Apollo) PayToAddressBech32(address string, lovelace int, units ...Unit) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
 	return b.AddPayment(&Payment{lovelace, decoded_addr, units, nil, nil, false})
 }
 
+/**
+	PayToAddress creates a payment to the specified address with the given lovelace and units,
+	then adds it to the list of payment.
+
+	Params:
+		address (Address.Address): The recipient's address for the payment.
+   		lovelace (int): The amount in lovelace to send in the payment.
+   		units (...Unit): A set of units to include in the payment.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the payment added.
+*/
 func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units ...Unit) *Apollo {
 	return b.AddPayment(&Payment{lovelace, address, units, nil, nil, false})
 }
 
+/**
+	AddDatum appends a Plutus datum to the list of data associated with the Apollo instance.
+
+	Params:
+   		pd (*PlutusData.PlutusData): The Plutus datum to be added.
+
+	Returns:
+   		*Apollo: A pointer to the modified Apollo instance with the datum added.
+*/
 func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 	b.datums = append(b.datums, *pd)
 	return b
 }
 
+/** 
+	PayToContract creates a payment to a smart contract address and includes a Plutus datum, which
+ 	is added to the list of payments, and if a datum is provided, it is added to the data list.
+
+	Params:
+	contractAddress (Address.Address): The smart contract address to send the payment to.
+	pd (*PlutusData.PlutusData): Plutus datum to include in the payment.
+	lovelace (int): The amount in lovelace to send in the payment.
+	isInline (bool): Indicates if the payment is inline with the datum.
+	units (...Unit): A set of units to include in the payment.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the payment and datum added.
+*/
 func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo {
 	if isInline {
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
@@ -192,6 +323,18 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
 	return b
 }
 
+/**
+	AddRequiredSignerFromBech32 decodes an address in Bech32 format and adds
+	its payment and staking parts as required signers.
+
+	Params:
+   		address (string): The Bech32-encoded address to decode and add its parts as required signers.
+	   	addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
+   		addStakingPart (bool): Indicates whether to add the staking part as a required signer.
+
+	Returns:
+	   	*Apollo: A pointer to the modified Apollo instance with the required signers added.
+*/
 func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, addStakingPart bool) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
 	if addPaymentPart {
@@ -205,11 +348,31 @@ func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, add
 
 }
 
+/** 
+	AddRequiredSigner appends a public key hash to the list of required signers.
+
+ 	Params:
+   		pkh (serialization.PubKeyHash): The public key hash to add as a required signer.
+
+ 	Returns:
+   		*Apollo: A pointer to the modified Apollo instance with the required signer added.
+*/
 func (b *Apollo) AddRequiredSigner(pkh serialization.PubKeyHash) *Apollo {
 	b.requiredSigners = append(b.requiredSigners, pkh)
 	return b
 }
 
+/**
+	AddRequiredSignerFromAddress extracts the payment and staking parts from an address and adds them as required signers.
+
+ 	Params:
+   		address (Address.Address): The address from which to extract the parts and add them as required signers.
+   		addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
+   		addStakingPart (bool): Indicates whether to add the staking part as a required signer.
+
+ 	Returns:
+   		*Apollo: A pointer to the modified Apollo instance with the required signers added.
+*/
 func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymentPart, addStakingPart bool) *Apollo {
 	if addPaymentPart {
 		pkh := serialization.PubKeyHash(address.PaymentPart)
@@ -231,6 +394,14 @@ func (b *Apollo) SetFeePadding(padding int64) *Apollo {
 	return b
 }
 
+
+/**
+	buildOutputs constructs and returns the transaction outputs based on the payments.
+
+	Returns:
+		[]TransactionOutput.TransactionOutput: A slice of transaction outputs.
+*/
+
 func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	outputs := make([]TransactionOutput.TransactionOutput, 0)
 	for _, payment := range b.payments {
@@ -240,6 +411,12 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 
 }
 
+/**
+	buildWitnessSet constructs and returns the witness set for the transaction.
+
+	Returns:
+		TransactionWitnessSet.TransactionWitnessSet: The transaction's witness set.
+*/
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	plutusdata := make([]PlutusData.PlutusData, 0)
 	plutusdata = append(plutusdata, b.datums...)
@@ -252,6 +429,12 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	}
 }
 
+/**
+	buildFakeWitnessSet constructs and returns a fake witness set used for testing.
+
+	Returns:
+		TransactionWitnessSet.TransactionWitnessSet: A fake witness set for testing.
+*/
 func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 	plutusdata := make([]PlutusData.PlutusData, 0)
 	plutusdata = append(plutusdata, b.datums...)
@@ -273,6 +456,15 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		VkeyWitnesses:  fakeVkWitnesses,
 	}
 }
+
+
+/**
+	scriptDataHash computes the hash of script data based on redeemers and datums.
+
+	Returns:
+		*serialization.ScriptDataHash: The computed script data hash.
+		error: An error if the scriptDataHash fails.
+*/
 
 func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if len(b.datums) == 0 && len(b.redeemers) == 0 {
@@ -332,6 +524,12 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 
 }
 
+/**
+	getMints returns the multi-assets generated from minting.
+
+	Returns:
+		MultiAsset.MultiAsset[int64]: The generated multi-assets.
+*/
 func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {
 	ma := make(MultiAsset.MultiAsset[int64])
 	for _, mintUnit := range b.mint {
@@ -340,16 +538,44 @@ func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {
 	return ma
 }
 
+/**
+	MintAssets adds a minting unit to the transaction's minting set.
+
+	Params:
+		mintUnit Unit: The minting unit to add.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object to support method chaining.
+*/
 func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 	b.mint = append(b.mint, mintUnit)
 	return b
 }
 
+/**
+	MintAssetsWithRedeemer adds a minting unit with an associated redeemer to the transaction's minting set.
+
+	Params:
+		mintUnit Unit: The minting unit to add.
+		redeemer Redeemer.Redeemer: The redeemer associated with the minting unit.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the minting unit added.
+*/
 func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
 	b.mint = append(b.mint, mintUnit)
 	b.redeemers = append(b.redeemers, redeemer)
 	return b
 }
+
+
+/**
+	buildTxBody constructs and returns the transaction body for the transaction.
+
+	Returns: 
+		TransactionBody.TransactionBody: The transaction body.
+		error: An error if the build fails.
+*/
 
 func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 	inputs := make([]TransactionInput.TransactionInput, 0)
@@ -391,6 +617,13 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 	return txb, nil
 }
 
+/**
+	buildFullFakeTx constructs and returns a full fake transaction for testing.
+
+	Returns:
+		*Transaction.Transaction: A pointer to the fake transaction.
+		error: An error if the transaction construction fails.
+*/
 func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	txBody, err := b.buildTxBody()
 	if err != nil {
@@ -412,6 +645,12 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	return &tx, nil
 }
 
+/**
+	estimateFee estimates the transaction fee based on execution units and transaction size.
+
+	Returns:
+		int64: The estimated transaction fee.
+*/
 func (b *Apollo) estimateFee() int64 {
 	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
 	for _, redeemer := range b.redeemers {
@@ -428,6 +667,12 @@ func (b *Apollo) estimateFee() int64 {
 
 }
 
+/**
+	getAvailableUtxos returns the available unspent transaction outputs (UTXOs) for the transaction.
+
+	Returns:
+		[]UTxO.UTxO: A slice of available UTXOs.
+*/
 func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 	availableUtxos := make([]UTxO.UTxO, 0)
 	for _, utxo := range b.utxos {
@@ -438,6 +683,13 @@ func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 	return availableUtxos
 }
 
+/**
+	setRedeemerIndexes function sets indexes for redeemers in 
+	the transaction based on UTxO inputs.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with indexes and redeemers set.
+*/
 func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
 	done := make([]string, 0)
@@ -456,10 +708,29 @@ func (b *Apollo) setRedeemerIndexes() *Apollo {
 	return b
 }
 
+/**
+	AttachDatum attaches a datum to the transaction.
+
+	Params:
+		datum *PlutusData.PlutusData: The datum to attach.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the datum added.
+*/
 func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo {
 	b.datums = append(b.datums, *datum)
 	return b
 }
+
+
+=======
+/**
+	setCollateral function sets collateral for the transaction.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object to support method chaining.
+		error: An error if the setCollateral fails.
+*/
 
 func (b *Apollo) setCollateral() (*Apollo, error) {
 	if len(b.collaterals) > 0 {
@@ -514,11 +785,23 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	return b, errors.New("NoCollateral")
 }
 
+/**
+	Clone creates a deep copy of the Apollo object.
+
+	Returns:
+		*Apollo: A pointer to the cloned Apollo object.
+*/
 func (b *Apollo) Clone() *Apollo {
 	clone := *b
 	return &clone
 }
 
+/**
+	estimateExUnits estimates the execution units for redeemers and updates them.
+
+	Returns:
+		map[string]Redeemer.ExecutionUnits: A map of estimated execution units.
+*/
 func (b *Apollo) estimateExunits() map[string]Redeemer.ExecutionUnits {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
@@ -527,6 +810,13 @@ func (b *Apollo) estimateExunits() map[string]Redeemer.ExecutionUnits {
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
+
+/**
+	updateExUnits updates the execution units in the transaction based on estimates.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object to support method chaining.
+*/
 func (b *Apollo) updateExUnits() *Apollo {
 	if b.isEstimateRequired {
 		estimated_execution_units := b.estimateExunits()
@@ -561,10 +851,24 @@ func (b *Apollo) updateExUnits() *Apollo {
 	return b
 }
 
+/**
+	GetTx returns the transaction associated with the Apollo object.
+
+	Returns:
+		*Transacction.Transaction: A pointer to the transaction.
+*/
 func (b *Apollo) GetTx() *Transaction.Transaction {
 	return b.tx
 }
 
+/**
+	Complete assembles and finalizes the Apollo transaction, handling
+	inputs, change, fees, collateral and witness data.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object representing the completed transaction.
+		error: An error if any issues are encountered during the process.
+*/
 func (b *Apollo) Complete() (*Apollo, error) {
 	selectedUtxos := make([]UTxO.UTxO, 0)
 	selectedAmount := Value.Value{}
@@ -672,6 +976,18 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	return b, nil
 }
 
+/**
+	Check if adding change to a transaction ouput would exceed
+	the UTxO limit for the given address.
+
+	Params:
+		change: The change amount to add.
+		address: The address for which change is being calculated.
+		b: The ChainContext providing protocol parameters.
+
+	Returns:
+		bool: True if adding change would exceed the UTXO limit, false otherwise.
+*/
 func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainContext) bool {
 	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
 	encoded, _ := cbor.Marshal(txOutput)
@@ -680,6 +996,18 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
 
 }
 
+/**
+	Split payments into multiple payments if adding change
+	exceeds the UTxO limit.
+
+	Params:
+		c: The change amount.
+		a: The address to which change is being sent.
+		b: The ChainContext providing protocol parameters.
+
+	Returns:
+		[]*Payment: An array of payment objects, split if necessary to avoid exceeding the UTxO limit.
+*/
 func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Payment {
 	lovelace := c.GetCoin()
 	assets := c.GetAssets()
@@ -729,6 +1057,16 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 	return payments
 
 }
+
+
+/**
+	Add change and fees to the transaction.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with change and fees added.
+		error: An error if addChangeAndFee fails.
+
+*/
 
 func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	providedAmount := Value.Value{}
@@ -803,6 +1141,16 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	return b, nil
 }
 
+/**
+	Collect a UTXO and its associated redeemer for inclusion in the transaction.
+
+	Params:
+		inputUtxo: The UTXO to collect.
+		redeemer: The redeemer associated with the UTXO.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the collected UTXO and redeemer.
+*/
 func (b *Apollo) CollectFrom(
 	inputUtxo UTxO.UTxO,
 	redeemerData PlutusData.PlutusData,
@@ -820,6 +1168,15 @@ func (b *Apollo) CollectFrom(
 	return b
 }
 
+/**
+	Attach a Plutus V1 script to the Apollo transaction.
+
+	Params:
+		script: The Plutus V1 script to attach.
+
+	Returns:
+		*Apollo: A pointer to the Apollo objecy with the attached script.
+*/
 func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
 	for _, scriptHash := range b.scriptHashes {
@@ -832,6 +1189,16 @@ func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 
 	return b
 }
+
+/**
+	Attach a Plutus V2 script to the Apollo transaction.
+
+	Params:
+		script: The Plutus V2 script to attach.
+
+	Returns:
+		*Apollo: A pointer to the Apollo objecy with the attached script.
+*/
 func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
 	for _, scriptHash := range b.scriptHashes {
@@ -843,6 +1210,18 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
+
+
+/**
+	Set the wallet for the Apollo transaction using a mnemonic.
+
+	Params:
+		menmonic: The menomic phrase used to generate the wallet.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the wallet set.
+		error: an error if setWalletFromMnemonic fails.
+*/
 
 func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
 	paymentPath := "m/1852'/1815'/0'/0/0"
@@ -913,6 +1292,15 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 	return a
 }
 
+/**
+	Set the wallet for the Apollo transaction using a Bech32 address.
+
+	Params:
+		address: The Bech32 address to use as the wallet.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the wallet set.
+*/
 func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
@@ -922,6 +1310,13 @@ func (a *Apollo) SetWalletFromBech32(address string) *Apollo {
 	return a
 }
 
+/**
+	Set the wallet as the change address for the Apollo transaction.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the wallet set as the change address.
+
+*/
 func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 	if b.wallet == nil {
 		panic("wallet not set")
@@ -937,12 +1332,31 @@ func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 	b.inputAddresses = append(b.inputAddresses, *b.wallet.GetAddress())
 	return b
 }
+
+/**
+	Sign the Apollo transaction using the wallet's keys.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the transaction signed.
+*/
 func (b *Apollo) Sign() *Apollo {
 	signatures := b.wallet.SignTx(*b.tx)
 	b.tx.TransactionWitnessSet = signatures
 	return b
 }
 
+
+/**
+	Sign the Apollo transaction with the given verification key and signing key.
+
+	Parameters:
+		vkey: The verification key to sign with.
+		skey: The signing key to sign with.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with the transaction signed.
+		error: An error if the signing fails.
+*/
 func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) (*Apollo, error) {
 	witness_set := b.GetTx().TransactionWitnessSet
 	txHash, err := b.GetTx().TransactionBody.Hash()
@@ -958,10 +1372,29 @@ func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) (*A
 	return b, nil
 }
 
+/**
+	Submit function submits the constructed transaction to the blockchain
+	network using the associated chain context.
+
+	Returns:
+		serialization.TransactionId: The ID of the submitted transaction.
+		error: An error, if any, encountered during transaction submission.
+*/
 func (b *Apollo) Submit() (serialization.TransactionId, error) {
 	return b.Context.SubmitTx(*b.tx)
 }
 
+/**
+	LoadTxCbor loads a transaction from its CBOR representation and updates
+	the apollo instances.
+
+	Params:
+		txCbor (string): The CBOR-encoded representation of the transaction.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the loaded transaction.
+		error: An error, if any, encountered during loading. 
+*/
 func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	tx := Transaction.Transaction{}
 	err := cbor.Unmarshal([]byte(txCbor), &tx)
@@ -972,6 +1405,16 @@ func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	return b, nil
 }
 
+/** 
+	UtxoFromRef retrieves a UTxO (Unspent Transaction Output) given its transaction hash and index.
+
+	Params:
+   		txHash (string): The hexadecimal representation of the transaction hash.
+   		txIndex (int): The index of the UTxO within the transaction's outputs.
+
+ 	Returns:
+   		*UTxO.UTxO: A pointer to the retrieved UTxO, or nil if not found.
+*/
 func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
 	utxo := b.Context.GetUtxoFromRef(txHash, txIndex)
 	if utxo == nil {
@@ -981,11 +1424,30 @@ func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
 
 }
 
+
+/** 
+	AddVerificationKeyWitness adds a verification key witness to the transaction.
+
+	Params:
+		vkw (VerificationKeyWitness.VerificationKeyWitness): The verification key witness to add.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the added verification key witness.
+*/
 func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.VerificationKeyWitness) *Apollo {
 	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, vkw)
 	return b
 }
 
+/**
+	SetChangeAddressBech32 sets the change address for the transaction using a Bech32-encoded address.
+
+	Params:
+   		address (string): The Bech32-encoded address to set as the change address.
+
+ 	Returns:
+   		*Apollo: A pointer to the modified Apollo instance with the change address set.
+*/
 func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
 	addr, err := Address.DecodeAddress(address)
 	if err != nil {
@@ -995,21 +1457,58 @@ func (b *Apollo) SetChangeAddressBech32(address string) *Apollo {
 	return b
 }
 
+/**
+	SetChangeAddress sets the change address for the transaction using an Address object.
+
+ 	Params:
+	   	address (Address.Address): The Address object to set as the change address.
+
+	Returns:
+	   	*Apollo: A pointer to the modified Apollo instance with the change address set.
+*/
 func (b *Apollo) SetChangeAddress(address Address.Address) *Apollo {
 	b.inputAddresses = append(b.inputAddresses, address)
 	return b
 }
 
+/**
+	SetTtl function sets the time-to-live (TTL) for the transaction.
+
+	Params:
+		ttl (int64): The TTL value to set fro the transaction.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the TTl set.
+*/
 func (b *Apollo) SetTtl(ttl int64) *Apollo {
 	b.Ttl = ttl
 	return b
 }
 
+/** 
+	SetValidityStart function sets the validity start for the transaction.
+
+	Params:
+		invalidBefore (int64): The validity start value to set for the transaction.
+
+	Returns:
+	   	*Apollo: A pointer to the modified Apollo instance with the validity start set.
+*/
 func (b *Apollo) SetValidityStart(invalidBefore int64) *Apollo {
 	b.ValidityStart = invalidBefore
 	return b
 }
 
+/**
+	SetShelleyMetadata function sets the Shelley Mary metadata for the transaction's
+	auxiliary data.
+
+	Params:
+		metadata (Metadata.ShelleyMaryMetadata): The Shelley Mary metadat to set.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the Shelley Mary metadata set.
+*/
 func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apollo {
 	if b.auxiliaryData == nil {
 		b.auxiliaryData = &Metadata.AuxiliaryData{}
@@ -1020,15 +1519,38 @@ func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apol
 	return b
 }
 
+/**
+	GetUsedUTxOs returns the list of used UTxOs in the transaction.
+	
+	Returns:
+	   []string: The list of used UTxOs as strings.
+*/
 func (b *Apollo) GetUsedUTxOs() []string {
 	return b.usedUtxos
 }
 
+/**
+	SetEstimationExUnitsRequired enables the estimation of execution units
+	for the transaction.
+
+	Returns:
+   		*Apollo: A pointer to the modified Apollo instance with execution units estimation enabled.
+*/
 func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 	b.isEstimateRequired = true
 	return b
 }
 
+/**
+	AddReferenceInput adds a reference input to the transaction.
+
+	Params:
+		txHash (string): The hexadecimal representation of the reference transaction hash.
+		index (int): The index of the reference input within its transaction.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with the added reference input.
+*/
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)
 	input := TransactionInput.TransactionInput{
@@ -1039,6 +1561,12 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	return b
 }
 
+/**
+	DisableExecutionUnitsEstimation disables the estimation of execution units for the transaction.
+
+ 	Returns:
+	   	*Apollo: A pointer to the modified Apollo instance with execution units estimation disabled.
+*/
 func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 	b.isEstimateRequired = false
 	return b
@@ -1065,6 +1593,7 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
 	b.stakeRedeemers[fmt.Sprint(b.withdrawals.Size()-1)] = newRedeemer
 	return b
 }
+
 
 func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
 	b.collaterals = append(b.collaterals, utxo)

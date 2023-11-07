@@ -338,6 +338,7 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 				log.Fatal(err)
 			}
 			l := PlutusData.DatumOptionInline(&x)
+
 			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
 				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 					Address: address,

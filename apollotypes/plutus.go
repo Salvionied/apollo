@@ -36,6 +36,17 @@ type AikenPlutusJSON struct {
 	} `json:"definitions"`
 }
 
+/**
+	GetScript retrives a Plutus V2 script by its name from an AikenPlutusJSON object.
+	It searches through the Validators and returns the script if found.
+
+	Params:
+		apj (*AikenPlutusJSON): A pointer to an AikenPlutusJSON object.
+		name (string): the name of the script to retrieve.
+
+	Returns:
+		(*PlutusData.PlutusV2Script, error): A pointer to a Plutus V2 script and an error (if any).
+*/
 func (apj *AikenPlutusJSON) GetScript(name string) (*PlutusData.PlutusV2Script, error) {
 	for _, validator := range apj.Validators {
 		if validator.Title == name {

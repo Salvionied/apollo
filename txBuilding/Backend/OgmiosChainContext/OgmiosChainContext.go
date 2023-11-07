@@ -608,6 +608,7 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 	}
 	txId, _ := tx.TransactionBody.Id()
 	return txId, nil
+
 }
 
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
