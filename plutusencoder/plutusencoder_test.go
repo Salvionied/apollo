@@ -2,7 +2,6 @@ package plutusencoder_test
 
 import (
 	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"github.com/Salvionied/apollo/plutusencoder"
@@ -39,8 +38,7 @@ func TestPlutusMarshal(t *testing.T) {
 		t.Error(err)
 	}
 	encoded, err := cbor.Marshal(marshaled)
-	fmt.Println(hex.EncodeToString(encoded))
-	if hex.EncodeToString(encoded) != "d87a9f44010203041a000f4240d87b8344010203041a000f42404401020304ff" {
+	if hex.EncodeToString(encoded) != "d87a9f44010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304ff" {
 		t.Error("encoding error")
 	}
 }
