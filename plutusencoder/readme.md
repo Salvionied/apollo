@@ -29,12 +29,12 @@ Usage
 Marshaling
 ```
     d = Datum{...}
-    plutusData, err := plutus.Marshal(d)
+    plutusData, err := plutus.MarshalPlutus(d)
 ```
 Unmarshaling
 ```
     plutusData = PlutusData.PlutusData{...}
     d = Datum{...}
-    err := plutus.Marshal(d)
+    err := plutus.UnmarshalPlutus(d)
 
 ```
