@@ -19,13 +19,16 @@ import (
 func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	res := make([]UTxO.UTxO, len(utxos))
 	copy(res, utxos)
-	for i := 0; i < len(res); i++ {
-		for j := i + 1; j < len(res); j++ {
-			if res[i].Output.GetAmount().Less(res[j].Output.GetAmount()) {
-				res[i], res[j] = res[j], res[i]
-			}
+	// Sort UTXOs first by large ADA-only UTXOs, then by assets
+	sort.Slice(res, func(i, j int) bool {
+		if !res[i].Output.GetValue().HasAssets && !res[j].Output.GetValue().HasAssets {
+			return res[i].Output.Lovelace() > res[j].Output.Lovelace()
+		} else if res[i].Output.GetValue().HasAssets && res[j].Output.GetValue().HasAssets {
+			return res[i].Output.GetAmount().Greater(res[j].Output.GetAmount())
+		} else {
+			return res[j].Output.GetAmount().HasAssets
 		}
-	}
+	})
 	return res
 }
 

@@ -22,9 +22,109 @@ type _Script struct {
 	Script []byte
 }
 
-type _DatumOption struct {
-	_     struct{} `cbor:",toarray"`
-	datum []byte
+type DatumType byte
+
+const (
+	DatumTypeHash   DatumType = 0
+	DatumTypeInline DatumType = 1
+)
+
+type DatumOption struct {
+	_         struct{} `cbor:",toarray"`
+	DatumType DatumType
+	Hash      []byte
+	Inline    *PlutusData
+}
+
+func (d *DatumOption) UnmarshalCBOR(b []byte) error {
+	var cborDatumOption struct {
+		_         struct{} `cbor:",toarray"`
+		DatumType DatumType
+		Content   cbor.RawMessage
+	}
+	err := cbor.Unmarshal(b, &cborDatumOption)
+	if err != nil {
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+	}
+	if cborDatumOption.DatumType == DatumTypeInline {
+		var cborDatumInline PlutusData
+		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
+		if errInline != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
+		}
+		if cborDatumInline.TagNr != 24 {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
+		}
+		taggedBytes, valid := cborDatumInline.Value.([]byte)
+		if !valid {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
+		}
+		var inline PlutusData
+		err = cbor.Unmarshal(taggedBytes, &inline)
+		if err != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+		}
+		d.DatumType = DatumTypeInline
+		d.Inline = &inline
+		return nil
+	} else if cborDatumOption.DatumType == DatumTypeHash {
+		var cborDatumHash []byte
+		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
+		if errHash != nil {
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errHash)
+		}
+		d.DatumType = DatumTypeHash
+		d.Hash = cborDatumHash
+		return nil
+	} else {
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: Unknown tag: %v", cborDatumOption.DatumType)
+	}
+
+}
+
+func DatumOptionHash(hash []byte) DatumOption {
+	return DatumOption{
+		DatumType: DatumTypeHash,
+		Hash:      hash,
+	}
+}
+
+func DatumOptionInline(pd *PlutusData) DatumOption {
+	return DatumOption{
+		DatumType: DatumTypeInline,
+		Inline:    pd,
+	}
+}
+
+func (d DatumOption) MarshalCBOR() ([]byte, error) {
+	var format struct {
+		_       struct{} `cbor:",toarray"`
+		Tag     DatumType
+		Content *PlutusData
+	}
+	switch d.DatumType {
+	case DatumTypeHash:
+		format.Tag = DatumTypeHash
+		format.Content = &PlutusData{
+			PlutusDataType: PlutusBytes,
+			TagNr:          0,
+			Value:          d.Hash,
+		}
+	case DatumTypeInline:
+		format.Tag = DatumTypeInline
+		bytes, err := cbor.Marshal(d.Inline)
+		if err != nil {
+			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
+		}
+		format.Content = &PlutusData{
+			PlutusDataType: PlutusBytes,
+			TagNr:          24,
+			Value:          bytes,
+		}
+	default:
+		return nil, fmt.Errorf("Invalid DatumOption: %v", d)
+	}
+	return cbor.Marshal(format)
 }
 
 type ScriptRef struct {
@@ -856,6 +956,7 @@ type RawPlutusData struct {
 	//TODO
 }
 
+
 /**
 	ToCbor converts the given interface to a hexadecimal-encoded CBOR string.
 
@@ -874,6 +975,7 @@ func ToCbor(x interface{}) (string, error) {
 	}
 	return hex.EncodeToString(bytes), nil
 }
+
 
 /**
 	PlutusDataHash computes the hash of a PlutusData structure using the Blake2b algorithm.
@@ -903,6 +1005,7 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	r := serialization.DatumHash{hash.Sum(nil)}
 	return r, nil
 }
+
 
 /**
 	HashDatum computes the hash of a CBOR marshaler using the Blake2b algorithm.
@@ -1004,6 +1107,7 @@ func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
 		}
 	}
 }
+
 
 /**
  	Hash computes the script hash for a PlutusV1Script.

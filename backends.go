@@ -3,6 +3,8 @@ package apollo
 import (
 	"fmt"
 
+	"github.com/Salvionied/apollo/constants"
+
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 )
@@ -31,32 +33,35 @@ func NewEmptyBackend() FixedChainContext.FixedChainContext {
 */
 func NewBlockfrostBackend(
 	projectId string,
-	network Network,
+	network constants.Network,
 
 ) (BlockFrostChainContext.BlockFrostChainContext, error) {
 	switch network {
-	case MAINNET:
+	case constants.MAINNET:
 		return BlockFrostChainContext.NewBlockfrostChainContext(
-			BLOCKFROST_BASE_URL_MAINNET,
-			int(MAINNET),
+			constants.BLOCKFROST_BASE_URL_MAINNET,
+			int(constants.MAINNET),
 			projectId,
 		), nil
-	case TESTNET:
+	case constants.TESTNET:
+
 		return BlockFrostChainContext.NewBlockfrostChainContext(
-			BLOCKFROST_BASE_URL_TESTNET,
-			int(TESTNET),
+			constants.BLOCKFROST_BASE_URL_TESTNET,
+			int(constants.TESTNET),
 			projectId,
 		), nil
-	case PREVIEW:
+	case constants.PREVIEW:
+
 		return BlockFrostChainContext.NewBlockfrostChainContext(
-			BLOCKFROST_BASE_URL_PREVIEW,
-			int(TESTNET),
+			constants.BLOCKFROST_BASE_URL_PREVIEW,
+			int(constants.TESTNET),
 			projectId,
 		), nil
-	case PREPROD:
+	case constants.PREPROD:
+
 		return BlockFrostChainContext.NewBlockfrostChainContext(
-			BLOCKFROST_BASE_URL_PREPROD,
-			int(TESTNET),
+			constants.BLOCKFROST_BASE_URL_PREPROD,
+			int(constants.TESTNET),
 			projectId,
 		), nil
 	default:

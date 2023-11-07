@@ -11,11 +11,12 @@ const (
 	REWARD
 )
 
+// See https://ogmios.dev/mini-protocols/local-tx-submission/#evaluatetx
 var RdeemerTagNames = map[RedeemerTag]string{
 	0: "spend",
 	1: "mint",
-	2: "cert",
-	3: "reward",
+	2: "certificate",
+	3: "withdrawal",
 }
 
 type ExecutionUnits struct {

@@ -18,6 +18,7 @@ type Transaction struct {
 	AuxiliaryData         *Metadata.AuxiliaryData
 }
 
+
 /**
 	Bytes returns the CBOR-encoded byte representation
 	of the Transaction.

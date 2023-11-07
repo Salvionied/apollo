@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/crypto/bech32"
 	"github.com/Salvionied/apollo/serialization"
 
@@ -38,6 +39,27 @@ type Address struct {
 	Hrp         string
 }
 
+func WalletAddressFromBytes(payment []byte, staking []byte, network constants.Network) *Address {
+	var addr Address
+	addr.PaymentPart = payment
+	addr.StakingPart = staking
+	if network == constants.MAINNET {
+		addr.Network = MAINNET
+	} else {
+		addr.Network = TESTNET
+	}
+	if len(payment) == 0 {
+		return nil
+	} else if len(staking) == 0 {
+		addr.AddressType = KEY_NONE
+	} else {
+		addr.AddressType = KEY_KEY
+	}
+	addr.HeaderByte = (addr.AddressType << 4) | addr.Network
+	addr.Hrp = ComputeHrp(addr.AddressType, addr.Network)
+	return &addr
+}
+
 /**
 	This function check if the current address is equal to another address.
 
@@ -48,6 +70,7 @@ type Address struct {
 	Returns:
 		bool: true if the addresses are equal, false otherwise.
 */
+
 func (addr *Address) Equal(other *Address) bool {
 	return addr.String() == other.String()
 }
@@ -61,6 +84,7 @@ func (addr *Address) Equal(other *Address) bool {
 func (addr *Address) Debug() string {
 	return fmt.Sprintf("{\nPaymentPart: %v\nStakingPart: %v\nNetwork: %v\nAddressType: %v\nHeaderByte: %v\nHrp: %s\n}", addr.PaymentPart, addr.StakingPart, addr.Network, addr.AddressType, addr.HeaderByte, addr.Hrp)
 }
+
 
 /**
 	It converts an address to its CBOR (Concise Binary Object Representation) format and returns

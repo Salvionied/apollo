@@ -18,7 +18,7 @@ type TransactionBody struct {
 	Fee               int64                                 `cbor:"2,keyasint"`
 	Ttl               int64                                 `cbor:"3,keyasint,omitempty"`
 	Certificates      *Certificate.Certificates             `cbor:"4,keyasint,omitempty"`
-	Withdrawals       []*Withdrawal.Withdrawal              `cbor:"5,keyasint,omitempty"`
+	Withdrawals       *Withdrawal.Withdrawal                `cbor:"5,keyasint,omitempty"`
 	UpdateProposals   []any                                 `cbor:"6,keyasint,omitempty"`
 	AuxiliaryDataHash []byte                                `cbor:"7,keyasint,omitempty"`
 	ValidityStart     int64                                 `cbor:"8,keyasint,omitempty"`

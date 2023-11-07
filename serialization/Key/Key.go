@@ -16,6 +16,7 @@ type SigningKey struct {
 	Payload []byte
 }
 
+
 /**
 	Sign function signs a message using the provided key and returns
 	the signature.
@@ -41,6 +42,7 @@ func Sign(message []byte, sk []byte) ([]byte, error) {
 	res := ed25519.Sign(sk, message)
 	return res, nil
 }
+
 
 /**
 	Sign function signs a data byte slice using
@@ -141,6 +143,7 @@ type PaymentKeyPair struct {
 	VerificationKey VerificationKey
 	SigningKey      SigningKey
 }
+
 
 /**
 	PaymentKeyPairGenerate generates a PaymentKey pair with a randomly

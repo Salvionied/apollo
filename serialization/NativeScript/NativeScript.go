@@ -51,6 +51,7 @@ type SerialHash struct {
 	Value []byte
 }
 
+
 /**
 	Hash computes the script hash for the NativeScript.
 

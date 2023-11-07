@@ -31,6 +31,7 @@ func tweak_bits(seed []byte) []byte {
 	return seed
 }
 
+
 /**
 	NewHDWalletFromSeed creates a new HDWallet instance from a seed string.
 
@@ -87,6 +88,7 @@ func generateSeedFromEntropy(passphrase string, entropy []byte) string {
 	return hex.EncodeToString(res)
 }
 
+
 /**
 	NewHDWalletFromMnemonic creates a new HDWallet instance from a
 	mnemonic and passphrase.
@@ -99,6 +101,7 @@ func generateSeedFromEntropy(passphrase string, entropy []byte) string {
 		*HDWallet: A new HDWallet instance.
 		error: An error if the new wallet fails.
 */
+
 func NewHDWalletFromMnemonic(mnemonic string, passphrase string) (*HDWallet, error) {
 	mnemo := norm.NFKD.String(mnemonic)
 	entropy, error := bip39.EntropyFromMnemonic(mnemonic)
@@ -132,6 +135,7 @@ func (hd *HDWallet) copy() *HDWallet {
 		Entropy:      hd.Entropy,
 	}
 }
+
 
 /**
 	DerivePath derives a new HDWallet from the current wallet based on 
@@ -199,6 +203,7 @@ func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
 	}
 
 }
+
 
 /**
 	GenerateMnemonic function generate a random mnemonic.
