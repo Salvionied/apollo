@@ -98,6 +98,25 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), pdi)
 					}
 				}
+			case "StringBytes":
+				if values.Field(i).Kind() != reflect.String {
+					return nil, fmt.Errorf("error: StringBytes field is not string")
+				}
+				pdsb := PlutusData.PlutusData{
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          []byte(values.Field(i).Interface().(string)),
+					TagNr:          constr,
+				}
+				if isMap {
+					nameBytes := serialization.CustomBytes{Value: name}
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = pdsb
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), pdsb)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), pdsb)
+					}
+				}
 			default:
 				pd, err := MarshalPlutus(values.Field(i).Interface())
 				if err != nil {
