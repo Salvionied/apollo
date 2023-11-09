@@ -1,7 +1,9 @@
 package apollo
 
 import (
+	"encoding/hex"
 	"sort"
+	"strconv"
 
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
 )
@@ -22,17 +24,36 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	return res
 }
 
+type txIn struct {
+	id string
+	ix int
+}
+
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
-	hashes := make([]string, 0)
+	txIns := make([]txIn, 0)
 	relationMap := map[string]UTxO.UTxO{}
 	for _, utxo := range inputs {
-		hashes = append(hashes, string(utxo.Input.String()))
-		relationMap[string(utxo.Input.String())] = utxo
+		newTxIn := txIn{
+			id: hex.EncodeToString(utxo.Input.TransactionId),
+			ix: utxo.Input.Index,
+		}
+		txIns = append(txIns, newTxIn)
+		key := newTxIn.id + strconv.Itoa(newTxIn.ix)
+		relationMap[key] = utxo
 	}
-	sort.Strings(hashes)
+	sort.Slice(txIns, func(i, j int) bool {
+		if txIns[i].id < txIns[j].id {
+			return true
+		} else if txIns[i].id > txIns[j].id {
+			return false
+		} else {
+			return txIns[i].ix < txIns[j].ix
+		}
+	})
 	sorted_inputs := make([]UTxO.UTxO, 0)
-	for _, hash := range hashes {
-		sorted_inputs = append(sorted_inputs, relationMap[hash])
+	for _, txIn := range txIns {
+		key := txIn.id + strconv.Itoa(txIn.ix)
+		sorted_inputs = append(sorted_inputs, relationMap[key])
 	}
 	return sorted_inputs
 }
