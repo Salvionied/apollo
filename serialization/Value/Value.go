@@ -23,7 +23,9 @@ type AlonzoValue struct {
 	HasAssets bool
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR deserializes CBOr-encoded data into an AlonzoValue.
 
 	Params:
@@ -50,7 +52,9 @@ func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
-/**
+/*
+*
+
 	MarshalCBOR serializes the AlonzoValue into an CBOr-encoded data.
 
 	Returns:
@@ -68,11 +72,13 @@ func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
 		if alVal.Coin < 0 {
 			return nil, errors.New("invalid coin value")
 		}
-		return cbor.Marshal([]any{alVal.Coin, map[any]any{}})
+		return cbor.Marshal(alVal.Coin)
 	}
 }
 
-/**
+/*
+*
+
 	Clone creates a copy of the AlonzoValue, including its assets.
 
 	Returns:
@@ -86,7 +92,9 @@ func (alVal AlonzoValue) Clone() AlonzoValue {
 	}
 }
 
-/**
+/*
+*
+
 	ToAlonzoValue converts a Value object to an AlonzoValue, preserving its attributes.
 
 	Returns:
@@ -100,7 +108,9 @@ func (val Value) ToAlonzoValue() AlonzoValue {
 	}
 }
 
-/**
+/*
+*
+
 	ToValue converts an AlonzoValue to a Value object, preserving its attributes.
 
 	Returns:
@@ -114,7 +124,9 @@ func (alVal AlonzoValue) ToValue() Value {
 	}
 }
 
-/**
+/*
+*
+
 	RemoveZeroAssets removes assets with zero values from a Value.
 
 	Returns:
@@ -128,7 +140,9 @@ func (val Value) RemoveZeroAssets() Value {
 	return res
 }
 
-/**
+/*
+*
+
 	Clone creates a copy of the Value, including its assets.
 
 	Returns:
@@ -142,10 +156,12 @@ func (val Value) Clone() Value {
 	}
 }
 
-/**	
+/*
+*
+
 	AddAssets adds MultiAsset assets to a Value.
 
-	Params: 
+	Params:
 		other (MultiAsset.MultiAsset[int64]): the MultiAssets assets to be added.
 */
 func (val *Value) AddAssets(other MultiAsset.MultiAsset[int64]) {
@@ -159,13 +175,15 @@ func (val *Value) AddAssets(other MultiAsset.MultiAsset[int64]) {
 	}
 }
 
-/**
+/*
+*
+
 	SimpleValue creates a Value object with a specified coin value and a MultiAssets.
 
 	Params:
 		coin (int64): The coin value.
 		assets (MultiAsset.MultiAsset[int64]): the assets.
-	
+
 	Returns:
 		Value: A Value object.
 */
@@ -184,7 +202,9 @@ func SimpleValue(coin int64, assets MultiAsset.MultiAsset[int64]) Value {
 	}
 }
 
-/**
+/*
+*
+
 	SubLovelace subtracts a specified amount of Lovelace (coin) from the Value.
 	In case that there aren't any assets, then it subtracts from the Coin field,
 	otherwise from the AlonzoAmount's Coin field.
@@ -200,7 +220,9 @@ func (val *Value) SubLovelace(amount int64) {
 	}
 }
 
-/**
+/*
+*
+
 	AddLovelace adds a specified amount of Lovelace (coin) from the Value.
 	In case that there aren't any assets, then it adds to the Coin field,
 	otherwise to the AlonzoAmount's Coin field.
@@ -216,7 +238,9 @@ func (val *Value) AddLovelace(amount int64) {
 	}
 }
 
-/**
+/*
+*
+
 	SetLovelace sets a specified amount of Lovelace (coin) in the Value.
 	In case that there aren't any assets, then it sets the Coin field,
 	otherwise it sets the AlonzoAmount's Coin field.
@@ -232,7 +256,9 @@ func (val *Value) SetLovelace(amount int64) {
 	}
 }
 
-/**
+/*
+*
+
 	SetMultiAsset sets the MultiAsset in the Value.
 
 	Params:
@@ -245,7 +271,9 @@ func (val *Value) SetMultiAsset(amount MultiAsset.MultiAsset[int64]) {
 	val.Am.Value = amount
 }
 
-/**
+/*
+*
+
 	GetCoin returns the amount of Lovelace (coin) in the Value.
 
 	Returns:
@@ -258,7 +286,9 @@ func (val Value) GetCoin() int64 {
 	return val.Coin
 }
 
-/**
+/*
+*
+
 	GetAssets returns the MultiAsset assets in the Value.
 
 	Returns:
@@ -271,7 +301,9 @@ func (val Value) GetAssets() MultiAsset.MultiAsset[int64] {
 	return nil
 }
 
-/**
+/*
+*
+
 	Add function adds another Value to the current Value.
 
 	Params:
@@ -300,7 +332,9 @@ func (val Value) Add(other Value) Value {
 	return res
 }
 
-/**
+/*
+*
+
 	Sub function subtracts another Value to the current Value.
 
 	Params:
@@ -327,7 +361,9 @@ func (val Value) Sub(other Value) Value {
 	return res
 }
 
-/**
+/*
+*
+
 	Less checks if the current Value is less than another Value.
 
 	Params:
@@ -340,7 +376,9 @@ func (val Value) Less(other Value) bool {
 	return val.GetCoin() <= other.GetCoin() && val.GetAssets().Less(other.GetAssets())
 }
 
-/**
+/*
+*
+
 	Equal checks if the current Value is equal to another Value.
 
 	Params:
@@ -353,7 +391,9 @@ func (val Value) Equal(other Value) bool {
 	return val.HasAssets == other.HasAssets && val.Coin == other.Coin && val.Am.Equal(other.Am)
 }
 
-/**
+/*
+*
+
 	LessOrEqual checks if the current Value is less than or equal to another Value.
 
 	Params:
@@ -366,7 +406,9 @@ func (val Value) LessOrEqual(other Value) bool {
 	return val.Equal(other) || val.Less(other)
 }
 
-/**
+/*
+*
+
 	Greater checks if the current Value is greater than another Value.
 
 	Params:
@@ -380,7 +422,9 @@ func (val Value) Greater(other Value) bool {
 
 }
 
-/**
+/*
+*
+
 	GreaterOrEqual checks if the current Value is greater than or equal to another Value.
 
 	Params:
@@ -393,7 +437,9 @@ func (val Value) GreaterOrEqual(other Value) bool {
 	return val.Greater(other) || val.Equal(other)
 }
 
-/**
+/*
+*
+
 	String reutnrs a string representation of teh Value.
 
 	Returns:
@@ -407,16 +453,18 @@ func (val Value) String() string {
 	}
 }
 
-/**
-	UnmarshalCBOR unmarshals a CBOR-encoded byte slice into the Value,
-	which decoed either a uint64 inot the Coin field or a CBOR-encoded Amount
-	into the AlonzoAmount field.
+/*
+*
 
-	Params:
-    	value ([]byte): The CBOR-encoded byte slice to unmarshal.
- 
-  	Returns:
-    	error: An error if unmarshaling fails.
+		UnmarshalCBOR unmarshals a CBOR-encoded byte slice into the Value,
+		which decoed either a uint64 inot the Coin field or a CBOR-encoded Amount
+		into the AlonzoAmount field.
+
+		Params:
+	    	value ([]byte): The CBOR-encoded byte slice to unmarshal.
+
+	  	Returns:
+	    	error: An error if unmarshaling fails.
 */
 func (val *Value) UnmarshalCBOR(value []byte) error {
 	var rec any
@@ -436,11 +484,13 @@ func (val *Value) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
-/**
+/*
+*
+
 	MarshalCBOR marshals the Value into a CBOR-encoded byte slice.
 	If the Value has assets, then it encodes the AlonzoAmount using CBOR,
 	otherwise it encodes the Coin field directly.
-	
+
 	Returns:
 		[]byte: The CBOR-encoded byte slice.
 		error: An error if marshaling fails.
@@ -460,15 +510,17 @@ func (val *Value) MarshalCBOR() ([]byte, error) {
 	}
 }
 
-/**
- 	PureLovelaceValue creates a Value with only a specified amount
-	of Lovelace (coin) and no assets.
+/*
+*
 
-	Params:
-		coin (int64): The amount of Lovelace (coin) to set in the Value.
+	 	PureLovelaceValue creates a Value with only a specified amount
+		of Lovelace (coin) and no assets.
 
-	Returns:
-		Value: The Value with the specified amount of Lovelace and no assets.
+		Params:
+			coin (int64): The amount of Lovelace (coin) to set in the Value.
+
+		Returns:
+			Value: The Value with the specified amount of Lovelace and no assets.
 */
 func PureLovelaceValue(coin int64) Value {
 	return Value{Coin: coin, HasAssets: false}
