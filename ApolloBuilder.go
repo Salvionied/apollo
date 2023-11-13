@@ -1215,18 +1215,13 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 */
 func (b *Apollo) CollectFrom(
 	inputUtxo UTxO.UTxO,
-	redeemerData PlutusData.PlutusData,
+	redeemer Redeemer.Redeemer,
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
 	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
-	newRedeemer := Redeemer.Redeemer{
-		Tag:     Redeemer.SPEND,
-		Index:   0, // This will be computed later when we iterate over redeemersToUTxO
-		Data:    redeemerData,
-		ExUnits: Redeemer.ExecutionUnits{},
-	}
-	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = newRedeemer
+
+	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = redeemer
 	return b
 }
 
