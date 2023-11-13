@@ -66,7 +66,7 @@ type Apollo struct {
 	totalCollateral    int
 	referenceInputs    []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
-	withdrawals        Withdrawal.Withdrawal
+	withdrawals        *Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
 	nativescripts      []NativeScript.NativeScript
 	usedUtxos          []string
@@ -106,7 +106,6 @@ func New(cc Base.ChainContext) *Apollo {
 		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
 		mint:               make([]Unit, 0),
 		collaterals:        make([]UTxO.UTxO, 0),
-		withdrawals:        Withdrawal.New(),
 		Fee:                0,
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
@@ -647,7 +646,7 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 		ValidityStart:     b.ValidityStart,
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
-		Withdrawals:       &b.withdrawals,
+		Withdrawals:       b.withdrawals,
 		ReferenceInputs:   b.referenceInputs}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
@@ -1664,6 +1663,10 @@ func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 }
 
 func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData PlutusData.PlutusData) *Apollo {
+	if b.withdrawals == nil {
+		newWithdrawal := Withdrawal.New()
+		b.withdrawals = &newWithdrawal
+	}
 	var stakeAddr [29]byte
 	stakeAddr[0] = address.HeaderByte
 	if len(address.StakingPart) != 28 {
