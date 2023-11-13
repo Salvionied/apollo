@@ -30,8 +30,8 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -140,7 +140,7 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	return &ref, nil
 }
 
-func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
+func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
 	txHashRaw, err := hex.DecodeString(u.Transaction.ID)
 	if err != nil {
 		log.Fatal(err, "Failed to decode ogmigo transaction ID")
@@ -176,7 +176,7 @@ func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
 func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
 	ctx := context.Background()
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
-		Transaction: chainsync.UtxoTxID{
+		Transaction: shared.UtxoTxID{
 			ID: txHash,
 		},
 		Index: uint32(index),
@@ -238,7 +238,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 		queries := make([]chainsync.TxInQuery, chunk_size)
 		for ix, _ := range queries {
 			queries[ix] = chainsync.TxInQuery{
-				Transaction: chainsync.UtxoTxID{
+				Transaction: shared.UtxoTxID{
 					ID: txHash,
 				},
 				Index: uint32(ix),
@@ -616,7 +616,10 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Executi
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
 	}
-	for _, e := range eval {
+	if eval.Error != nil {
+		log.Fatal(eval.Error, "OgmiosChainContext: EvaluateTx: Ogmios returned an error")
+	}
+	for _, e := range eval.ExUnits {
 		final_result[e.Validator] = Redeemer.ExecutionUnits{
 			Mem:   int64(e.Budget.Memory),
 			Steps: int64(e.Budget.Cpu),
