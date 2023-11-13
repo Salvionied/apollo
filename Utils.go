@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"encoding/hex"
 	"sort"
 
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
@@ -22,17 +23,22 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	return res
 }
 
+type txIn struct {
+	id string
+	ix int
+}
+
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
-	hashes := make([]string, 0)
-	relationMap := map[string]UTxO.UTxO{}
-	for _, utxo := range inputs {
-		hashes = append(hashes, string(utxo.Input.String()))
-		relationMap[string(utxo.Input.String())] = utxo
-	}
-	sort.Strings(hashes)
-	sorted_inputs := make([]UTxO.UTxO, 0)
-	for _, hash := range hashes {
-		sorted_inputs = append(sorted_inputs, relationMap[hash])
-	}
-	return sorted_inputs
+	sortedInputs := make([]UTxO.UTxO, 0)
+	sortedInputs = append(sortedInputs, inputs...)
+	sort.Slice(sortedInputs, func(i, j int) bool {
+		iTxId := hex.EncodeToString(sortedInputs[i].Input.TransactionId)
+		jTxId := hex.EncodeToString(sortedInputs[j].Input.TransactionId)
+		if iTxId != jTxId {
+			return iTxId < jTxId
+		} else {
+			return sortedInputs[i].Input.Index < sortedInputs[j].Input.Index
+		}
+	})
+	return sortedInputs
 }
