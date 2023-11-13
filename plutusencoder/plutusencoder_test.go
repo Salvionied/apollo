@@ -15,16 +15,18 @@ type BuyerDatum struct {
 	Skh    []byte   `plutusType:"Bytes"`
 }
 type Datum struct {
-	_      struct{} `plutusType:"IndefList" plutusConstr:"1"`
-	Pkh    []byte   `plutusType:"Bytes"`
-	Amount int64    `plutusType:"Int"`
-	Buyer  BuyerDatum
+	_          struct{} `plutusType:"IndefList" plutusConstr:"1"`
+	Pkh        []byte   `plutusType:"Bytes"`
+	RandomText string   `plutusType:"StringBytes"`
+	Amount     int64    `plutusType:"Int"`
+	Buyer      BuyerDatum
 }
 
 func TestPlutusMarshal(t *testing.T) {
 	d := Datum{
-		Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
-		Amount: 1000000,
+		Pkh:        []byte{0x01, 0x02, 0x03, 0x04},
+		Amount:     1000000,
+		RandomText: "Hello World",
 		Buyer: BuyerDatum{
 			Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
 			Amount: 1000000,
@@ -36,7 +38,7 @@ func TestPlutusMarshal(t *testing.T) {
 		t.Error(err)
 	}
 	encoded, err := cbor.Marshal(marshaled)
-	if hex.EncodeToString(encoded) != "d87a9f44010203041a000f4240d87b8344010203041a000f42404401020304ff" {
+	if hex.EncodeToString(encoded) != "d87a9f44010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304ff" {
 		t.Error("encoding error")
 	}
 }

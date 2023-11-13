@@ -6,7 +6,11 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Value"
@@ -44,7 +48,7 @@ func TestPostAlonzo(t *testing.T) {
 	txO.PostAlonzo.Amount = Value.PureLovelaceValue(1000000).ToAlonzoValue()
 	d := PlutusData.DatumOptionInline(&pd)
 	txO.PostAlonzo.Datum = &d
-	resultHex := "a300581d712618e94cdb06792f05ae9b1ec78b0231f4b7f4215b1b4cf52e6342de01821a000f4240a0028201d81858e8d8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c47534f4349455459ff1b00002cc16be02b37ff1a001e84801a001e8480ff"
+	resultHex := "a300581d712618e94cdb06792f05ae9b1ec78b0231f4b7f4215b1b4cf52e6342de011a000f4240028201d81858e8d8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c47534f4349455459ff1b00002cc16be02b37ff1a001e84801a001e8480ff"
 	cborred, _ := cbor.Marshal(txO)
 	if hex.EncodeToString(cborred) != resultHex {
 		fmt.Println(hex.EncodeToString(cborred))
@@ -72,4 +76,35 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 		t.Error("Error while reserializing", hex.EncodeToString(remarshaled))
 	}
 
+}
+
+func TestValueSerialization(t *testing.T) {
+	ShelleyValueWithNoAssets := Value.PureLovelaceValue(1000000)
+	ShelleyValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
+		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+			AssetName.NewAssetNameFromString("Token1"): 1,
+		},
+	})
+	AlonzoValueWithNoAssets := Value.PureLovelaceValue(1000000).ToAlonzoValue()
+	AlonzoValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
+		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+			AssetName.NewAssetNameFromString("Token1"): 1,
+		},
+	}).ToAlonzoValue()
+	ShelleyValueWithNoAssetsBytes, _ := cbor.Marshal(ShelleyValueWithNoAssets)
+	ShelleyValueWithAssetsBytes, _ := cbor.Marshal(ShelleyValueWithAssets)
+	AlonzoValueWithNoAssetsBytes, _ := cbor.Marshal(AlonzoValueWithNoAssets)
+	AlonzoValueWithAssetsBytes, _ := cbor.Marshal(AlonzoValueWithAssets)
+	if hex.EncodeToString(ShelleyValueWithNoAssetsBytes) != "1a000f4240" {
+		t.Error("ShelleyValueWithNoAssetsBytes")
+	}
+	if hex.EncodeToString(AlonzoValueWithNoAssetsBytes) != "1a000f4240" {
+		t.Error("AlonzoValueWithNoAssetsBytes")
+	}
+	if hex.EncodeToString(ShelleyValueWithAssetsBytes) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
+		t.Error("ShelleyValueWithAssetsBytes")
+	}
+	if hex.EncodeToString(AlonzoValueWithAssetsBytes) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
+		t.Error("AlonzoValueWithAssetsBytes")
+	}
 }
