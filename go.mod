@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231101192200-2e052daaeb54 // indirect
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231113061525-0180d57af523 // indirect
 	github.com/aws/aws-sdk-go v1.44.197 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
