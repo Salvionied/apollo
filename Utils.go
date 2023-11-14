@@ -1,21 +1,25 @@
 package apollo
 
 import (
+	"encoding/hex"
 	"sort"
 
 	"github.com/Salvionied/apollo/serialization/UTxO"
 )
 
-/**
-	SortUtxos sorts a slice of UTxO objects in descending order
-	based on their amounts.
+/*
+*
+SortUtxos sorts a slice of UTxO objects in descending order
+based on their amounts.
 
-	Params:
-		utxos ([]UTxO.UTxO): A slice of UTxO objects to be sorted.
+Params:
 
-	Returns:
-		[]UTxO.UTxO: A new slice of UTxO objects sorted by descending amounts.
-*/	
+	utxos ([]UTxO.UTxO): A slice of UTxO objects to be sorted.
+
+Returns:
+
+	[]UTxO.UTxO: A new slice of UTxO objects sorted by descending amounts.
+*/
 func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	res := make([]UTxO.UTxO, len(utxos))
 	copy(res, utxos)
@@ -32,7 +36,9 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	return res
 }
 
-/**
+/*
+*
+
 	SortInputs sorts a slice of UTxO objects based on their strings.
 
 	Params:
@@ -42,16 +48,16 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 		[]UTxO.UTxO: A new slice of UTxO objects sorted based on input strings.
 */
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
-	hashes := make([]string, 0)
-	relationMap := map[string]UTxO.UTxO{}
-	for _, utxo := range inputs {
-		hashes = append(hashes, string(utxo.Input.String()))
-		relationMap[string(utxo.Input.String())] = utxo
-	}
-	sort.Strings(hashes)
-	sorted_inputs := make([]UTxO.UTxO, 0)
-	for _, hash := range hashes {
-		sorted_inputs = append(sorted_inputs, relationMap[hash])
-	}
-	return sorted_inputs
+	sortedInputs := make([]UTxO.UTxO, 0)
+	sortedInputs = append(sortedInputs, inputs...)
+	sort.Slice(sortedInputs, func(i, j int) bool {
+		iTxId := hex.EncodeToString(sortedInputs[i].Input.TransactionId)
+		jTxId := hex.EncodeToString(sortedInputs[j].Input.TransactionId)
+		if iTxId != jTxId {
+			return iTxId < jTxId
+		} else {
+			return sortedInputs[i].Input.Index < sortedInputs[j].Input.Index
+		}
+	})
+	return sortedInputs
 }
