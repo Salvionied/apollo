@@ -931,10 +931,8 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	for _, utxo := range b.preselectedUtxos {
 		selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 	}
-	for _, mintUnit := range b.mint {
-		selectedAmount = selectedAmount.Add(mintUnit.ToValue())
-	}
-
+	burnedValue := b.GetBurns()
+	selectedAmount = selectedAmount.Add(burnedValue)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
@@ -990,7 +988,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 			}
 		}
 		for {
-
 			if selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})) {
 				break
 			}
@@ -1118,6 +1115,23 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 
 }
 
+func (b *Apollo) GetBurns() (burns Value.Value) {
+	burns = Value.Value{}
+	for _, mintUnit := range b.mint {
+		if mintUnit.Quantity < 0 {
+			usedUnit := Unit{
+				PolicyId: mintUnit.PolicyId,
+				Name:     mintUnit.Name,
+				Quantity: -mintUnit.Quantity,
+			}
+			burns = burns.Add(usedUnit.ToValue())
+		}
+
+	}
+	return burns
+
+}
+
 /**
 Add change and fees to the transaction.
 
@@ -1128,10 +1142,12 @@ Returns:
 */
 
 func (b *Apollo) addChangeAndFee() (*Apollo, error) {
+	burns := b.GetBurns()
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
 		providedAmount = providedAmount.Add(utxo.Output.GetValue())
 	}
+	providedAmount = providedAmount.Sub(burns)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
