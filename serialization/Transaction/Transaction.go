@@ -19,7 +19,8 @@ type Transaction struct {
 }
 
 func (tx *Transaction) Bytes() []byte {
-	cborred, err := cbor.Marshal(tx)
+	em, _ := cbor.CanonicalEncOptions().EncMode()
+	cborred, err := em.Marshal(tx)
 	if err != nil {
 		fmt.Println(err)
 	}

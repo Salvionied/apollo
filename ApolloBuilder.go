@@ -365,6 +365,10 @@ func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 	}
 	aux_data_hash := b.auxiliaryData.Hash()
 	mints := b.getMints()
+	var withdrawals *Withdrawal.Withdrawal
+	if b.withdrawals != nil && b.withdrawals.Size() > 0 {
+		withdrawals = &b.withdrawals
+	}
 	txb := TransactionBody.TransactionBody{
 		Inputs:            inputs,
 		Outputs:           b.buildOutputs(),
@@ -377,7 +381,7 @@ func (b *Apollo) buildTxBody() TransactionBody.TransactionBody {
 		ValidityStart:     b.ValidityStart,
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
-		Withdrawals:       &b.withdrawals,
+		Withdrawals:       withdrawals,
 		ReferenceInputs:   b.referenceInputs}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
