@@ -30,8 +30,8 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -86,7 +86,8 @@ func multiAsset_OgmigoToApollo(m map[string]map[string]num.Int) MultiAsset.Multi
 }
 
 func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
-	ass := multiAsset_OgmigoToApollo(v.AssetsExceptAda())
+	a, _ := v.AssetsExceptAda()
+	ass := multiAsset_OgmigoToApollo(a)
 	if ass == nil {
 		return Value.AlonzoValue{
 			Am:        Amount.AlonzoAmount{},
@@ -198,7 +199,8 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
 	})
-	for policyId, tokenMap := range v.AssetsExceptAda() {
+	a, _ := v.AssetsExceptAda()
+	for policyId, tokenMap := range a {
 		for tokenName, quantity := range tokenMap {
 			amts = append(amts, Base.AddressAmount{
 				Unit:     policyId + tokenName,
