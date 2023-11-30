@@ -285,9 +285,40 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 
 						reflect.ValueOf(v).Elem().Field(idx + 1).SetInt(int64(x))
 					case PlutusData.PlutusArray:
-						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
-						if err != nil {
-							return fmt.Errorf("error at index %d: %v", idx, err)
+						if reflect.TypeOf(v).Elem().Field(idx+1).Type.Kind() == reflect.Slice {
+							pa, ok := pAEl.Value.(PlutusData.PlutusIndefArray)
+							if ok {
+								val := reflect.ValueOf(v).Elem().Field(idx + 1)
+								val.Grow(len(pa))
+								val.SetLen(len(pa))
+								for secIdx, arrayElement := range pa {
+									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									if err != nil {
+										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
+									}
+								}
+								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val)
+							} else {
+								pa2, ok := pAEl.Value.(PlutusData.PlutusDefArray)
+								if !ok {
+									return fmt.Errorf("error: value is not a PlutusArray")
+								}
+								val2 := reflect.ValueOf(v).Elem().Field(idx + 1)
+								val2.Grow(len(pa2))
+								val2.SetLen(len(pa2))
+								for secIdx, arrayElement := range pa2 {
+									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									if err != nil {
+										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
+									}
+								}
+								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
+							}
+						} else {
+							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+							if err != nil {
+								return fmt.Errorf("error at index %d: %v", idx, err)
+							}
 						}
 					case PlutusData.PlutusMap:
 						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
@@ -326,34 +357,40 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 
 						reflect.ValueOf(v).Elem().Field(idx + 1).SetInt(int64(x))
 					case PlutusData.PlutusArray:
-						pa, ok := pAEl.Value.(PlutusData.PlutusIndefArray)
-						if ok {
-
-							val := reflect.ValueOf(v).Elem().Field(idx + 1)
-							val.Grow(len(pa))
-							val.SetLen(len(pa))
-							for secIdx, arrayElement := range pa {
-								err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
-								if err != nil {
-									return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
+						if reflect.TypeOf(v).Elem().Field(idx+1).Type.Kind() == reflect.Slice {
+							pa, ok := pAEl.Value.(PlutusData.PlutusIndefArray)
+							if ok {
+								val := reflect.ValueOf(v).Elem().Field(idx + 1)
+								val.Grow(len(pa))
+								val.SetLen(len(pa))
+								for secIdx, arrayElement := range pa {
+									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									if err != nil {
+										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
+									}
 								}
+								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val)
+							} else {
+								pa2, ok := pAEl.Value.(PlutusData.PlutusDefArray)
+								if !ok {
+									return fmt.Errorf("error: value is not a PlutusArray")
+								}
+								val2 := reflect.ValueOf(v).Elem().Field(idx + 1)
+								val2.Grow(len(pa2))
+								val2.SetLen(len(pa2))
+								for secIdx, arrayElement := range pa2 {
+									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									if err != nil {
+										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
+									}
+								}
+								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
 							}
-							reflect.ValueOf(v).Elem().Field(idx + 1).Set(val)
 						} else {
-							pa2, ok := pAEl.Value.(PlutusData.PlutusDefArray)
-							if !ok {
-								return fmt.Errorf("error: value is not a PlutusArray")
+							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+							if err != nil {
+								return fmt.Errorf("error at index %d: %v", idx, err)
 							}
-							val2 := reflect.ValueOf(v).Elem().Field(idx + 1)
-							val2.Grow(len(pa2))
-							val2.SetLen(len(pa2))
-							for secIdx, arrayElement := range pa2 {
-								err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
-								if err != nil {
-									return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
-								}
-							}
-							reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
 						}
 					case PlutusData.PlutusMap:
 						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
