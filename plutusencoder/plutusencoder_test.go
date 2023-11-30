@@ -24,6 +24,124 @@ type Datum struct {
 	Buyer      BuyerDatum
 }
 
+type NestedList struct {
+	_      struct{}     `plutusType:"IndefList" plutusConstr:"1"`
+	Pkh    []byte       `plutusType:"Bytes"`
+	Amount int64        `plutusType:"Int"`
+	Buyers []BuyerDatum `plutusType:"IndefList"`
+}
+
+func GetDatum() PlutusData.PlutusData {
+	x := PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusArray,
+		TagNr:          122,
+		Value: PlutusData.PlutusIndefArray{
+			PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value:          []byte{0x01, 0x02, 0x03, 0x04},
+			},
+			PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value:          []byte("Hello World"),
+			},
+			PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusInt,
+				Value:          uint64(1000000),
+			},
+			PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusArray,
+				TagNr:          2,
+				Value: PlutusData.PlutusDefArray{
+					PlutusData.PlutusData{
+						PlutusDataType: PlutusData.PlutusBytes,
+						Value:          []byte{0x01, 0x02, 0x03, 0x04},
+					},
+					PlutusData.PlutusData{
+						PlutusDataType: PlutusData.PlutusInt,
+						Value:          uint64(1000000),
+					},
+					PlutusData.PlutusData{
+						PlutusDataType: PlutusData.PlutusBytes,
+						Value:          []byte{0x01, 0x02, 0x03, 0x04},
+					},
+				},
+			},
+		},
+	}
+	return x
+}
+
+func TestNestedListMarshal(t *testing.T) {
+	d := NestedList{
+		Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
+		Amount: 1000000,
+		Buyers: []BuyerDatum{
+			BuyerDatum{
+				Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
+				Amount: 1000000,
+				Skh:    []byte{0x01, 0x02, 0x03, 0x04},
+			},
+			BuyerDatum{
+				Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
+				Amount: 1000000,
+				Skh:    []byte{0x01, 0x02, 0x03, 0x04},
+			},
+		},
+	}
+	marshaled, err := plutusencoder.MarshalPlutus(d)
+	if err != nil {
+		t.Error(err)
+	}
+	encoded, err := cbor.Marshal(marshaled)
+	fmt.Println(hex.EncodeToString(encoded))
+	if hex.EncodeToString(encoded) != "d87a9f44010203041a000f42409fd87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304ffff" {
+		t.Error("encoding error")
+	}
+}
+
+func TestNestedListUnmarshal(t *testing.T) {
+	p := "d87a9f44010203041a000f42409fd87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304ffff"
+	decoded, err := hex.DecodeString(p)
+	if err != nil {
+		t.Error(err)
+	}
+	pd := PlutusData.PlutusData{}
+	err = cbor.Unmarshal(decoded, &pd)
+	if err != nil {
+		t.Error(err)
+	}
+	d := new(NestedList)
+	err = plutusencoder.UnmarshalPlutus(&pd, d)
+	if err != nil {
+		t.Error(err)
+	}
+	if d.Amount != 1000000 {
+		t.Error("amount not correct")
+	}
+	if fmt.Sprintf("%x", d.Pkh) != "01020304" {
+		t.Error("pkh not correct")
+	}
+	if fmt.Sprintf("%x", d.Buyers[0].Pkh) != "01020304" {
+		t.Error("buyer pkh not correct")
+	}
+	if fmt.Sprintf("%x", d.Buyers[0].Skh) != "01020304" {
+		t.Error("buyer skh not correct")
+	}
+	if d.Buyers[0].Amount != 1000000 {
+		t.Error("buyer amount not correct")
+	}
+	if fmt.Sprintf("%x", d.Buyers[1].Pkh) != "01020304" {
+		t.Error("buyer pkh not correct")
+	}
+	if fmt.Sprintf("%x", d.Buyers[1].Skh) != "01020304" {
+		t.Error("buyer skh not correct")
+	}
+	if d.Buyers[1].Amount != 1000000 {
+		t.Error("buyer amount not correct")
+	}
+	fmt.Println(d)
+}
+
 func TestPlutusMarshal(t *testing.T) {
 	d := Datum{
 		Pkh:        []byte{0x01, 0x02, 0x03, 0x04},
