@@ -1150,28 +1150,45 @@ func (b *Apollo) GetBurns() (burns Value.Value) {
 
 }
 
-/**
+func (b *Apollo) getPositiveMints() (mints Value.Value) {
+	mints = Value.Value{}
+	for _, mintUnit := range b.mint {
+		if mintUnit.Quantity > 0 {
+			usedUnit := Unit{
+				PolicyId: mintUnit.PolicyId,
+				Name:     mintUnit.Name,
+				Quantity: mintUnit.Quantity,
+			}
+			mints = mints.Add(usedUnit.ToValue())
+		}
+
+	}
+	return mints
+
+}
+
+/*
+*
 Add change and fees to the transaction.
 
 Returns:
+
 	*Apollo: A pointer to the Apollo object with change and fees added.
 	error: An error if addChangeAndFee fails.
-
 */
-
 func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	burns := b.GetBurns()
-	mints := b.getMints()
+	mints := b.getPositiveMints()
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
 		providedAmount = providedAmount.Add(utxo.Output.GetValue())
 	}
-	providedAmount = providedAmount.Sub(burns)
-	providedAmount = providedAmount.Add(Value.SimpleValue(0, mints))
+	providedAmount = providedAmount.Add(mints)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
+	requestedAmount = requestedAmount.Add(burns)
 	b.Fee = b.estimateFee()
 	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
