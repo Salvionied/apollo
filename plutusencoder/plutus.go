@@ -270,8 +270,6 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								reflect.ValueOf(v).Elem().Field(idx + 1).SetString(string(pAEl.Value.([]byte)))
 								continue
 							}
-							fmt.Println(tps.Field(idx + 1).Type.Kind())
-							return fmt.Errorf("error: Bytes field is not a slice")
 						}
 						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(pAEl.Value))
 					case PlutusData.PlutusInt:

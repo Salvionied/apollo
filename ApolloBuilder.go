@@ -57,6 +57,7 @@ type Apollo struct {
 	redeemers          []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
 	stakeRedeemers     map[string]Redeemer.Redeemer
+	mintRedeemers      map[string]Redeemer.Redeemer
 	mint               []Unit
 	collaterals        []UTxO.UTxO
 	Fee                int64
@@ -110,7 +111,8 @@ func New(cc Base.ChainContext) *Apollo {
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
-		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
+		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
+		mintRedeemers:      make(map[string]Redeemer.Redeemer)}
 }
 
 /*
@@ -603,7 +605,8 @@ func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 */
 func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
 	b.mint = append(b.mint, mintUnit)
-	b.redeemers = append(b.redeemers, redeemer)
+	b.mintRedeemers[mintUnit.PolicyId] = redeemer
+	b.isEstimateRequired = true
 	return b
 }
 
@@ -886,11 +889,22 @@ func (b *Apollo) updateExUnits() *Apollo {
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
+		for k, redeemer := range b.mintRedeemers {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.mintRedeemers[k] = redeemer
+			}
+		}
 		for _, redeemer := range b.redeemersToUTxO {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 		for _, redeemer := range b.stakeRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.mintRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+
 		}
 	} else {
 		for _, redeemer := range b.redeemersToUTxO {
@@ -899,6 +913,10 @@ func (b *Apollo) updateExUnits() *Apollo {
 		for _, redeemer := range b.stakeRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
+		for _, redeemer := range b.mintRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+
 	}
 	return b
 }
@@ -1143,11 +1161,13 @@ Returns:
 
 func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	burns := b.GetBurns()
+	mints := b.getMints()
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
 		providedAmount = providedAmount.Add(utxo.Output.GetValue())
 	}
 	providedAmount = providedAmount.Sub(burns)
+	providedAmount = providedAmount.Add(Value.SimpleValue(0, mints))
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
@@ -1235,7 +1255,6 @@ func (b *Apollo) CollectFrom(
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
 	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
-
 	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = redeemer
 	return b
 }
