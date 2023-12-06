@@ -1191,12 +1191,9 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	requestedAmount = requestedAmount.Add(burns)
-	fmt.Println("PROVIDED AMT", providedAmount)
 	b.Fee = b.estimateFee()
 	requestedAmount.AddLovelace(b.Fee)
-	fmt.Println("REQUESTED AMT", requestedAmount)
 	change := providedAmount.Sub(requestedAmount)
-	fmt.Println("CHANGE", change)
 	if change.GetCoin() < Utils.MinLovelacePostAlonzo(
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
 		b.Context,
