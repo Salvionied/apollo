@@ -28,7 +28,13 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error parsing constructor: %v", err)
 			}
-			containerConstr = 121 + uint64(parsedConstr)
+			if parsedConstr < 7 {
+				containerConstr = 121 + uint64(parsedConstr)
+			} else if 7 <= parsedConstr && parsedConstr <= 1400 {
+				containerConstr = 1280 + uint64(parsedConstr-7)
+			} else {
+				return nil, fmt.Errorf("parsedConstr value is above 1400")
+			}
 		}
 		switch typeOfStruct {
 		case "IndefList":
@@ -58,7 +64,13 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				if err != nil {
 					return nil, fmt.Errorf("error parsing constructor: %v", err)
 				}
-				constr = 121 + uint64(parsedConstr)
+				if parsedConstr < 7 {
+					constr = 121 + uint64(parsedConstr)
+				} else if 7 <= parsedConstr && parsedConstr <= 1400 {
+					constr = 1280 + uint64(parsedConstr-7)
+				} else {
+					return nil, fmt.Errorf("parsedConstr value is above 1400")
+				}
 			}
 			switch typeOfField {
 			case "Bytes":
@@ -249,7 +261,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 				return fmt.Errorf("error: v is not a PlutusList")
 			}
 			plutusConstr := fields.Tag.Get("plutusConstr")
-			if constr != 0 && plutusConstr != fmt.Sprint(constr-121) {
+			if constr != 0 && constr > 1400 && (plutusConstr != fmt.Sprint(constr-121) || plutusConstr != fmt.Sprint(constr-1280)) {
 				return fmt.Errorf("error: constructorTag does not match, got %s, expected %d", plutusConstr, constr)
 			}
 
