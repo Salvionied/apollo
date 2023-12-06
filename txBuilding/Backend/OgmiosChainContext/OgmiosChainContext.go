@@ -86,8 +86,8 @@ func multiAsset_OgmigoToApollo(m map[string]map[string]num.Int) MultiAsset.Multi
 }
 
 func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
-	a, _ := v.AssetsExceptAda()
-	ass := multiAsset_OgmigoToApollo(a)
+	val := v.AssetsExceptAda()
+	ass := multiAsset_OgmigoToApollo(val)
 	if ass == nil {
 		return Value.AlonzoValue{
 			Am:        Amount.AlonzoAmount{},
@@ -199,8 +199,8 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
 	})
-	a, _ := v.AssetsExceptAda()
-	for policyId, tokenMap := range a {
+	val := v.AssetsExceptAda()
+	for policyId, tokenMap := range val {
 		for tokenName, quantity := range tokenMap {
 			amts = append(amts, Base.AddressAmount{
 				Unit:     policyId + tokenName,
@@ -284,14 +284,60 @@ func (occ *OgmiosChainContext) LatestBlock() Base.Block {
 	}
 }
 
+// Given an era history, find the unix timestamp for the end of the current
+// epoch
+func computeEndTime(epoch uint64, networkStartTime time.Time, history *ogmigo.EraHistory) (uint64, error) {
+	for _, summary := range history.Summaries {
+		// Skip ahead to current era
+		if !(summary.Start.Epoch <= epoch && summary.End.Epoch > epoch) {
+			continue
+		}
+		eraStartOffset := summary.Start.Time.Seconds
+		eraStartTime := networkStartTime.Add(time.Second * time.Duration(eraStartOffset.Int64()))
+		slotDuration := time.Millisecond * time.Duration(summary.Parameters.SlotLength.Milliseconds.Int64())
+		// We have to count epochs from the era start to the current
+		// epoch, and add 1 since we want the end of this one
+		eraElapsed := slotDuration * time.Duration((epoch+1-summary.Start.Epoch)*summary.Parameters.EpochLength)
+		eraEndTime := eraStartTime.Add(eraElapsed)
+		return uint64(eraEndTime.Unix()), nil
+	}
+	return 0, fmt.Errorf("Epoch %v not found in history: %v", epoch, *history)
+}
+
+// Because ogmios does not return the end time when querying the current epoch,
+// we have to dig through the era summaries and query the network start time
 func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
 	ctx := context.Background()
 	current, err := occ.ogmigo.CurrentEpoch(ctx)
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to request current epoch")
 	}
+	genesisConfig, err := occ.ogmigo.GenesisConfig(ctx, "byron")
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to request genesis config")
+	}
+	var genesisInfo struct {
+		StartTime string
+	}
+	err = json.Unmarshal(genesisConfig, &genesisInfo)
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to parse genesis config")
+	}
+	startTime, err := time.Parse(time.RFC3339, genesisInfo.StartTime)
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to parse genesis config startTime")
+	}
+	eraSummaries, err := occ.ogmigo.EraSummaries(ctx)
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to request era summaries")
+	}
+	endTime, err := computeEndTime(current, startTime, eraSummaries)
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to compute end time for epoch")
+	}
 	return Base.Epoch{
-		Epoch: int(current),
+		Epoch:   int(current),
+		EndTime: int(endTime),
 	}
 }
 
