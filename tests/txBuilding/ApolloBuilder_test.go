@@ -521,3 +521,46 @@ func TestMintPlutus(t *testing.T) {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
+
+func TestMintPlutusWithPayment(t *testing.T) {
+	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
+	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	testUtxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15000000, nil)),
+	}
+	apollob := apollo.New(&cc)
+	apollob, err := apollob.
+		AddLoadedUTxOs(testUtxo).
+		SetChangeAddress(decoded_addr).
+		MintAssetsWithRedeemer(
+			apollo.Unit{
+				PolicyId: policy.String(),
+				Name:     "TEST",
+				Quantity: int(1),
+			},
+			Redeemer.Redeemer{},
+		).PayToAddress(
+		decoded_addr,
+		1200000,
+		apollo.NewUnit(
+			policy.String(),
+			"TEST",
+			1,
+		),
+	).Complete()
+
+	if err != nil {
+		t.Error(err)
+	}
+	txBytes, err := apollob.GetTx().Bytes()
+	if hex.EncodeToString(txBytes) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00151c56a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cce39d021a0002e1cd09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b5820aed726f17f6c88739b6d5ba2e104b948bb81f6c46e8fc0809c120021c1e6e88ba10581840000f6820000f5f6" {
+		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
+	}
+}
