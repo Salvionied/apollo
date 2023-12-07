@@ -7,9 +7,168 @@ import (
 	"strconv"
 
 	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/cbor/v2"
 )
+
+func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, error) {
+	switch address.AddressType {
+	case Address.KEY_KEY:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          121,
+							PlutusDataType: PlutusData.PlutusArray,
+							Value: PlutusData.PlutusIndefArray{
+								PlutusData.PlutusData{
+									TagNr:          121,
+									PlutusDataType: PlutusData.PlutusBytes,
+									Value:          address.StakingPart,
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+
+	case Address.SCRIPT_KEY:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          122,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          121,
+							PlutusDataType: PlutusData.PlutusArray,
+							Value: PlutusData.PlutusIndefArray{
+								PlutusData.PlutusData{
+									TagNr:          121,
+									PlutusDataType: PlutusData.PlutusBytes,
+									Value:          address.StakingPart,
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	case Address.KEY_SCRIPT:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          121,
+							PlutusDataType: PlutusData.PlutusArray,
+							Value: PlutusData.PlutusIndefArray{
+								PlutusData.PlutusData{
+									TagNr:          122,
+									PlutusDataType: PlutusData.PlutusBytes,
+									Value:          address.StakingPart,
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	case Address.SCRIPT_SCRIPT:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          122,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          121,
+							PlutusDataType: PlutusData.PlutusArray,
+							Value: PlutusData.PlutusIndefArray{
+								PlutusData.PlutusData{
+									TagNr:          122,
+									PlutusDataType: PlutusData.PlutusBytes,
+									Value:          address.StakingPart,
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	case Address.KEY_NONE:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          121,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          122,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value:          PlutusData.PlutusIndefArray{},
+				},
+			},
+		}, nil
+	case Address.SCRIPT_NONE:
+		return &PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{
+				PlutusData.PlutusData{
+					TagNr:          122,
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          address.PaymentPart,
+				},
+				PlutusData.PlutusData{
+					TagNr:          122,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value:          PlutusData.PlutusIndefArray{},
+				},
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("error: Pointer Addresses are not supported")
+	}
+}
 
 func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 	var overallContainer interface{}
@@ -46,7 +205,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			overallContainer = PlutusData.PlutusDefArray{}
 			isIndef = false
 		default:
-			overallContainer = PlutusData.PlutusIndefArray{}
+			return nil, fmt.Errorf("error: unknown type")
 		}
 		//get fields
 		for i := 0; i < types.NumField(); i++ {
@@ -131,6 +290,22 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), pdsb)
 					}
 				}
+			case "Address":
+				addpd, err := GetAddressPlutusData(values.Field(i).Interface().(Address.Address))
+				if err != nil {
+					return nil, fmt.Errorf("error marshalling: %v", err)
+				}
+				if isMap {
+					nameBytes := serialization.CustomBytes{Value: name}
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = *addpd
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), *addpd)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), *addpd)
+					}
+				}
+
 			case "IndefList":
 				container := PlutusData.PlutusIndefArray{}
 				for j := 0; j < values.Field(i).Len(); j++ {
@@ -207,6 +382,9 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 		}
 
 	}
+	if !ok {
+		return nil, fmt.Errorf("error: no _ field")
+	}
 	pd := PlutusData.PlutusData{
 		PlutusDataType: PlutusData.PlutusArray,
 		Value:          &overallContainer,
@@ -215,7 +393,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 	return &pd, nil
 }
 
-func CborUnmarshal(data string, v interface{}) error {
+func CborUnmarshal(data string, v interface{}, network byte) error {
 	decoded, err := hex.DecodeString(data)
 	if err != nil {
 		return fmt.Errorf("error decoding hex: %v", err)
@@ -225,18 +403,65 @@ func CborUnmarshal(data string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("error unmarshalling: %v", err)
 	}
-	err = UnmarshalPlutus(&pd, v)
+	err = UnmarshalPlutus(&pd, v, network)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling: %v", err)
 	}
 	return nil
 }
 
-func UnmarshalPlutus(data *PlutusData.PlutusData, v interface{}) error {
-	return unmarshalPlutus(data, v, data.TagNr, data.PlutusDataType)
+func UnmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) error {
+	return unmarshalPlutus(data, v, data.TagNr, data.PlutusDataType, network)
 }
 
-func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr uint64, PlutusType PlutusData.PlutusType) error {
+func DecodePlutusAddress(data PlutusData.PlutusData, network byte) Address.Address {
+	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
+		return Address.Address{}
+	}
+	pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+	is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+	skh := []byte{}
+	skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
+	is_skh_script := false
+	if skh_exists {
+		is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+		skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+	}
+	var addrType byte
+	if is_script {
+		if skh_exists {
+			if is_skh_script {
+				addrType = Address.SCRIPT_SCRIPT
+			} else {
+				addrType = Address.SCRIPT_KEY
+			}
+		} else {
+			addrType = Address.SCRIPT_NONE
+		}
+	} else {
+		if skh_exists {
+			if is_skh_script {
+				addrType = Address.KEY_SCRIPT
+			} else {
+				addrType = Address.KEY_KEY
+			}
+		} else {
+			addrType = Address.KEY_NONE
+		}
+	}
+	hrp := Address.ComputeHrp(addrType, network)
+	header := addrType<<4 | network
+	addr := Address.Address{
+		PaymentPart: pkh,
+		StakingPart: skh,
+		AddressType: addrType,
+		Network:     network,
+		HeaderByte:  header,
+		Hrp:         hrp}
+	return addr
+}
+
+func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr uint64, PlutusType PlutusData.PlutusType, network byte) error {
 	types := reflect.TypeOf(v)
 	if types.Kind() != reflect.Ptr {
 		return fmt.Errorf("error: v is not a pointer %v", v)
@@ -273,6 +498,11 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 					return fmt.Errorf("error: value is not a PlutusDefArray")
 				}
 				for idx, pAEl := range plutusValues {
+					if tps.Field(idx+1).Type.String() == "Address.Address" {
+						addr := DecodePlutusAddress(pAEl, network)
+						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
+						continue
+					}
 					switch pAEl.PlutusDataType {
 					case PlutusData.PlutusBytes:
 						if tps.Field(idx+1).Type.String() != "[]uint8" {
@@ -302,7 +532,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								val.Grow(len(pa))
 								val.SetLen(len(pa))
 								for secIdx, arrayElement := range pa {
-									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 									if err != nil {
 										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
 									}
@@ -317,7 +547,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								val2.Grow(len(pa2))
 								val2.SetLen(len(pa2))
 								for secIdx, arrayElement := range pa2 {
-									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 									if err != nil {
 										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
 									}
@@ -325,13 +555,13 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
 							}
 						} else {
-							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 							if err != nil {
 								return fmt.Errorf("error at index %d: %v", idx, err)
 							}
 						}
 					case PlutusData.PlutusMap:
-						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 						if err != nil {
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}
@@ -345,6 +575,11 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 					return fmt.Errorf("error: value is not a PlutusIndefArray")
 				}
 				for idx, pAEl := range plutusValues {
+					if tps.Field(idx+1).Type.String() == "Address.Address" {
+						addr := DecodePlutusAddress(pAEl, network)
+						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
+						continue
+					}
 					switch pAEl.PlutusDataType {
 					case PlutusData.PlutusBytes:
 						if tps.Field(idx+1).Type.String() != "[]uint8" {
@@ -374,7 +609,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								val.Grow(len(pa))
 								val.SetLen(len(pa))
 								for secIdx, arrayElement := range pa {
-									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 									if err != nil {
 										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
 									}
@@ -389,7 +624,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								val2.Grow(len(pa2))
 								val2.SetLen(len(pa2))
 								for secIdx, arrayElement := range pa2 {
-									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 									if err != nil {
 										return fmt.Errorf("error at index %d.%d: %v:", idx, secIdx, err)
 									}
@@ -397,13 +632,13 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
 							}
 						} else {
-							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 							if err != nil {
 								return fmt.Errorf("error at index %d: %v", idx, err)
 							}
 						}
 					case PlutusData.PlutusMap:
-						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType)
+						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().Field(idx+1).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 						if err != nil {
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}

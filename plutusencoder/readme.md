@@ -2,6 +2,8 @@ Plutus Struct tags:
 
 plutusConstr: int -> Defines the constructor - for no constructor
 plutusType: Bytes || Int || Map || IndefList || DefList || StringBytes
+PredefinedPlutusTypes: Address
+
 
 
 
