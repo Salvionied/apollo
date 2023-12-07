@@ -21,8 +21,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          121,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          121,
@@ -34,8 +40,13 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 							Value: PlutusData.PlutusIndefArray{
 								PlutusData.PlutusData{
 									TagNr:          121,
-									PlutusDataType: PlutusData.PlutusBytes,
-									Value:          address.StakingPart,
+									PlutusDataType: PlutusData.PlutusArray,
+									Value: PlutusData.PlutusIndefArray{
+										PlutusData.PlutusData{
+											TagNr:          0,
+											Value:          address.StakingPart,
+											PlutusDataType: PlutusData.PlutusBytes},
+									},
 								},
 							},
 						},
@@ -51,8 +62,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          122,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          121,
@@ -64,8 +81,13 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 							Value: PlutusData.PlutusIndefArray{
 								PlutusData.PlutusData{
 									TagNr:          121,
-									PlutusDataType: PlutusData.PlutusBytes,
-									Value:          address.StakingPart,
+									PlutusDataType: PlutusData.PlutusArray,
+									Value: PlutusData.PlutusIndefArray{
+										PlutusData.PlutusData{
+											TagNr:          0,
+											Value:          address.StakingPart,
+											PlutusDataType: PlutusData.PlutusBytes},
+									},
 								},
 							},
 						},
@@ -80,8 +102,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          121,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          121,
@@ -93,8 +121,13 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 							Value: PlutusData.PlutusIndefArray{
 								PlutusData.PlutusData{
 									TagNr:          122,
-									PlutusDataType: PlutusData.PlutusBytes,
-									Value:          address.StakingPart,
+									PlutusDataType: PlutusData.PlutusArray,
+									Value: PlutusData.PlutusIndefArray{
+										PlutusData.PlutusData{
+											TagNr:          0,
+											Value:          address.StakingPart,
+											PlutusDataType: PlutusData.PlutusBytes},
+									},
 								},
 							},
 						},
@@ -109,8 +142,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          122,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          121,
@@ -122,8 +161,13 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 							Value: PlutusData.PlutusIndefArray{
 								PlutusData.PlutusData{
 									TagNr:          122,
-									PlutusDataType: PlutusData.PlutusBytes,
-									Value:          address.StakingPart,
+									PlutusDataType: PlutusData.PlutusArray,
+									Value: PlutusData.PlutusIndefArray{
+										PlutusData.PlutusData{
+											TagNr:          0,
+											Value:          address.StakingPart,
+											PlutusDataType: PlutusData.PlutusBytes},
+									},
 								},
 							},
 						},
@@ -138,8 +182,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          121,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          122,
@@ -155,8 +205,14 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			Value: PlutusData.PlutusIndefArray{
 				PlutusData.PlutusData{
 					TagNr:          122,
-					PlutusDataType: PlutusData.PlutusBytes,
-					Value:          address.PaymentPart,
+					PlutusDataType: PlutusData.PlutusArray,
+					Value: PlutusData.PlutusIndefArray{
+						PlutusData.PlutusData{
+							TagNr:          0,
+							Value:          address.PaymentPart,
+							PlutusDataType: PlutusData.PlutusBytes,
+						},
+					},
 				},
 				PlutusData.PlutusData{
 					TagNr:          122,
@@ -418,14 +474,14 @@ func DecodePlutusAddress(data PlutusData.PlutusData, network byte) Address.Addre
 	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
 		return Address.Address{}
 	}
-	pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+	pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
 	is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
 	skh := []byte{}
 	skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
 	is_skh_script := false
 	if skh_exists {
-		is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
-		skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+		is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+		skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
 	}
 	var addrType byte
 	if is_script {
