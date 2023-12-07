@@ -56,6 +56,7 @@ type Apollo struct {
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
 	redeemers          []Redeemer.Redeemer
+	mintRedeemers      []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
 	stakeRedeemers     map[string]Redeemer.Redeemer
 	mint               []Unit
@@ -343,9 +344,15 @@ func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 	return b
 }
 
-func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
+func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemerData PlutusData.PlutusData) *Apollo {
 	b.mint = append(b.mint, mintUnit)
-	b.redeemers = append(b.redeemers, redeemer)
+	newRedeemer := Redeemer.Redeemer{
+		Tag:     Redeemer.MINT,
+		Index:   0, // This will be computed later when we iterate over mintRedeemers
+		Data:    redeemerData,
+		ExUnits: Redeemer.ExecutionUnits{},
+	}
+	b.mintRedeemers = append(b.mintRedeemers, newRedeemer)
 	return b
 }
 
@@ -518,10 +525,20 @@ func (b *Apollo) updateExUnits() *Apollo {
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
+		for k, redeemer := range b.mintRedeemers {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.mintRedeemers[k] = redeemer
+			}
+		}
 		for _, redeemer := range b.redeemersToUTxO {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 		for _, redeemer := range b.stakeRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.mintRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	} else {
@@ -529,6 +546,9 @@ func (b *Apollo) updateExUnits() *Apollo {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 		for _, redeemer := range b.stakeRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.mintRedeemers {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	}
