@@ -371,7 +371,7 @@ func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, add
 
 	}
 	if addStakingPart {
-		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]))
+		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.StakingPart[0:28]))
 	}
 	return b
 
