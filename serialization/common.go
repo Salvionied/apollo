@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"log"
 	"reflect"
+	"strconv"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"
@@ -71,6 +72,13 @@ func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
 		}
 		return cbor.Marshal(cb.Value)
 	}
+	if cb.tp == "uint64" {
+		n, err := strconv.ParseInt(cb.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return cbor.Marshal(n)
+	}
 	res, err := hex.DecodeString(cb.Value)
 	if err != nil {
 		return nil, err
@@ -95,8 +103,9 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	case string:
 		cb.tp = "string"
 		cb.Value = res.(string)
-	default:
-		log.Fatal("Unknown type")
+	case uint64:
+		cb.tp = "uint64"
+		cb.Value = strconv.FormatUint(res.(uint64), 10)
 	}
 	return nil
 }

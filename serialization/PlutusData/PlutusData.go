@@ -687,6 +687,22 @@ func (pd *PlutusData) Clone() PlutusData {
 	}
 }
 
+type CborMap struct {
+	Contents *map[serialization.CustomBytes]PlutusData
+}
+
+func (cm *CborMap) MarshalCBOR() ([]uint8, error) {
+	em, err := cbor.CanonicalEncOptions().EncMode()
+	if err != nil {
+		return nil, err
+	}
+	return em.Marshal(cm.Contents)
+}
+
+func (cm *CborMap) UnmarshalCBOR(value []uint8) error {
+	return cbor.Unmarshal(value, cm.Contents)
+}
+
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 	if pd.TagNr == 0 {
 		return cbor.Marshal(pd.Value)
@@ -812,8 +828,10 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 
 		case map[interface{}]interface{}:
-			y := new(map[serialization.CustomBytes]PlutusData)
-			err = cbor.Unmarshal(value, y)
+			y := CborMap{
+				Contents: new(map[serialization.CustomBytes]PlutusData),
+			}
+			err = cbor.Unmarshal(value, &y)
 			if err != nil {
 				return err
 			}
