@@ -512,21 +512,21 @@ func (b *Apollo) updateExUnits() *Apollo {
 	if b.isEstimateRequired {
 		estimated_execution_units := b.estimateExunits()
 		for k, redeemer := range b.redeemersToUTxO {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.stakeRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.mintRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.mintRedeemers[k] = redeemer
