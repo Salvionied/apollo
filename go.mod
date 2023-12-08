@@ -7,7 +7,7 @@ require (
 	github.com/Salvionied/cbor/v2 v2.6.0
 	github.com/SundaeSwap-finance/kugo v0.1.5
 	github.com/SundaeSwap-finance/ogmigo v0.8.0
-	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231130003151-fc70736a1b12
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231202034041-841744733d95
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/text v0.9.0
