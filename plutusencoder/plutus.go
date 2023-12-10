@@ -346,6 +346,29 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), pdsb)
 					}
 				}
+			case "HexString":
+				if values.Field(i).Kind() != reflect.String {
+					return nil, fmt.Errorf("error: HexString field is not string")
+				}
+				hexString, err := hex.DecodeString(values.Field(i).Interface().(string))
+				if err != nil {
+					return nil, fmt.Errorf("error: HexString field is not hex")
+				}
+				pdsb := PlutusData.PlutusData{
+					PlutusDataType: PlutusData.PlutusBytes,
+					Value:          hexString,
+					TagNr:          constr,
+				}
+				if isMap {
+					nameBytes := serialization.CustomBytes{Value: name}
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = pdsb
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), pdsb)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), pdsb)
+					}
+				}
 			case "Address":
 				addpd, err := GetAddressPlutusData(values.Field(i).Interface().(Address.Address))
 				if err != nil {
