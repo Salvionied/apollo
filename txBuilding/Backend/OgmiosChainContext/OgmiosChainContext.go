@@ -657,15 +657,21 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 	return tx.TransactionBody.Id(), nil
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
 	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: EvaluateTx: Error evaluating tx: %v",
+			err,
+		)
 	}
 	if eval.Error != nil {
-		log.Fatal(eval.Error, "OgmiosChainContext: EvaluateTx: Ogmios returned an error")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v",
+			eval.Error,
+		)
 	}
 	for _, e := range eval.ExUnits {
 		final_result[e.Validator] = Redeemer.ExecutionUnits{
@@ -673,7 +679,7 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Executi
 			Steps: int64(e.Budget.Cpu),
 		}
 	}
-	return final_result
+	return final_result, nil
 }
 
 // This is unused

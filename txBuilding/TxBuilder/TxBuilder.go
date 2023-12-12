@@ -770,11 +770,14 @@ func (tb *TransactionBuilder) Build(changeAddress *Address.Address, mergeChange 
 		tb._SetCollateralReturn(changeAddress)
 	}
 
-	tb._UpdateExecutionUnits(changeAddress, mergeChange, collateralChangeAddress)
+	err = tb._UpdateExecutionUnits(changeAddress, mergeChange, collateralChangeAddress)
+	if err != nil {
+		return TransactionBody.TransactionBody{}, err
+	}
 
 	err = tb._AddChangeAndFee(changeAddress, mergeChange)
 	if err != nil {
-		log.Fatal(err)
+		return TransactionBody.TransactionBody{}, err
 	}
 	tx_body := tb._BuildTxBody()
 	return tx_body, nil
@@ -819,20 +822,29 @@ func (tb *TransactionBuilder) Copy() *TransactionBuilder {
 	}
 }
 
-func (tb *TransactionBuilder) _EstimateExecutionUnits(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) map[string]Redeemer.ExecutionUnits {
+func (tb *TransactionBuilder) _EstimateExecutionUnits(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) (map[string]Redeemer.ExecutionUnits, error) {
 	tmp_builder := tb.Copy()
 	tmp_builder.ShouldEstimateExecutionUnits = false
-	tx_body, _ := tmp_builder.Build(changeAddress, mergeChange, collateralChangeAddress)
+	tx_body, err := tmp_builder.Build(changeAddress, mergeChange, collateralChangeAddress)
+	if err != nil {
+		return nil, err
+	}
 	witness_set := tb._BuildFakeWitnessSet()
 	tx := Transaction.Transaction{TransactionBody: tx_body, TransactionWitnessSet: witness_set, Valid: false}
-	tx_cbor, _ := cbor.Marshal(tx)
+	tx_cbor, err := cbor.Marshal(tx)
+	if err != nil {
+		return nil, err
+	}
 	return tb.Context.EvaluateTx(tx_cbor)
 
 }
 
-func (tb *TransactionBuilder) _UpdateExecutionUnits(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) {
+func (tb *TransactionBuilder) _UpdateExecutionUnits(changeAddress *Address.Address, mergeChange bool, collateralChangeAddress *Address.Address) error {
 	if tb.ShouldEstimateExecutionUnits {
-		estimated_execution_units := tb._EstimateExecutionUnits(changeAddress, mergeChange, collateralChangeAddress)
+		estimated_execution_units, err := tb._EstimateExecutionUnits(changeAddress, mergeChange, collateralChangeAddress)
+		if err != nil {
+			return err
+		}
 		for k, redeemer := range tb.InputsToRedeemers {
 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
@@ -840,8 +852,8 @@ func (tb *TransactionBuilder) _UpdateExecutionUnits(changeAddress *Address.Addre
 				tb.InputsToRedeemers[k] = redeemer
 			}
 		}
-
 	}
+	return nil
 }
 
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {

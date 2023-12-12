@@ -137,10 +137,10 @@ type ExecutionResult struct {
 	Result EvalResult `json:"result"`
 }
 
-func (mcc *MaestroChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	//TODO
-	return final_result
+	return final_result, nil
 }
 
 type BlockfrostContractCbor struct {

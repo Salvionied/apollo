@@ -500,7 +500,7 @@ func (b *Apollo) Clone() *Apollo {
 	return &clone
 }
 
-func (b *Apollo) estimateExunits() map[string]Redeemer.ExecutionUnits {
+func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
 	updated_b, _ := cloned_b.Complete()
@@ -508,9 +508,12 @@ func (b *Apollo) estimateExunits() map[string]Redeemer.ExecutionUnits {
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
-func (b *Apollo) updateExUnits() *Apollo {
+func (b *Apollo) updateExUnits() (*Apollo, error) {
 	if b.isEstimateRequired {
-		estimated_execution_units := b.estimateExunits()
+		estimated_execution_units, err := b.estimateExunits()
+		if err != nil {
+			return nil, err
+		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
@@ -552,7 +555,7 @@ func (b *Apollo) updateExUnits() *Apollo {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	}
-	return b
+	return b, nil
 }
 
 func (b *Apollo) GetTx() *Transaction.Transaction {
@@ -647,7 +650,10 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET COLLATERAL
 	b = b.setCollateral()
 	//UPDATE EXUNITS
-	b = b.updateExUnits()
+	b, err := b.updateExUnits()
+	if err != nil {
+		return nil, err
+	}
 	//ADDCHANGEANDFEE
 	b = b.addChangeAndFee()
 	//FINALIZE TX

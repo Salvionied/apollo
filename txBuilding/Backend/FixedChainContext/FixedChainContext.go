@@ -129,8 +129,8 @@ func (f FixedChainContext) SubmitTx(tx Transaction.Transaction) (serialization.T
 	return serialization.TransactionId{}, nil
 }
 
-func (f FixedChainContext) EvaluateTx(tx []uint8) map[string]Redeemer.ExecutionUnits {
-	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}
+func (f FixedChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.ExecutionUnits, error) {
+	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
 }
 
 func (f FixedChainContext) GetContractCbor(scriptHash string) string {

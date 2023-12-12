@@ -443,32 +443,32 @@ type ExecutionResult struct {
 	Result EvalResult `json:"result"`
 }
 
-func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	encoded := hex.EncodeToString(tx)
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/v0/utils/txs/evaluate", bfc._baseUrl), strings.NewReader(encoded))
 	req.Header.Set("project_id", bfc._projectId)
 	req.Header.Set("Content-Type", "application/cbor")
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return nil, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var x any
 	err = json.Unmarshal(body, &x)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return nil, err
 	}
 	var response ExecutionResult
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return nil, err
 	}
 	final_result := make(map[string]Redeemer.ExecutionUnits, 0)
 	for k, v := range response.Result.Result {
 
 		final_result[k] = Redeemer.ExecutionUnits{Steps: int64(v["steps"]), Mem: int64(v["memory"])}
 	}
-	return final_result
+	return final_result, nil
 }
 
 type BlockfrostContractCbor struct {
