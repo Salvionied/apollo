@@ -650,9 +650,17 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	ctx := context.Background()
 	bytes := tx.Bytes()
-	err := occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+	result, err := occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
+		return serialization.TransactionId{}, fmt.Errorf("OgmiosChainContext: SubmitTx: %v", err)
+	}
+	if result.Error != nil {
+		return serialization.TransactionId{}, fmt.Errorf(
+			"OgmiosChainContext: SubmitTx: %v %v %v",
+			result.Error.Code,
+			result.Error.Message,
+			string(result.Error.Data),
+		)
 	}
 	return tx.TransactionBody.Id(), nil
 }
