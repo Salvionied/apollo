@@ -669,8 +669,10 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 	}
 	if eval.Error != nil {
 		return nil, fmt.Errorf(
-			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v",
-			eval.Error,
+			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v %v %v",
+			eval.Error.Code,
+			eval.Error.Message,
+			string(eval.Error.Data),
 		)
 	}
 	for _, e := range eval.ExUnits {
