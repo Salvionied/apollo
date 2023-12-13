@@ -3,11 +3,6 @@
 </div>
 
 # Apollo: Pure Golang Cardano Building blocks 
-
-> NOTE: This is a fork of the excellent library built by Edoardo Salvioni;
-> Given the sensitivity of building transactions, we maintain our own fork to reduce
-> the risk of a supply chain attack.
-
 ## Pure Golang Cardano Serialization
 
 The Objective of this library is to give Developers Access to each and every needed resource for cardano development.
