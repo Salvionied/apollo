@@ -1745,3 +1745,83 @@ func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
 	b.collaterals = append(b.collaterals, utxo)
 	return b
 }
+
+func (b *Apollo) CompleteExact(fee int) (*Apollo, error) {
+	//SET REDEEMER INDEXES
+	b = b.setRedeemerIndexes()
+	//SET COLLATERAL
+	b, err := b.setCollateral()
+	if err != nil {
+		return nil, err
+	}
+	//UPDATE EXUNITS
+	b = b.updateExUnitsExact(fee)
+	//ADDCHANGEANDFEE
+	b.Fee = int64(fee)
+	//FINALIZE TX
+	body, err := b.buildTxBody()
+	if err != nil {
+		return nil, err
+	}
+	witnessSet := b.buildWitnessSet()
+	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
+	return b, nil
+}
+
+func (b *Apollo) estimateExunitsExact(fee int) map[string]Redeemer.ExecutionUnits {
+	cloned_b := b.Clone()
+	cloned_b.isEstimateRequired = false
+	updated_b, _ := cloned_b.CompleteExact(fee)
+	//updated_b = updated_b.fakeWitness()
+	tx_cbor, _ := cbor.Marshal(updated_b.tx)
+	return b.Context.EvaluateTx(tx_cbor)
+}
+
+func (b *Apollo) updateExUnitsExact(fee int) *Apollo {
+	if b.isEstimateRequired {
+		estimated_execution_units := b.estimateExunitsExact(fee)
+		for k, redeemer := range b.redeemersToUTxO {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.redeemersToUTxO[k] = redeemer
+			}
+		}
+		for k, redeemer := range b.stakeRedeemers {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.stakeRedeemers[k] = redeemer
+			}
+		}
+		for k, redeemer := range b.mintRedeemers {
+			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			if _, ok := estimated_execution_units[key]; ok {
+				redeemer.ExUnits = estimated_execution_units[key]
+				b.mintRedeemers[k] = redeemer
+			}
+		}
+		for _, redeemer := range b.redeemersToUTxO {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.stakeRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.mintRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+
+		}
+	} else {
+		for _, redeemer := range b.redeemersToUTxO {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.stakeRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+		for _, redeemer := range b.mintRedeemers {
+			b.redeemers = append(b.redeemers, redeemer)
+		}
+
+	}
+	return b
+}
