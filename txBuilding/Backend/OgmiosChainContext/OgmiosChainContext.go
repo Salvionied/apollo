@@ -650,22 +650,38 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	ctx := context.Background()
 	bytes := tx.Bytes()
-	err := occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+	result, err := occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
+		return serialization.TransactionId{}, fmt.Errorf("OgmiosChainContext: SubmitTx: %v", err)
+	}
+	if result.Error != nil {
+		return serialization.TransactionId{}, fmt.Errorf(
+			"OgmiosChainContext: SubmitTx: %v %v %v",
+			result.Error.Code,
+			result.Error.Message,
+			string(result.Error.Data),
+		)
 	}
 	return tx.TransactionBody.Id(), nil
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
 	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: EvaluateTx: Error evaluating tx: %v",
+			err,
+		)
 	}
 	if eval.Error != nil {
-		log.Fatal(eval.Error, "OgmiosChainContext: EvaluateTx: Ogmios returned an error")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v %v %v",
+			eval.Error.Code,
+			eval.Error.Message,
+			string(eval.Error.Data),
+		)
 	}
 	for _, e := range eval.ExUnits {
 		final_result[e.Validator] = Redeemer.ExecutionUnits{
@@ -673,7 +689,7 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Executi
 			Steps: int64(e.Budget.Cpu),
 		}
 	}
-	return final_result
+	return final_result, nil
 }
 
 // This is unused
