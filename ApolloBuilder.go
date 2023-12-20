@@ -1202,6 +1202,9 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 			return b, errors.New("No Remaining UTxOs")
 		}
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
+		if len(sortedUtxos) == 0 {
+			return b, errors.New("No Remaining UTxOs")
+		}
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
 		return b.addChangeAndFee()
