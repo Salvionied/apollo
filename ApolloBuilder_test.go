@@ -1,4 +1,4 @@
-package txBuilding_test
+package apollo_test
 
 import (
 	"encoding/hex"
@@ -19,6 +19,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/serialization/Value"
+	testutils "github.com/Salvionied/apollo/testUtils"
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 	"github.com/Salvionied/cbor/v2"
@@ -436,7 +437,7 @@ func TestFailedSubmissionThrows(t *testing.T) {
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
-		AddLoadedUTxOs(initUtxosDifferentiated()...).
+		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000).
 		Complete()
 	if err != nil {

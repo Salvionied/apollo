@@ -135,7 +135,9 @@ type CostModels map[serialization.CustomBytes]CM
 
 type CM map[string]int
 
-/**
+/*
+*
+
 	MarshalCBOR encodes the CM into a CBOR-encoded byte slice, in which
 	it serializes the map key alphabetically and encodes the respective values.
 
@@ -330,7 +332,9 @@ var PLUTUSV1COSTMODEL = CM{
 
 type CostView map[string]int
 
-/**
+/*
+*
+
 	MarshalCBOR encodes the CostView into a CBOR-encoded byte slice, in which
 	it serializes the map key alphabetically and encodes the respective values.
 
@@ -550,7 +554,9 @@ type PlutusList interface {
 type PlutusIndefArray []PlutusData
 type PlutusDefArray []PlutusData
 
-/**
+/*
+*
+
 	Len returns the length of the PlutusIndefArray.
 
 	Returns:
@@ -560,7 +566,9 @@ func (pia PlutusIndefArray) Len() int {
 	return len(pia)
 }
 
-/**
+/*
+*
+
 	Len returns the length of the PlutusDefArray.
 
 	Returns:
@@ -570,7 +578,9 @@ func (pia PlutusDefArray) Len() int {
 	return len(pia)
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the PlutusIndefArray.
 
 	Returns:
@@ -584,13 +594,15 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 	return ret
 }
 
-/**
-	MarshalCBOR encodes the PlutusIndefArray into a CBOR-encoded byte
-	slice, in which it serializes the elements in indefinite-length array format.
- 	
-	Returns:
-   		[]uint8: The CBOR-encoded byte slice.
-   		error: An error if marshaling fails.
+/*
+*
+
+		MarshalCBOR encodes the PlutusIndefArray into a CBOR-encoded byte
+		slice, in which it serializes the elements in indefinite-length array format.
+
+		Returns:
+	   		[]uint8: The CBOR-encoded byte slice.
+	   		error: An error if marshaling fails.
 */
 func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
@@ -613,7 +625,9 @@ type Datum struct {
 	Value          any
 }
 
-/**
+/*
+*
+
 	ToPlutusData converts a datum to PlutusData, encoding
 	the Datum into CBOR format and then decodes it into a
 	PlutusData.
@@ -628,7 +642,9 @@ func (pd *Datum) ToPlutusData() PlutusData {
 	return res
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the Datum>
 
 	Returns:
@@ -642,13 +658,15 @@ func (pd *Datum) Clone() Datum {
 	}
 }
 
-/**
-	MarshalCBOR encodes the Datum into a CBOR-encoded byte slice,
-	it applies a CBOR tag, if TagNr is not 0, otherwise it marshals the Value
- 	
-	Returns:
-   		[]uint8: The CBOR-encoded byte slice.
-   		error: An error if marshaling fails.
+/*
+*
+
+		MarshalCBOR encodes the Datum into a CBOR-encoded byte slice,
+		it applies a CBOR tag, if TagNr is not 0, otherwise it marshals the Value
+
+		Returns:
+	   		[]uint8: The CBOR-encoded byte slice.
+	   		error: An error if marshaling fails.
 */
 func (pd Datum) MarshalCBOR() ([]uint8, error) {
 	if pd.TagNr == 0 {
@@ -658,12 +676,14 @@ func (pd Datum) MarshalCBOR() ([]uint8, error) {
 	}
 }
 
-/**
-	UnmarshalCBOR decodes a CBOR-encoded byte slice into a Datum.
-	It handles different Plutus data types and applies appropriate decoding logic.
+/*
+*
 
-	Returns:
-   		error: An error if unmarshaling fails.
+		UnmarshalCBOR decodes a CBOR-encoded byte slice into a Datum.
+		It handles different Plutus data types and applies appropriate decoding logic.
+
+		Returns:
+	   		error: An error if unmarshaling fails.
 */
 func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 	var x any
@@ -737,8 +757,10 @@ type PlutusData struct {
 	Value          any
 }
 
-/**
-	Equal check if two PlutusData values are equal 
+/*
+*
+
+	Equal check if two PlutusData values are equal
 	using their CBOR representations.
 
 	Params:
@@ -753,7 +775,9 @@ func (pd *PlutusData) Equal(other PlutusData) bool {
 	return bytes.Equal(marshaledThis, marshaledOther)
 }
 
-/**
+/*
+*
+
 	ToDatum converts a PlutusData to a Datum, in which
 	it encodes the PlutusData into CBOR format and later
 	into a Datum.
@@ -769,7 +793,9 @@ func (pd *PlutusData) ToDatum() Datum {
 	return res
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of a PlutusData object.
 
 	Returns:
@@ -783,7 +809,9 @@ func (pd *PlutusData) Clone() PlutusData {
 	}
 }
 
-/**
+/*
+*
+
 	MarshalCBOR encodes the PlutusData into a CBOR byte slice.
 
 	Returns:
@@ -798,14 +826,16 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 	}
 }
 
-/**
-	UnmarshalJSON unmarshals JSON-encoded PlutusData into a PlutusData object.
+/*
+*
 
-	Params:
-   		value ([]byte): The JSON-encoded data to unmarshal.
+		UnmarshalJSON unmarshals JSON-encoded PlutusData into a PlutusData object.
 
- 	Returns:
-   		error: An error, if any, during unmarshaling.
+		Params:
+	   		value ([]byte): The JSON-encoded data to unmarshal.
+
+	 	Returns:
+	   		error: An error, if any, during unmarshaling.
 */
 func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 	var x any
@@ -852,18 +882,21 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 		} else {
 			return errors.New("invalid Nested Struct in plutus data")
 		}
+
 	}
 	return nil
 }
 
-/**
-	UnmarshalCBOR unmarshals CBOR-encoded data into a PlutusData object.
+/*
+*
 
-	Params:
-   		value ([]uint8): The CBOR-encoded data to unmarshal.
+		UnmarshalCBOR unmarshals CBOR-encoded data into a PlutusData object.
 
- 	Returns:
-   		error: An error, if any, during unmarshaling.
+		Params:
+	   		value ([]uint8): The CBOR-encoded data to unmarshal.
+
+	 	Returns:
+	   		error: An error, if any, during unmarshaling.
 */
 func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	var x any
@@ -896,9 +929,19 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusBytes
 			pd.Value = ok.Content
+		case map[interface{}]interface{}:
+			y := new(map[serialization.CustomBytes]PlutusData)
+			err = cbor.Unmarshal(value, y)
+			if err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusMap
+			pd.Value = y
+			pd.TagNr = 0
 
 		default:
 			//TODO SKIP
+			fmt.Println("HERE")
 			return nil
 		}
 	} else {
@@ -956,14 +999,15 @@ type RawPlutusData struct {
 	//TODO
 }
 
+/*
+*
 
-/**
 	ToCbor converts the given interface to a hexadecimal-encoded CBOR string.
 
 	Params:
 		x (interface{}): The input value to be encoded to CBOR to converted
 						 to a hexadecimal string.
-	
+
 	Returns:
 		string: The hexadecimal-encoded CBOR representation of the input value.
 		error: An error if the convertion fails.
@@ -976,16 +1020,17 @@ func ToCbor(x interface{}) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+/*
+*
 
-/**
-	PlutusDataHash computes the hash of a PlutusData structure using the Blake2b algorithm.
+		PlutusDataHash computes the hash of a PlutusData structure using the Blake2b algorithm.
 
- 	Params:
-	   	pd (*PlutusData): A pointer to the PlutusData structure to be hashed.
+	 	Params:
+		   	pd (*PlutusData): A pointer to the PlutusData structure to be hashed.
 
-	Returns:
-  		serialization.DatumHash: The hash of the PlutusData.
-		error: An error if the PlutusDataHash fails.
+		Returns:
+	  		serialization.DatumHash: The hash of the PlutusData.
+			error: An error if the PlutusDataHash fails.
 */
 func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	finalbytes := []byte{}
@@ -1006,8 +1051,9 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	return r, nil
 }
 
+/*
+*
 
-/**
 	HashDatum computes the hash of a CBOR marshaler using the Blake2b algorithm.
 
 	Params:
@@ -1040,7 +1086,9 @@ type ScriptHashable interface {
 	Hash() (serialization.ScriptHash, error)
 }
 
-/**
+/*
+*
+
 	PlutusScriptHash computes the script hash of a ScriptHashable object.
 
 	Params:
@@ -1056,14 +1104,16 @@ func PlutusScriptHash(script ScriptHashable) serialization.ScriptHash {
 
 type PlutusV1Script []byte
 
-/**
-	ToAddress converts a PlutusV1Script to an Address with an optional staking credential.
+/*
+*
 
- 	Params:
-   		stakingCredential ([]byte): The staking credential to include in the address.
+		ToAddress converts a PlutusV1Script to an Address with an optional staking credential.
 
- 	Returns:
-   		Address.Address: The generated address.
+	 	Params:
+	   		stakingCredential ([]byte): The staking credential to include in the address.
+
+	 	Returns:
+	   		Address.Address: The generated address.
 */
 func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 	hash := PlutusScriptHash(ps)
@@ -1083,14 +1133,16 @@ func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 
 type PlutusV2Script []byte
 
-/**
-	ToAddress converts a PlutusV2Script to an Address with an optional staking credential.
+/*
+*
 
- 	Params:
-   		stakingCredential ([]byte): The staking credential to include in the address.
+		ToAddress converts a PlutusV2Script to an Address with an optional staking credential.
 
- 	Returns:
-   		Address.Address: The generated address.
+	 	Params:
+	   		stakingCredential ([]byte): The staking credential to include in the address.
+
+	 	Returns:
+	   		Address.Address: The generated address.
 */
 func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
 	hash := PlutusScriptHash(ps)
@@ -1108,13 +1160,14 @@ func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
 	}
 }
 
+/*
+*
 
-/**
- 	Hash computes the script hash for a PlutusV1Script.
+	 	Hash computes the script hash for a PlutusV1Script.
 
- 	Returns:
-   		serialization.ScriptHash: The script hash of the PlutusV1Script.
-		error: An error if the hashing fails.
+	 	Returns:
+	   		serialization.ScriptHash: The script hash of the PlutusV1Script.
+			error: An error if the hashing fails.
 */
 func (ps PlutusV1Script) Hash() (serialization.ScriptHash, error) {
 	finalbytes, err := hex.DecodeString("01")
@@ -1135,12 +1188,14 @@ func (ps PlutusV1Script) Hash() (serialization.ScriptHash, error) {
 	return r, nil
 }
 
-/**
- 	Hash computes the script hash for a PlutusV2Script.
+/*
+*
 
- 	Returns:
-   		serialization.ScriptHash: The script hash of the PlutusV2Script.
-		error: An error if the Hashing fails.
+	 	Hash computes the script hash for a PlutusV2Script.
+
+	 	Returns:
+	   		serialization.ScriptHash: The script hash of the PlutusV2Script.
+			error: An error if the Hashing fails.
 */
 func (ps PlutusV2Script) Hash() (serialization.ScriptHash, error) {
 	finalbytes, err := hex.DecodeString("02")

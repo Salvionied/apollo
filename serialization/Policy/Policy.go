@@ -11,12 +11,14 @@ type PolicyId struct {
 	Value string
 }
 
-/**
+/*
+*
+
 	New creates a new PolicyId from a hexadecimal string
 
 	Params:
 		value string: The hexadecimal string representing the policy ID.
-	
+
 	Returns:
 		*PolicyId: A pointer to the PolicyId.
 		error: An error if the input string is not of the expected length.
@@ -30,12 +32,14 @@ func New(value string) (*PolicyId, error) {
 	}, nil
 }
 
-/**
+/*
+*
+
 	FromBytes creates a new PolicyId from a byte slice.
 
 	Params:
 		value []byte: The byte slice representing the policy ID.
-	
+
 	Returns:
 		*PolicyId: A pointer to the PolicyId.
 		error: An error if the input byte slice is not of the expected length.
@@ -49,7 +53,9 @@ func FromBytes(value []byte) (*PolicyId, error) {
 	}, nil
 }
 
-/**
+/*
+*
+
 	String returns the hexadecimal string representation
 	of the PolicyId.
 */
@@ -57,7 +63,9 @@ func (policyId PolicyId) String() string {
 	return policyId.Value
 }
 
-/**
+/*
+*
+
 	MarshalCBOR serializes the PolicyId to CBOR format.
 
 	Returns:
@@ -80,7 +88,9 @@ func (policyId *PolicyId) MarshalCBOR() ([]byte, error) {
 
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR deserializes the PolicyId from CBOR format.
 
 	Params:

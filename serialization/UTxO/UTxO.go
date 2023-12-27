@@ -18,7 +18,9 @@ type UTxO struct {
 	Output TransactionOutput.TransactionOutput
 }
 
-/**
+/*
+*
+
 	GetKey returns a unique key for the UTxO through its
 	transaction ID and index.
 
@@ -29,7 +31,9 @@ func (u UTxO) GetKey() string {
 	return fmt.Sprintf("%s:%d", hex.EncodeToString(u.Input.TransactionId), u.Input.Index)
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the UTxO instance.
 
 	Returns:
@@ -42,7 +46,9 @@ func (u UTxO) Clone() UTxO {
 	}
 }
 
-/**
+/*
+*
+
 	EqualTo checks if the UTxO is equal to another object.
 
 	Params:

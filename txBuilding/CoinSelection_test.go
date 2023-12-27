@@ -1,7 +1,6 @@
 package txBuilding_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Address"
@@ -9,63 +8,15 @@ import (
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/serialization/Value"
+	testutils "github.com/Salvionied/apollo/testUtils"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 	"github.com/Salvionied/apollo/txBuilding/CoinSelection"
 )
 
 var TESTADDRESS = "addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg52x"
-
-func initUtxos() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
-	for i := 0; i < 10; i++ {
-		tx_in := TransactionInput.TransactionInput{
-			TransactionId: make([]byte, 32),
-			Index:         i,
-		}
-
-		Addr, _ := Address.DecodeAddress(TESTADDRESS)
-		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
-		asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", i))
-		Asset := Asset.Asset[int64]{
-			asset_name: int64((i + 1) * 100)}
-		assets := MultiAsset.MultiAsset[int64]{policy: Asset}
-		value := Value.SimpleValue(int64((i+1)*1000000),
-			assets)
-		tx_out := TransactionOutput.SimpleTransactionOutput(
-			Addr, value)
-		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
-	}
-	return utxos
-}
-func initUtxosDifferentiated() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
-	for i := 0; i < 10; i++ {
-		tx_in := TransactionInput.TransactionInput{
-			TransactionId: make([]byte, 32),
-			Index:         i,
-		}
-
-		Addr, _ := Address.DecodeAddress(TESTADDRESS)
-		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
-		singleasset := Asset.Asset[int64]{}
-		for j := 0; j < i; j++ {
-			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
-			singleasset[asset_name] = int64((i + 1) * 100)
-		}
-
-		assets := MultiAsset.MultiAsset[int64]{policy: singleasset}
-		value := Value.SimpleValue(int64((i+1)*1000000),
-			assets)
-		tx_out := TransactionOutput.SimpleTransactionOutput(
-			Addr, value)
-		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
-	}
-	return utxos
-}
 
 func AssertRequestFulfilled(request []TransactionOutput.TransactionOutput, selected []UTxO.UTxO) bool {
 	//TODO IMPLEMENT
@@ -75,7 +26,7 @@ func TestLargestFirstAdaOnly(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(15_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, true)
@@ -94,7 +45,7 @@ func TestLargestFirstRequestOutputs(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(9_000_000)),
 		TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(6_000_000))}
@@ -115,7 +66,7 @@ func TestFeeEffectLargestFirst(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(10_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, true, false)
@@ -134,7 +85,7 @@ func TestNoFeeEffectLargestFirst(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(10_000_000))}
 	selected, change, _ := selector.Select(utxos, request, chain_context, -1, false, false)
@@ -153,7 +104,7 @@ func TestInsufficientBalance(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(1_000_000_000))}
 	_, _, err := selector.Select(utxos, request, chain_context, -1, false, false)
@@ -166,7 +117,7 @@ func TestMaxInputCountLargestFirst(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address, Value.PureLovelaceValue(15000000))}
 	_, _, err := selector.Select(utxos, request, chain_context, 1, false, false)
@@ -179,7 +130,7 @@ func TestMultiAsset(t *testing.T) {
 	chain_context := FixedChainContext.InitFixedChainContext()
 	decoded_address, _ := Address.DecodeAddress(TESTADDRESS)
 	selector := CoinSelection.LargestFirstSelector{}
-	utxos := initUtxos()
+	utxos := testutils.InitUtxos()
 	//ONlY ADA TEST
 	request := []TransactionOutput.TransactionOutput{TransactionOutput.SimpleTransactionOutput(decoded_address,
 		Value.SimpleValue(15000000, MultiAsset.MultiAsset[int64]{

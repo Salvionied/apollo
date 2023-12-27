@@ -1,4 +1,4 @@
-package serialization_test
+package MultiAsset_test
 
 import (
 	"testing"
@@ -9,6 +9,11 @@ import (
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Value"
 )
+
+var policyT1 = Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
+var policyT2 = Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f"}
+var assetNameT1 = AssetName.NewAssetNameFromString("token1")
+var assetNameT2 = AssetName.NewAssetNameFromString("token2")
 
 func TestMultiAssetAddition(t *testing.T) {
 	policy_id := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
@@ -226,4 +231,191 @@ func TestValues(t *testing.T) {
 		t.Errorf("Expected true, got false")
 	}
 
+}
+
+func TestGetByPolicyAndId(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 2},
+		policyT2: Asset.Asset[int64]{assetNameT1: 3, assetNameT2: 4},
+	}
+	if ma.GetByPolicyAndId(policyT1, assetNameT1) != 1 {
+		t.Errorf("Expected 1, got %d", ma.GetByPolicyAndId(policyT1, assetNameT1))
+	}
+	if ma.GetByPolicyAndId(policyT1, assetNameT2) != 2 {
+		t.Errorf("Expected 2, got %d", ma.GetByPolicyAndId(policyT1, assetNameT2))
+	}
+	if ma.GetByPolicyAndId(policyT2, assetNameT1) != 3 {
+		t.Errorf("Expected 3, got %d", ma.GetByPolicyAndId(policyT2, assetNameT1))
+	}
+	if ma.GetByPolicyAndId(policyT2, assetNameT2) != 4 {
+		t.Errorf("Expected 4, got %d", ma.GetByPolicyAndId(policyT2, assetNameT2))
+	}
+	if ma.GetByPolicyAndId(policyT2, AssetName.NewAssetNameFromString("token3")) != 0 {
+		t.Errorf("Expected 0, got %d", ma.GetByPolicyAndId(policyT2, AssetName.NewAssetNameFromString("token3")))
+	}
+}
+
+func TestRemove0Assets(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma = ma.RemoveZeroAssets()
+	if len(ma) != 1 {
+		t.Errorf("Expected 1, got %d", len(ma))
+	}
+	if len(ma[policyT1]) != 1 {
+		t.Errorf("Expected 1, got %d", len(ma[policyT1]))
+	}
+	if ma[policyT1][assetNameT1] != 1 {
+		t.Errorf("Expected 1, got %d", ma[policyT1][assetNameT1])
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 0, assetNameT2: 0}}
+	ma2 = ma2.RemoveZeroAssets()
+	if len(ma2) != 0 {
+		t.Errorf("Expected 0, got %d", len(ma2))
+	}
+}
+
+func TestClone(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma2 := ma.Clone()
+	if !ma.Equal(ma2) {
+		t.Errorf("Expected true, got false")
+	}
+	if &ma == &ma2 {
+		t.Errorf("Expected false, got true")
+	}
+	ma2[policyT1][assetNameT1] = 2
+	if ma.Equal(ma2) {
+		t.Errorf("Expected false, got true")
+	}
+}
+
+func TestEqual(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma3 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+		policyT2: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma4 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+		policyT2: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 1},
+	}
+	if !ma.Equal(ma2) {
+		t.Errorf("Expected true, got false")
+	}
+	if ma.Equal(ma3) {
+		t.Errorf("Expected false, got true")
+	}
+	if ma.Equal(ma4) {
+		t.Errorf("Expected false, got true")
+	}
+}
+
+func TestStrictLess(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma3 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 1},
+	}
+	if !ma.Less(ma2) {
+		t.Errorf("Expected false, got true")
+	}
+	if !ma.Less(ma3) {
+		t.Errorf("Expected true, got false")
+	}
+	if ma3.Less(ma) {
+		t.Errorf("Expected false, got true")
+	}
+}
+
+func TestGreater(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma3 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 1},
+	}
+	if !ma.Greater(ma2) {
+		t.Errorf("Expected true, got false")
+	}
+	if ma.Greater(ma3) {
+		t.Errorf("Expected false, got true")
+	}
+	if !ma3.Greater(ma) {
+		t.Errorf("Expected true, got false")
+	}
+}
+
+func TestAdd(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 2, assetNameT2: 1},
+	}
+	ma3 := ma.Add(ma2)
+	if ma3[policyT1][assetNameT1] != 3 {
+		t.Errorf("Expected 3, got %d", ma3[policyT1][assetNameT1])
+	}
+	if ma3[policyT1][assetNameT2] != 1 {
+		t.Errorf("Expected 1, got %d", ma3[policyT1][assetNameT2])
+	}
+
+}
+
+func TestSub(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 2, assetNameT2: 1},
+	}
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
+	}
+	ma3 := ma.Sub(ma2)
+	if ma3[policyT1][assetNameT1] != 1 {
+		t.Errorf("Expected 1, got %d", ma3[policyT1][assetNameT1])
+	}
+	if ma3[policyT1][assetNameT2] != 1 {
+		t.Errorf("Expected 1, got %d", ma3[policyT1][assetNameT2])
+	}
+
+	ma3 = ma.Sub(ma2).Sub(ma2).Sub(ma2)
+	if ma3[policyT1][assetNameT1] != -1 {
+		t.Errorf("Expected -1, got %d", ma3[policyT1][assetNameT1])
+	}
+	if ma3[policyT1][assetNameT2] != 1 {
+		t.Errorf("Expected 1, got %d", ma3[policyT1][assetNameT2])
+	}
+}
+
+func TestFilter(t *testing.T) {
+	ma := MultiAsset.MultiAsset[int64]{
+		policyT1: Asset.Asset[int64]{assetNameT1: 2, assetNameT2: 1},
+	}
+
+	ma2 := ma.Filter(func(policy Policy.PolicyId, assetName AssetName.AssetName, qty int64) bool {
+		return assetName == assetNameT1 && qty == 2
+	})
+
+	if ma2[policyT1][assetNameT1] != 2 {
+		t.Errorf("Expected 2, got %d", ma2[policyT1][assetNameT1])
+	}
+	if ma2[policyT1][assetNameT2] != 0 {
+		t.Errorf("Expected 0, got %d", ma2[policyT1][assetNameT2])
+	}
 }

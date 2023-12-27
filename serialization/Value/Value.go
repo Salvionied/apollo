@@ -85,8 +85,14 @@ func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
 		AlonzoValue: A copy of the AlonzoValue.
 */
 func (alVal AlonzoValue) Clone() AlonzoValue {
+	if alVal.HasAssets {
+		return AlonzoValue{
+			Am:        alVal.Am.Clone(),
+			Coin:      alVal.Coin,
+			HasAssets: alVal.HasAssets,
+		}
+	}
 	return AlonzoValue{
-		Am:        alVal.Am.Clone(),
 		Coin:      alVal.Coin,
 		HasAssets: alVal.HasAssets,
 	}
@@ -149,10 +155,17 @@ func (val Value) RemoveZeroAssets() Value {
 		Value: A copy of the Value.
 */
 func (val Value) Clone() Value {
-	return Value{
-		Am:        val.Am.Clone(),
-		Coin:      val.Coin,
-		HasAssets: val.HasAssets,
+	if val.HasAssets {
+		return Value{
+			Am:        val.Am.Clone(),
+			Coin:      val.Coin,
+			HasAssets: val.HasAssets,
+		}
+	} else {
+		return Value{
+			Coin:      val.Coin,
+			HasAssets: val.HasAssets,
+		}
 	}
 }
 
@@ -267,6 +280,8 @@ func (val *Value) SetLovelace(amount int64) {
 func (val *Value) SetMultiAsset(amount MultiAsset.MultiAsset[int64]) {
 	if !val.HasAssets {
 		val.HasAssets = true
+		val.Am.Coin = val.Coin
+		val.Coin = 0
 	}
 	val.Am.Value = amount
 }
@@ -388,7 +403,14 @@ func (val Value) Less(other Value) bool {
 		bool: True if the current value is equal to the other Value, false otherwise.
 */
 func (val Value) Equal(other Value) bool {
-	return val.HasAssets == other.HasAssets && val.Coin == other.Coin && val.Am.Equal(other.Am)
+	if val.HasAssets != other.HasAssets {
+		return false
+	}
+	if val.HasAssets {
+		return val.Coin == other.Coin && val.Am.Equal(other.Am)
+	} else {
+		return val.Coin == other.Coin
+	}
 }
 
 /*
