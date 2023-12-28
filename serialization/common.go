@@ -9,15 +9,18 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-/**
-	Blake2bHash computes the Blake2b hash of the given data.
+/*
+*
+Blake2bHash computes the Blake2b hash of the given data.
 
-	Params:
-		data ([]byte): The data to hash.
-	
-	Returns:
-		[]byte: The Blake2b hash of the data.
-		error: An error if the hashing fails.
+Params:
+
+	data ([]byte): The data to hash.
+
+Returns:
+
+	[]byte: The Blake2b hash of the data.
+	error: An error if the hashing fails.
 */
 func Blake2bHash(data []byte) ([]byte, error) {
 	hash, err := blake2b.New(32, nil)
@@ -35,7 +38,9 @@ type ConstrainedBytes struct {
 	Payload []byte
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR deserializes a CBOR-encoded byte slice into ConstrainedBytes.
 
 	Params:
@@ -49,7 +54,9 @@ func (cb *ConstrainedBytes) UnmarshalCBOR(data []byte) error {
 	return err
 }
 
-/**
+/*
+*
+
 	MarshalCBOR serializes ConstrainedBytes into a CBOR-encoded byte slice.
 
 	Returns:
@@ -65,7 +72,9 @@ const VERIFICATION_KEY_HASH_SIZE = 28
 type TransactionId ConstrainedBytes
 type ScriptHash [28]byte
 
-/**
+/*
+*
+
 	Bytes returns the underlying byte slice of a ScriptHash.
 
 	Returns:
@@ -77,7 +86,9 @@ func (sh *ScriptHash) Bytes() []byte {
 
 type DatumHash ConstrainedBytes
 
-/**
+/*
+*
+
 	Equal checks if two DatumHash instances are equal.
 
 	Params:
@@ -98,7 +109,14 @@ type CustomBytes struct {
 	tp    string
 }
 
-/**
+func NewCustomBytes(value string) CustomBytes {
+
+	return CustomBytes{Value: hex.EncodeToString([]byte(value))}
+}
+
+/*
+*
+
 	String returns the Value's string representation of a CustomBytes.
 
 	Returns:
@@ -108,7 +126,9 @@ func (cb CustomBytes) String() string {
 	return cb.Value
 }
 
-/**
+/*
+*
+
 	MarshalCBOR serializes CustomBytes into a CBOR-encoded byte slice.
 
 	Returns:
@@ -136,12 +156,14 @@ func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
 
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR deserializes a CBOR-encoded byte slice into CustomBytes.
 
 	Params:
 		value ([]byte): The CBOR-encoded byte slice.
-	
+
 	Returns:
 		error: An error if deserialization fails.
 */

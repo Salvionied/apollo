@@ -18,6 +18,30 @@ const (
 	InvalidHereafter
 )
 
+func NewScriptPubKey(keyHash []byte) NativeScript {
+	return NativeScript{Tag: ScriptPubKey, KeyHash: keyHash}
+}
+
+func NewScriptAll(nativeScripts []NativeScript) NativeScript {
+	return NativeScript{Tag: ScriptAll, NativeScripts: nativeScripts}
+}
+
+func NewScriptAny(nativeScripts []NativeScript) NativeScript {
+	return NativeScript{Tag: ScriptAny, NativeScripts: nativeScripts}
+}
+
+func NewScriptNofK(nativeScripts []NativeScript, noK int) NativeScript {
+	return NativeScript{Tag: ScriptNofK, NativeScripts: nativeScripts, NoK: noK}
+}
+
+func NewInvalidBefore(before int64) NativeScript {
+	return NativeScript{Tag: InvalidBefore, Before: before}
+}
+
+func NewInvalidHereafter(after int64) NativeScript {
+	return NativeScript{Tag: InvalidHereafter, After: after}
+}
+
 type NativeScript struct {
 	Tag           ScriptTag
 	KeyHash       []byte
@@ -51,8 +75,9 @@ type SerialHash struct {
 	Value []byte
 }
 
+/*
+*
 
-/**
 	Hash computes the script hash for the NativeScript.
 
 	Returns:
@@ -79,7 +104,9 @@ func (ns NativeScript) Hash() (serialization.ScriptHash, error) {
 	return ret, nil
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR decodes the CBOR-encoded data and populates
 	the NativeScript fields.
 
@@ -140,7 +167,9 @@ func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
 	}
 }
 
-/**
+/*
+*
+
 	MarshalCBOR encodes the NativeScript into CBOR format.
 
 	Returns:

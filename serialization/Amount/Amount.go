@@ -8,7 +8,9 @@ type Amount struct {
 	Value MultiAsset.MultiAsset[int64]
 }
 
-/**
+/*
+*
+
 	ToAlonzo converts an Amount to its Alonzo representation creating
 	a new AlonzoAmount object.
 
@@ -25,7 +27,9 @@ func (amt Amount) ToAlonzo() AlonzoAmount {
 	}
 }
 
-/**
+/*
+*
+
 	ToShelley converts an AlonzoAmount to its Shelley representation
 	creating a new Amount object.
 
@@ -34,7 +38,6 @@ func (amt Amount) ToAlonzo() AlonzoAmount {
 
 	Returns:
 		Amount: The Amount representation of the AlonzoAmount.
-
 */
 func (amtAl AlonzoAmount) ToShelley() Amount {
 	return Amount{
@@ -49,7 +52,9 @@ type AlonzoAmount struct {
 	Value MultiAsset.MultiAsset[int64]
 }
 
-/**
+/*
+*
+
 	Clone function creates a deep copy of an AlonzoAmount object.
 
 	Returns:
@@ -62,7 +67,9 @@ func (am AlonzoAmount) Clone() AlonzoAmount {
 	}
 }
 
-/**
+/*
+*
+
 	RemoveZeroAssets remove zero-value assets from an amount.
 
 	Returns:
@@ -74,7 +81,9 @@ func (am Amount) RemoveZeroAssets() Amount {
 	return res
 }
 
-/**
+/*
+*
+
 	Clone function creates a deep copy of an Amount object.
 
 	Returns:
@@ -87,7 +96,9 @@ func (am Amount) Clone() Amount {
 	}
 }
 
-/**
+/*
+*
+
 	This function checks if two Amount are equal.
 
 	Params:
@@ -100,7 +111,9 @@ func (am Amount) Equal(other Amount) bool {
 	return am.Coin == other.Coin && am.Value.Equal(other.Value)
 }
 
-/**
+/*
+*
+
 	Less function checks if an Amount is less than another Amount.
 
 	Params:
@@ -113,7 +126,9 @@ func (am Amount) Less(other Amount) bool {
 	return am.Coin < other.Coin && am.Value.Less(other.Value)
 }
 
-/**
+/*
+*
+
 	Greater function checks if an Amount is greater than another Amount.
 
 	Params:
@@ -126,7 +141,9 @@ func (am Amount) Greater(other Amount) bool {
 	return am.Coin > other.Coin && am.Value.Greater(other.Value)
 }
 
-/**
+/*
+*
+
 	Add function adds an Amount to the current Amount.
 
 	Params:
@@ -141,7 +158,9 @@ func (am Amount) Add(other Amount) Amount {
 	return am
 }
 
-/**
+/*
+*
+
 	Sub function subtracts an Amount from the current Amount.
 
 	Params:

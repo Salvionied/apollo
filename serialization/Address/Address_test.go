@@ -1,6 +1,7 @@
-package address_test
+package Address_test
 
 import (
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"testing"
@@ -518,5 +519,52 @@ func TestString(t *testing.T) {
 				t.Errorf("\ntest: %v\nexpected: %v\nresult: %v", name, testCase.expected, result)
 			}
 		})
+	}
+}
+
+func TestMarshalCbor(t *testing.T) {
+	addr, _ := Address.DecodeAddress("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x")
+	cbor, _ := addr.MarshalCBOR()
+	encoded := hex.EncodeToString(cbor)
+	if encoded != "5839019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251" {
+		t.Errorf("\nexpected: %v\nresult: %v", "5839019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251", encoded)
+	}
+}
+
+func TestUnmarshalCbor(t *testing.T) {
+	cbor := "5839019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251"
+	decoded, _ := hex.DecodeString(cbor)
+	addr := Address.Address{}
+	addr.UnmarshalCBOR(decoded)
+	if addr.String() != "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x" {
+		t.Errorf("\nexpected: %v\nresult: %v", "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", addr.String())
+	}
+}
+
+func TestAddressFromBytes(t *testing.T) {
+	addr, _ := Address.DecodeAddress("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x")
+	newAddr := Address.WalletAddressFromBytes(addr.PaymentPart, addr.StakingPart, 0)
+	if newAddr.String() != "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x" {
+		t.Errorf("\nexpected: %v\nresult: %v", "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", newAddr.String())
+	}
+	newAddr = Address.WalletAddressFromBytes(addr.PaymentPart, addr.StakingPart, 1)
+	if newAddr.String() != "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae" {
+		t.Errorf("\nexpected: %v\nresult: %v", "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae", newAddr.String())
+	}
+	newAddr = Address.WalletAddressFromBytes(addr.PaymentPart, nil, 0)
+	if newAddr.String() != "addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8" {
+		t.Errorf("\nexpected: %v\nresult: %v", "addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8", newAddr.String())
+	}
+
+	newAddr = Address.WalletAddressFromBytes(nil, addr.StakingPart, 0)
+	if newAddr != nil {
+		t.Errorf("\nexpected: %v\nresult: %v", nil, newAddr)
+	}
+}
+
+func TestEquality(t *testing.T) {
+	addr, _ := Address.DecodeAddress("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x")
+	if !addr.Equal(&addr) {
+		t.Errorf("\nexpected: %v\nresult: %v", true, addr.Equal(&addr))
 	}
 }

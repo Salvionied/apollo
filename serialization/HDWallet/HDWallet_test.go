@@ -1,4 +1,4 @@
-package hdwallet_test
+package HDWallet_test
 
 import (
 	"testing"
@@ -29,7 +29,6 @@ func TestIsMnemonic(t *testing.T) {
 	if res != true {
 		t.Errorf("IsMnemonic() failed")
 	}
-
 }
 
 func TestIsMnemonicFail(t *testing.T) {
@@ -58,5 +57,13 @@ func TestPaymentAddress12Reward(t *testing.T) {
 	addr := Address.Address{PaymentPart: make([]byte, 0), StakingPart: vkh[:], Network: 1, AddressType: Address.NONE_KEY, HeaderByte: 0b11100001, Hrp: "stake"}
 	if addr.String() != "stake1uyevw2xnsc0pvn9t9r9c7qryfqfeerchgrlm3ea2nefr9hqxdekzz" {
 		t.Errorf("PaymentAddress12Reward() failed")
+	}
+}
+
+func TestInvalidDerivationPath(t *testing.T) {
+	hd, _ := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
+	_, err := hd.DerivePath("test")
+	if err == nil {
+		t.Errorf("DerivePath() failed")
 	}
 }

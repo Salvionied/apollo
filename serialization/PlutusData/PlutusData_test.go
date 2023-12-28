@@ -1,4 +1,4 @@
-package plutusdata_test
+package PlutusData_test
 
 import (
 	"encoding/hex"

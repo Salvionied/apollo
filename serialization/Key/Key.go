@@ -16,15 +16,16 @@ type SigningKey struct {
 	Payload []byte
 }
 
+/*
+*
 
-/**
 	Sign function signs a message using the provided key and returns
 	the signature.
 
 	Params:
 		message ([]byte): The message to sign.
 		sk ([]byte): The signing key, which can be either an extended or an ed25519 private key.
-	
+
 	Returns:
 		[]byte: The signature of the message.
 		error: An error if the signing fails.
@@ -43,8 +44,9 @@ func Sign(message []byte, sk []byte) ([]byte, error) {
 	return res, nil
 }
 
+/*
+*
 
-/**
 	Sign function signs a data byte slice using
 	the signing key and the returns the signature.
 
@@ -68,10 +70,12 @@ type VerificationKey struct {
 	Payload []byte
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR function unmarshals data into a VerificationKey instance.
 
-	Params: 
+	Params:
 		data ([]byte): The CBOR data to unmarshal.
 
 	Returns:
@@ -87,9 +91,11 @@ func (vk *VerificationKey) UnmarshalCBOR(data []byte) error {
 	return nil
 }
 
-/**
+/*
+*
+
 	MarshalCBOR marshals the VerificationKey instance into CBOR data.
-	
+
 	Returns:
 		([]byte, error): The CBOR-encoded data and error if marshaling fails, nil otherwise.
 */
@@ -97,15 +103,17 @@ func (vk *VerificationKey) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(vk.Payload)
 }
 
-/**
-	VerificationKeyFromCbor creates a VerificationKey 
+/*
+*
+
+	VerificationKeyFromCbor creates a VerificationKey
 	instance from a CBOR-encoded string.
 
 	Params:
 		cbor_string (string): The CBOR-encoded string.
 
 	Returns:
-		(*VerificationKey, error): A VerificationKey instance and an error 
+		(*VerificationKey, error): A VerificationKey instance and an error
 								   if decoding or unmarshaling fails, nil otherwise.
 */
 func VerificationKeyFromCbor(cbor_string string) (*VerificationKey, error) {
@@ -121,10 +129,12 @@ func VerificationKeyFromCbor(cbor_string string) (*VerificationKey, error) {
 	return vkey, nil
 }
 
-/**
+/*
+*
+
 	Hash computes the has of the VerificationKey and returns it as
 	public key.
-	
+
 	Returns:
 		(serialization.PubKeyHash, error): The computed hash and an error
 											if computation fails, nil otherwise.
@@ -144,8 +154,9 @@ type PaymentKeyPair struct {
 	SigningKey      SigningKey
 }
 
+/*
+*
 
-/**
 	PaymentKeyPairGenerate generates a PaymentKey pair with a randomly
 	generated key pair.
 
@@ -166,7 +177,9 @@ type PaymentVerificationKey VerificationKey
 type StakeSigningKey SigningKey
 type StakeVerificationKey VerificationKey
 
-/**
+/*
+*
+
 	Blake224Hash computes the Blake2b-224 hash of the provided byte slice.
 
 	Params:
@@ -187,4 +200,46 @@ func Blake224Hash(b []byte, len int) ([]byte, error) {
 		return nil, err
 	}
 	return hash.Sum(nil), err
+}
+
+func SigningKeyFromHexString(hexString string) (*SigningKey, error) {
+	skey := new(SigningKey)
+	value, err := hex.DecodeString(hexString)
+	if err != nil {
+		return nil, err
+	}
+	skey.Payload = value
+	return skey, nil
+}
+
+func VerificationKeyFromHexString(hexString string) (*VerificationKey, error) {
+	vkey := new(VerificationKey)
+	value, err := hex.DecodeString(hexString)
+	if err != nil {
+		return nil, err
+	}
+	vkey.Payload = value
+	return vkey, nil
+}
+
+func (sk SigningKey) ToHexString() string {
+	return hex.EncodeToString(sk.Payload)
+}
+
+func (vk VerificationKey) ToHexString() string {
+	return hex.EncodeToString(vk.Payload)
+}
+
+func (sk *SigningKey) MarshalCBOR() ([]byte, error) {
+	return cbor.Marshal(sk.Payload)
+}
+
+func (sk *SigningKey) UnmarshalCBOR(data []byte) error {
+	final_data := make([]byte, 0)
+	err := cbor.Unmarshal(data, &final_data)
+	if err != nil {
+		return err
+	}
+	sk.Payload = final_data
+	return nil
 }

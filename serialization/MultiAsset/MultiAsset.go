@@ -10,13 +10,15 @@ import (
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
 
-/**
+/*
+*
+
 	GetByPolicyAndId returns the asset amount given a policy and asset name.
 
 	Params:
 		pol Policy.PolicyId: The policy ID.
 		asset_name AssetName.AssetName: The asset name.
-	
+
 	Returns:
 		V: The asset amount.
 */
@@ -34,7 +36,9 @@ func (ma MultiAsset[V]) GetByPolicyAndId(pol Policy.PolicyId, asset_name AssetNa
 	return 0
 }
 
-/**
+/*
+*
+
 	RemoveZeroAssets removes assets with a zero amount from the MultiAsset.
 
 	Returns:
@@ -57,7 +61,9 @@ func (ma MultiAsset[V]) RemoveZeroAssets() MultiAsset[V] {
 	return result
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the MultiAsset.
 
 	Returns:
@@ -71,7 +77,9 @@ func (ma MultiAsset[V]) Clone() MultiAsset[V] {
 	return result
 }
 
-/**
+/*
+*
+
 	Equal checks if two MultiAsset instances are equal.
 
 	Params:
@@ -84,7 +92,9 @@ func (ma MultiAsset[V]) Equal(other MultiAsset[V]) bool {
 	return reflect.DeepEqual(ma, other)
 }
 
-/**
+/*
+*
+
 	Less checks if the current MultiAsset is less
 	than another MultiAsset.
 
@@ -92,7 +102,7 @@ func (ma MultiAsset[V]) Equal(other MultiAsset[V]) bool {
 		other MultiAsset[V]: The other MultiAsset to compare.
 
 	Returns:
-		bool: True if the current MultiAsset is less than the other, false otherwise. 
+		bool: True if the current MultiAsset is less than the other, false otherwise.
 */
 func (ma MultiAsset[V]) Less(other MultiAsset[V]) bool {
 	for policy, asset := range ma {
@@ -105,7 +115,9 @@ func (ma MultiAsset[V]) Less(other MultiAsset[V]) bool {
 
 }
 
-/**
+/*
+*
+
 	Greater checks if the current MultiAsset is greater
 	than another MultiAsset.
 
@@ -125,7 +137,9 @@ func (ma MultiAsset[V]) Greater(other MultiAsset[V]) bool {
 	return true
 }
 
-/**
+/*
+*
+
 	Sub subtracts another MultiAsset from the current MultiAsset.
 
 	Params:
@@ -147,7 +161,9 @@ func (ma MultiAsset[V]) Sub(other MultiAsset[V]) MultiAsset[V] {
 	return result
 }
 
-/**
+/*
+*
+
 	Add adds another MultiAsset to the current MultiAsset.
 
 	Params:
@@ -169,7 +185,9 @@ func (ma MultiAsset[V]) Add(other MultiAsset[V]) MultiAsset[V] {
 	return res
 }
 
-/**
+/*
+*
+
 	Filter returns a MultiAsset containing only the assets that
 	satisfy the filter function.
 
@@ -179,12 +197,20 @@ func (ma MultiAsset[V]) Add(other MultiAsset[V]) MultiAsset[V] {
 	Returns:
 		MultiAsset[V]: The filtered MultiAsset.
 */
-func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset Asset.Asset[V]) bool) MultiAsset[V] {
+func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.AssetName, quantity V) bool) MultiAsset[V] {
 	result := make(MultiAsset[V])
 	for policy, asset := range ma {
-		if f(policy, asset) {
-			result[policy] = asset
+		for assetName, amount := range asset {
+			if f(policy, assetName, amount) {
+				_, ok := result[policy]
+				if ok {
+					result[policy][assetName] = amount
+				} else {
+					result[policy] = Asset.Asset[V]{assetName: amount}
+				}
+			}
 		}
 	}
 	return result
+
 }

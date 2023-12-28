@@ -693,11 +693,12 @@ func (tb *TransactionBuilder) Build(changeAddress *Address.Address, mergeChange 
 	requestedAmount.AddLovelace(tb._EstimateFee())
 
 	trimmedSelectedAmount := Value.SimpleValue(selectedAmount.GetCoin(),
-		selectedAmount.GetAssets().Filter(func(policy Policy.PolicyId, asset Asset.Asset[int64]) bool {
+		selectedAmount.GetAssets().Filter(func(policy Policy.PolicyId, asset AssetName.AssetName, quantity int64) bool {
 			for requestedPolicy, requestedAsset := range requestedAmount.GetAssets() {
-				if asset.Equal(requestedAsset) && requestedPolicy == policy {
-
-					return true
+				for requestedAssetName, _ := range requestedAsset {
+					if requestedPolicy == policy && requestedAssetName == asset {
+						return true
+					}
 				}
 			}
 			return false
