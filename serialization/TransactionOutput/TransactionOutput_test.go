@@ -135,7 +135,7 @@ func TestTransactionOutputPostAlonzoUtils(t *testing.T) {
 		t.Error("Error while cloning with assets")
 	}
 
-	if toNoAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:1000000 Datum " {
+	if toNoAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:1000000 Datum :<nil>" {
 		t.Error("Error while stringifying, got", toNoAssets.String())
 	}
 }
@@ -338,10 +338,10 @@ func TestGetLovelace(t *testing.T) {
 }
 
 func TestString(t *testing.T) {
-	if toAlonzoNoAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:1000000 Datum " {
+	if toAlonzoNoAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:1000000 Datum :<nil>" {
 		t.Error("Error while stringifying", toAlonzoNoAssets.String())
 	}
-	if toAlonzoWithAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:{{} 1000000 map[115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818:map[Token1:1]]} Datum " {
+	if toAlonzoWithAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:{{} 1000000 map[115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818:map[Token1:1]]} Datum :<nil>" {
 		t.Error("Error while stringifying", toAlonzoWithAssets.String())
 	}
 }

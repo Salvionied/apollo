@@ -166,6 +166,7 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 		panic("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
+	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
 	return b
@@ -194,6 +195,7 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 		return b
 	}
 	b.payments = append(b.payments, payments...)
+	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
 	return b
@@ -783,6 +785,15 @@ Returns:
 
 func (b *Apollo) setCollateral() (*Apollo, error) {
 	if len(b.collaterals) > 0 {
+		collateral_amount := 5_000_000
+		for _, utxo := range b.collaterals {
+			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+				b.totalCollateral = collateral_amount
+				return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
+				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
+				b.collateralReturn = &returnOutput
+			}
+		}
 		return b, nil
 	}
 	witnesses := b.buildWitnessSet()
@@ -1198,7 +1209,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
 		b.Context,
 	) {
-		if len(b.preselectedUtxos) == 0 {
+		if len(b.getAvailableUtxos()) == 0 {
 			return b, errors.New("No Remaining UTxOs")
 		}
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())

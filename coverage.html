@@ -55,13 +55,13 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/Salvionied/apollo/ApolloBuilder.go (41.9%)</option>
+				<option value="file0">github.com/Salvionied/apollo/ApolloBuilder.go (73.0%)</option>
 				
-				<option value="file1">github.com/Salvionied/apollo/Models.go (44.6%)</option>
+				<option value="file1">github.com/Salvionied/apollo/Models.go (69.6%)</option>
 				
 				<option value="file2">github.com/Salvionied/apollo/Utils.go (100.0%)</option>
 				
-				<option value="file3">github.com/Salvionied/apollo/backends.go (0.0%)</option>
+				<option value="file3">github.com/Salvionied/apollo/backends.go (14.3%)</option>
 				
 				<option value="file4">github.com/Salvionied/apollo/plutusencoder/plutus.go (82.6%)</option>
 				
@@ -240,7 +240,7 @@ func New(cc Base.ChainContext) *Apollo <span class="cov8" title="1">{
         Returns:
                 apollotypes.Wallet: The wallet associated with the Apollo instance.
 */
-func (b *Apollo) GetWallet() apollotypes.Wallet <span class="cov0" title="0">{
+func (b *Apollo) GetWallet() apollotypes.Wallet <span class="cov8" title="1">{
         return b.wallet
 }</span>
 
@@ -256,7 +256,7 @@ func (b *Apollo) GetWallet() apollotypes.Wallet <span class="cov0" title="0">{
         Returns:
                 *Apollo: A pointer to the modified Apollo instance.
 */
-func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo <span class="cov8" title="1">{
         b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
         return b
 }</span>
@@ -273,16 +273,17 @@ func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo <span class="cov0" title="
         Returns:
                 *Apollo: A pointer to the modified Apollo instance.
 */
-func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo <span class="cov8" title="1">{
         b.preselectedUtxos = append(b.preselectedUtxos, utxo)
         selectedValue := utxo.Output.GetAmount()
-        for _, payment := range payments </span><span class="cov0" title="0">{
+        for _, payment := range payments </span><span class="cov8" title="1">{
                 selectedValue = selectedValue.Sub(payment.ToValue())
         }</span>
-        <span class="cov0" title="0">if selectedValue.Less(Value.Value{}) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if selectedValue.Less(Value.Value{}) </span><span class="cov0" title="0">{
                 panic("selected value is negative")</span>
         }
-        <span class="cov0" title="0">b.payments = append(b.payments, payments...)
+        <span class="cov8" title="1">b.payments = append(b.payments, payments...)
+        selectedValue = selectedValue.RemoveZeroAssets()
         p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
         b.payments = append(b.payments, p)
         return b</span>
@@ -300,17 +301,18 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo <span
                  Returns:
                            *Apollo: A pointer to the modified Apollo instance.
 */
-func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Apollo <span class="cov8" title="1">{
         b.preselectedUtxos = append(b.preselectedUtxos, utxo)
         selectedValue := utxo.Output.GetAmount()
-        for _, payment := range payments </span><span class="cov0" title="0">{
+        for _, payment := range payments </span><span class="cov8" title="1">{
                 selectedValue = selectedValue.Sub(Value.SimpleValue(0, payment.ToValue().GetAssets()))
         }</span>
-        <span class="cov0" title="0">if selectedValue.Less(Value.Value{}) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if selectedValue.Less(Value.Value{}) </span><span class="cov0" title="0">{
                 panic("selected value is negative")</span>
                 <span class="cov0" title="0">return b</span>
         }
-        <span class="cov0" title="0">b.payments = append(b.payments, payments...)
+        <span class="cov8" title="1">b.payments = append(b.payments, payments...)
+        selectedValue = selectedValue.RemoveZeroAssets()
         p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
         b.payments = append(b.payments, p)
         return b</span>
@@ -453,12 +455,12 @@ func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo <span class="cov8" 
                         *Apollo: A pointer to the modified Apollo instance with the payment and datum added.
 */
 func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo <span class="cov8" title="1">{
-        if isInline </span><span class="cov0" title="0">{
+        if isInline </span><span class="cov8" title="1">{
                 b = b.AddPayment(&amp;Payment{lovelace, contractAddress, units, pd, nil, isInline})
         }</span> else<span class="cov8" title="1"> if pd != nil </span><span class="cov8" title="1">{
                 dataHash, _ := PlutusData.PlutusDataHash(pd)
                 b = b.AddPayment(&amp;Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline})
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov8" title="1"> {
                 b = b.AddPayment(&amp;Payment{lovelace, contractAddress, units, nil, nil, isInline})
         }</span>
         <span class="cov8" title="1">if pd != nil &amp;&amp; !isInline </span><span class="cov8" title="1">{
@@ -481,16 +483,16 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
                 Returns:
                            *Apollo: A pointer to the modified Apollo instance with the required signers added.
 */
-func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, addStakingPart bool) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, addStakingPart bool) *Apollo <span class="cov8" title="1">{
         decoded_addr, _ := Address.DecodeAddress(address)
-        if addPaymentPart </span><span class="cov0" title="0">{
+        if addPaymentPart </span><span class="cov8" title="1">{
                 b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]))
 
         }</span>
-        <span class="cov0" title="0">if addStakingPart </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if addStakingPart </span><span class="cov8" title="1">{
                 b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.StakingPart[0:28]))
         }</span>
-        <span class="cov0" title="0">return b</span>
+        <span class="cov8" title="1">return b</span>
 
 }
 
@@ -505,7 +507,7 @@ func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, add
                  Returns:
                            *Apollo: A pointer to the modified Apollo instance with the required signer added.
 */
-func (b *Apollo) AddRequiredSigner(pkh serialization.PubKeyHash) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AddRequiredSigner(pkh serialization.PubKeyHash) *Apollo <span class="cov8" title="1">{
         b.requiredSigners = append(b.requiredSigners, pkh)
         return b
 }</span>
@@ -523,23 +525,23 @@ func (b *Apollo) AddRequiredSigner(pkh serialization.PubKeyHash) *Apollo <span c
                  Returns:
                            *Apollo: A pointer to the modified Apollo instance with the required signers added.
 */
-func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymentPart, addStakingPart bool) *Apollo <span class="cov0" title="0">{
-        if addPaymentPart </span><span class="cov0" title="0">{
+func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymentPart, addStakingPart bool) *Apollo <span class="cov8" title="1">{
+        if addPaymentPart </span><span class="cov8" title="1">{
                 pkh := serialization.PubKeyHash(address.PaymentPart)
 
                 b.requiredSigners = append(b.requiredSigners, pkh)
 
         }</span>
-        <span class="cov0" title="0">if addStakingPart </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if addStakingPart </span><span class="cov8" title="1">{
                 pkh := serialization.PubKeyHash(address.StakingPart)
 
                 b.requiredSigners = append(b.requiredSigners, pkh)
 
         }</span>
-        <span class="cov0" title="0">return b</span>
+        <span class="cov8" title="1">return b</span>
 }
 
-func (b *Apollo) SetFeePadding(padding int64) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) SetFeePadding(padding int64) *Apollo <span class="cov8" title="1">{
         b.FeePadding = padding
         return b
 }</span>
@@ -595,7 +597,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
         fakeVkWitnesses = append(fakeVkWitnesses, VerificationKeyWitness.VerificationKeyWitness{
                 Vkey:      constants.FAKE_VKEY,
                 Signature: constants.FAKE_SIGNATURE})
-        for range b.requiredSigners </span><span class="cov0" title="0">{
+        for range b.requiredSigners </span><span class="cov8" title="1">{
                 fakeVkWitnesses = append(fakeVkWitnesses, VerificationKeyWitness.VerificationKeyWitness{
                         Vkey:      constants.FAKE_VKEY,
                         Signature: constants.FAKE_SIGNATURE})
@@ -654,7 +656,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) <span c
                 datum_bytes = []byte{}
         }</span>
         <span class="cov8" title="1">var cost_model_bytes []byte
-        if isV1 </span><span class="cov0" title="0">{
+        if isV1 </span><span class="cov8" title="1">{
                 cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -741,7 +743,7 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) <span cl
                 inputs = append(inputs, utxo.Input)
         }</span>
         <span class="cov8" title="1">collaterals := make([]TransactionInput.TransactionInput, 0)
-        for _, utxo := range b.collaterals </span><span class="cov0" title="0">{
+        for _, utxo := range b.collaterals </span><span class="cov8" title="1">{
                 collaterals = append(collaterals, utxo.Input)
         }</span>
         <span class="cov8" title="1">dataHash, err := b.scriptDataHash()
@@ -768,7 +770,7 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) <span cl
                 Certificates:      b.certificates,
                 Withdrawals:       b.withdrawals,
                 ReferenceInputs:   b.referenceInputs}
-        if b.totalCollateral != 0 </span><span class="cov0" title="0">{
+        if b.totalCollateral != 0 </span><span class="cov8" title="1">{
                 txb.TotalCollateral = b.totalCollateral
                 txb.CollateralReturn = b.collateralReturn
         }</span>
@@ -862,7 +864,7 @@ func (b *Apollo) setRedeemerIndexes() *Apollo <span class="cov8" title="1">{
         for i, utxo := range sorted_inputs </span><span class="cov8" title="1">{
                 key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
                 val, ok := b.redeemersToUTxO[key]
-                if ok &amp;&amp; val.Tag == Redeemer.SPEND </span><span class="cov0" title="0">{
+                if ok &amp;&amp; val.Tag == Redeemer.SPEND </span><span class="cov8" title="1">{
                         done = append(done, key)
                         redeem := b.redeemersToUTxO[key]
                         redeem.Index = i
@@ -885,7 +887,7 @@ func (b *Apollo) setRedeemerIndexes() *Apollo <span class="cov8" title="1">{
         Returns:
                 *Apollo: A pointer to the Apollo object with the datum added.
 */
-func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AttachDatum(datum *PlutusData.PlutusData) *Apollo <span class="cov8" title="1">{
         b.datums = append(b.datums, *datum)
         return b
 }</span>
@@ -899,28 +901,37 @@ Returns:
 */
 
 func (b *Apollo) setCollateral() (*Apollo, error) <span class="cov8" title="1">{
-        if len(b.collaterals) &gt; 0 </span><span class="cov0" title="0">{
-                return b, nil
-        }</span>
+        if len(b.collaterals) &gt; 0 </span><span class="cov8" title="1">{
+                collateral_amount := 5_000_000
+                for _, utxo := range b.collaterals </span><span class="cov8" title="1">{
+                        if int(utxo.Output.GetValue().GetCoin()) &gt;= collateral_amount+1_000_000 &amp;&amp; len(utxo.Output.GetValue().GetAssets()) &lt;= 5 </span><span class="cov8" title="1">{
+                                b.totalCollateral = collateral_amount
+                                return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
+                                returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
+                                b.collateralReturn = &amp;returnOutput
+                        }</span>
+                }
+                <span class="cov8" title="1">return b, nil</span>
+        }
         <span class="cov8" title="1">witnesses := b.buildWitnessSet()
         if len(witnesses.PlutusV1Script) == 0 &amp;&amp;
                 len(witnesses.PlutusV2Script) == 0 &amp;&amp;
                 len(b.referenceInputs) == 0 </span><span class="cov8" title="1">{
                 return b, nil
         }</span>
-        <span class="cov0" title="0">availableUtxos := b.getAvailableUtxos()
+        <span class="cov8" title="1">availableUtxos := b.getAvailableUtxos()
         collateral_amount := 5_000_000
-        for _, utxo := range availableUtxos </span><span class="cov0" title="0">{
-                if int(utxo.Output.GetValue().GetCoin()) &gt;= collateral_amount &amp;&amp; len(utxo.Output.GetValue().GetAssets()) &lt;= 5 </span><span class="cov0" title="0">{
+        for _, utxo := range availableUtxos </span><span class="cov8" title="1">{
+                if int(utxo.Output.GetValue().GetCoin()) &gt;= collateral_amount &amp;&amp; len(utxo.Output.GetValue().GetAssets()) &lt;= 5 </span><span class="cov8" title="1">{
                         return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
                         min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets())), b.Context)
                         if min_lovelace &gt; return_amount &amp;&amp; return_amount != 0 </span><span class="cov0" title="0">{
                                 continue</span>
-                        } else<span class="cov0" title="0"> if return_amount == 0 &amp;&amp; len(utxo.Output.GetAmount().GetAssets()) == 0 </span><span class="cov0" title="0">{
+                        } else<span class="cov8" title="1"> if return_amount == 0 &amp;&amp; len(utxo.Output.GetAmount().GetAssets()) == 0 </span><span class="cov0" title="0">{
                                 b.collaterals = append(b.collaterals, utxo)
                                 b.totalCollateral = collateral_amount
                                 return b, nil
-                        }</span> else<span class="cov0" title="0"> {
+                        }</span> else<span class="cov8" title="1"> {
                                 returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
                                 b.collaterals = append(b.collaterals, utxo)
                                 b.collateralReturn = &amp;returnOutput
@@ -992,9 +1003,9 @@ func (b *Apollo) estimateExunits() map[string]Redeemer.ExecutionUnits <span clas
 func (b *Apollo) updateExUnits() *Apollo <span class="cov8" title="1">{
         if b.isEstimateRequired </span><span class="cov8" title="1">{
                 estimated_execution_units := b.estimateExunits()
-                for k, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+                for k, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
-                        if _, ok := estimated_execution_units[key]; ok </span><span class="cov0" title="0">{
+                        if _, ok := estimated_execution_units[key]; ok </span><span class="cov8" title="1">{
                                 redeemer.ExUnits = estimated_execution_units[key]
                                 b.redeemersToUTxO[k] = redeemer
                         }</span>
@@ -1013,7 +1024,7 @@ func (b *Apollo) updateExUnits() *Apollo <span class="cov8" title="1">{
                                 b.mintRedeemers[k] = redeemer
                         }</span>
                 }
-                <span class="cov8" title="1">for _, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
                 <span class="cov8" title="1">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
@@ -1024,7 +1035,7 @@ func (b *Apollo) updateExUnits() *Apollo <span class="cov8" title="1">{
 
                 }</span>
         } else<span class="cov8" title="1"> {
-                for _, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+                for _, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
                 <span class="cov8" title="1">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
@@ -1202,7 +1213,7 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
         Returns:
                 []*Payment: An array of payment objects, split if necessary to avoid exceeding the UTxO limit.
 */
-func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Payment <span class="cov0" title="0">{
+func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Payment <span class="cov8" title="1">{
         lovelace := c.GetCoin()
         assets := c.GetAssets()
         payments := make([]*Payment, 0)
@@ -1210,17 +1221,17 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
         newPayment.Receiver = a
         newPayment.Lovelace = 0
         newPayment.Units = make([]Unit, 0)
-        for policy, assets := range assets </span><span class="cov0" title="0">{
-                for asset, amt := range assets </span><span class="cov0" title="0">{
-                        if !isOverUtxoLimit(newPayment.ToValue(), a, b) </span><span class="cov0" title="0">{
-                                if amt &gt; 0 </span><span class="cov0" title="0">{
+        for policy, assets := range assets </span><span class="cov8" title="1">{
+                for asset, amt := range assets </span><span class="cov8" title="1">{
+                        if !isOverUtxoLimit(newPayment.ToValue(), a, b) </span><span class="cov8" title="1">{
+                                if amt &gt; 0 </span><span class="cov8" title="1">{
                                         newPayment.Units = append(newPayment.Units, Unit{
                                                 PolicyId: policy.String(),
                                                 Name:     asset.String(),
                                                 Quantity: int(amt),
                                         })
                                 }</span>
-                        } else<span class="cov0" title="0"> {
+                        } else<span class="cov8" title="1"> {
 
                                 minLovelace := Utils.MinLovelacePostAlonzo(
                                         *newPayment.ToTxOut(), b)
@@ -1231,7 +1242,7 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
                                 newPayment.Receiver = a
                                 newPayment.Lovelace = 0
                                 newPayment.Units = make([]Unit, 0)
-                                if amt &gt; 0 </span><span class="cov0" title="0">{
+                                if amt &gt; 0 </span><span class="cov8" title="1">{
                                         newPayment.Units = append(newPayment.Units, Unit{
                                                 PolicyId: policy.String(),
                                                 Name:     asset.String(),
@@ -1241,14 +1252,14 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
                         }
                 }
         }
-        <span class="cov0" title="0">payments = append(payments, newPayment)
+        <span class="cov8" title="1">payments = append(payments, newPayment)
 
         payments[len(payments)-1].Lovelace += int(lovelace)
         totalCoin := 0
-        for _, payment := range payments </span><span class="cov0" title="0">{
+        for _, payment := range payments </span><span class="cov8" title="1">{
                 totalCoin += payment.Lovelace
         }</span>
-        <span class="cov0" title="0">return payments</span>
+        <span class="cov8" title="1">return payments</span>
 
 }
 
@@ -1314,28 +1325,28 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) <span class="cov8" title="1"
         if change.GetCoin() &lt; Utils.MinLovelacePostAlonzo(
                 TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
                 b.Context,
-        ) </span><span class="cov0" title="0">{
-                if len(b.preselectedUtxos) == 0 </span><span class="cov0" title="0">{
+        ) </span><span class="cov8" title="1">{
+                if len(b.getAvailableUtxos()) == 0 </span><span class="cov0" title="0">{
                         return b, errors.New("No Remaining UTxOs")
                 }</span>
-                <span class="cov0" title="0">sortedUtxos := SortUtxos(b.getAvailableUtxos())
+                <span class="cov8" title="1">sortedUtxos := SortUtxos(b.getAvailableUtxos())
                 b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
                 b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
                 return b.addChangeAndFee()</span>
         }
-        <span class="cov8" title="1">if isOverUtxoLimit(change, b.inputAddresses[0], b.Context) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if isOverUtxoLimit(change, b.inputAddresses[0], b.Context) </span><span class="cov8" title="1">{
                 adjustedPayments := splitPayments(change, b.inputAddresses[0], b.Context)
                 pp := b.payments[:]
-                for _, payment := range adjustedPayments </span><span class="cov0" title="0">{
+                for _, payment := range adjustedPayments </span><span class="cov8" title="1">{
                         b.payments = append(b.payments, payment)
                 }</span>
-                <span class="cov0" title="0">newestFee := b.estimateFee()
-                if newestFee &gt; b.Fee </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">newestFee := b.estimateFee()
+                if newestFee &gt; b.Fee </span><span class="cov8" title="1">{
                         difference := newestFee - b.Fee
                         adjustedPayments[len(adjustedPayments)-1].Lovelace -= int(difference)
                         b.Fee = newestFee
                         b.payments = pp
-                        for _, payment := range adjustedPayments </span><span class="cov0" title="0">{
+                        for _, payment := range adjustedPayments </span><span class="cov8" title="1">{
                                 b.payments = append(b.payments, payment)
                         }</span>
                 }
@@ -1386,7 +1397,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) <span class="cov8" title="1"
 func (b *Apollo) CollectFrom(
         inputUtxo UTxO.UTxO,
         redeemer Redeemer.Redeemer,
-) *Apollo <span class="cov0" title="0">{
+) *Apollo <span class="cov8" title="1">{
         b.isEstimateRequired = true
         b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
         b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
@@ -1405,14 +1416,14 @@ func (b *Apollo) CollectFrom(
         Returns:
                 *Apollo: A pointer to the Apollo objecy with the attached script.
 */
-func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo <span class="cov8" title="1">{
         hash := PlutusData.PlutusScriptHash(script)
-        for _, scriptHash := range b.scriptHashes </span><span class="cov0" title="0">{
-                if scriptHash == hex.EncodeToString(hash.Bytes()) </span><span class="cov0" title="0">{
+        for _, scriptHash := range b.scriptHashes </span><span class="cov8" title="1">{
+                if scriptHash == hex.EncodeToString(hash.Bytes()) </span><span class="cov8" title="1">{
                         return b
                 }</span>
         }
-        <span class="cov0" title="0">b.v1scripts = append(b.v1scripts, script)
+        <span class="cov8" title="1">b.v1scripts = append(b.v1scripts, script)
         b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 
         return b</span>
@@ -1429,14 +1440,14 @@ func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo <span 
         Returns:
                 *Apollo: A pointer to the Apollo objecy with the attached script.
 */
-func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo <span class="cov8" title="1">{
         hash := PlutusData.PlutusScriptHash(script)
-        for _, scriptHash := range b.scriptHashes </span><span class="cov0" title="0">{
-                if scriptHash == hex.EncodeToString(hash.Bytes()) </span><span class="cov0" title="0">{
+        for _, scriptHash := range b.scriptHashes </span><span class="cov8" title="1">{
+                if scriptHash == hex.EncodeToString(hash.Bytes()) </span><span class="cov8" title="1">{
                         return b
                 }</span>
         }
-        <span class="cov0" title="0">b.v2scripts = append(b.v2scripts, script)
+        <span class="cov8" title="1">b.v2scripts = append(b.v2scripts, script)
         b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
         return b</span>
 }
@@ -1532,12 +1543,12 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
         Returns:
                 *Apollo: A pointer to the Apollo object with the wallet set.
 */
-func (a *Apollo) SetWalletFromBech32(address string) *Apollo <span class="cov0" title="0">{
+func (a *Apollo) SetWalletFromBech32(address string) *Apollo <span class="cov8" title="1">{
         addr, err := Address.DecodeAddress(address)
         if err != nil </span><span class="cov0" title="0">{
                 return a
         }</span>
-        <span class="cov0" title="0">a.wallet = &amp;apollotypes.ExternalWallet{Address: addr}
+        <span class="cov8" title="1">a.wallet = &amp;apollotypes.ExternalWallet{Address: addr}
         return a</span>
 }
 
@@ -1549,19 +1560,19 @@ func (a *Apollo) SetWalletFromBech32(address string) *Apollo <span class="cov0" 
         Returns:
                 *Apollo: A pointer to the Apollo object with the wallet set as the change address.
 */
-func (b *Apollo) SetWalletAsChangeAddress() *Apollo <span class="cov0" title="0">{
+func (b *Apollo) SetWalletAsChangeAddress() *Apollo <span class="cov8" title="1">{
         if b.wallet == nil </span><span class="cov0" title="0">{
                 panic("wallet not set")</span>
                 <span class="cov0" title="0">return b</span>
         }
-        <span class="cov0" title="0">switch b.Context.(type) </span>{
+        <span class="cov8" title="1">switch b.Context.(type) </span>{
         case *BlockFrostChainContext.BlockFrostChainContext:<span class="cov0" title="0">
 
                 utxos := b.Context.Utxos(*b.wallet.GetAddress())
                 b = b.AddLoadedUTxOs(utxos...)</span>
-        default:<span class="cov0" title="0"></span>
+        default:<span class="cov8" title="1"></span>
         }
-        <span class="cov0" title="0">b.inputAddresses = append(b.inputAddresses, *b.wallet.GetAddress())
+        <span class="cov8" title="1">b.inputAddresses = append(b.inputAddresses, *b.wallet.GetAddress())
         return b</span>
 }
 
@@ -1692,12 +1703,12 @@ func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.Verificati
                  Returns:
                            *Apollo: A pointer to the modified Apollo instance with the change address set.
 */
-func (b *Apollo) SetChangeAddressBech32(address string) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) SetChangeAddressBech32(address string) *Apollo <span class="cov8" title="1">{
         addr, err := Address.DecodeAddress(address)
         if err != nil </span><span class="cov0" title="0">{
                 return b
         }</span>
-        <span class="cov0" title="0">b.inputAddresses = append(b.inputAddresses, addr)
+        <span class="cov8" title="1">b.inputAddresses = append(b.inputAddresses, addr)
         return b</span>
 }
 
@@ -1792,7 +1803,7 @@ func (b *Apollo) GetUsedUTxOs() []string <span class="cov0" title="0">{
                 Returns:
                            *Apollo: A pointer to the modified Apollo instance with execution units estimation enabled.
 */
-func (b *Apollo) SetEstimationExUnitsRequired() *Apollo <span class="cov0" title="0">{
+func (b *Apollo) SetEstimationExUnitsRequired() *Apollo <span class="cov8" title="1">{
         b.isEstimateRequired = true
         return b
 }</span>
@@ -1809,7 +1820,7 @@ func (b *Apollo) SetEstimationExUnitsRequired() *Apollo <span class="cov0" title
         Returns:
                 *Apollo: A pointer to the modified Apollo instance with the added reference input.
 */
-func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo <span class="cov8" title="1">{
         decodedHash, _ := hex.DecodeString(txHash)
         input := TransactionInput.TransactionInput{
                 TransactionId: decodedHash,
@@ -1858,12 +1869,12 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
         return b</span>
 }
 
-func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo <span class="cov0" title="0">{
+func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo <span class="cov8" title="1">{
         b.collaterals = append(b.collaterals, utxo)
         return b
 }</span>
 
-func (b *Apollo) CompleteExact(fee int) (*Apollo, error) <span class="cov0" title="0">{
+func (b *Apollo) CompleteExact(fee int) (*Apollo, error) <span class="cov8" title="1">{
         //SET REDEEMER INDEXES
         b = b.setRedeemerIndexes()
         //SET COLLATERAL
@@ -1872,7 +1883,7 @@ func (b *Apollo) CompleteExact(fee int) (*Apollo, error) <span class="cov0" titl
                 return nil, err
         }</span>
         //UPDATE EXUNITS
-        <span class="cov0" title="0">b = b.updateExUnitsExact(fee)
+        <span class="cov8" title="1">b = b.updateExUnitsExact(fee)
         //ADDCHANGEANDFEE
         b.Fee = int64(fee)
         //FINALIZE TX
@@ -1880,12 +1891,12 @@ func (b *Apollo) CompleteExact(fee int) (*Apollo, error) <span class="cov0" titl
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov0" title="0">witnessSet := b.buildWitnessSet()
+        <span class="cov8" title="1">witnessSet := b.buildWitnessSet()
         b.tx = &amp;Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
         return b, nil</span>
 }
 
-func (b *Apollo) estimateExunitsExact(fee int) map[string]Redeemer.ExecutionUnits <span class="cov0" title="0">{
+func (b *Apollo) estimateExunitsExact(fee int) map[string]Redeemer.ExecutionUnits <span class="cov8" title="1">{
         cloned_b := b.Clone()
         cloned_b.isEstimateRequired = false
         updated_b, _ := cloned_b.CompleteExact(fee)
@@ -1894,53 +1905,53 @@ func (b *Apollo) estimateExunitsExact(fee int) map[string]Redeemer.ExecutionUnit
         return b.Context.EvaluateTx(tx_cbor)
 }</span>
 
-func (b *Apollo) updateExUnitsExact(fee int) *Apollo <span class="cov0" title="0">{
-        if b.isEstimateRequired </span><span class="cov0" title="0">{
+func (b *Apollo) updateExUnitsExact(fee int) *Apollo <span class="cov8" title="1">{
+        if b.isEstimateRequired </span><span class="cov8" title="1">{
                 estimated_execution_units := b.estimateExunitsExact(fee)
-                for k, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+                for k, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
-                        if _, ok := estimated_execution_units[key]; ok </span><span class="cov0" title="0">{
+                        if _, ok := estimated_execution_units[key]; ok </span><span class="cov8" title="1">{
                                 redeemer.ExUnits = estimated_execution_units[key]
                                 b.redeemersToUTxO[k] = redeemer
                         }</span>
                 }
-                <span class="cov0" title="0">for k, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for k, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
                         key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
                         if _, ok := estimated_execution_units[key]; ok </span><span class="cov0" title="0">{
                                 redeemer.ExUnits = estimated_execution_units[key]
                                 b.stakeRedeemers[k] = redeemer
                         }</span>
                 }
-                <span class="cov0" title="0">for k, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for k, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
                         key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
                         if _, ok := estimated_execution_units[key]; ok </span><span class="cov0" title="0">{
                                 redeemer.ExUnits = estimated_execution_units[key]
                                 b.mintRedeemers[k] = redeemer
                         }</span>
                 }
-                <span class="cov0" title="0">for _, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
-                <span class="cov0" title="0">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
-                <span class="cov0" title="0">for _, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
                         b.redeemers = append(b.redeemers, redeemer)
 
                 }</span>
-        } else<span class="cov0" title="0"> {
-                for _, redeemer := range b.redeemersToUTxO </span><span class="cov0" title="0">{
+        } else<span class="cov8" title="1"> {
+                for _, redeemer := range b.redeemersToUTxO </span><span class="cov8" title="1">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
-                <span class="cov0" title="0">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.stakeRedeemers </span><span class="cov0" title="0">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
-                <span class="cov0" title="0">for _, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">for _, redeemer := range b.mintRedeemers </span><span class="cov0" title="0">{
                         b.redeemers = append(b.redeemers, redeemer)
                 }</span>
 
         }
-        <span class="cov0" title="0">return b</span>
+        <span class="cov8" title="1">return b</span>
 }
 </pre>
 		
@@ -2067,7 +2078,7 @@ func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment <span
         Returns:
                 *Payment: The newly created Payment object.
 */
-func NewPayment(receiver string, lovelace int, units []Unit) *Payment <span class="cov0" title="0">{
+func NewPayment(receiver string, lovelace int, units []Unit) *Payment <span class="cov8" title="1">{
         decoded_address, _ := Address.DecodeAddress(receiver)
         return &amp;Payment{
                 Lovelace: lovelace,
@@ -2087,7 +2098,7 @@ func NewPayment(receiver string, lovelace int, units []Unit) *Payment <span clas
         Returns:
                 *Payment: The newly created Payment object.
 */
-func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment <span class="cov0" title="0">{
+func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment <span class="cov8" title="1">{
         payment := &amp;Payment{
                 Receiver: receiver,
                 Lovelace: int(value.GetCoin()),
@@ -2101,7 +2112,7 @@ func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment <
                         })
                 }</span>
         }
-        <span class="cov0" title="0">return payment</span>
+        <span class="cov8" title="1">return payment</span>
 }
 
 /**
@@ -2144,7 +2155,7 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) <span class="cov8" title="
 */
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput <span class="cov8" title="1">{
         txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
-        if p.IsInline </span><span class="cov0" title="0">{
+        if p.IsInline </span><span class="cov8" title="1">{
                 txO := TransactionOutput.TransactionOutput{}
                 txO.IsPostAlonzo = true
                 l := PlutusData.DatumOptionInline(p.Datum)
@@ -2152,10 +2163,10 @@ func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput <span class="co
                 txO.PostAlonzo.Address = p.Receiver
                 txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()
 
-                if p.Datum != nil </span><span class="cov0" title="0">{
+                if p.Datum != nil </span><span class="cov8" title="1">{
                         txOut.SetDatum(p.Datum)
                 }</span>
-                <span class="cov0" title="0">return &amp;txO</span>
+                <span class="cov8" title="1">return &amp;txO</span>
         } else<span class="cov8" title="1"> {
                 if p.DatumHash != nil </span><span class="cov8" title="1">{
                         txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
@@ -2251,7 +2262,7 @@ import (
         Returns:
                 FixedChainContext.FixedChainContext: An empty FixedChainContext instance.
 */
-func NewEmptyBackend() FixedChainContext.FixedChainContext <span class="cov0" title="0">{
+func NewEmptyBackend() FixedChainContext.FixedChainContext <span class="cov8" title="1">{
         return FixedChainContext.InitFixedChainContext()
 }</span>
 
@@ -6529,7 +6540,7 @@ func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo <span class="co
                 string: The string representation of TransactionOutputAlonzo.
 */
 func (txo TransactionOutputAlonzo) String() string <span class="cov8" title="1">{
-        return fmt.Sprintf("%s:%s Datum ", txo.Address.String(), txo.Amount.ToValue().String())
+        return fmt.Sprintf("%s:%s Datum :%v", txo.Address.String(), txo.Amount.ToValue().String(), txo.Datum)
 }</span>
 
 type TransactionOutputShelley struct {

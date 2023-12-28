@@ -46,7 +46,7 @@ func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
 		string: The string representation of TransactionOutputAlonzo.
 */
 func (txo TransactionOutputAlonzo) String() string {
-	return fmt.Sprintf("%s:%s Datum ", txo.Address.String(), txo.Amount.ToValue().String())
+	return fmt.Sprintf("%s:%s Datum :%v", txo.Address.String(), txo.Amount.ToValue().String(), txo.Datum)
 }
 
 type TransactionOutputShelley struct {
