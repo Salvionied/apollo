@@ -26,7 +26,6 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Value"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	chainsyncv5 "github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
@@ -211,25 +210,7 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	return amts
 }
 
-// Does chainsync really need to have a different value type from state query?
-// need to double check
-func chainsyncValue_toAddressAmount(v chainsyncv5.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 0)
-	amts = append(amts, Base.AddressAmount{
-		Unit:     "lovelace",
-		Quantity: strconv.FormatInt(v.Coins.Int64(), 10),
-	})
-	for assetId, quantity := range v.Assets {
-		a := string(assetId)
-		policy := a[:56] // always 28 bytes
-		token := a[57:]  // skip the '.'
-		amts = append(amts, Base.AddressAmount{
-			Unit:     policy + token,
-			Quantity: strconv.FormatInt(quantity.Int64(), 10),
-		})
-	}
-	return amts
-}
+
 
 func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 	ctx := context.Background()
@@ -359,7 +340,7 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 		addressUtxos = append(addressUtxos, Base.AddressUTXO{
 			TxHash:      match.TransactionID,
 			OutputIndex: match.OutputIndex,
-			Amount:      chainsyncValue_toAddressAmount(match.Value),
+			Amount:      statequeryValue_toAddressAmount(shared.Value(match.Value)),
 			// We probably don't need this info and kupo doesn't provide it in this query
 			Block:       "",
 			DataHash:    match.DatumHash,
