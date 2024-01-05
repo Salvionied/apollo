@@ -193,7 +193,7 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UT
 }
 
 func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 1)
+	amts := make([]Base.AddressAmount, 0)
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
@@ -209,8 +209,6 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	}
 	return amts
 }
-
-
 
 func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 	ctx := context.Background()
@@ -337,10 +335,11 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 				log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
 			}
 		}
+		am := statequeryValue_toAddressAmount(shared.Value(match.Value))
 		addressUtxos = append(addressUtxos, Base.AddressUTXO{
 			TxHash:      match.TransactionID,
 			OutputIndex: match.OutputIndex,
-			Amount:      statequeryValue_toAddressAmount(shared.Value(match.Value)),
+			Amount:      am,
 			// We probably don't need this info and kupo doesn't provide it in this query
 			Block:       "",
 			DataHash:    match.DatumHash,
