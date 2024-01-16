@@ -649,6 +649,21 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 	return tx.TransactionBody.Id(), nil
 }
 
+func convertOgmiosRedeemerTag(tag string) (string, error) {
+	switch tag {
+	case "spend":
+		return Redeemer.RedeemerTagNames[0], nil
+	case "mint":
+		return Redeemer.RedeemerTagNames[1], nil
+	case "publish":
+		return Redeemer.RedeemerTagNames[2], nil
+	case "withdraw":
+		return Redeemer.RedeemerTagNames[3], nil
+	default:
+		return "", fmt.Errorf("Unexpected ogmios redeemer tag: %s", tag)
+	}
+}
+
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
@@ -668,7 +683,11 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 		)
 	}
 	for _, e := range eval.ExUnits {
-		val := fmt.Sprintf("%v:%v", e.Validator.Purpose, e.Validator.Index)
+		purpose, err := convertOgmiosRedeemerTag(e.Validator.Purpose)
+		if err != nil {
+			return nil, fmt.Errorf("OgmiosChainContext: EvaluateTx: %w", err)
+		}
+		val := fmt.Sprintf("%v:%v", purpose, e.Validator.Index)
 		final_result[val] = Redeemer.ExecutionUnits{
 			Mem:   int64(e.Budget.Memory),
 			Steps: int64(e.Budget.Cpu),
