@@ -350,6 +350,10 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 
 }
 
+type AdaLovelace struct {
+	Ada Lovelace `json:"ada"`
+}
+
 type Lovelace struct {
 	Lovelace uint64 `json:"lovelace"`
 }
@@ -413,27 +417,27 @@ type ExUnits struct {
 }
 
 type OgmiosProtocolParameters struct {
-	MinFeeConstant                  Lovelace `json:"minFeeConstant"`
-	MinFeeCoefficient               uint64   `json:"minFeeCoefficient"`
-	MaxBlockSize                    Bytes    `json:"maxBlockBodySize"`
-	MaxTxSize                       Bytes    `json:"maxTransactionSize"`
-	MaxBlockHeaderSize              Bytes    `json:"maxBlockHeaderSize"`
-	KeyDeposits                     Lovelace `json:"stakeCredentialDeposit"`
-	PoolDeposits                    Lovelace `json:"stakePoolDeposit"`
-	PoolInfluence                   string   `json:"stakePoolPledgeInfluence"`
-	MonetaryExpansion               string   `json:"monetaryExpansion"`
-	TreasuryExpansion               string   `json:"treasuryExpansion"`
-	ExtraEntropy                    string   `json:"extraEntropy"`
-	MaxValSize                      Bytes    `json:"maxValueSize"`
-	ScriptExecutionPrices           Prices   `json:"scriptExecutionPrices"`
-	MinUtxoDepositCoefficient       uint64   `json:"minUtxoDepositCoefficient"`
-	MinUtxoDepositConstant          uint64   `json:"minUtxoDepositConstant"`
-	MinStakePoolCost                Lovelace `json:"minStakePoolCost"`
-	MaxExecutionUnitsPerTransaction ExUnits  `json:"maxExecutionUnitsPerTransaction"`
-	MaxExecutionUnitsPerBlock       ExUnits  `json:"maxExecutionUnitsPerBlock"`
-	CollateralPercentage            uint64   `json:"collateralPercentage"`
-	MaxCollateralInputs             uint64   `json:"maxCollateralInputs"`
-	Version                         Version  `json:"version"`
+	MinFeeConstant                  AdaLovelace `json:"minFeeConstant"`
+	MinFeeCoefficient               uint64      `json:"minFeeCoefficient"`
+	MaxBlockSize                    Bytes       `json:"maxBlockBodySize"`
+	MaxTxSize                       Bytes       `json:"maxTransactionSize"`
+	MaxBlockHeaderSize              Bytes       `json:"maxBlockHeaderSize"`
+	KeyDeposits                     AdaLovelace `json:"stakeCredentialDeposit"`
+	PoolDeposits                    AdaLovelace `json:"stakePoolDeposit"`
+	PoolInfluence                   string      `json:"stakePoolPledgeInfluence"`
+	MonetaryExpansion               string      `json:"monetaryExpansion"`
+	TreasuryExpansion               string      `json:"treasuryExpansion"`
+	ExtraEntropy                    string      `json:"extraEntropy"`
+	MaxValSize                      Bytes       `json:"maxValueSize"`
+	ScriptExecutionPrices           Prices      `json:"scriptExecutionPrices"`
+	MinUtxoDepositCoefficient       uint64      `json:"minUtxoDepositCoefficient"`
+	MinUtxoDepositConstant          AdaLovelace `json:"minUtxoDepositConstant"`
+	MinStakePoolCost                AdaLovelace `json:"minStakePoolCost"`
+	MaxExecutionUnitsPerTransaction ExUnits     `json:"maxExecutionUnitsPerTransaction"`
+	MaxExecutionUnitsPerBlock       ExUnits     `json:"maxExecutionUnitsPerBlock"`
+	CollateralPercentage            uint64      `json:"collateralPercentage"`
+	MaxCollateralInputs             uint64      `json:"maxCollateralInputs"`
+	Version                         Version     `json:"version"`
 }
 
 func ratio(s string) float32 {
@@ -465,13 +469,13 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	}
 
 	return Base.ProtocolParameters{
-		MinFeeConstant:     int(ogmiosParams.MinFeeConstant.Lovelace),
+		MinFeeConstant:     int(ogmiosParams.MinFeeConstant.Ada.Lovelace),
 		MinFeeCoefficient:  int(ogmiosParams.MinFeeCoefficient),
 		MaxBlockSize:       int(ogmiosParams.MaxBlockSize.Bytes),
 		MaxTxSize:          int(ogmiosParams.MaxTxSize.Bytes),
 		MaxBlockHeaderSize: int(ogmiosParams.MaxBlockHeaderSize.Bytes),
-		KeyDeposits:        strconv.FormatUint(ogmiosParams.KeyDeposits.Lovelace, 10),
-		PoolDeposits:       strconv.FormatUint(ogmiosParams.PoolDeposits.Lovelace, 10),
+		KeyDeposits:        strconv.FormatUint(ogmiosParams.KeyDeposits.Ada.Lovelace, 10),
+		PoolDeposits:       strconv.FormatUint(ogmiosParams.PoolDeposits.Ada.Lovelace, 10),
 		PooolInfluence:     ratio(ogmiosParams.PoolInfluence),
 		MonetaryExpansion:  ratio(ogmiosParams.MonetaryExpansion),
 		TreasuryExpansion:  ratio(ogmiosParams.TreasuryExpansion),
@@ -479,10 +483,10 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		// preview
 		DecentralizationParam: 0,
 		ExtraEntropy:          ogmiosParams.ExtraEntropy,
-		MinUtxo:               strconv.FormatUint(ogmiosParams.MinUtxoDepositConstant, 10),
+		MinUtxo:               strconv.FormatUint(ogmiosParams.MinUtxoDepositConstant.Ada.Lovelace, 10),
 		ProtocolMajorVersion:  int(ogmiosParams.Version.Major),
 		ProtocolMinorVersion:  int(ogmiosParams.Version.Minor),
-		MinPoolCost:           strconv.FormatUint(ogmiosParams.MinStakePoolCost.Lovelace, 10),
+		MinPoolCost:           strconv.FormatUint(ogmiosParams.MinStakePoolCost.Ada.Lovelace, 10),
 		PriceMem:              float32(ogmiosParams.ScriptExecutionPrices.Memory),
 		PriceStep:             float32(ogmiosParams.ScriptExecutionPrices.Cpu),
 		MaxTxExMem:            strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerTransaction.Memory, 10),
@@ -645,6 +649,21 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 	return tx.TransactionBody.Id(), nil
 }
 
+func convertOgmiosRedeemerTag(tag string) (string, error) {
+	switch tag {
+	case "spend":
+		return Redeemer.RedeemerTagNames[0], nil
+	case "mint":
+		return Redeemer.RedeemerTagNames[1], nil
+	case "publish":
+		return Redeemer.RedeemerTagNames[2], nil
+	case "withdraw":
+		return Redeemer.RedeemerTagNames[3], nil
+	default:
+		return "", fmt.Errorf("Unexpected ogmios redeemer tag: %s", tag)
+	}
+}
+
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
@@ -664,7 +683,12 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 		)
 	}
 	for _, e := range eval.ExUnits {
-		final_result[e.Validator] = Redeemer.ExecutionUnits{
+		purpose, err := convertOgmiosRedeemerTag(e.Validator.Purpose)
+		if err != nil {
+			return nil, fmt.Errorf("OgmiosChainContext: EvaluateTx: %w", err)
+		}
+		val := fmt.Sprintf("%v:%v", purpose, e.Validator.Index)
+		final_result[val] = Redeemer.ExecutionUnits{
 			Mem:   int64(e.Budget.Memory),
 			Steps: int64(e.Budget.Cpu),
 		}
