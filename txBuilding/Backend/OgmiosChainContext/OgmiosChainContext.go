@@ -320,6 +320,34 @@ func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
 	}
 }
 
+func (occ *OgmiosChainContext) KupoToUtxo(m kugo.Match) UTxO.UTxO {
+	ctx := context.Background()
+	addr, au := occ.kupoToAddressUtxo(ctx, m)
+	return occ.addressUtxoToUtxo(addr, au)
+}
+
+func (occ *OgmiosChainContext) kupoToAddressUtxo(ctx context.Context, match kugo.Match) (Address.Address, Base.AddressUTXO) {
+	datum := ""
+	var err error
+	if match.DatumType == "inline" {
+		datum, err = occ.kugo.Datum(ctx, match.DatumHash)
+		if err != nil {
+			log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
+		}
+	}
+	am := statequeryValue_toAddressAmount(shared.Value(match.Value))
+	addr, _ := Address.DecodeAddress(match.Address)
+	return addr, Base.AddressUTXO{
+		TxHash:      match.TransactionID,
+		OutputIndex: match.OutputIndex,
+		Amount:      am,
+		// We probably don't need this info and kupo doesn't provide it in this query
+		Block:       "",
+		DataHash:    match.DatumHash,
+		InlineDatum: datum,
+	}
+}
+
 func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.AddressUTXO {
 	ctx := context.Background()
 	addressUtxos := make([]Base.AddressUTXO, 0)
@@ -328,23 +356,8 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
 	}
 	for _, match := range matches {
-		datum := ""
-		if match.DatumType == "inline" {
-			datum, err = occ.kugo.Datum(ctx, match.DatumHash)
-			if err != nil {
-				log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
-			}
-		}
-		am := statequeryValue_toAddressAmount(shared.Value(match.Value))
-		addressUtxos = append(addressUtxos, Base.AddressUTXO{
-			TxHash:      match.TransactionID,
-			OutputIndex: match.OutputIndex,
-			Amount:      am,
-			// We probably don't need this info and kupo doesn't provide it in this query
-			Block:       "",
-			DataHash:    match.DatumHash,
-			InlineDatum: datum,
-		})
+		_, addrUtxo := occ.kupoToAddressUtxo(ctx, match)
+		addressUtxos = append(addressUtxos, addrUtxo)
 	}
 	return addressUtxos
 
@@ -557,76 +570,83 @@ func (occ *OgmiosChainContext) MaxTxFee() int {
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
+func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result Base.AddressUTXO) UTxO.UTxO {
+	decodedTxId, _ := hex.DecodeString(result.TxHash)
+	tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
+	amount := result.Amount
+	lovelace_amount := 0
+	multi_assets := MultiAsset.MultiAsset[int64]{}
+	for _, item := range amount {
+		if item.Unit == "lovelace" {
+			amount, err := strconv.Atoi(item.Quantity)
+			if err != nil {
+				log.Fatal(err)
+			}
+			lovelace_amount += amount
+		} else {
+			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
+			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+			_, ok := multi_assets[policy_id]
+			if !ok {
+				multi_assets[policy_id] = Asset.Asset[int64]{}
+			}
+			multi_assets[policy_id][asset_name] = int64(asset_quantity)
+		}
+	}
+	final_amount := Value.Value{}
+	if len(multi_assets) > 0 {
+		final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
+	} else {
+		final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
+	}
+	datum_hash := serialization.DatumHash{}
+	if result.DataHash != "" && result.InlineDatum == "" {
+
+		datum_hash = serialization.DatumHash{}
+		copy(datum_hash.Payload[:], result.DataHash[:])
+	}
+	var tx_out TransactionOutput.TransactionOutput
+	if result.InlineDatum != "" {
+		decoded, err := hex.DecodeString(result.InlineDatum)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var x PlutusData.PlutusData
+		err = cbor.Unmarshal(decoded, &x)
+		if err != nil {
+			log.Fatal(err)
+		}
+		l := PlutusData.DatumOptionInline(&x)
+		tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
+			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+				Address: address,
+				Amount:  final_amount.ToAlonzoValue(),
+				Datum:   &l},
+		}
+	} else {
+		tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
+			Address:   address,
+			Amount:    final_amount,
+			DatumHash: datum_hash,
+			HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+	}
+	return UTxO.UTxO{
+		Input:  tx_in,
+		Output: tx_out,
+	}
+}
+
 // Copied from blockfrost context def since it just calls AddressUtxos and then
 // converts
 func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 	results := occ.AddressUtxos(address.String(), true)
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
-		decodedTxId, _ := hex.DecodeString(result.TxHash)
-		tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
-		amount := result.Amount
-		lovelace_amount := 0
-		multi_assets := MultiAsset.MultiAsset[int64]{}
-		for _, item := range amount {
-			if item.Unit == "lovelace" {
-				amount, err := strconv.Atoi(item.Quantity)
-				if err != nil {
-					log.Fatal(err)
-				}
-				lovelace_amount += amount
-			} else {
-				asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
-				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
-				_, ok := multi_assets[policy_id]
-				if !ok {
-					multi_assets[policy_id] = Asset.Asset[int64]{}
-				}
-				multi_assets[policy_id][asset_name] = int64(asset_quantity)
-			}
-		}
-		final_amount := Value.Value{}
-		if len(multi_assets) > 0 {
-			final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
-		} else {
-			final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
-		}
-		datum_hash := serialization.DatumHash{}
-		if result.DataHash != "" && result.InlineDatum == "" {
-
-			datum_hash = serialization.DatumHash{}
-			copy(datum_hash.Payload[:], result.DataHash[:])
-		}
-		var tx_out TransactionOutput.TransactionOutput
-		if result.InlineDatum != "" {
-			decoded, err := hex.DecodeString(result.InlineDatum)
-			if err != nil {
-				log.Fatal(err)
-			}
-			var x PlutusData.PlutusData
-			err = cbor.Unmarshal(decoded, &x)
-			if err != nil {
-				log.Fatal(err)
-			}
-			l := PlutusData.DatumOptionInline(&x)
-			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
-				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
-					Address: address,
-					Amount:  final_amount.ToAlonzoValue(),
-					Datum:   &l},
-			}
-		} else {
-			tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
-				Address:   address,
-				Amount:    final_amount,
-				DatumHash: datum_hash,
-				HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
-		}
-		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
+		utxos = append(utxos, occ.addressUtxoToUtxo(address, result))
 	}
 	return utxos
 }
