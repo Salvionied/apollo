@@ -337,7 +337,13 @@ func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 		Returns:
 			*Apollo: A pointer to the modified Apollo instance with the payment and datum added.
 */
-func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo {
+func (b *Apollo) PayToContract(
+	contractAddress Address.Address,
+	pd *PlutusData.PlutusData,
+	lovelace int,
+	isInline bool,
+	units ...Unit,
+) *Apollo {
 	if isInline {
 		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
 	} else if pd != nil {
@@ -355,25 +361,40 @@ func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.P
 /*
 *
 
-		AddRequiredSignerFromBech32 decodes an address in Bech32 format and adds
-		its payment and staking parts as required signers.
+	AddRequiredSignerFromBech32 decodes an address in Bech32 format and adds
+	its payment and staking parts as required signers.
 
-		Params:
-	   		address (string): The Bech32-encoded address to decode and add its parts as required signers.
-		   	addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
+	Params:
+
+
+	address (string): The Bech32-encoded address to decode and add its parts as required signers.
+
+
+	addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
+
+
 	   		addStakingPart (bool): Indicates whether to add the staking part as a required signer.
 
 		Returns:
 		   	*Apollo: A pointer to the modified Apollo instance with the required signers added.
 */
-func (b *Apollo) AddRequiredSignerFromBech32(address string, addPaymentPart, addStakingPart bool) *Apollo {
+func (b *Apollo) AddRequiredSignerFromBech32(
+	address string,
+	addPaymentPart, addStakingPart bool,
+) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
 	if addPaymentPart {
-		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]))
+		b.requiredSigners = append(
+			b.requiredSigners,
+			serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]),
+		)
 
 	}
 	if addStakingPart {
-		b.requiredSigners = append(b.requiredSigners, serialization.PubKeyHash(decoded_addr.StakingPart[0:28]))
+		b.requiredSigners = append(
+			b.requiredSigners,
+			serialization.PubKeyHash(decoded_addr.StakingPart[0:28]),
+		)
 	}
 	return b
 
@@ -401,14 +422,23 @@ func (b *Apollo) AddRequiredSigner(pkh serialization.PubKeyHash) *Apollo {
 		AddRequiredSignerFromAddress extracts the payment and staking parts from an address and adds them as required signers.
 
 	 	Params:
-	   		address (Address.Address): The address from which to extract the parts and add them as required signers.
-	   		addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
-	   		addStakingPart (bool): Indicates whether to add the staking part as a required signer.
 
-	 	Returns:
-	   		*Apollo: A pointer to the modified Apollo instance with the required signers added.
+
+	address (Address.Address): The address from which to extract the parts and add them as required signers.
+
+
+	addPaymentPart (bool): Indicates whether to add the payment part as a required signer.
+
+
+	  		addStakingPart (bool): Indicates whether to add the staking part as a required signer.
+
+		Returns:
+	  		*Apollo: A pointer to the modified Apollo instance with the required signers added.
 */
-func (b *Apollo) AddRequiredSignerFromAddress(address Address.Address, addPaymentPart, addStakingPart bool) *Apollo {
+func (b *Apollo) AddRequiredSignerFromAddress(
+	address Address.Address,
+	addPaymentPart, addStakingPart bool,
+) *Apollo {
 	if addPaymentPart {
 		pkh := serialization.PubKeyHash(address.PaymentPart)
 
@@ -787,10 +817,14 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	if len(b.collaterals) > 0 {
 		collateral_amount := 5_000_000
 		for _, utxo := range b.collaterals {
-			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 &&
+				len(utxo.Output.GetValue().GetAssets()) <= 5 {
 				b.totalCollateral = collateral_amount
 				return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
+				returnOutput := TransactionOutput.SimpleTransactionOutput(
+					b.inputAddresses[0],
+					Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()),
+				)
 				b.collateralReturn = &returnOutput
 			}
 		}
@@ -805,9 +839,16 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
 	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount &&
+			len(utxo.Output.GetValue().GetAssets()) <= 5 {
 			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets())), b.Context)
+			min_lovelace := Utils.MinLovelacePostAlonzo(
+				TransactionOutput.SimpleTransactionOutput(
+					b.inputAddresses[0],
+					Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets()),
+				),
+				b.Context,
+			)
 			if min_lovelace > return_amount && return_amount != 0 {
 				continue
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
@@ -826,7 +867,13 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	for _, utxo := range availableUtxos {
 		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
 			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets())), b.Context)
+			min_lovelace := Utils.MinLovelacePostAlonzo(
+				TransactionOutput.SimpleTransactionOutput(
+					b.inputAddresses[0],
+					Value.SimpleValue(return_amount, utxo.Output.GetAmount().GetAssets()),
+				),
+				b.Context,
+			)
 			if min_lovelace > return_amount && return_amount != 0 {
 				continue
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
@@ -1019,7 +1066,11 @@ func (b *Apollo) Complete() (*Apollo, error) {
 			}
 		}
 		for {
-			if selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})) {
+			if selectedAmount.Greater(
+				requestedAmount.Add(
+					Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false},
+				),
+			) {
 				break
 			}
 			if len(available_utxos) == 0 {
@@ -1056,7 +1107,12 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		return nil, err
 	}
 	witnessSet := b.buildWitnessSet()
-	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
+	b.tx = &Transaction.Transaction{
+		TransactionBody:       body,
+		TransactionWitnessSet: witnessSet,
+		AuxiliaryData:         b.auxiliaryData,
+		Valid:                 true,
+	}
 	return b, nil
 }
 
@@ -1075,7 +1131,10 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		bool: True if adding change would exceed the UTXO limit, false otherwise.
 */
 func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainContext) bool {
-	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
+	txOutput := TransactionOutput.SimpleTransactionOutput(
+		address,
+		Value.SimpleValue(0, change.GetAssets()),
+	)
 	encoded, _ := cbor.Marshal(txOutput)
 	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
 	return len(encoded) > maxValSize
@@ -1094,7 +1153,9 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
 		b: The ChainContext providing protocol parameters.
 
 	Returns:
-		[]*Payment: An array of payment objects, split if necessary to avoid exceeding the UTxO limit.
+
+
+	[]*Payment: An array of payment objects, split if necessary to avoid exceeding the UTxO limit.
 */
 func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Payment {
 	lovelace := c.GetCoin()
@@ -1206,7 +1267,10 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
 	if change.GetCoin() < Utils.MinLovelacePostAlonzo(
-		TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(0, change.GetAssets())),
+		TransactionOutput.SimpleTransactionOutput(
+			b.inputAddresses[0],
+			Value.SimpleValue(0, change.GetAssets()),
+		),
 		b.Context,
 	) {
 		if len(b.getAvailableUtxos()) == 0 {
@@ -1371,14 +1435,27 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
 	//stake := stakingKeyPath.RootXprivKey.Bytes()
 	signingKey := Key.SigningKey{Payload: signingKey_bytes}
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
-	stakeSigningKey := Key.StakeSigningKey{Payload: stakeSigningKey_bytes}
-	stakeVerificationKey := Key.StakeVerificationKey{Payload: stakeVerificationKey_bytes}
+	stakeSigningKey := Key.SigningKey{Payload: stakeSigningKey_bytes}
+	stakeVerificationKey := Key.VerificationKey{Payload: stakeVerificationKey_bytes}
 	stakeVerKey := Key.VerificationKey{Payload: stakeVerificationKey_bytes}
 	skh, _ := stakeVerKey.Hash()
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
-	wallet := apollotypes.GenericWallet{SigningKey: signingKey, VerificationKey: verificationKey, Address: addr, StakeSigningKey: stakeSigningKey, StakeVerificationKey: stakeVerificationKey}
+	addr := Address.Address{
+		StakingPart: skh[:],
+		PaymentPart: vkh[:],
+		Network:     1,
+		AddressType: Address.KEY_KEY,
+		HeaderByte:  0b00000001,
+		Hrp:         "addr",
+	}
+	wallet := apollotypes.GenericWallet{
+		SigningKey:           signingKey,
+		VerificationKey:      verificationKey,
+		Address:              addr,
+		StakeSigningKey:      stakeSigningKey,
+		StakeVerificationKey: stakeVerificationKey,
+	}
 	a.wallet = &wallet
 	return a, nil
 }
@@ -1403,7 +1480,14 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 
 	addr := Address.Address{}
 	if network == constants.MAINNET {
-		addr = Address.Address{StakingPart: nil, PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_NONE, HeaderByte: 0b01100001, Hrp: "addr"}
+		addr = Address.Address{
+			StakingPart: nil,
+			PaymentPart: vkh[:],
+			Network:     1,
+			AddressType: Address.KEY_NONE,
+			HeaderByte:  0b01100001,
+			Hrp:         "addr",
+		}
 	} else {
 		addr = Address.Address{StakingPart: nil, PaymentPart: vkh[:], Network: 0, AddressType: Address.KEY_NONE, HeaderByte: 0b01100000, Hrp: "addr_test"}
 	}
@@ -1411,8 +1495,8 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 		SigningKey:           signingKey,
 		VerificationKey:      verificationKey,
 		Address:              addr,
-		StakeSigningKey:      Key.StakeSigningKey{},
-		StakeVerificationKey: Key.StakeVerificationKey{},
+		StakeSigningKey:      Key.SigningKey{},
+		StakeVerificationKey: Key.VerificationKey{},
 	}
 	a.wallet = &wallet
 	return a
@@ -1471,7 +1555,10 @@ func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 		*Apollo: A pointer to the Apollo object with the transaction signed.
 */
 func (b *Apollo) Sign() *Apollo {
-	signatures := b.wallet.SignTx(*b.tx)
+	usedUtxos := make([]UTxO.UTxO, 0)
+	usedUtxos = append(usedUtxos, b.preselectedUtxos...)
+	usedUtxos = append(usedUtxos, b.collaterals...)
+	signatures := b.wallet.SignTx(*b.tx, usedUtxos)
 	b.tx.TransactionWitnessSet = signatures
 	return b
 }
@@ -1499,7 +1586,10 @@ func (b *Apollo) SignWithSkey(vkey Key.VerificationKey, skey Key.SigningKey) (*A
 	if err != nil {
 		return b, err
 	}
-	witness_set.VkeyWitnesses = append(witness_set.VkeyWitnesses, VerificationKeyWitness.VerificationKeyWitness{Vkey: vkey, Signature: signature})
+	witness_set.VkeyWitnesses = append(
+		witness_set.VkeyWitnesses,
+		VerificationKeyWitness.VerificationKeyWitness{Vkey: vkey, Signature: signature},
+	)
 	b.GetTx().TransactionWitnessSet = witness_set
 	return b, nil
 }
@@ -1573,7 +1663,9 @@ func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
 	Returns:
 		*Apollo: A pointer to the modified Apollo instance with the added verification key witness.
 */
-func (b *Apollo) AddVerificationKeyWitness(vkw VerificationKeyWitness.VerificationKeyWitness) *Apollo {
+func (b *Apollo) AddVerificationKeyWitness(
+	vkw VerificationKeyWitness.VerificationKeyWitness,
+) *Apollo {
 	b.tx.TransactionWitnessSet.VkeyWitnesses = append(b.tx.TransactionWitnessSet.VkeyWitnesses, vkw)
 	return b
 }
@@ -1683,11 +1775,13 @@ func (b *Apollo) GetUsedUTxOs() []string {
 /*
 *
 
-		SetEstimationExUnitsRequired enables the estimation of execution units
-		for the transaction.
+	SetEstimationExUnitsRequired enables the estimation of execution units
+	for the transaction.
 
-		Returns:
-	   		*Apollo: A pointer to the modified Apollo instance with execution units estimation enabled.
+	Returns:
+
+
+	*Apollo: A pointer to the modified Apollo instance with execution units estimation enabled.
 */
 func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 	b.isEstimateRequired = true
@@ -1722,14 +1816,20 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 		DisableExecutionUnitsEstimation disables the estimation of execution units for the transaction.
 
 	 	Returns:
-		   	*Apollo: A pointer to the modified Apollo instance with execution units estimation disabled.
+
+
+	*Apollo: A pointer to the modified Apollo instance with execution units estimation disabled.
 */
 func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 	b.isEstimateRequired = false
 	return b
 }
 
-func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData PlutusData.PlutusData) *Apollo {
+func (b *Apollo) AddWithdrawal(
+	address Address.Address,
+	amount int,
+	redeemerData PlutusData.PlutusData,
+) *Apollo {
 	if b.withdrawals == nil {
 		newWithdrawal := Withdrawal.New()
 		b.withdrawals = &newWithdrawal
@@ -1737,7 +1837,10 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
 	var stakeAddr [29]byte
 	stakeAddr[0] = address.HeaderByte
 	if len(address.StakingPart) != 28 {
-		fmt.Printf("AddWithdrawal: address has invalid or missing staking part: %v\n", address.StakingPart)
+		fmt.Printf(
+			"AddWithdrawal: address has invalid or missing staking part: %v\n",
+			address.StakingPart,
+		)
 	}
 	copy(stakeAddr[1:], address.StakingPart)
 	err := b.withdrawals.Add(stakeAddr, amount)
@@ -1778,7 +1881,12 @@ func (b *Apollo) CompleteExact(fee int) (*Apollo, error) {
 		return nil, err
 	}
 	witnessSet := b.buildWitnessSet()
-	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
+	b.tx = &Transaction.Transaction{
+		TransactionBody:       body,
+		TransactionWitnessSet: witnessSet,
+		AuxiliaryData:         b.auxiliaryData,
+		Valid:                 true,
+	}
 	return b, nil
 }
 

@@ -16,3 +16,16 @@ type Certificate struct {
 }
 
 type Certificates []*Certificate
+
+func (sc *StakeCredential) Kind() int {
+	return sc._CODE
+}
+
+func (c *Certificate) Kind() int {
+	return c._CODE
+}
+
+func (sc *StakeCredential) KeyHash() serialization.PubKeyHash {
+	res := serialization.PubKeyHash(sc.Credential.Payload)
+	return res
+}
