@@ -66,28 +66,6 @@ func (sk SigningKey) Sign(data []byte) ([]byte, error) {
 	return signature, nil
 }
 
-/*
-*
-
-	Sign function signs a data byte slice using
-	the signing key and the returns the signature.
-
-	Params:
-		data ([]byte): The data to sign.
-
-	Returns:
-		[]byte: The signature of the data.
-		error: An error if the signing fails.
-*/
-func (sk StakeSigningKey) Sign(data []byte) ([]byte, error) {
-	pk := sk.Payload
-	signature, err := Sign(data, pk)
-	if err != nil {
-		return nil, err
-	}
-	return signature, nil
-}
-
 type VerificationKey struct {
 	Payload []byte
 }
@@ -171,16 +149,6 @@ func (vk VerificationKey) Hash() (serialization.PubKeyHash, error) {
 	return r, nil
 }
 
-func (vsk StakeVerificationKey) Hash() (serialization.PubKeyHash, error) {
-	KeyHash, err := Blake224Hash(vsk.Payload, 28)
-	if err != nil {
-		return serialization.PubKeyHash{}, err
-	}
-	r := serialization.PubKeyHash{}
-	copy(r[:], KeyHash)
-	return r, nil
-}
-
 type PaymentKeyPair struct {
 	VerificationKey VerificationKey
 	SigningKey      SigningKey
@@ -206,8 +174,6 @@ func PaymentKeyPairGenerate() (*PaymentKeyPair, error) {
 
 type PaymentSigningKey SigningKey
 type PaymentVerificationKey VerificationKey
-type StakeSigningKey SigningKey
-type StakeVerificationKey VerificationKey
 
 /*
 *

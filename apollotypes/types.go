@@ -9,13 +9,17 @@ import (
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
 	"github.com/Salvionied/apollo/serialization/UTxO"
+
 	"github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 )
 
 type Wallet interface {
 	GetAddress() *serAddress.Address
-	SignTx(tx Transaction.Transaction, usedUtxos []UTxO.UTxO) TransactionWitnessSet.TransactionWitnessSet
+	SignTx(
+		tx Transaction.Transaction,
+		usedUtxos []UTxO.UTxO,
+	) TransactionWitnessSet.TransactionWitnessSet
 	PkeyHash() serialization.PubKeyHash
 	SkeyHash() serialization.PubKeyHash
 	//SignMessage(address serAddress.Address, message []uint8) []uint8
@@ -46,9 +50,14 @@ func (ew *ExternalWallet) GetAddress() *serAddress.Address {
 		tx (Transaction.Transaction): The transaction to be signed.
 
 	Returns:
-		TransactionWitnessSet.TransactionWitnessSet: The withness set associated with the signed transaction.
+
+
+	TransactionWitnessSet.TransactionWitnessSet: The withness set associated with the signed transaction.
 */
-func (ew *ExternalWallet) SignTx(tx Transaction.Transaction, usedUtxos []UTxO.UTxO) TransactionWitnessSet.TransactionWitnessSet {
+func (ew *ExternalWallet) SignTx(
+	tx Transaction.Transaction,
+	usedUtxos []UTxO.UTxO,
+) TransactionWitnessSet.TransactionWitnessSet {
 	return tx.TransactionWitnessSet
 }
 
@@ -68,21 +77,24 @@ func (ew *ExternalWallet) PkeyHash() serialization.PubKeyHash {
 }
 
 func (ew *ExternalWallet) SkeyHash() serialization.PubKeyHash {
-	return serialization.PubKeyHash{}
+	res := serialization.PubKeyHash(ew.Address.StakingPart)
+	return res
 }
 
 type GenericWallet struct {
 	SigningKey           Key.SigningKey
 	VerificationKey      Key.VerificationKey
 	Address              serAddress.Address
-	StakeSigningKey      Key.StakeSigningKey
-	StakeVerificationKey Key.StakeVerificationKey
+	StakeSigningKey      Key.SigningKey
+	StakeVerificationKey Key.VerificationKey
 }
 
 /*
 *
 
-		PkeyHash calculates and returns the public key hash associated with a generic wallet.
+	PkeyHash calculates and returns the public key hash associated with a generic wallet.
+
+
 		It computes the public key hash by calling the Hash() method on the wallet's VerificationKey.
 		Then it returns as a serialization.PubKeyHas type.
 
@@ -114,17 +126,23 @@ func (gw *GenericWallet) GetAddress() *serAddress.Address {
 /*
 *
 
-		SignTx signs a transaction using a generic wallet and returns the updated TransactionWitnessSet.
-		It takes a transaction of type Transaction.Transaction and signs it using the wallet's SigningKey.
-		Then it appends the corresponding VerificationKeyWitness to the TransactionWitnessSet and returns
-		the updated witness set.
+	SignTx signs a transaction using a generic wallet and returns the updated TransactionWitnessSet.
 
-		Parameters:
-		   	wallet (*GenericWallet): A pointer to a generic wallet.
-			tx (Transaction.Transaction): The transaction to be signed.
 
-		Returns:
-	   		TransactionWitnessSet.TransactionWitnessSet: The updated TransactionWitnessSet after signing the transaction.
+	It takes a transaction of type Transaction.Transaction and signs it using the wallet's SigningKey.
+
+
+	Then it appends the corresponding VerificationKeyWitness to the TransactionWitnessSet and returns
+	the updated witness set.
+
+	Parameters:
+	   	wallet (*GenericWallet): A pointer to a generic wallet.
+		tx (Transaction.Transaction): The transaction to be signed.
+
+	Returns:
+
+
+	TransactionWitnessSet.TransactionWitnessSet: The updated TransactionWitnessSet after signing the transaction.
 */
 func (wallet *GenericWallet) SignTx(
 	tx Transaction.Transaction,
