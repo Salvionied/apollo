@@ -72,7 +72,7 @@ func TestEnsureTxIsBalanced(t *testing.T) {
 	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300)
-	apollob, err := apollob.Complete()
+	apollob, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -139,7 +139,7 @@ func TestComplexTxBuild(t *testing.T) {
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300).
 		SetValidityStart(0)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -213,7 +213,7 @@ func TestFakeBurnBalancing(t *testing.T) {
 		SetValidityStart(0).MintAssets(
 		apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
 	)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
 		t.Error(err)

@@ -500,19 +500,20 @@ func (b *Apollo) Clone() *Apollo {
 	return &clone
 }
 
-func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
+func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, []byte, error) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, _ := cloned_b.Complete()
+	updated_b, _, _ := cloned_b.Complete()
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
-	return b.Context.EvaluateTx(tx_cbor)
+	result, err := b.Context.EvaluateTx(tx_cbor)
+	return result, tx_cbor, err
 }
-func (b *Apollo) updateExUnits() (*Apollo, error) {
+func (b *Apollo) updateExUnits() (*Apollo, []byte, error) {
 	if b.isEstimateRequired {
-		estimated_execution_units, err := b.estimateExunits()
+		estimated_execution_units, tx_cbor, err := b.estimateExunits()
 		if err != nil {
-			return nil, err
+			return nil, tx_cbor, err
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
@@ -555,14 +556,16 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	}
-	return b, nil
+	return b, nil, nil
 }
 
 func (b *Apollo) GetTx() *Transaction.Transaction {
 	return b.tx
 }
 
-func (b *Apollo) Complete() (*Apollo, error) {
+// If this fails due to a script failure, it returns the failed tx cbor as
+// bytes for diagnostic purposes.
+func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	selectedUtxos := make([]UTxO.UTxO, 0)
 	selectedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
@@ -618,7 +621,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 					}
 					available_utxos = newAvailUtxos
 					if !found {
-						return nil, errors.New("missing required assets")
+						return nil, nil, errors.New("missing required assets")
 					}
 
 				}
@@ -632,7 +635,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
 				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
 
-				return nil, errors.New("not enough funds")
+				return nil, nil, errors.New("not enough funds")
 			}
 			utxo := available_utxos[0]
 			selectedUtxos = append(selectedUtxos, utxo)
@@ -650,9 +653,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET COLLATERAL
 	b = b.setCollateral()
 	//UPDATE EXUNITS
-	b, err := b.updateExUnits()
+	b, tx_cbor, err := b.updateExUnits()
 	if err != nil {
-		return nil, err
+		return nil, tx_cbor, err
 	}
 	//ADDCHANGEANDFEE
 	b = b.addChangeAndFee()
@@ -660,7 +663,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	body := b.buildTxBody()
 	witnessSet := b.buildWitnessSet()
 	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
-	return b, nil
+	return b, nil, nil
 }
 
 func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainContext) bool {
