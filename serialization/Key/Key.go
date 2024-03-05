@@ -174,8 +174,6 @@ func PaymentKeyPairGenerate() (*PaymentKeyPair, error) {
 
 type PaymentSigningKey SigningKey
 type PaymentVerificationKey VerificationKey
-type StakeSigningKey SigningKey
-type StakeVerificationKey VerificationKey
 
 /*
 *
