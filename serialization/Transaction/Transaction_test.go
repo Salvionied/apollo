@@ -59,6 +59,6 @@ func TestId(t *testing.T) {
 	}
 	txId := tx.Id()
 	if hex.EncodeToString(txId.Payload) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
-		t.Error("Invalid transaction ID", hex.EncodeToString(txId.Payload), "Expected", "f60200a1049ffff4f6")
+		t.Error("Invalid transaction ID", hex.EncodeToString(txId.Payload), "Expected", "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615")
 	}
 }
