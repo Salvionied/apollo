@@ -6,6 +6,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Asset"
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/cbor/v2"
 )
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
@@ -212,5 +213,20 @@ func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.As
 		}
 	}
 	return result
+}
 
+func (ma MultiAsset[V]) ToOrderedAssets() OrderedAsset[V] {
+	result := make(OrderedAsset[V])
+	for policy, asset := range ma {
+		result[policy] = asset
+	}
+	return result
+}
+
+type OrderedAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
+
+func (ma MultiAsset[V]) MarshalCBOR() ([]byte, error) {
+	em, _ := cbor.CanonicalEncOptions().EncMode()
+
+	return em.Marshal(ma.ToOrderedAssets())
 }
