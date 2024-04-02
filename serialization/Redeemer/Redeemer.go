@@ -16,7 +16,7 @@ var RdeemerTagNames = map[RedeemerTag]string{
 	0: "spend",
 	1: "mint",
 	2: "certificate",
-	3: "withdrawal",
+	3: "withdraw",
 }
 
 type ExecutionUnits struct {
@@ -25,7 +25,9 @@ type ExecutionUnits struct {
 	Steps int64
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the ExecutionUnits.
 
 	Returns:
@@ -38,7 +40,9 @@ func (ex *ExecutionUnits) Clone() ExecutionUnits {
 	}
 }
 
-/**
+/*
+*
+
 	Sum adds the memory and step of another ExecutionUnits to
 	the current instance.
 
@@ -59,7 +63,9 @@ type Redeemer struct {
 	ExUnits ExecutionUnits
 }
 
-/**
+/*
+*
+
 	Clone creates a deep copy of the Redeemer.
 
 	Returns:
