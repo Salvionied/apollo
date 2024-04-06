@@ -1,0 +1,3 @@
+[submodule "go-sdk"]
+	path = go-sdk
+	url = https://github.com/maestro-org/go-sdk
