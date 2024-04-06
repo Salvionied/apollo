@@ -30,21 +30,25 @@ type MaestroChainContext struct {
 	client          *client.Client
 }
 
-func NewMaestroChainContext(network int, projectId string) MaestroChainContext {
+func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
 	networkString := "mainnet"
 	if network == 0 {
 		networkString = "mainnet"
 	} else if network == 1 {
-		networkString = "preview"
+		networkString = "testnet"
 	} else if network == 2 {
-		networkString = "preprod"
+		networkString = "preview"
+	} else if network == 3 {
+		networkString = "pre-prod"
+	} else {
+		return MaestroChainContext{}, fmt.Errorf("Invalid network")
 	}
 	maestroClient := client.NewClient(projectId, networkString)
 	mcc := MaestroChainContext{
 		client: maestroClient, _Network: network,
 	}
 	mcc.Init()
-	return mcc
+	return mcc, nil
 }
 func (mcc *MaestroChainContext) Init() {
 	latest_epochs := mcc.LatestEpoch()

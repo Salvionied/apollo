@@ -7,20 +7,25 @@ import (
 
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
+	"github.com/Salvionied/apollo/txBuilding/Backend/MaestroChainContext"
 )
 
-/**
-	NewEmptyBackend creates and returns an empty FixedChainContext instance,
-	which is iused for cases where no specific backend context is required.
+/*
+*
+NewEmptyBackend creates and returns an empty FixedChainContext instance,
+which is iused for cases where no specific backend context is required.
 
-	Returns:
-		FixedChainContext.FixedChainContext: An empty FixedChainContext instance.
+Returns:
+
+	FixedChainContext.FixedChainContext: An empty FixedChainContext instance.
 */
 func NewEmptyBackend() FixedChainContext.FixedChainContext {
 	return FixedChainContext.InitFixedChainContext()
 }
 
-/**
+/*
+*
+
 	NewBlockfrostBackend creates a BlockFrostChainContext instance based
 	on the specified network and project ID.
 
@@ -67,4 +72,22 @@ func NewBlockfrostBackend(
 	default:
 		return BlockFrostChainContext.BlockFrostChainContext{}, fmt.Errorf("Invalid network")
 	}
+}
+
+// NewMaestroBackend
+// NewMaestroBackend creates a MaestroChainContext instance based on the specified network and project ID.
+// Params:
+// projectId (string): The project ID to authenticate with Maestro.
+// network (Network): The network to configure the Maestro context for.
+// Returns:
+// MaestroChainContext.MaestroChainContext: A MaestroChainContext instance configured for the specified network.
+func NewMaestroBackend(
+	projectId string,
+	network constants.Network,
+) (MaestroChainContext.MaestroChainContext, error) {
+	return MaestroChainContext.NewMaestroChainContext(
+		int(network),
+		projectId,
+	)
+
 }
