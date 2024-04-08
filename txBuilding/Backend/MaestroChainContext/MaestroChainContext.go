@@ -415,6 +415,10 @@ func (mcc *MaestroChainContext) GetContractCbor(scriptHash string) string {
 	if err != nil {
 		return ""
 	}
-	return res.Data.Bytes
+	scCborBytes := res.Data.Bytes
+	bytes := []byte{}
+	decodedBytes, _ := hex.DecodeString(scCborBytes)
+	_ = cbor.Unmarshal(decodedBytes, &bytes)
+	return hex.EncodeToString(bytes)
 
 }
