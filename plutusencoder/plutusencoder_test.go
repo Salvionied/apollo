@@ -295,7 +295,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address := plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ := plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq" {
 		t.Error(address, "expected", "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq")
 	}
@@ -304,7 +304,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3" {
 		t.Error(address, "expected", "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3")
 	}
@@ -314,7 +314,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh" {
 		t.Error(address, "expected", "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh")
 	}
@@ -922,6 +922,154 @@ func TestMap(t *testing.T) {
 	}
 	if resultinStruct.Map.Value != 5 {
 		t.Error("wrong map", resultinStruct.Map.Value)
+	}
+
+}
+
+type InputMap struct {
+	_      struct{} `plutusType:"IntMap"`
+	TokenA plutusencoder.MultiAssetPlutus
+	TokenB plutusencoder.MultiAssetPlutus
+}
+
+type Asset struct {
+	_      struct{} `plutusType:"IndefList" plutusConstr:"0"`
+	Policy []byte   `plutusType:"Bytes"`
+	Name   []byte   `plutusType:"Bytes"`
+}
+
+type InputOutput struct {
+	_      struct{} `plutusType:"IndefList"`
+	Input  Asset
+	Output Asset
+}
+
+type Date struct {
+	_    struct{} `plutusType:"IndefList" plutusConstr:"7"`
+	Date int64    `plutusType:"Int"`
+}
+
+type Price struct {
+	_          struct{} `plutusType:"IndefList" plutusConstr:"0"`
+	BasePrice  int64    `plutusType:"Int"`
+	FinalPrice int64    `plutusType:"Int"`
+}
+
+type Pricing struct {
+	_     struct{} `plutusType:"IndefList" plutusConstr:"2"`
+	Price Price
+}
+
+type OrderMap struct {
+	_         struct{} `plutusType:"Map"`
+	EndDate   Date
+	StartDate Date
+	Price     Pricing
+}
+
+type EmptyStruct struct {
+	_ struct{} `plutusType:"Map"`
+}
+
+type DatTest struct {
+	_           struct{} `plutusType:"IndefList"`
+	InputMap    InputMap
+	InputOutput InputOutput
+	OrderToken  Asset
+	OrderMap    OrderMap
+	EmptyMap    EmptyStruct
+}
+
+func TestComplextDatum(t *testing.T) {
+	decodedCbor, _ := hex.DecodeString("9fa200a140a1401a0098968001a09fd8799f4040ffd8799f581ca0028f350aaabe0545fdcb56b039bfb08e4bb4d8c4d7c3c7d481c23545484f534b59ffffd8799f581c279afa4c71ea050339f0699de9095daa612485ee8489fc413e93ebda4953505f725650717978ffa347656e6444617465d905009f1b000003bbcc68f818ff457072696365d87b9fd8799f190cbb19c350ffff49737461727444617465d905009f1b0000018ce8cdd1b5ffa0ff")
+	pd := PlutusData.PlutusData{}
+	err := cbor.Unmarshal(decodedCbor, &pd)
+	if err != nil {
+		t.Error(err)
+	}
+	marshaled, _ := cbor.Marshal(pd)
+	if hex.EncodeToString(marshaled) != hex.EncodeToString(decodedCbor) {
+		t.Error("decoding error", hex.EncodeToString(marshaled))
+	}
+	dat := DatTest{}
+	err = plutusencoder.UnmarshalPlutus(&pd, &dat, 1)
+	if err != nil {
+		fmt.Println("FROM PLUTUS")
+		fmt.Println(err)
+		fmt.Println("DATUM", dat)
+		t.Error(err)
+	}
+	fmt.Println(dat.OrderMap.EndDate.Date)
+	fmt.Println(dat.OrderMap.Price)
+	if dat.OrderMap.EndDate.Date != 4105123199000 {
+		t.Error("wrong date")
+	}
+	pdFromStruct, err := plutusencoder.MarshalPlutus(dat)
+	if err != nil {
+		fmt.Println("TO PLUTUS")
+		t.Error(err)
+	}
+	fmt.Println("TRANSFORMED TO PLUTUS?")
+	encoded, err := cbor.Marshal(pdFromStruct)
+	if err != nil {
+		fmt.Println("CBOR MARSHAL")
+		t.Error(err)
+	}
+	fmt.Println("ENCODED", hex.EncodeToString(encoded))
+	if len(encoded) != len(decodedCbor) {
+		t.Error("encoding error", hex.EncodeToString(encoded))
+	}
+	// if hex.EncodeToString(encoded) != hex.EncodeToString(decodedCbor) {
+	// 	t.Error("encoding error", hex.EncodeToString(encoded))
+	// }
+
+}
+
+// type FeeDatumGens struct {
+// 	InputToValueMap map[PlutusUtxo]PlutusValue
+// 	EmptyValue      PlutusValue
+// 	EmptyArray      []byte `plutusType:"Bytes", PlutusConstr:"1"`
+// }
+
+// func TestFeeDatumGens(t *testing.T) {
+
+// }
+
+// func TestDecodeFeeDatumGens(t *testing.T) {
+// 	hexEncodedCBor := "d87983a1d87982d879815820b4bf6f7a29915cdf1aaac9d2112fc986bb3227d9cd04d7af418991cee23b07ed00a240a1401a000f4240581c95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0b55fb00a14448554e54193a98a0d87a80"
+// 	decoded_hex, _ := hex.DecodeString(hexEncodedCBor)
+// 	pd := PlutusData.PlutusData{}
+// 	err := cbor.Unmarshal(decoded_hex, &pd)
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	fmt.Println(pd.String())
+// 	encoded, err := cbor.Marshal(pd)
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	fmt.Println(hex.EncodeToString(encoded))
+// 	if hex.EncodeToString(encoded) != hexEncodedCBor {
+// 		t.Error("encoding error", hex.EncodeToString(encoded))
+// 	}
+
+// 	// byteArr := []byte{216, 121, 130, 216, 121, 129, 88, 32, 180, 191, 111, 122, 41, 145, 92, 223, 26, 170, 201, 210, 17, 47, 201, 134, 187, 50, 39, 217, 205, 4, 215, 175, 65, 137, 145, 206, 226, 59, 7, 237, 0}
+// 	// pd2 := PlutusData.PlutusData{}
+// 	// err = cbor.Unmarshal(byteArr, &pd2)
+// 	// if err != nil {
+// 	// 	t.Error(err)
+// 	// }
+// 	// fmt.Println(pd2.String())
+// 	//x := map[[]byte][]byte{}
+// }
+
+func TestAxoDatum(t *testing.T) {
+	cborHex := "d8799fa200a140a1401a20c8558001a09fd8799f4040ffd8799f581c420000029ad9527271b1b1e3c27ee065c18df70a4a4cfc3093a41a444341584fffffd8799f581c93833468a70ab5eec63b00a1646297430a502d0da68d533b80f217894745466747613941ffa347656e6444617465d905009f1b000003bb2cc3d418ff457072696365d87b9fd8799f1b00044b339b77367b1b01bc16d674ec8000ffff49737461727444617465d905009f1b00000092f3973818ffa0ff"
+	decodedHex, _ := hex.DecodeString(cborHex)
+	pd := PlutusData.PlutusData{}
+	err := cbor.Unmarshal(decodedHex, &pd)
+	if err != nil {
+		t.Error(err)
 	}
 
 }
