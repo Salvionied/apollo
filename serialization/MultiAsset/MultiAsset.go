@@ -212,5 +212,4 @@ func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.As
 		}
 	}
 	return result
-
 }
