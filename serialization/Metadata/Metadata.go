@@ -14,7 +14,7 @@ type PoliciesMetadata map[string]MinimalMetadata
 
 type TagMetadata map[string]any
 
-type Metadata map[int]TagMetadata
+type Metadata map[int]any
 
 type ShelleyMaryMetadata struct {
 	_             struct{}                    `cbor:",toarray,omitempty"`
@@ -22,7 +22,9 @@ type ShelleyMaryMetadata struct {
 	NativeScripts []NativeScript.NativeScript `cbor:",omitempty"`
 }
 
-/**
+/*
+*
+
 	MarshalCBOR marshals a ShelleyMaryMetadata instance into CBOR-encoded data.
 
 	Returns:
@@ -50,28 +52,45 @@ type AuxiliaryData struct {
 	_AlonzoMeta  AlonzoMetadata
 }
 
-/**
+/*
+*
+
 	SetBasicMetadata sets the basic metadata for the AuxiliaryData.
 */
 func (ad *AuxiliaryData) SetBasicMetadata(value Metadata) {
 	ad._basicMeta = value
 }
 
-/**
+/*
+*
+
 	SetAlonzoMetadata sets the Alonzo metadata for the AuxiliaryData.
 */
 func (ad *AuxiliaryData) SetAlonzoMetadata(value AlonzoMetadata) {
 	ad._AlonzoMeta = value
 }
 
-/**
+/*
+*
+
 	SetShelleyMetadata sets the Shelley metadata for the AuxiliaryData.
 */
 func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
-	ad._ShelleyMeta = value
+	if ad._ShelleyMeta.Metadata == nil {
+		ad._ShelleyMeta = value
+	} else {
+		currentMetadata := ad._ShelleyMeta.Metadata
+		for key, val := range value.Metadata {
+			currentMetadata[key] = val
+		}
+
+	}
+
 }
 
-/**
+/*
+*
+
 	Hash computes computes the has of the AuxiliaryData.
 
 	Returns:
@@ -90,7 +109,9 @@ func (ad *AuxiliaryData) Hash() []byte {
 	}
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR deserializes the AuxiliaryData from a CBOR-encoded byte slice.
 
 	Params:
@@ -110,7 +131,9 @@ func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
-/**
+/*
+*
+
 	MarshalCBOR serializes the AUxiliaryData to a CBOR byte slice.
 
 	Returns:
