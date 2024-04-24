@@ -1533,10 +1533,10 @@ func (b *Apollo) Submit() (serialization.TransactionId, error) {
 */
 func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	tx := Transaction.Transaction{}
-  cborBytes, err := hex.DecodeString(txCbor)
-  if err != nil {
-    return nil, err
-  }
+	cborBytes, err := hex.DecodeString(txCbor)
+	if err != nil {
+		return nil, err
+	}
 	err = cbor.Unmarshal(cborBytes, &tx)
 	if err != nil {
 		return b, err

@@ -861,10 +861,12 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 				return fmt.Errorf("error: value is not a PlutusMap")
 			}
 			for idxStringHex, pAEl := range *values {
-				idxBytes, _ := hex.DecodeString(idxStringHex.String())
+				idxBytes, _ := hex.DecodeString(idxStringHex.HexString())
 				idx := string(idxBytes)
 				field, ok := tps.FieldByName(idx)
 				if !ok {
+					fmt.Println(idxBytes, idxStringHex.String(), idxStringHex)
+					fmt.Println(idx)
 					return fmt.Errorf("error: field %s does not exist", idx)
 				}
 				switch field.Type.String() {

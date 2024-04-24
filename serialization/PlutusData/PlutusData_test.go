@@ -3,7 +3,6 @@ package PlutusData_test
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
@@ -291,13 +290,11 @@ func TestPlutusDataFromJson(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(hex.EncodeToString(cborred))
 	datum := GetMinSwapPlutusData()
 	receborred, err := cbor.Marshal(datum)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(hex.EncodeToString(receborred))
 	if hex.EncodeToString(cborred) == hex.EncodeToString(receborred) {
 		t.Error("Not the same")
 	}
