@@ -850,7 +850,7 @@ func TestMapInternal(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if hex.EncodeToString(encoded) != "d87ba14158d87ba34556616c756500454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61" {
+	if hex.EncodeToString(encoded) != "d87ba14158d87ba345427974657344010203044556616c75650049486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 
@@ -900,6 +900,7 @@ func TestMap(t *testing.T) {
 	resultinStruct := MapTest{}
 	err = plutusencoder.CborUnmarshal("d87ba74a496e64656641727261799fd87a9f05ffd87a9f05ffd87a9f05ffff434d6170d87ba14556616c7565054556616c756505454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce614741646472657373d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff48446566417272617983d87b8105d87b8105d87b8105", &resultinStruct, 1)
 	if err != nil {
+		fmt.Println("FAILING HERE")
 		t.Error(err)
 	}
 	if resultinStruct.Address.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh" {

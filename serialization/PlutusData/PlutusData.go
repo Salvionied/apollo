@@ -910,10 +910,11 @@ func (pd *PlutusData) Clone() PlutusData {
 		error: An error, if any, during ecoding.
 */
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
+	enc, _ := cbor.CanonicalEncOptions().EncMode()
 	if pd.TagNr == 0 {
-		return cbor.Marshal(pd.Value)
+		return enc.Marshal(pd.Value)
 	} else {
-		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		return enc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 	}
 }
 

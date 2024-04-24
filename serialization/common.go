@@ -144,6 +144,9 @@ func (cb *CustomBytes) String() string {
 	}
 	return fmt.Sprintf("Bytes(%s)", cb.Value)
 }
+func (cb *CustomBytes) HexString() string {
+	return cb.Value
+}
 
 /*
 *
