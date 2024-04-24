@@ -1090,7 +1090,6 @@ func (pdk *PlutusDataKey) UnmarshalCBOR(value []uint8) error {
 
 func (pdk *PlutusDataKey) MarshalCBOR() ([]uint8, error) {
 	decodedHex, _ := hex.DecodeString(pdk.CborHexValue)
-	fmt.Println("CALLED ONCE")
 	return decodedHex, nil
 }
 
@@ -1190,7 +1189,6 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 				y := map[PlutusDataKey]PlutusData{}
 				err := cbor.Unmarshal(value, &y)
 				if err != nil {
-					fmt.Println("ERRORED HERE")
 					return err
 				}
 				pd.PlutusDataType = PlutusMap

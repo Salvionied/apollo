@@ -255,7 +255,6 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) []Base
 	params.ResolveDatums()
 	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(address, params)
 	if err != nil {
-		fmt.Println(err)
 		return addressUtxos
 	}
 
@@ -312,7 +311,6 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 	params.ResolveDatums()
 	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(address.String(), params)
 	if err != nil {
-		fmt.Println(err)
 		return utxos
 	}
 
@@ -365,7 +363,6 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	txBytes, err := tx.Bytes()
 	if err != nil {
-		fmt.Println("HERE ERR")
 		return serialization.TransactionId{}, err
 	}
 	txHex := hex.EncodeToString(txBytes)
@@ -374,7 +371,6 @@ func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serializat
 		log.Fatal(err)
 		return serialization.TransactionId{}, err
 	}
-	fmt.Println("RESPONSE", resp)
 	decodedResponseHash, _ := hex.DecodeString(resp.Data)
 	return serialization.TransactionId{Payload: []byte(decodedResponseHash)}, nil
 }

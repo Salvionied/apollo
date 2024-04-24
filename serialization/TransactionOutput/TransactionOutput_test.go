@@ -2,7 +2,6 @@ package TransactionOutput_test
 
 import (
 	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Address"
@@ -54,7 +53,6 @@ func TestPostAlonzo(t *testing.T) {
 	resultHex := "a300581d712618e94cdb06792f05ae9b1ec78b0231f4b7f4215b1b4cf52e6342de011a000f4240028201d81858e8d8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c47534f4349455459ff1b00002cc16be02b37ff1a001e84801a001e8480ff"
 	cborred, _ := cbor.Marshal(txO)
 	if hex.EncodeToString(cborred) != resultHex {
-		fmt.Println(hex.EncodeToString(cborred))
 		t.Errorf("Invalid marshaling")
 	}
 
@@ -70,7 +68,6 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 	if err != nil {
 		t.Error("Error while unmarshaling", err)
 	}
-	fmt.Println(tx.TransactionBody.Outputs[0].PostAlonzo.Datum)
 	remarshaled, err := cbor.Marshal(tx)
 	if err != nil {
 		t.Error("Error While remarshaling", err)
@@ -157,7 +154,6 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 	clonedNoAssets := toNoAssets.Clone()
 	clonedWithAssets := toWithAssets.Clone()
 	if !toNoAssets.Amount.Equal(clonedNoAssets.Amount) { //|| toNoAssets.Address.String() != clonedNoAssets.Address.String() || &toNoAssets == &clonedNoAssets {
-		fmt.Println(toNoAssets.Amount.GetCoin(), clonedNoAssets.Amount.GetCoin(), toNoAssets.Amount.GetAssets(), clonedNoAssets.Amount.GetAssets())
 		t.Error("Error while cloning og:", toNoAssets.Amount.String(), "cloned:", clonedNoAssets.Amount.String())
 	}
 	if !toWithAssets.Amount.Equal(clonedWithAssets.Amount) || toWithAssets.Address.String() != clonedWithAssets.Address.String() || &toWithAssets == &clonedWithAssets {
