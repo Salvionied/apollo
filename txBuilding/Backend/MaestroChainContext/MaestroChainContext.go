@@ -28,6 +28,7 @@ type MaestroChainContext struct {
 	_genesis_param  Base.GenesisParameters
 	_protocol_param Base.ProtocolParameters
 	client          *client.Client
+	latestUpdate    time.Time
 }
 
 func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
@@ -158,22 +159,13 @@ func (mcc *MaestroChainContext) GenesisParams() Base.GenesisParameters {
 	// NO GENESIS PARAMS IN MAESTRO
 	return genesisParams
 }
-func (mcc *MaestroChainContext) _CheckEpochAndUpdate() bool {
-	// TO REVISION MISSING FROM MAESTRO
-	if mcc._epoch_info.EndTime <= int(time.Now().Unix()) {
-		latest_epochs := mcc.LatestEpoch()
-		mcc._epoch_info = latest_epochs
-		return true
-	}
-	return false
-}
 
 func (mcc *MaestroChainContext) Network() int {
 	return mcc._Network
 }
 
 func (mcc *MaestroChainContext) Epoch() int {
-	if mcc._CheckEpochAndUpdate() {
+	if time.Since(mcc.latestUpdate) > time.Minute*5 {
 		new_epoch := mcc.LatestEpoch()
 		mcc._epoch = new_epoch.Epoch
 	}
@@ -186,7 +178,7 @@ func (mcc *MaestroChainContext) LastBlockSlot() int {
 }
 
 func (mcc *MaestroChainContext) GetGenesisParams() Base.GenesisParameters {
-	if mcc._CheckEpochAndUpdate() {
+	if time.Since(mcc.latestUpdate) > time.Minute*5 {
 		params := mcc.GenesisParams()
 		mcc._genesis_param = params
 	}
@@ -194,9 +186,10 @@ func (mcc *MaestroChainContext) GetGenesisParams() Base.GenesisParameters {
 }
 
 func (mcc *MaestroChainContext) GetProtocolParams() Base.ProtocolParameters {
-	if mcc._CheckEpochAndUpdate() {
+	if time.Since(mcc.latestUpdate) > time.Minute*5 {
 		latest_params := mcc.LatestEpochParams()
 		mcc._protocol_param = latest_params
+		mcc.latestUpdate = time.Now()
 	}
 	return mcc._protocol_param
 }
