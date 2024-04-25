@@ -609,7 +609,6 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
 	res = append(res, 0x9f)
-
 	for _, el := range pia {
 		bytes, err := cbor.Marshal(el)
 		if err != nil {
@@ -910,12 +909,30 @@ func (pd *PlutusData) Clone() PlutusData {
 		error: An error, if any, during ecoding.
 */
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
-	enc, _ := cbor.CanonicalEncOptions().EncMode()
-	if pd.TagNr == 0 {
-		return enc.Marshal(pd.Value)
+	//enc, _ := cbor.CanonicalEncOptions().EncMode()
+	if pd.PlutusDataType == PlutusMap {
+		customEnc, _ := cbor.EncOptions{Sort: cbor.SortBytewiseLexical}.EncMode()
+		if pd.TagNr != 0 {
+			return customEnc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		} else {
+			return customEnc.Marshal(pd.Value)
+		}
+	} else if pd.PlutusDataType == PlutusIntMap {
+		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
+		if pd.TagNr != 0 {
+			return canonicalenc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		} else {
+			return canonicalenc.Marshal(pd.Value)
+		}
 	} else {
-		return enc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
+		if pd.TagNr == 0 {
+			return cbor.Marshal(pd.Value)
+		} else {
+			return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		}
 	}
+
 }
 
 /*
