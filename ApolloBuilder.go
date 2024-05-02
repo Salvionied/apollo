@@ -1,7 +1,6 @@
 package apollo
 
 import (
-	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -889,11 +888,7 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 	if err != nil {
 		fmt.Println("SetWalletFromKeypair: Failed to decode skey")
 	}
-	// There are two slightly different interpretations of ed25519,
-	// depending on which thing you call the "private key".
-	// cardano-cli and the golang library crypto/ed25519 take opposite
-	// interpretations. NewKeyFromSeed performs the necessary conversion.
-	signingKey := Key.SigningKey{Payload: ed25519.NewKeyFromSeed(signingKey_bytes)}
+	signingKey := Key.SigningKey{Payload: signingKey_bytes}
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
 	vkh, _ := verificationKey.Hash()
 
