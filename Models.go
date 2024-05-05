@@ -65,14 +65,15 @@ type PaymentI interface {
 }
 
 type Payment struct {
-	Lovelace     int
-	Receiver     Address.Address
-	Units        []Unit
-	Datum        *PlutusData.PlutusData
-	DatumHash    []byte
-	IsInline     bool
-	ScriptRef    []byte
-	HasScriptRef bool
+	Lovelace         int
+	Receiver         Address.Address
+	Units            []Unit
+	Datum            *PlutusData.PlutusData
+	DatumHash        []byte
+	IsInline         bool
+	ScriptRef        []byte
+	HasScriptRef     bool
+	ScriptRefVersion int
 }
 
 /*
@@ -227,7 +228,8 @@ func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
 		}
-		scriptRef := PlutusData.ScriptRef{p.ScriptRef}
+
+		scriptRef := PlutusData.NewScriptRef(p.ScriptRef, p.ScriptRefVersion)
 		txO.PostAlonzo.ScriptRef = &scriptRef
 		return &txO
 	}

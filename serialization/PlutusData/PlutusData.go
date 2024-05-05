@@ -123,15 +123,36 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(format)
 }
 
+type _Script struct {
+	_       struct{} `cbor:",toarray"`
+	Version int
+	Script  []byte
+}
+
+func NewScriptRef(script []byte, Version int) ScriptRef {
+	scr := _Script{
+		Version: Version,
+		Script:  script,
+	}
+	return ScriptRef{
+		Script: scr,
+	}
+}
+
 type ScriptRef struct {
-	Script []byte
+	Script _Script
 }
 
 func (sc *ScriptRef) MarshalCBOR() ([]byte, error) {
+	marshaledContent, err := cbor.Marshal(sc.Script)
+	if err != nil {
+		return nil, fmt.Errorf("ScriptRef: MarshalCBOR: %v", err)
+
+	}
 	container := PlutusData{
 		PlutusDataType: PlutusBytes,
 		TagNr:          24,
-		Value:          sc.Script,
+		Value:          marshaledContent,
 	}
 	return cbor.Marshal(container)
 
