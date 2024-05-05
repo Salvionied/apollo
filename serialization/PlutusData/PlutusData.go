@@ -132,6 +132,10 @@ type ScriptRef struct {
 	Script _Script
 }
 
+func (sr *ScriptRef) SetScriptBytes(script []byte) {
+	sr.Script = _Script{Script: script}
+}
+
 type CostModels map[serialization.CustomBytes]CM
 
 type CM map[string]int

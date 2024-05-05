@@ -284,7 +284,7 @@ func (b *Apollo) AddPayment(payment PaymentI) *Apollo {
 */
 func (b *Apollo) PayToAddressBech32(address string, lovelace int, units ...Unit) *Apollo {
 	decoded_addr, _ := Address.DecodeAddress(address)
-	return b.AddPayment(&Payment{lovelace, decoded_addr, units, nil, nil, false})
+	return b.AddPayment(&Payment{lovelace, decoded_addr, units, nil, nil, false, nil, false})
 }
 
 /*
@@ -302,7 +302,7 @@ func (b *Apollo) PayToAddressBech32(address string, lovelace int, units ...Unit)
 			*Apollo: A pointer to the modified Apollo instance with the payment added.
 */
 func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units ...Unit) *Apollo {
-	return b.AddPayment(&Payment{lovelace, address, units, nil, nil, false})
+	return b.AddPayment(&Payment{lovelace, address, units, nil, nil, false, nil, false})
 }
 
 /*
@@ -339,16 +339,27 @@ func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 */
 func (b *Apollo) PayToContract(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, units ...Unit) *Apollo {
 	if isInline {
-		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline})
+		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, nil, isInline, nil, false})
 	} else if pd != nil {
 		dataHash, _ := PlutusData.PlutusDataHash(pd)
-		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline})
+		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline, nil, false})
 	} else {
-		b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, nil, isInline})
+		b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, nil, isInline, nil, false})
 	}
 	if pd != nil && !isInline {
 		b = b.AddDatum(pd)
 	}
+	return b
+}
+
+func (b *Apollo) CreateScriptRefPaymentToAddress(address Address.Address, scriptBytes []byte) *Apollo {
+	b = b.AddPayment(&Payment{0, address, nil, nil, nil, false, scriptBytes, true})
+	return b
+}
+
+func (b *Apollo) CreateScriptRefPaymentToAddressBech32(address string, scriptBytes []byte) *Apollo {
+	decoded_addr, _ := Address.DecodeAddress(address)
+	b = b.AddPayment(&Payment{0, decoded_addr, nil, nil, nil, false, scriptBytes, true})
 	return b
 }
 

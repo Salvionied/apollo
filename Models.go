@@ -19,7 +19,9 @@ type Unit struct {
 	Quantity int
 }
 
-/**
+/*
+*
+
 	ToValue converts a Unit to a Value object.
 
 	Returns:
@@ -35,7 +37,9 @@ func (u *Unit) ToValue() Value.Value {
 	return val
 }
 
-/**
+/*
+*
+
 	NewUnit creates a new Unit with the provided information.
 
 	Params:
@@ -61,15 +65,19 @@ type PaymentI interface {
 }
 
 type Payment struct {
-	Lovelace  int
-	Receiver  Address.Address
-	Units     []Unit
-	Datum     *PlutusData.PlutusData
-	DatumHash []byte
-	IsInline  bool
+	Lovelace     int
+	Receiver     Address.Address
+	Units        []Unit
+	Datum        *PlutusData.PlutusData
+	DatumHash    []byte
+	IsInline     bool
+	ScriptRef    []byte
+	HasScriptRef bool
 }
 
-/**
+/*
+*
+
 	PaymentFromTxOut creates a Payment object from a TransactionOutput.
 
 	Params:
@@ -110,10 +118,12 @@ func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
 	return payment
 }
 
-/**
+/*
+*
+
 	NewPayment creates a new Payment object.
 
-	Params: 
+	Params:
 		receiver (string): The receiver's address.
 		lovelace (int): The amount in Lovelace.
 		units ([]Unit): The assets units to be included.
@@ -130,7 +140,9 @@ func NewPayment(receiver string, lovelace int, units []Unit) *Payment {
 	}
 }
 
-/**
+/*
+*
+
 	NewPaymentFromValue creates a new Payment object from an Address
 	and Value object.
 
@@ -158,7 +170,9 @@ func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment {
 	return payment
 }
 
-/**
+/*
+*
+
 	ToValue converts a Payment to a Value object.
 
 	Returns:
@@ -173,7 +187,9 @@ func (p *Payment) ToValue() Value.Value {
 	return v
 }
 
-/**
+/*
+*
+
 	EnsureMinUTXO ensures that the payment amount meets the minimun UTXO requirement.
 
 	Params:
@@ -190,14 +206,32 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	}
 }
 
-/**
-	ToTxOut converts a Payment object to a TransactionOutput object.
+/*
+*
 
-	Returns:
-   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
+		ToTxOut converts a Payment object to a TransactionOutput object.
+
+		Returns:
+	   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
 */
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
+	if p.HasScriptRef {
+		txO := TransactionOutput.TransactionOutput{}
+		txO.IsPostAlonzo = true
+		l := PlutusData.DatumOptionInline(p.Datum)
+		txO.PostAlonzo.Datum = &l
+		txO.PostAlonzo.Address = p.Receiver
+		txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()
+
+		if p.Datum != nil {
+			txOut.SetDatum(p.Datum)
+		}
+		scriptRef := PlutusData.ScriptRef{}
+		scriptRef.SetScriptBytes(p.ScriptRef)
+		txO.PostAlonzo.ScriptRef = &scriptRef
+		return &txO
+	}
 	if p.IsInline {
 		txO := TransactionOutput.TransactionOutput{}
 		txO.IsPostAlonzo = true
