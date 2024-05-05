@@ -161,16 +161,16 @@ func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{},
 	if script != nil {
 		tb.InputsToScripts = make(map[string]PlutusData.ScriptHashable)
 	}
-	if utxo.Output.IsPostAlonzo && len(utxo.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script)
+	if utxo.Output.IsPostAlonzo && len(utxo.Output.PostAlonzo.ScriptRef.Script) > 0 {
+		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script)
 		tb.ReferenceInputs = append(tb.ReferenceInputs, utxo.Input)
-		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script))
+		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script))
 	} else if script == nil {
 		for _, i := range tb.LoadedUtxos {
-			if i.Output.IsPostAlonzo && len(i.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script)
+			if i.Output.IsPostAlonzo && len(i.Output.PostAlonzo.ScriptRef.Script) > 0 {
+				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script)
 				tb.ReferenceInputs = append(tb.ReferenceInputs, i.Input)
-				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script))
+				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script))
 				break
 			}
 		}

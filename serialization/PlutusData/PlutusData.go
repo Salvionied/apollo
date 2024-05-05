@@ -18,11 +18,6 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-type _Script struct {
-	_      struct{} `cbor:",toarray"`
-	Script []byte
-}
-
 type DatumType byte
 
 const (
@@ -129,11 +124,17 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 }
 
 type ScriptRef struct {
-	Script _Script
+	Script []byte
 }
 
-func (sr *ScriptRef) SetScriptBytes(script []byte) {
-	sr.Script = _Script{Script: script}
+func (sc *ScriptRef) MarshalCBOR() ([]byte, error) {
+	container := PlutusData{
+		PlutusDataType: PlutusBytes,
+		TagNr:          24,
+		Value:          sc.Script,
+	}
+	return cbor.Marshal(container)
+
 }
 
 type CostModels map[serialization.CustomBytes]CM

@@ -391,3 +391,14 @@ func TestSetDatum(t *testing.T) {
 
 	}
 }
+
+func TestSetScript(t *testing.T) {
+	ScriptRefBytes := []byte{0x01, 0x02, 0x03}
+	clonedAlonzo := toAlonzoNoAssets.Clone()
+	ScriptRef := PlutusData.ScriptRef{Script: ScriptRefBytes}
+	clonedAlonzo.PostAlonzo.ScriptRef = &ScriptRef
+	cborred, _ := cbor.Marshal(clonedAlonzo)
+	if hex.EncodeToString(cborred) != "a300583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4011a000f424003d81843010203" {
+		t.Error("Error while setting script")
+	}
+}

@@ -227,8 +227,7 @@ func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 		if p.Datum != nil {
 			txOut.SetDatum(p.Datum)
 		}
-		scriptRef := PlutusData.ScriptRef{}
-		scriptRef.SetScriptBytes(p.ScriptRef)
+		scriptRef := PlutusData.ScriptRef{p.ScriptRef}
 		txO.PostAlonzo.ScriptRef = &scriptRef
 		return &txO
 	}
