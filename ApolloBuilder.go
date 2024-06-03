@@ -513,7 +513,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	PV1Scripts := witnessSet.PlutusV1Script
 	PV2Scripts := witnessSet.PlutusV2Script
 	datums := witnessSet.PlutusData
-
+	enc, _ := cbor.CanonicalEncOptions().EncMode()
 	isV1 := len(PV1Scripts) > 0
 	if len(redeemers) > 0 {
 		if len(PV2Scripts) > 0 {
@@ -525,13 +525,13 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if redeemers == nil {
 		redeemers = []Redeemer.Redeemer{}
 	}
-	redeemer_bytes, err := cbor.Marshal(redeemers)
+	redeemer_bytes, err := enc.Marshal(redeemers)
 	if err != nil {
 		return nil, err
 	}
 	var datum_bytes []byte
 	if datums.Len() > 0 {
-		datum_bytes, err = cbor.Marshal(datums)
+		datum_bytes, err = enc.Marshal(datums)
 		if err != nil {
 			return nil, err
 		}
@@ -540,17 +540,18 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	var cost_model_bytes []byte
 	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
+		cost_model_bytes, err = enc.Marshal(PlutusData.COST_MODELSV1)
 		if err != nil {
 			return nil, err
 		}
 
 	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
+		cost_model_bytes, err = enc.Marshal(cost_models)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	hashBytes, err := serialization.Blake2bHash(total_bytes)

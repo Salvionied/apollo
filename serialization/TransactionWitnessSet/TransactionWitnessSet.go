@@ -47,8 +47,9 @@ type WithRedeemerNoScripts struct {
 		error: An error if serialization fails.
 */
 func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
+	enc, _ := cbor.CanonicalEncOptions().EncMode()
 	if len(tws.PlutusV1Script) == 0 && len(tws.Redeemer) > 0 && len(tws.PlutusData) == 0 {
-		return cbor.Marshal(WithRedeemerNoScripts{
+		return enc.Marshal(WithRedeemerNoScripts{
 			VkeyWitnesses:      tws.VkeyWitnesses,
 			NativeScripts:      tws.NativeScripts,
 			BootstrapWitnesses: tws.BootstrapWitnesses,
@@ -58,7 +59,7 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 			Redeemer:           tws.Redeemer,
 		})
 	}
-	return cbor.Marshal(normaltws{
+	return enc.Marshal(normaltws{
 		VkeyWitnesses:      tws.VkeyWitnesses,
 		NativeScripts:      tws.NativeScripts,
 		BootstrapWitnesses: tws.BootstrapWitnesses,
