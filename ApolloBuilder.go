@@ -756,6 +756,42 @@ func (b *Apollo) setRedeemerIndexes() *Apollo {
 			//TODO: IMPLEMENT FOR MINTS
 		}
 	}
+	b.preselectedUtxos = sorted_inputs
+	return b
+}
+
+/*
+*
+
+	setRedeemerIndexes function sets indexes for redeemers in
+	the transaction based on UTxO inputs.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with indexes and redeemers set.
+*/
+func (b *Apollo) setRedeemerIndexesAfterPossibleUpdate() *Apollo {
+	sorted_inputs := SortInputs(b.preselectedUtxos)
+	for i, utxo := range sorted_inputs {
+		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
+		val, ok := b.redeemersToUTxO[key]
+		if ok && val.Tag == Redeemer.SPEND {
+			redeem := b.redeemersToUTxO[key]
+			redeem.Index = i
+			b.redeemersToUTxO[key] = redeem
+		}
+	}
+	b.redeemers = make([]Redeemer.Redeemer, 0)
+	b.preselectedUtxos = sorted_inputs
+	for _, redeemer := range b.redeemersToUTxO {
+		b.redeemers = append(b.redeemers, redeemer)
+	}
+	for _, redeemer := range b.stakeRedeemers {
+		b.redeemers = append(b.redeemers, redeemer)
+	}
+	for _, redeemer := range b.mintRedeemers {
+		b.redeemers = append(b.redeemers, redeemer)
+
+	}
 	return b
 }
 
@@ -1050,6 +1086,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	if err != nil {
 		return nil, err
 	}
+	b = b.setRedeemerIndexesAfterPossibleUpdate()
 	//FINALIZE TX
 	body, err := b.buildTxBody()
 	if err != nil {
