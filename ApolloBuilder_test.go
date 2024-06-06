@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/Salvionied/apollo"
@@ -1232,4 +1233,21 @@ func TestMapWithCbor(t *testing.T) {
 		}
 	}
 
+}
+
+func TestPlutusBigInt(t *testing.T) {
+	x := "c249056bc75e2d63100000"
+	decoded, _ := hex.DecodeString(x)
+	var y PlutusData.PlutusData
+	err := cbor.Unmarshal(decoded, &y)
+	if err != nil {
+		t.Error(err)
+	}
+	if y.PlutusDataType != PlutusData.PlutusBigInt {
+		t.Error("Tx is not correct")
+	}
+	tmpBI := y.Value.(big.Int)
+	if tmpBI.String() != "100000000000000000000" {
+		t.Error("Tx is not correct")
+	}
 }

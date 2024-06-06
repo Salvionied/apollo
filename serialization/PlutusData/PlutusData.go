@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -545,6 +546,7 @@ const (
 	PlutusMap
 	PlutusIntMap
 	PlutusInt
+	PlutusBigInt
 	PlutusBytes
 	PlutusShortArray
 )
@@ -924,6 +926,8 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 		} else {
 			return canonicalenc.Marshal(pd.Value)
 		}
+	} else if pd.PlutusDataType == PlutusBigInt {
+		return cbor.Marshal(pd.Value)
 	} else {
 		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
 		if pd.TagNr == 0 {
@@ -1128,9 +1132,15 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	if err != nil {
 		return err
 	}
+	//fmt.Println(hex.EncodeToString(value))
 	ok, valid := x.(cbor.Tag)
 	if valid {
 		switch ok.Content.(type) {
+		case big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			tmpBigInt := x.(big.Int)
+			pd.Value = tmpBigInt
+			pd.TagNr = 0
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
@@ -1170,6 +1180,11 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		}
 	} else {
 		switch x.(type) {
+		case big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			tmpBigInt := x.(big.Int)
+			pd.Value = tmpBigInt
+			pd.TagNr = 0
 		case []interface{}:
 			if value[0] == 0x9f {
 				y := PlutusIndefArray{}
