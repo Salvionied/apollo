@@ -84,6 +84,18 @@ func multiAsset_OgmigoToApollo(m map[string]map[string]num.Int) MultiAsset.Multi
 	return assetMap
 }
 
+func multiAsset_ApolloToOgmigo(ma MultiAsset.MultiAsset[int64]) map[string]map[string]num.Int {
+	assetMap := make(map[string]map[string]num.Int)
+	for policy, asset := range ma {
+		tokensMap := make(map[string]num.Int)
+		for assetName, amount := range asset {
+			tokensMap[assetName.HexString()] = num.Int64(amount)
+		}
+		assetMap[policy.Value] = tokensMap
+	}
+	return assetMap
+}
+
 func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 	val := v.AssetsExceptAda()
 	ass := multiAsset_OgmigoToApollo(val)
@@ -101,6 +113,20 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 		},
 		Coin:      0,
 		HasAssets: true,
+	}
+}
+
+func value_ApolloToOgmigo(v Value.AlonzoValue) shared.Value {
+	if v.HasAssets {
+		result := multiAsset_ApolloToOgmigo(v.Am.Value)
+		result["ada"] = make(map[string]num.Int)
+		result["ada"]["lovelace"] = num.Int64(v.Am.Coin)
+		return result
+	} else {
+		result := make(map[string]map[string]num.Int)
+		result["ada"] = make(map[string]num.Int)
+		result["ada"]["lovelace"] = num.Int64(v.Coin)
+		return result
 	}
 }
 
@@ -129,6 +155,21 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 	return nil
 }
 
+func datum_ApolloToOgmigo(pd *PlutusData.DatumOption) (string, string, error) {
+	switch pd.DatumType {
+	case PlutusData.DatumTypeHash:
+		return "", hex.EncodeToString(pd.Hash), nil
+	case PlutusData.DatumTypeInline:
+		bytes, err := cbor.Marshal(pd.Inline)
+		if err != nil {
+			return "", "", err
+		}
+		return hex.EncodeToString(bytes), "", nil
+	default:
+		return "", "", fmt.Errorf("datum_ApolloToOgmigo: unknown type tag for DatumOption: %v", pd.DatumType)
+	}
+}
+
 func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, error) {
 	if len(script) == 0 {
 		return nil, nil
@@ -138,6 +179,17 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 		return nil, err
 	}
 	return &ref, nil
+}
+
+func scriptRef_ApolloToOgmigo(script *PlutusData.ScriptRef) (json.RawMessage, error) {
+	if script == nil {
+		return nil, nil
+	}
+	enc, err := json.Marshal(script)
+	if err != nil {
+		return nil, err
+	}
+	return enc, nil
 }
 
 func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
@@ -170,6 +222,29 @@ func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
 			IsPostAlonzo: true,
 		},
+	}
+}
+
+func Utxo_ApolloToOgmigo(u UTxO.UTxO) statequery.TxOut {
+	amount := value_ApolloToOgmigo(u.Output.GetValue().ToAlonzoValue())
+	datum, datumHash, err := datum_ApolloToOgmigo(u.Output.GetDatumOption())
+	if err != nil {
+		log.Fatal(err, "Failed to convert apollo datum object to ogmigo format")
+	}
+	scriptRef, err := scriptRef_ApolloToOgmigo(u.Output.GetScriptRef())
+	if err != nil {
+		log.Fatal(err, "Failed to convert apollo script ref to ogmigo format")
+	}
+	return statequery.TxOut{
+		Transaction: shared.UtxoTxID{
+			ID: hex.EncodeToString(u.Input.TransactionId),
+		},
+		Index:     uint32(u.Input.Index),
+		Address:   u.Output.GetAddress().String(),
+		Value:     amount,
+		Datum:     datum,
+		DatumHash: datumHash,
+		Script:    scriptRef,
 	}
 }
 
@@ -521,6 +596,11 @@ func (occ *OgmiosChainContext) GenesisParams() Base.GenesisParameters {
 	return genesisParams
 }
 func (occ *OgmiosChainContext) _CheckEpochAndUpdate() bool {
+	fmt.Printf(
+		"_CheckEpochAndUpdate: EndTime:%v, now:%v\n",
+		occ._epoch_info.EndTime,
+		int(time.Now().Unix()),
+	)
 	if occ._epoch_info.EndTime <= int(time.Now().Unix()) {
 		latest_epochs := occ.LatestEpoch()
 		occ._epoch_info = latest_epochs
@@ -684,10 +764,14 @@ func convertOgmiosRedeemerTag(tag string) (string, error) {
 	}
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
+func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
-	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
+	var additionalUtxosOgmigo []statequery.TxOut
+	for _, u := range additionalUtxos {
+		additionalUtxosOgmigo = append(additionalUtxosOgmigo, Utxo_ApolloToOgmigo(u))
+	}
+	eval, err := occ.ogmigo.EvaluateTxWithAdditionalUtxos(ctx, hex.EncodeToString(tx), additionalUtxosOgmigo)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"OgmiosChainContext: EvaluateTx: Error evaluating tx: %v",
@@ -714,6 +798,14 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 		}
 	}
 	return final_result, nil
+}
+
+func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
+	return occ.evaluateTx(tx, nil)
+}
+
+func (occ *OgmiosChainContext) EvaluateTxWithAdditionalUtxos(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	return occ.evaluateTx(tx, additionalUtxos)
 }
 
 // This is unused

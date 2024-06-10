@@ -29,3 +29,5 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.16.0
 )
+
+replace github.com/SundaeSwap-finance/ogmigo/v6 => ../ogmigo

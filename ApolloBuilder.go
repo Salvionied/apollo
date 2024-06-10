@@ -48,6 +48,7 @@ type Apollo struct {
 	auxiliaryData      *Metadata.AuxiliaryData
 	utxos              []UTxO.UTxO
 	preselectedUtxos   []UTxO.UTxO
+	additionalUtxos    []UTxO.UTxO
 	inputAddresses     []Address.Address
 	tx                 *Transaction.Transaction
 	datums             []PlutusData.PlutusData
@@ -146,6 +147,11 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 
 func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	b.utxos = append(b.utxos, utxos...)
+	return b
+}
+
+func (b *Apollo) SetAdditionalUTxOs(utxos []UTxO.UTxO) *Apollo {
+	b.additionalUtxos = utxos
 	return b
 }
 
@@ -505,7 +511,7 @@ func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, []byte, 
 	updated_b, _, _ := cloned_b.Complete()
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
-	result, err := b.Context.EvaluateTx(tx_cbor)
+	result, err := b.Context.EvaluateTxWithAdditionalUtxos(tx_cbor, b.additionalUtxos)
 	return result, tx_cbor, err
 }
 func (b *Apollo) updateExUnits() (*Apollo, []byte, error) {

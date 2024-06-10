@@ -471,6 +471,10 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Ex
 	return final_result, nil
 }
 
+func (bfc *BlockFrostChainContext) EvaluateTxWithAdditionalUtxos(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	return nil, fmt.Errorf("EvaluateTxWithAdditionalUtxos: Not implemented")
+}
+
 type BlockfrostContractCbor struct {
 	Cbor string `json:"cbor"`
 }
