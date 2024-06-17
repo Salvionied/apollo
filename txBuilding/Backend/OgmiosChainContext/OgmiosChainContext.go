@@ -30,7 +30,6 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -192,7 +191,7 @@ func scriptRef_ApolloToOgmigo(script *PlutusData.ScriptRef) (json.RawMessage, er
 	return enc, nil
 }
 
-func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
+func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 	txHashRaw, err := hex.DecodeString(u.Transaction.ID)
 	if err != nil {
 		log.Fatal(err, "Failed to decode ogmigo transaction ID")
@@ -225,7 +224,7 @@ func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
 	}
 }
 
-func Utxo_ApolloToOgmigo(u UTxO.UTxO) statequery.TxOut {
+func Utxo_ApolloToOgmigo(u UTxO.UTxO) shared.Utxo {
 	amount := value_ApolloToOgmigo(u.Output.GetValue().ToAlonzoValue())
 	datum, datumHash, err := datum_ApolloToOgmigo(u.Output.GetDatumOption())
 	if err != nil {
@@ -235,7 +234,7 @@ func Utxo_ApolloToOgmigo(u UTxO.UTxO) statequery.TxOut {
 	if err != nil {
 		log.Fatal(err, "Failed to convert apollo script ref to ogmigo format")
 	}
-	return statequery.TxOut{
+	return shared.Utxo{
 		Transaction: shared.UtxoTxID{
 			ID: hex.EncodeToString(u.Input.TransactionId),
 		},
@@ -267,7 +266,7 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UT
 	}
 }
 
-func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
+func ogmiosValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	amts := make([]Base.AddressAmount, 0)
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
@@ -305,7 +304,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 			more_utxos = false
 		}
 		for _, u := range us {
-			am := statequeryValue_toAddressAmount(u.Value)
+			am := ogmiosValue_toAddressAmount(u.Value)
 			apolloUtxo := Base.Output{
 				Address:             u.Address,
 				Amount:              am,
@@ -410,7 +409,7 @@ func (occ *OgmiosChainContext) kupoToAddressUtxo(ctx context.Context, match kugo
 			log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
 		}
 	}
-	am := statequeryValue_toAddressAmount(shared.Value(match.Value))
+	am := ogmiosValue_toAddressAmount(shared.Value(match.Value))
 	addr, _ := Address.DecodeAddress(match.Address)
 	return addr, Base.AddressUTXO{
 		TxHash:      match.TransactionID,
@@ -767,7 +766,7 @@ func convertOgmiosRedeemerTag(tag string) (string, error) {
 func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
-	var additionalUtxosOgmigo []statequery.TxOut
+	var additionalUtxosOgmigo []shared.Utxo
 	for _, u := range additionalUtxos {
 		additionalUtxosOgmigo = append(additionalUtxosOgmigo, Utxo_ApolloToOgmigo(u))
 	}

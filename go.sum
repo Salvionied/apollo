@@ -26,6 +26,8 @@ github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231213010429-142aa2fed3c3 h1:AG
 github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20231213010429-142aa2fed3c3/go.mod h1:CsDGcgbkKoz6S4h0RJ30go7oXG+KhGE2KLhBpRFnEqA=
 github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20240112192511-634b3a182d35 h1:7ov1+v0I2StvDFAyRz9/ei+bO+OX2AzD1UKxWx3XV7o=
 github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20240112192511-634b3a182d35/go.mod h1:CsDGcgbkKoz6S4h0RJ30go7oXG+KhGE2KLhBpRFnEqA=
+github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20240613041327-627a9f8c8240 h1:RDnNABG8PR8dX+Mfu3+jk9AJX/fv9KUm/7OaujozZis=
+github.com/SundaeSwap-finance/ogmigo/v6 v6.0.0-20240613041327-627a9f8c8240/go.mod h1:CsDGcgbkKoz6S4h0RJ30go7oXG+KhGE2KLhBpRFnEqA=
 github.com/aws/aws-sdk-go v1.44.197 h1:pkg/NZsov9v/CawQWy+qWVzJMIZRQypCtYjUBXFomF8=
 github.com/aws/aws-sdk-go v1.44.197/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go v1.48.7 h1:gDcOhmkohlNk20j0uWpko5cLBbwSkB+xpkshQO45F7Y=
