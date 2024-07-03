@@ -993,6 +993,16 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			pd.PlutusDataType = PlutusMap
 			pd.Value = y
 			pd.TagNr = uint64(tag)
+		} else if _, ok := val["biguint"]; ok {
+			vl := big.NewInt(0)
+			vl.SetBytes([]byte(val["biguint"].(string)))
+			pd.PlutusDataType = PlutusInt
+			pd.Value = vl.Uint64()
+		} else if _, ok := val["bignint"]; ok {
+			vl := big.NewInt(0)
+			vl.SetBytes([]byte(val["bignint"].(string)))
+			pd.PlutusDataType = PlutusInt
+			pd.Value = vl.Uint64()
 		} else if _, ok := val["bytes"]; ok {
 			pd.PlutusDataType = PlutusBytes
 			pd.Value, _ = hex.DecodeString(val["bytes"].(string))
