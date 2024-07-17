@@ -944,6 +944,18 @@ func (b *Apollo) GetTx() *Transaction.Transaction {
 	return b.tx
 }
 
+func CountRequiredAssets(assets MultiAsset.MultiAsset[int64]) int {
+	count := 0
+	for _, asset := range assets {
+		for _, amt := range asset {
+			if amt > 0 {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 /*
 *
 
@@ -974,7 +986,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
-	if unfulfilledAmount.GreaterOrEqual(Value.Value{}) {
+	requiredAssetsCount := CountRequiredAssets(unfulfilledAmount.GetAssets())
+	fmt.Println(requiredAssetsCount)
+	if unfulfilledAmount.GetCoin() > 0 || requiredAssetsCount > 0 {
 		//BALANCE
 		if len(unfulfilledAmount.GetAssets()) > 0 {
 			//BALANCE WITH ASSETS
