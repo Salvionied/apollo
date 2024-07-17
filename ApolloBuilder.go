@@ -987,7 +987,6 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
 	requiredAssetsCount := CountRequiredAssets(unfulfilledAmount.GetAssets())
-	fmt.Println(requiredAssetsCount)
 	if unfulfilledAmount.GetCoin() > 0 || requiredAssetsCount > 0 {
 		//BALANCE
 		if len(unfulfilledAmount.GetAssets()) > 0 {
