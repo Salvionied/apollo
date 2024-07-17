@@ -1349,7 +1349,7 @@ Returns:
 	error: an error if setWalletFromMnemonic fails.
 */
 
-func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
+func (a *Apollo) SetWalletFromMnemonic(mnemonic string, network constants.Network) (*Apollo, error) {
 	paymentPath := "m/1852'/1815'/0'/0/0"
 	stakingPath := "m/1852'/1815'/0'/2/0"
 	hdWall, err := HDWallet.NewHDWalletFromMnemonic(mnemonic, "")
@@ -1377,7 +1377,12 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
 	skh, _ := stakeVerKey.Hash()
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
+	addr := Address.Address{}
+	if network == constants.MAINNET {
+		addr = Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
+	} else {
+		addr = Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 0, AddressType: Address.KEY_KEY, HeaderByte: 0b00000000, Hrp: "addr_test"}
+	}
 	wallet := apollotypes.GenericWallet{SigningKey: signingKey, VerificationKey: verificationKey, Address: addr, StakeSigningKey: stakeSigningKey, StakeVerificationKey: stakeVerificationKey}
 	a.wallet = &wallet
 	return a, nil
