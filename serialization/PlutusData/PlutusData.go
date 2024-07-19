@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 
@@ -1411,18 +1412,33 @@ type PlutusV2Script []byte
 	 	Returns:
 	   		Address.Address: The generated address.
 */
-func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
+func (ps *PlutusV2Script) ToAddress(stakingCredential []byte, network constants.Network) Address.Address {
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
-		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		if network == constants.MAINNET {
+			return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		} else {
+			return Address.Address{hash.Bytes(), nil, Address.TESTNET, Address.SCRIPT_NONE, 0b01110000, "addr_test"}
+		}
 	} else {
-		return Address.Address{
-			PaymentPart: hash.Bytes(),
-			StakingPart: stakingCredential,
-			Network:     Address.MAINNET,
-			AddressType: Address.SCRIPT_KEY,
-			HeaderByte:  0b00010001,
-			Hrp:         "addr",
+		if network == constants.MAINNET {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010001,
+				Hrp:         "addr",
+			}
+		} else {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010000,
+				Hrp:         "addr_test",
+			}
 		}
 	}
 }
