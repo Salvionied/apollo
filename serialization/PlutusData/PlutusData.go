@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"sort"
+	"strings"
 
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 
@@ -542,7 +545,9 @@ type PlutusType int
 const (
 	PlutusArray PlutusType = iota
 	PlutusMap
+	PlutusIntMap
 	PlutusInt
+	PlutusBigInt
 	PlutusBytes
 	PlutusShortArray
 )
@@ -607,7 +612,6 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
 	res = append(res, 0x9f)
-
 	for _, el := range pia {
 		bytes, err := cbor.Marshal(el)
 		if err != nil {
@@ -742,7 +746,15 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.PlutusDataType = PlutusMap
 			pd.Value = y
 			pd.TagNr = 0
-
+		case map[uint64]interface{}:
+			y := new(map[uint64]Datum)
+			err = cbor.Unmarshal(value, y)
+			if err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusIntMap
+			pd.Value = y
+			pd.TagNr = 0
 		default:
 		}
 
@@ -755,6 +767,87 @@ type PlutusData struct {
 	PlutusDataType PlutusType
 	TagNr          uint64
 	Value          any
+}
+
+func (pd *PlutusData) String() string {
+	res := ""
+	if pd.TagNr != 0 {
+		res += fmt.Sprintf("Constr: %d\n", pd.TagNr)
+	}
+	switch pd.PlutusDataType {
+	case PlutusArray:
+		res += "Array[\n"
+		value, ok := pd.Value.(PlutusIndefArray)
+		if ok {
+			for _, v := range value {
+				contentString := v.String()
+				for idx, line := range strings.Split(contentString, "\n") {
+					if idx == len(strings.Split(contentString, "\n"))-1 {
+						res += "    " + line
+					} else {
+						res += "    " + line + "\n"
+					}
+				}
+				res += ",\n"
+			}
+			res += "]"
+		}
+		value2, ok := pd.Value.(PlutusDefArray)
+		if ok {
+			for _, v := range value2 {
+				contentString := v.String()
+				for _, line := range strings.Split(contentString, "\n") {
+					res += "    " + line + "\n"
+				}
+				res += ",\n"
+			}
+			res += "]"
+		}
+	case PlutusMap:
+		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
+		if ok {
+			res += "Map{\n"
+			for k, v := range value {
+				contentString := v.String()
+				res += k.String() + ": "
+				for idx, line := range strings.Split(contentString, "\n") {
+					if idx == 0 {
+						res += line + "\n"
+						continue
+					}
+					res += "    " + line + "\n"
+				}
+				res += ",\n"
+			}
+			res += "}"
+		}
+
+	case PlutusIntMap:
+		value, ok := pd.Value.(map[uint64]PlutusData)
+		if ok {
+			res += "IntMap{\n"
+			for k, v := range value {
+				contentString := v.String()
+				res += fmt.Sprint(k) + ": "
+				for idx, line := range strings.Split(contentString, "\n") {
+					if idx == 0 {
+						res += line + "\n"
+						continue
+					}
+					res += "    " + line + "\n"
+				}
+				res += ",\n"
+			}
+			res += "}"
+		}
+	case PlutusInt:
+		res += fmt.Sprintf("Int(%d)", pd.Value.(uint64))
+	case PlutusBytes:
+		res += fmt.Sprintf("Bytes(%s)", hex.EncodeToString(pd.Value.([]uint8)))
+	default:
+		res += fmt.Sprintf("%v", pd.Value)
+	}
+	return res
 }
 
 /*
@@ -819,11 +912,32 @@ func (pd *PlutusData) Clone() PlutusData {
 		error: An error, if any, during ecoding.
 */
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
-	if pd.TagNr == 0 {
+	//enc, _ := cbor.CanonicalEncOptions().EncMode()
+	if pd.PlutusDataType == PlutusMap {
+		customEnc, _ := cbor.EncOptions{Sort: cbor.SortBytewiseLexical}.EncMode()
+		if pd.TagNr != 0 {
+			return customEnc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		} else {
+			return customEnc.Marshal(pd.Value)
+		}
+	} else if pd.PlutusDataType == PlutusIntMap {
+		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
+		if pd.TagNr != 0 {
+			return canonicalenc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		} else {
+			return canonicalenc.Marshal(pd.Value)
+		}
+	} else if pd.PlutusDataType == PlutusBigInt {
 		return cbor.Marshal(pd.Value)
 	} else {
-		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
+		if pd.TagNr == 0 {
+			return cbor.Marshal(pd.Value)
+		} else {
+			return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		}
 	}
+
 }
 
 /*
@@ -861,7 +975,14 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			var tag int
 			constructor, ok := val["constructor"]
 			if ok {
-				tag = int(121 + constructor.(float64))
+				constrfloat := constructor.(float64)
+				if constrfloat < 7 {
+					tag = int(121 + constrfloat)
+				} else if 7 <= constrfloat && constrfloat < 1400 {
+					tag = int(1280 + constrfloat - 7)
+				} else {
+					return errors.New("constructor out of range ")
+				}
 			} else {
 				tag = 0
 			}
@@ -873,18 +994,136 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			pd.PlutusDataType = PlutusMap
 			pd.Value = y
 			pd.TagNr = uint64(tag)
+		} else if _, ok := val["biguint"]; ok {
+			vl := big.NewInt(0)
+			vl.SetBytes([]byte(val["biguint"].(string)))
+			pd.PlutusDataType = PlutusInt
+			pd.Value = vl.Uint64()
+		} else if _, ok := val["bignint"]; ok {
+			vl := big.NewInt(0)
+			vl.SetBytes([]byte(val["bignint"].(string)))
+			pd.PlutusDataType = PlutusInt
+			pd.Value = vl.Uint64()
 		} else if _, ok := val["bytes"]; ok {
 			pd.PlutusDataType = PlutusBytes
 			pd.Value, _ = hex.DecodeString(val["bytes"].(string))
 		} else if _, ok := val["int"]; ok {
 			pd.PlutusDataType = PlutusInt
 			pd.Value = uint64(val["int"].(float64))
-		} else {
-			return errors.New("invalid Nested Struct in plutus data")
+		} else if valu, ok := val["map"]; ok {
+			var tag int
+			constructor, ok := val["constructor"]
+			if ok {
+				constrfloat := constructor.(float64)
+				if constrfloat < 7 {
+					tag = int(121 + constrfloat)
+				} else if 7 <= constrfloat && constrfloat < 1400 {
+					tag = int(1280 + constrfloat - 7)
+				} else {
+					return errors.New("constructor out of range ")
+				}
+			} else {
+				tag = 0
+			}
+			isInt := false
+			normalMap := make(map[serialization.CustomBytes]PlutusData)
+			IntMap := make(map[uint64]PlutusData)
+			for _, element := range valu.([]interface{}) {
+				dictionary, ok := element.(map[string]interface{})
+				if ok {
+					kval, okk := dictionary["k"].(map[string]interface{})
+					vval, okv := dictionary["v"].(map[string]interface{})
+					if okk && okv {
+						if kvalue, okk := kval["int"]; okk {
+							isInt = true
+							pd := PlutusData{}
+							marshaled := []byte{}
+							marshaled, err = json.Marshal(vval)
+
+							err = json.Unmarshal(marshaled, &pd)
+							if err != nil {
+								return err
+							}
+							parsedInt := kvalue.(float64)
+							IntMap[uint64(parsedInt)] = pd
+						} else {
+							pd := PlutusData{}
+							marshaled := []byte{}
+							marshaled, err = json.Marshal(vval)
+
+							err = json.Unmarshal(marshaled, &pd)
+							if err != nil {
+								return err
+							}
+							bytes, _ := hex.DecodeString(kval["bytes"].(string))
+							cb := serialization.NewCustomBytes(string(bytes))
+							normalMap[cb] = pd
+						}
+					}
+				}
+			}
+			if isInt {
+				pd.PlutusDataType = PlutusIntMap
+				pd.Value = IntMap
+				pd.TagNr = uint64(tag)
+			} else {
+				pd.PlutusDataType = PlutusMap
+				pd.Value = normalMap
+				pd.TagNr = uint64(tag)
+			}
+			return nil
+
+		} else if valu, ok := val["list"]; ok {
+			y := new([]PlutusData)
+			var tag int
+			constructor, ok := val["constructor"]
+			if ok {
+				constrfloat := constructor.(float64)
+				if constrfloat < 7 {
+					tag = int(121 + constrfloat)
+				} else if 7 <= constrfloat && constrfloat < 1400 {
+					tag = int(1280 + constrfloat - 7)
+				} else {
+					return errors.New("constructor out of range ")
+				}
+			} else {
+				tag = 0
+			}
+
+			marshaled, _ := json.Marshal(valu)
+			err = json.Unmarshal(marshaled, y)
+			if err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusArray
+			pd.Value = PlutusIndefArray(*y)
+			pd.TagNr = uint64(tag)
+
 		}
+	default:
+		fmt.Println("DEFAULT", x)
 
 	}
 	return nil
+}
+
+type PlutusDataKey struct {
+	CborHexValue string
+}
+
+func (pdk *PlutusDataKey) String() string {
+	return pdk.CborHexValue
+
+}
+
+func (pdk *PlutusDataKey) UnmarshalCBOR(value []uint8) error {
+	pdk.CborHexValue = hex.EncodeToString(value)
+	return nil
+}
+
+func (pdk *PlutusDataKey) MarshalCBOR() ([]uint8, error) {
+	decodedHex, _ := hex.DecodeString(pdk.CborHexValue)
+	return decodedHex, nil
 }
 
 /*
@@ -904,23 +1143,31 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	if err != nil {
 		return err
 	}
+	//fmt.Println(hex.EncodeToString(value))
 	ok, valid := x.(cbor.Tag)
 	if valid {
 		switch ok.Content.(type) {
+		case big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			tmpBigInt := x.(big.Int)
+			pd.Value = tmpBigInt
+			pd.TagNr = 0
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			if value[2] == 0x9f {
+			lenTag := len([]byte(fmt.Sprint(ok.Number)))
+			if value[lenTag-1] == 0x9f {
 				y := PlutusIndefArray{}
-				err = cbor.Unmarshal(value[2:], &y)
+				err = cbor.Unmarshal(value[lenTag-1:], &y)
 				if err != nil {
 					return err
 				}
 				pd.Value = y
 			} else {
 				y := PlutusDefArray{}
-				err = cbor.Unmarshal(value[2:], &y)
+				err = cbor.Unmarshal(value[lenTag-1:], &y)
 				if err != nil {
+
 					return err
 				}
 				pd.Value = y
@@ -938,14 +1185,17 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.PlutusDataType = PlutusMap
 			pd.Value = y
 			pd.TagNr = 0
-
 		default:
 			//TODO SKIP
-			fmt.Println("HERE")
 			return nil
 		}
 	} else {
 		switch x.(type) {
+		case big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			tmpBigInt := x.(big.Int)
+			pd.Value = tmpBigInt
+			pd.TagNr = 0
 		case []interface{}:
 			if value[0] == 0x9f {
 				y := PlutusIndefArray{}
@@ -977,15 +1227,33 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 
 		case map[interface{}]interface{}:
-			y := new(map[serialization.CustomBytes]PlutusData)
-			err = cbor.Unmarshal(value, y)
+			y := map[serialization.CustomBytes]PlutusData{}
+			err = cbor.Unmarshal(value, &y)
 			if err != nil {
+				y := map[PlutusDataKey]PlutusData{}
+				err := cbor.Unmarshal(value, &y)
+				if err != nil {
+					return err
+				}
+				pd.PlutusDataType = PlutusMap
+				pd.Value = &y
+				pd.TagNr = 0
 				return err
 			}
-			pd.PlutusDataType = PlutusMap
-			pd.Value = y
+			isInt := false
+			for k := range y {
+				if k.IsInt() {
+					isInt = true
+					break
+				}
+			}
+			if isInt {
+				pd.PlutusDataType = PlutusIntMap
+			} else {
+				pd.PlutusDataType = PlutusMap
+			}
+			pd.Value = &y
 			pd.TagNr = 0
-
 		default:
 			fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
 		}
@@ -1144,18 +1412,33 @@ type PlutusV2Script []byte
 	 	Returns:
 	   		Address.Address: The generated address.
 */
-func (ps *PlutusV2Script) ToAddress(stakingCredential []byte) Address.Address {
+func (ps *PlutusV2Script) ToAddress(stakingCredential []byte, network constants.Network) Address.Address {
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
-		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		if network == constants.MAINNET {
+			return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		} else {
+			return Address.Address{hash.Bytes(), nil, Address.TESTNET, Address.SCRIPT_NONE, 0b01110000, "addr_test"}
+		}
 	} else {
-		return Address.Address{
-			PaymentPart: hash.Bytes(),
-			StakingPart: stakingCredential,
-			Network:     Address.MAINNET,
-			AddressType: Address.SCRIPT_KEY,
-			HeaderByte:  0b00010001,
-			Hrp:         "addr",
+		if network == constants.MAINNET {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010001,
+				Hrp:         "addr",
+			}
+		} else {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010000,
+				Hrp:         "addr_test",
+			}
 		}
 	}
 }

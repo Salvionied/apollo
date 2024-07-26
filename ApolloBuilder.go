@@ -944,6 +944,18 @@ func (b *Apollo) GetTx() *Transaction.Transaction {
 	return b.tx
 }
 
+func CountRequiredAssets(assets MultiAsset.MultiAsset[int64]) int {
+	count := 0
+	for _, asset := range assets {
+		for _, amt := range asset {
+			if amt > 0 {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 /*
 *
 
@@ -974,7 +986,8 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
-	if unfulfilledAmount.GreaterOrEqual(Value.Value{}) {
+	requiredAssetsCount := CountRequiredAssets(unfulfilledAmount.GetAssets())
+	if unfulfilledAmount.GetCoin() > 0 || requiredAssetsCount > 0 {
 		//BALANCE
 		if len(unfulfilledAmount.GetAssets()) > 0 {
 			//BALANCE WITH ASSETS
@@ -1349,7 +1362,7 @@ Returns:
 	error: an error if setWalletFromMnemonic fails.
 */
 
-func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
+func (a *Apollo) SetWalletFromMnemonic(mnemonic string, network constants.Network) (*Apollo, error) {
 	paymentPath := "m/1852'/1815'/0'/0/0"
 	stakingPath := "m/1852'/1815'/0'/2/0"
 	hdWall, err := HDWallet.NewHDWalletFromMnemonic(mnemonic, "")
@@ -1377,7 +1390,12 @@ func (a *Apollo) SetWalletFromMnemonic(mnemonic string) (*Apollo, error) {
 	skh, _ := stakeVerKey.Hash()
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
+	addr := Address.Address{}
+	if network == constants.MAINNET {
+		addr = Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 1, AddressType: Address.KEY_KEY, HeaderByte: 0b00000001, Hrp: "addr"}
+	} else {
+		addr = Address.Address{StakingPart: skh[:], PaymentPart: vkh[:], Network: 0, AddressType: Address.KEY_KEY, HeaderByte: 0b00000000, Hrp: "addr_test"}
+	}
 	wallet := apollotypes.GenericWallet{SigningKey: signingKey, VerificationKey: verificationKey, Address: addr, StakeSigningKey: stakeSigningKey, StakeVerificationKey: stakeVerificationKey}
 	a.wallet = &wallet
 	return a, nil
@@ -1533,7 +1551,11 @@ func (b *Apollo) Submit() (serialization.TransactionId, error) {
 */
 func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	tx := Transaction.Transaction{}
-	err := cbor.Unmarshal([]byte(txCbor), &tx)
+	cborBytes, err := hex.DecodeString(txCbor)
+	if err != nil {
+		return nil, err
+	}
+	err = cbor.Unmarshal(cborBytes, &tx)
 	if err != nil {
 		return b, err
 	}

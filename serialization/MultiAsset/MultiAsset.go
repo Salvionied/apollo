@@ -48,7 +48,7 @@ func (ma MultiAsset[V]) RemoveZeroAssets() MultiAsset[V] {
 	result := make(MultiAsset[V])
 	for policy, asset := range ma {
 		for assetName, amount := range asset {
-			if amount != 0 {
+			if amount > 0 {
 				_, ok := result[policy]
 				if ok {
 					result[policy][assetName] = amount
@@ -212,5 +212,4 @@ func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.As
 		}
 	}
 	return result
-
 }

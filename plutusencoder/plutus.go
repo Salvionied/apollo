@@ -235,13 +235,13 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 	types := reflect.TypeOf(v)
 	values := reflect.ValueOf(v)
 	//get Container type
-	fields, ok := types.FieldByName("_")
-	typeOfStruct := fields.Tag.Get("plutusType")
-	if typeOfStruct == "Map" {
-		isMap = true
-	}
+	ok := types.Kind() == reflect.Struct
 	if ok {
+		fields, _ := types.FieldByName("_")
 		typeOfStruct := fields.Tag.Get("plutusType")
+		if typeOfStruct == "Map" {
+			isMap = true
+		}
 		Constr := fields.Tag.Get("plutusConstr")
 		if Constr != "" {
 			parsedConstr, err := strconv.Atoi(Constr)
@@ -266,6 +266,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			overallContainer = PlutusData.PlutusDefArray{}
 			isIndef = false
 		default:
+			fmt.Println(typeOfStruct)
 			return nil, fmt.Errorf("error: unknown type")
 		}
 		//get fields
@@ -293,6 +294,35 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			}
 			switch typeOfField {
+			case "Bool":
+				if values.Field(i).Kind() != reflect.Bool {
+					return nil, fmt.Errorf("error: Bool field is not bool")
+				}
+				var boolPD PlutusData.PlutusData
+				switch values.Field(i).Bool() {
+				case true:
+					boolPD = PlutusData.PlutusData{
+						TagNr:          122,
+						PlutusDataType: PlutusData.PlutusArray,
+						Value:          PlutusData.PlutusDefArray{},
+					}
+				case false:
+					boolPD = PlutusData.PlutusData{
+						TagNr:          121,
+						PlutusDataType: PlutusData.PlutusArray,
+						Value:          PlutusData.PlutusDefArray{},
+					}
+				}
+				if isMap {
+					nameBytes := serialization.NewCustomBytes(name)
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = boolPD
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), boolPD)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), boolPD)
+					}
+				}
 			case "Bytes":
 				if values.Field(i).Kind() != reflect.Slice {
 					return nil, fmt.Errorf("error: Bytes field is not a slice")
@@ -507,7 +537,28 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 
 	}
 	if !ok {
-		return nil, fmt.Errorf("error: no _ field")
+		switch types.Kind() {
+		case reflect.String:
+			return &PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value:          []byte(values.Interface().(string)),
+				TagNr:          containerConstr,
+			}, nil
+		case reflect.Int:
+			return &PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusInt,
+				Value:          values.Interface().(int),
+				TagNr:          containerConstr,
+			}, nil
+		case reflect.Slice:
+			return &PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value:          values.Interface().([]byte),
+				TagNr:          containerConstr,
+			}, nil
+		default:
+			return nil, fmt.Errorf("error: unknown type")
+		}
 	}
 	ptype := PlutusData.PlutusArray
 	if isMap {
@@ -541,6 +592,7 @@ func CborUnmarshal(data string, v interface{}, network byte) error {
 func UnmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) (ret error) {
 	defer func() {
 		if r := recover(); r != nil {
+			fmt.Println("Recovered in UnmarshalPlutus", r)
 			ret = errors.New("error unmarshalling")
 		}
 	}()
@@ -606,11 +658,9 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 	tps := types.Elem()
 	//values := reflect.ValueOf(tps)
 	//isStruct := tps.Kind() == reflect.Struct
-	fields, ok := tps.FieldByName("_")
+	ok := tps.Kind() == reflect.Struct
 	if ok {
-		if !ok {
-			return fmt.Errorf("error: no _ field")
-		}
+		fields, _ := tps.FieldByName("_")
 		switch data.PlutusDataType {
 		case PlutusData.PlutusArray:
 			if reflect.TypeOf(v).Kind() != reflect.Ptr {
@@ -635,6 +685,13 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 					if tps.Field(idx+1).Type.String() == "Address.Address" {
 						addr := DecodePlutusAddress(pAEl, network)
 						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
+						continue
+					}
+					if tps.Field(idx+1).Type.String() == "bool" {
+						if tps.Field(idx+1).Type.String() != "bool" {
+							return fmt.Errorf("error: Bool field is not bool")
+						}
+						reflect.ValueOf(v).Elem().Field(idx + 1).SetBool(pAEl.TagNr == 122)
 						continue
 					}
 					switch pAEl.PlutusDataType {
@@ -718,6 +775,13 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
 						continue
 					}
+					if tps.Field(idx+1).Type.String() == "bool" {
+						if tps.Field(idx+1).Type.String() != "bool" {
+							return fmt.Errorf("error: Bool field is not bool")
+						}
+						reflect.ValueOf(v).Elem().Field(idx + 1).SetBool(pAEl.TagNr == 122)
+						continue
+					}
 					switch pAEl.PlutusDataType {
 					case PlutusData.PlutusBytes:
 						if tps.Field(idx+1).Type.String() != "[]uint8" {
@@ -797,16 +861,21 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 				return fmt.Errorf("error: value is not a PlutusMap")
 			}
 			for idxStringHex, pAEl := range *values {
-				idxBytes, _ := hex.DecodeString(idxStringHex.String())
+				idxBytes, _ := hex.DecodeString(idxStringHex.HexString())
 				idx := string(idxBytes)
 				field, ok := tps.FieldByName(idx)
 				if !ok {
+					fmt.Println(idxBytes, idxStringHex.String(), idxStringHex)
+					fmt.Println(idx)
 					return fmt.Errorf("error: field %s does not exist", idx)
 				}
 				switch field.Type.String() {
 				case "Address.Address":
 					addr := DecodePlutusAddress(pAEl, network)
 					reflect.ValueOf(v).Elem().FieldByName(idx).Set(reflect.ValueOf(addr))
+					continue
+				case "bool":
+					reflect.ValueOf(v).Elem().FieldByName(idx).SetBool(pAEl.TagNr == 122)
 					continue
 				case "[]uint8":
 					if pAEl.PlutusDataType != PlutusData.PlutusBytes {
@@ -881,7 +950,46 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 			return fmt.Errorf("error: unknown type")
 		}
 	} else {
-		return fmt.Errorf("error: no _ field")
+		if types.Kind() == reflect.Ptr {
+			types = types.Elem()
+		}
+		switch types.Kind() {
+		case reflect.String:
+			if data.PlutusDataType != PlutusData.PlutusBytes {
+				return fmt.Errorf("error: Bytes field is not a slice")
+			}
+			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+				return fmt.Errorf("error: v is not a pointer")
+			}
+			if reflect.TypeOf(v).Elem().Kind() != reflect.String {
+				return fmt.Errorf("error: v is not a string")
+			}
+			reflect.ValueOf(v).Elem().SetString(string(data.Value.([]byte)))
+		case reflect.Int:
+			if data.PlutusDataType != PlutusData.PlutusInt {
+				return fmt.Errorf("error: Int field is not int64")
+			}
+			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+				return fmt.Errorf("error: v is not a pointer")
+			}
+			if reflect.TypeOf(v).Elem().Kind() != reflect.Int {
+				return fmt.Errorf("error: v is not an int")
+			}
+			reflect.ValueOf(v).Elem().SetInt(int64(data.Value.(uint64)))
+		case reflect.Slice:
+			if data.PlutusDataType != PlutusData.PlutusBytes {
+				return fmt.Errorf("error: Bytes field is not a slice")
+			}
+			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+				return fmt.Errorf("error: v is not a pointer")
+			}
+			if reflect.TypeOf(v).Elem().Kind() != reflect.Slice {
+				return fmt.Errorf("error: v is not a slice")
+			}
+			reflect.ValueOf(v).Elem().Set(reflect.ValueOf(data.Value))
+		default:
+			return fmt.Errorf("error: unknown type")
+		}
 	}
 
 	return nil

@@ -2,8 +2,9 @@ package serialization
 
 import (
 	"encoding/hex"
-	"log"
+	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/Salvionied/cbor/v2"
 	"golang.org/x/crypto/blake2b"
@@ -109,6 +110,21 @@ type CustomBytes struct {
 	tp    string
 }
 
+func (cb *CustomBytes) Int() (int, error) {
+	if cb.tp == "uint64" {
+		value, err := strconv.ParseInt(cb.Value, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return int(value), nil
+	}
+	return 0, fmt.Errorf("not int")
+}
+
+func (cb *CustomBytes) IsInt() bool {
+	return cb.tp == "uint64"
+}
+
 func NewCustomBytes(value string) CustomBytes {
 
 	return CustomBytes{Value: hex.EncodeToString([]byte(value))}
@@ -122,7 +138,13 @@ func NewCustomBytes(value string) CustomBytes {
 	Returns:
 		string: The Value's string representation of CustomBytes.
 */
-func (cb CustomBytes) String() string {
+func (cb *CustomBytes) String() string {
+	if cb.tp == "uint64" {
+		return fmt.Sprintf("Int(%s)", cb.Value)
+	}
+	return fmt.Sprintf("Bytes(%s)", cb.Value)
+}
+func (cb *CustomBytes) HexString() string {
 	return cb.Value
 }
 
@@ -144,6 +166,13 @@ func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
 			return cbor.Marshal(make([]byte, 0))
 		}
 		return cbor.Marshal(cb.Value)
+	}
+	if cb.tp == "uint64" {
+		value, err := strconv.ParseInt(cb.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return cbor.Marshal(value)
 	}
 	res, err := hex.DecodeString(cb.Value)
 	if err != nil {
@@ -180,8 +209,11 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	case string:
 		cb.tp = "string"
 		cb.Value = res.(string)
+	case uint64:
+		cb.tp = "uint64"
+		cb.Value = fmt.Sprintf("%d", res.(uint64))
 	default:
-		log.Fatal("Unknown type")
+		return fmt.Errorf("invalid type for customBytes")
 	}
 	return nil
 }

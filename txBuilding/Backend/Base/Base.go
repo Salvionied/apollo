@@ -92,7 +92,7 @@ type Output struct {
 }
 
 func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
-	txOut, _ := o.ToTransactionOutput()
+	txOut := o.ToTransactionOutput()
 	decodedTxHash, _ := hex.DecodeString(txHash)
 	utxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -104,7 +104,7 @@ func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
 	return &utxo
 }
 
-func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, PlutusData.PlutusData) {
+func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 	address, _ := Address.DecodeAddress(o.Address)
 	amount := o.Amount
 	lovelace_amount := 0
@@ -145,13 +145,25 @@ func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, Plut
 		cbor.Unmarshal(decoded, &x)
 
 		datum = x
+		tx_out := TransactionOutput.TransactionOutput{
+			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+				Address: address,
+				Amount:  final_amount.ToAlonzoValue(),
+				Datum: &PlutusData.DatumOption{
+					Inline:    &datum,
+					DatumType: 1,
+				},
+			},
+			IsPostAlonzo: true,
+		}
+		return tx_out
 	}
 	tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
 		Address:   address,
 		Amount:    final_amount,
 		DatumHash: datum_hash,
 		HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
-	return tx_out, datum
+	return tx_out
 }
 
 type TxUtxos struct {
