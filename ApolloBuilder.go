@@ -213,7 +213,11 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 		*Apollo: A pointer to the modified Apollo instance.
 */
 func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
-	b.utxos = append(b.utxos, utxos...)
+	for _, utxo := range utxos {
+		if !Utils.Contains(b.utxos, utxo) {
+			b.utxos = append(b.utxos, utxos...)
+		}
+	}
 	return b
 }
 
