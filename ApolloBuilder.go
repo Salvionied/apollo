@@ -783,11 +783,13 @@ Returns:
 	error: An error if the setCollateral fails.
 */
 
-func (b *Apollo) setCollateral() (*Apollo, error) {
+func (b *Apollo) setCollateral(selectedAmount Value.Value) (*Apollo, error) {
 	if len(b.collaterals) > 0 {
 		collateral_amount := 5_000_000
 		for _, utxo := range b.collaterals {
-			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 &&
+				int(utxo.Output.GetValue().GetCoin()) - int(selectedAmount.GetCoin()) > 0 &&
+				len(utxo.Output.GetValue().GetAssets()) <= 5 {
 				b.totalCollateral = collateral_amount
 				return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
 				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
@@ -1043,8 +1045,8 @@ func (b *Apollo) Complete() (*Apollo, error) {
 			selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 			available_utxos = available_utxos[1:]
 			b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+			b.AddCollateral(utxo)
 		}
-
 	}
 	// ADD NEW SELECTED INPUTS TO PRE SELECTION
 	b.preselectedUtxos = append(b.preselectedUtxos, selectedUtxos...)
@@ -1052,7 +1054,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET REDEEMER INDEXES
 	b = b.setRedeemerIndexes()
 	//SET COLLATERAL
-	b, err := b.setCollateral()
+	b, err := b.setCollateral(selectedAmount)
 	if err != nil {
 		return nil, err
 	}
@@ -1778,7 +1780,9 @@ func (b *Apollo) AddWithdrawal(address Address.Address, amount int, redeemerData
 }
 
 func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
-	b.collaterals = append(b.collaterals, utxo)
+	if !Utils.Contains(b.collaterals, utxo) {
+		b.collaterals = append(b.collaterals, utxo)
+	}
 	return b
 }
 
@@ -1786,7 +1790,8 @@ func (b *Apollo) CompleteExact(fee int) (*Apollo, error) {
 	//SET REDEEMER INDEXES
 	b = b.setRedeemerIndexes()
 	//SET COLLATERAL
-	b, err := b.setCollateral()
+	selectedAmount := Value.Value{}
+	b, err := b.setCollateral(selectedAmount)
 	if err != nil {
 		return nil, err
 	}
