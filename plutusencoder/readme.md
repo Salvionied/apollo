@@ -32,12 +32,12 @@ Marshaling
 ```
     d = Datum{...}
 
-    plutusData, err := plutus.MarshalPlutus(d)
+    plutusData, err := plutusencoder.MarshalPlutus(d)
 ```
 Unmarshaling
 ```
     plutusData = PlutusData.PlutusData{...}
     d = Datum{...}
-    err := plutus.UnmarshalPlutus(d)
+    err := plutusencoder.UnmarshalPlutus(d)
 
 ```
