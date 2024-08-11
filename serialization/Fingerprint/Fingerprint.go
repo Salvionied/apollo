@@ -48,9 +48,17 @@ func (f *Fingerprint) ToPlutusData() PlutusData.PlutusData {
 	return PlutusData.PlutusData {
 		TagNr: 121,
 		PlutusDataType: PlutusData.PlutusArray,
-		Value: [][]byte {
-			policyIdValue,
-			assetNameValue,
+		Value: PlutusData.PlutusIndefArray {
+			PlutusData.PlutusData {
+				TagNr: 0,
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value: policyIdValue,
+			},
+			PlutusData.PlutusData {
+				TagNr: 0,
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value: assetNameValue,
+			},
 		},
 	}
 }
