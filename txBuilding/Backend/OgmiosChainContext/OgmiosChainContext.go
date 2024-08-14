@@ -173,11 +173,28 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	if len(script) == 0 {
 		return nil, nil
 	}
-	var ref PlutusData.ScriptRef
+        var ref struct {
+          Language string
+          Cbor string
+        }
 	if err := json.Unmarshal(script, &ref); err != nil {
 		return nil, err
 	}
-	return &ref, nil
+        if ref.Language == "" {
+                return nil, fmt.Errorf("can't parse script ref (missing 'language') '%s'", string(script))
+        }
+        if ref.Cbor == "" {
+                return nil, fmt.Errorf("can't parse script ref (missing 'cbor') '%s'", string(script))
+        }
+        cborRaw, err := hex.DecodeString(ref.Cbor)
+        if err != nil {
+          return nil, err
+        }
+        return &PlutusData.ScriptRef{
+          Script: PlutusData.InnerScript{
+            Script: cborRaw,
+          },
+        }, nil
 }
 
 func scriptRef_ApolloToOgmigo(script *PlutusData.ScriptRef) (json.RawMessage, error) {
@@ -503,28 +520,35 @@ type ExUnits struct {
 	Memory uint64 `json:"memory"`
 }
 
+type ReferenceScriptsFees struct {
+	Base       float64 `json:"base"`
+	Range      uint64  `json:"range"`
+	Multiplier float64 `json:"multiplier"`
+}
+
 type OgmiosProtocolParameters struct {
-	MinFeeConstant                  AdaLovelace `json:"minFeeConstant"`
-	MinFeeCoefficient               uint64      `json:"minFeeCoefficient"`
-	MaxBlockSize                    Bytes       `json:"maxBlockBodySize"`
-	MaxTxSize                       Bytes       `json:"maxTransactionSize"`
-	MaxBlockHeaderSize              Bytes       `json:"maxBlockHeaderSize"`
-	KeyDeposits                     AdaLovelace `json:"stakeCredentialDeposit"`
-	PoolDeposits                    AdaLovelace `json:"stakePoolDeposit"`
-	PoolInfluence                   string      `json:"stakePoolPledgeInfluence"`
-	MonetaryExpansion               string      `json:"monetaryExpansion"`
-	TreasuryExpansion               string      `json:"treasuryExpansion"`
-	ExtraEntropy                    string      `json:"extraEntropy"`
-	MaxValSize                      Bytes       `json:"maxValueSize"`
-	ScriptExecutionPrices           Prices      `json:"scriptExecutionPrices"`
-	MinUtxoDepositCoefficient       uint64      `json:"minUtxoDepositCoefficient"`
-	MinUtxoDepositConstant          AdaLovelace `json:"minUtxoDepositConstant"`
-	MinStakePoolCost                AdaLovelace `json:"minStakePoolCost"`
-	MaxExecutionUnitsPerTransaction ExUnits     `json:"maxExecutionUnitsPerTransaction"`
-	MaxExecutionUnitsPerBlock       ExUnits     `json:"maxExecutionUnitsPerBlock"`
-	CollateralPercentage            uint64      `json:"collateralPercentage"`
-	MaxCollateralInputs             uint64      `json:"maxCollateralInputs"`
-	Version                         Version     `json:"version"`
+	MinFeeConstant                  AdaLovelace          `json:"minFeeConstant"`
+	MinFeeCoefficient               uint64               `json:"minFeeCoefficient"`
+	MaxBlockSize                    Bytes                `json:"maxBlockBodySize"`
+	MaxTxSize                       Bytes                `json:"maxTransactionSize"`
+	MaxBlockHeaderSize              Bytes                `json:"maxBlockHeaderSize"`
+	KeyDeposits                     AdaLovelace          `json:"stakeCredentialDeposit"`
+	PoolDeposits                    AdaLovelace          `json:"stakePoolDeposit"`
+	PoolInfluence                   string               `json:"stakePoolPledgeInfluence"`
+	MonetaryExpansion               string               `json:"monetaryExpansion"`
+	TreasuryExpansion               string               `json:"treasuryExpansion"`
+	ExtraEntropy                    string               `json:"extraEntropy"`
+	MaxValSize                      Bytes                `json:"maxValueSize"`
+	ScriptExecutionPrices           Prices               `json:"scriptExecutionPrices"`
+	MinUtxoDepositCoefficient       uint64               `json:"minUtxoDepositCoefficient"`
+	MinUtxoDepositConstant          AdaLovelace          `json:"minUtxoDepositConstant"`
+	MinStakePoolCost                AdaLovelace          `json:"minStakePoolCost"`
+	MaxExecutionUnitsPerTransaction ExUnits              `json:"maxExecutionUnitsPerTransaction"`
+	MaxExecutionUnitsPerBlock       ExUnits              `json:"maxExecutionUnitsPerBlock"`
+	CollateralPercentage            uint64               `json:"collateralPercentage"`
+	MaxCollateralInputs             uint64               `json:"maxCollateralInputs"`
+	MinFeeReferenceScripts          ReferenceScriptsFees `json:"minFeeReferenceScripts"`
+	Version                         Version              `json:"version"`
 }
 
 func ratio(s string) float32 {
@@ -585,7 +609,8 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		MaxCollateralInuts:    int(ogmiosParams.MaxCollateralInputs),
 		CoinsPerUtxoByte:      strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
-		CoinsPerUtxoWord: strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		CoinsPerUtxoWord:       strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		MinFeeReferenceScripts: int(ogmiosParams.MinFeeReferenceScripts.Base),
 	}
 }
 

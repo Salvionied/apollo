@@ -2,9 +2,11 @@ package Utils
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
+	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
 	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
@@ -51,12 +53,26 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, references []TransactionInput.TransactionInput) int64 {
 	pm := context.GetProtocolParams()
+	refScriptsSize := 0
+	for _, input := range references {
+		utxo := context.GetUtxoFromRef(hex.EncodeToString(input.TransactionId), input.Index)
+		script := utxo.Output.GetScriptRef()
+		fmt.Printf("Utils.Fee: %s#%v script: %v\n",
+			hex.EncodeToString(input.TransactionId),
+			input.Index,
+			script != nil)
+		if script != nil {
+			fmt.Printf("Utils.Fee: script len: %v\n", len(script.Script.Script))
+			refScriptsSize += len(script.Script.Script)
+		}
+	}
 	fee := int64(txSize*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+
-		int(float32(mem)*pm.PriceMem)) + 10_000
+		int(float32(mem)*pm.PriceMem)+
+		refScriptsSize*pm.MinFeeReferenceScripts) + 10_000
 	return fee
 }
 
