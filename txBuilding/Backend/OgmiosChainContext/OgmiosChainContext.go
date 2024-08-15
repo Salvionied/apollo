@@ -173,28 +173,28 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	if len(script) == 0 {
 		return nil, nil
 	}
-        var ref struct {
-          Language string
-          Cbor string
-        }
+	var ref struct {
+		Language string
+		Cbor     string
+	}
 	if err := json.Unmarshal(script, &ref); err != nil {
 		return nil, err
 	}
-        if ref.Language == "" {
-                return nil, fmt.Errorf("can't parse script ref (missing 'language') '%s'", string(script))
-        }
-        if ref.Cbor == "" {
-                return nil, fmt.Errorf("can't parse script ref (missing 'cbor') '%s'", string(script))
-        }
-        cborRaw, err := hex.DecodeString(ref.Cbor)
-        if err != nil {
-          return nil, err
-        }
-        return &PlutusData.ScriptRef{
-          Script: PlutusData.InnerScript{
-            Script: cborRaw,
-          },
-        }, nil
+	if ref.Language == "" {
+		return nil, fmt.Errorf("can't parse script ref (missing 'language') '%s'", string(script))
+	}
+	if ref.Cbor == "" {
+		return nil, fmt.Errorf("can't parse script ref (missing 'cbor') '%s'", string(script))
+	}
+	cborRaw, err := hex.DecodeString(ref.Cbor)
+	if err != nil {
+		return nil, err
+	}
+	return &PlutusData.ScriptRef{
+		Script: PlutusData.InnerScript{
+			Script: cborRaw,
+		},
+	}, nil
 }
 
 func scriptRef_ApolloToOgmigo(script *PlutusData.ScriptRef) (json.RawMessage, error) {
