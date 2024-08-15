@@ -620,11 +620,6 @@ func (occ *OgmiosChainContext) GenesisParams() Base.GenesisParameters {
 	return genesisParams
 }
 func (occ *OgmiosChainContext) _CheckEpochAndUpdate() bool {
-	fmt.Printf(
-		"_CheckEpochAndUpdate: EndTime:%v, now:%v\n",
-		occ._epoch_info.EndTime,
-		int(time.Now().Unix()),
-	)
 	if occ._epoch_info.EndTime <= int(time.Now().Unix()) {
 		latest_epochs := occ.LatestEpoch()
 		occ._epoch_info = latest_epochs

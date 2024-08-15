@@ -2,7 +2,6 @@ package Utils
 
 import (
 	"encoding/hex"
-	"fmt"
 	"log"
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
@@ -59,12 +58,7 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, referenc
 	for _, input := range references {
 		utxo := context.GetUtxoFromRef(hex.EncodeToString(input.TransactionId), input.Index)
 		script := utxo.Output.GetScriptRef()
-		fmt.Printf("Utils.Fee: %s#%v script: %v\n",
-			hex.EncodeToString(input.TransactionId),
-			input.Index,
-			script != nil)
 		if script != nil {
-			fmt.Printf("Utils.Fee: script len: %v\n", len(script.Script.Script))
 			refScriptsSize += len(script.Script.Script)
 		}
 	}
