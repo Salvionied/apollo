@@ -294,6 +294,35 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			}
 			switch typeOfField {
+			case "IndefBool":
+				if values.Field(i).Kind() != reflect.Bool {
+					return nil, fmt.Errorf("error: Bool field is not bool")
+				}
+				var boolPD PlutusData.PlutusData
+				switch values.Field(i).Bool() {
+				case true:
+					boolPD = PlutusData.PlutusData{
+						TagNr:          122,
+						PlutusDataType: PlutusData.PlutusArray,
+						Value:          PlutusData.PlutusIndefArray{},
+					}
+				case false:
+					boolPD = PlutusData.PlutusData{
+						TagNr:          121,
+						PlutusDataType: PlutusData.PlutusArray,
+						Value:          PlutusData.PlutusIndefArray{},
+					}
+				}
+				if isMap {
+					nameBytes := serialization.NewCustomBytes(name)
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = boolPD
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), boolPD)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), boolPD)
+					}
+				}
 			case "Bool":
 				if values.Field(i).Kind() != reflect.Bool {
 					return nil, fmt.Errorf("error: Bool field is not bool")
@@ -605,47 +634,98 @@ func DecodePlutusAddress(data PlutusData.PlutusData, network byte) Address.Addre
 	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
 		return Address.Address{}
 	}
-	pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
-	is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
-	skh := []byte{}
-	skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
-	is_skh_script := false
-	if skh_exists {
-		is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
-		skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+	isIndef := true
+	switch data.Value.(type) {
+	case PlutusData.PlutusDefArray:
+		isIndef = false
+
 	}
-	var addrType byte
-	if is_script {
+	if isIndef {
+		pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+		fmt.Println("!!!")
+		is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+		skh := []byte{}
+		skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
+		is_skh_script := false
 		if skh_exists {
-			if is_skh_script {
-				addrType = Address.SCRIPT_SCRIPT
+			is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+			skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+		}
+		var addrType byte
+		if is_script {
+			if skh_exists {
+				if is_skh_script {
+					addrType = Address.SCRIPT_SCRIPT
+				} else {
+					addrType = Address.SCRIPT_KEY
+				}
 			} else {
-				addrType = Address.SCRIPT_KEY
+				addrType = Address.SCRIPT_NONE
 			}
 		} else {
-			addrType = Address.SCRIPT_NONE
+			if skh_exists {
+				if is_skh_script {
+					addrType = Address.KEY_SCRIPT
+				} else {
+					addrType = Address.KEY_KEY
+				}
+			} else {
+				addrType = Address.KEY_NONE
+			}
 		}
+		hrp := Address.ComputeHrp(addrType, network)
+		header := addrType<<4 | network
+		addr := Address.Address{
+			PaymentPart: pkh,
+			StakingPart: skh,
+			AddressType: addrType,
+			Network:     network,
+			HeaderByte:  header,
+			Hrp:         hrp}
+		return addr
 	} else {
+		pkh := data.Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
+		is_script := data.Value.(PlutusData.PlutusDefArray)[0].TagNr == 122
+		skh := []byte{}
+		skh_exists := data.Value.(PlutusData.PlutusDefArray)[1].TagNr == 121
+		is_skh_script := false
 		if skh_exists {
-			if is_skh_script {
-				addrType = Address.KEY_SCRIPT
+			is_skh_script = data.Value.(PlutusData.PlutusDefArray)[1].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].TagNr == 122
+			skh = data.Value.(PlutusData.PlutusDefArray)[1].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
+		}
+		var addrType byte
+		if is_script {
+			if skh_exists {
+				if is_skh_script {
+					addrType = Address.SCRIPT_SCRIPT
+				} else {
+					addrType = Address.SCRIPT_KEY
+				}
 			} else {
-				addrType = Address.KEY_KEY
+				addrType = Address.SCRIPT_NONE
 			}
 		} else {
-			addrType = Address.KEY_NONE
+			if skh_exists {
+				if is_skh_script {
+					addrType = Address.KEY_SCRIPT
+				} else {
+					addrType = Address.KEY_KEY
+				}
+			} else {
+				addrType = Address.KEY_NONE
+			}
 		}
+		hrp := Address.ComputeHrp(addrType, network)
+		header := addrType<<4 | network
+		addr := Address.Address{
+			PaymentPart: pkh,
+			StakingPart: skh,
+			AddressType: addrType,
+			Network:     network,
+			HeaderByte:  header,
+			Hrp:         hrp}
+		return addr
 	}
-	hrp := Address.ComputeHrp(addrType, network)
-	header := addrType<<4 | network
-	addr := Address.Address{
-		PaymentPart: pkh,
-		StakingPart: skh,
-		AddressType: addrType,
-		Network:     network,
-		HeaderByte:  header,
-		Hrp:         hrp}
-	return addr
 }
 
 func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr uint64, PlutusType PlutusData.PlutusType, network byte) error {
