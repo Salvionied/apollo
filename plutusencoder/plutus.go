@@ -642,7 +642,6 @@ func DecodePlutusAddress(data PlutusData.PlutusData, network byte) Address.Addre
 	}
 	if isIndef {
 		pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
-		fmt.Println("!!!")
 		is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
 		skh := []byte{}
 		skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
