@@ -3,9 +3,11 @@ package plutusencoder_test
 import (
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/Salvionied/apollo/plutusencoder"
+	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/cbor/v2"
@@ -695,7 +697,7 @@ func TestInvalidFieldConstr(t *testing.T) {
 	}
 }
 
-func TestCborUnmarshal(t *testing.T) {
+func TestCborAddressUnmarshal(t *testing.T) {
 	invalidHex := "test"
 	wrongStructHex := "d87b81d87e05"
 	validHex := "d87b81d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff"
@@ -952,4 +954,97 @@ func TestAsset(t *testing.T) {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 
+}
+
+type IntMapOfAssetCustom struct {
+	Content map[uint64]map[serialization.CustomBytes]map[serialization.CustomBytes]uint64
+}
+
+// implements plutusMarshaler interface
+func (m IntMapOfAssetCustom) ToPlutusData() (PlutusData.PlutusData, error) {
+	mapVal := make(map[serialization.CustomBytes]PlutusData.PlutusData)
+	for k, v := range m.Content {
+		innerMap := make(map[serialization.CustomBytes]PlutusData.PlutusData)
+		for k2, v2 := range v {
+			innerInnerMap := make(map[serialization.CustomBytes]PlutusData.PlutusData)
+			for k3, v3 := range v2 {
+				innerInnerMap[serialization.CustomBytes(k3)] = PlutusData.PlutusData{PlutusDataType: PlutusData.PlutusInt, Value: v3}
+			}
+			innerMap[serialization.CustomBytes(k2)] = PlutusData.PlutusData{PlutusDataType: PlutusData.PlutusMap, Value: innerInnerMap}
+		}
+		mapVal[serialization.NewCustomBytesInt(int(k))] = PlutusData.PlutusData{PlutusDataType: PlutusData.PlutusMap, Value: innerMap}
+	}
+	return PlutusData.PlutusData{PlutusDataType: PlutusData.PlutusIntMap, Value: mapVal}, nil
+}
+
+func (m IntMapOfAssetCustom) FromPlutusData(pd PlutusData.PlutusData, res interface{}) error {
+	if pd.PlutusDataType != PlutusData.PlutusIntMap {
+		return fmt.Errorf("expected map but got %v", pd.PlutusDataType)
+	}
+	mapVal, ok := pd.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+	if !ok {
+		return fmt.Errorf("expected map but got %v", pd.Value)
+	}
+	newType := new(IntMapOfAssetCustom)
+	newType.Content = make(map[uint64]map[serialization.CustomBytes]map[serialization.CustomBytes]uint64)
+	for k, v := range mapVal {
+		innermap := make(map[serialization.CustomBytes]map[serialization.CustomBytes]uint64)
+		innermapVal, ok := v.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+		if !ok {
+			return fmt.Errorf("expected map but got %v", v.Value)
+		}
+		for k2, v2 := range innermapVal {
+			innerInnerMap := make(map[serialization.CustomBytes]uint64)
+			innerInnerMapVal, ok := v2.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+			if !ok {
+				return fmt.Errorf("expected map but got %v", v2.Value)
+			}
+			for k3, v3 := range innerInnerMapVal {
+				_, ok := innerInnerMap[k3]
+				if !ok {
+					innerInnerMap[k3] = 0
+				}
+				innerInnerMap[k3], _ = v3.Value.(uint64)
+			}
+			innermap[k2] = innerInnerMap
+		}
+		keyAsInt, _ := k.Int()
+		newType.Content[uint64(keyAsInt)] = innermap
+	}
+
+	reflect.ValueOf(res).Elem().Set(reflect.ValueOf(*newType))
+	return nil
+}
+
+type IntMapOfAsset struct {
+	_                   struct{}            `plutusType:"DefList"`
+	IntMapOfAssetCustom IntMapOfAssetCustom `plutusType:"Custom"`
+}
+
+func TestIntMapOfAsset(t *testing.T) {
+	cborHex := "81a200a140a1401a05f5e10001a0"
+	pd := PlutusData.PlutusData{}
+	decodedHex, _ := hex.DecodeString(cborHex)
+	err := cbor.Unmarshal(decodedHex, &pd)
+	if err != nil {
+		t.Error(err)
+	}
+	resultinStruct := IntMapOfAsset{}
+	err = plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println("RESULT", resultinStruct)
+	//Test remarshal
+	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	if err != nil {
+		t.Error(err)
+	}
+	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
+	if hex.EncodeToString(encoded) != cborHex {
+		t.Error("encoding error", hex.EncodeToString(encoded))
+	}
 }

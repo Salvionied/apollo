@@ -738,7 +738,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 
 		case map[interface{}]interface{}:
-			y := new(map[serialization.CustomBytes]Datum)
+			y := map[serialization.CustomBytes]Datum{}
 			err = cbor.Unmarshal(value, y)
 			if err != nil {
 				return err
@@ -747,13 +747,13 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.Value = y
 			pd.TagNr = 0
 		case map[uint64]interface{}:
-			y := new(map[uint64]Datum)
+			y := map[serialization.CustomBytes]Datum{}
 			err = cbor.Unmarshal(value, y)
 			if err != nil {
 				return err
 			}
 			pd.PlutusDataType = PlutusIntMap
-			pd.Value = y
+			pd.Value = &y
 			pd.TagNr = 0
 		default:
 		}
@@ -823,7 +823,7 @@ func (pd *PlutusData) String() string {
 		}
 
 	case PlutusIntMap:
-		value, ok := pd.Value.(map[uint64]PlutusData)
+		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
 		if ok {
 			res += "IntMap{\n"
 			for k, v := range value {
@@ -1177,14 +1177,26 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.PlutusDataType = PlutusBytes
 			pd.Value = ok.Content
 		case map[interface{}]interface{}:
-			y := new(map[serialization.CustomBytes]PlutusData)
-			err = cbor.Unmarshal(value, y)
+			y := map[serialization.CustomBytes]PlutusData{}
+			err = cbor.Unmarshal(value, &y)
 			if err != nil {
 				return err
 			}
-			pd.PlutusDataType = PlutusMap
+			isInt := false
+			for k := range y {
+				if k.IsInt() {
+					isInt = true
+					break
+				}
+			}
+			if isInt {
+				pd.PlutusDataType = PlutusIntMap
+			} else {
+				pd.PlutusDataType = PlutusMap
+			}
 			pd.Value = y
 			pd.TagNr = 0
+
 		default:
 			//TODO SKIP
 			return nil
@@ -1252,7 +1264,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			} else {
 				pd.PlutusDataType = PlutusMap
 			}
-			pd.Value = &y
+			pd.Value = y
 			pd.TagNr = 0
 		default:
 			fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
