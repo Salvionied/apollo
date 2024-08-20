@@ -62,6 +62,9 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			}
 			tag := f.Tag
 			name := f.Name
+			if tag.Get("plutusKey") != "" {
+				name = tag.Get("plutusKey")
+			}
 			constr := uint64(0)
 			typeOfField := tag.Get("plutusType")
 			constrOfField := tag.Get("plutusConstr")
