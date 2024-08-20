@@ -52,7 +52,6 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			overallContainer = PlutusData.PlutusDefArray{}
 			isIndef = false
 		default:
-			fmt.Println(typeOfStruct)
 			return nil, fmt.Errorf("error: unknown type")
 		}
 		//get fields
@@ -221,8 +220,6 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			case "Custom":
 				tmpval, ok := values.Field(i).Interface().(PlutusMarshaler)
-				fmt.Println("VALUE", values.Field(i))
-				fmt.Println("TYPE", reflect.TypeOf(values.Field(i).Interface()))
 				if !ok {
 					return nil, fmt.Errorf("error: Custom field does not implement PlutusMarshaler")
 				}
@@ -405,7 +402,6 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				TagNr:          containerConstr,
 			}, nil
 		default:
-			fmt.Println("HERE 5")
 			return nil, fmt.Errorf("error: unknown type")
 		}
 	}
@@ -677,7 +673,6 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}
 					default:
-						fmt.Println("here 6")
 						return fmt.Errorf("error: unknown type")
 					}
 				}
@@ -779,18 +774,15 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}
 					default:
-						fmt.Println("HERE")
 						return fmt.Errorf("error: unknown type")
 					}
 				}
 			default:
-				fmt.Println("HERE2")
 				return fmt.Errorf("error: unknown type")
 			}
 		case PlutusData.PlutusMap:
 			values, ok := data.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
 			if !ok {
-				fmt.Println(reflect.TypeOf(data.Value))
 				return fmt.Errorf("error: value is not a PlutusMap")
 			}
 			for idxStringHex, pAEl := range values {
@@ -798,9 +790,18 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 				idx := string(idxBytes)
 				field, ok := tps.FieldByName(idx)
 				if !ok {
-					fmt.Println(idxBytes, idxStringHex.String(), idxStringHex)
-					fmt.Println(idx)
-					return fmt.Errorf("error: field %s does not exist", idx)
+					found := false
+					for i := 0; i < tps.NumField(); i++ {
+						if tps.Field(i).Tag.Get("plutusKey") == idx {
+							idx = tps.Field(i).Name
+							field = tps.Field(i)
+							found = true
+							break
+						}
+					}
+					if !found {
+						return fmt.Errorf("error: field %s does not exist", idx)
+					}
 				}
 				x, ok := reflect.ValueOf(v).Elem().FieldByName(idx).Addr().Interface().(PlutusMarshaler)
 				if ok {
@@ -850,7 +851,6 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 					switch pAEl.PlutusDataType {
 					case PlutusData.PlutusArray:
 						tp, _ := reflect.TypeOf(v).Elem().FieldByName(idx)
-
 						switch tp.Tag.Get("plutusType") {
 						case "IndefList":
 							pa, ok := pAEl.Value.(PlutusData.PlutusIndefArray)
@@ -882,17 +882,24 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 								}
 							}
 							reflect.ValueOf(v).Elem().FieldByName(idx).Set(val)
+						default:
+							err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().FieldByName(idx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
+							if err != nil {
+								return fmt.Errorf("error at index %s: %v", idx, err)
+							}
+
 						}
 					case PlutusData.PlutusMap:
 						err := unmarshalPlutus(&pAEl, reflect.ValueOf(v).Elem().FieldByName(idx).Addr().Interface(), pAEl.TagNr, pAEl.PlutusDataType, network)
 						if err != nil {
 							return fmt.Errorf("error at index %s: %v", idx, err)
 						}
+					default:
+						return fmt.Errorf("error: unknown type")
 					}
 				}
 			}
 		default:
-			fmt.Println("HERE 3")
 			return fmt.Errorf("error: unknown type")
 		}
 	} else {
