@@ -448,7 +448,19 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), *addpd)
 					}
 				}
-
+			case "Asset":
+				addpd := GetAssetPlutusData(values.Field(i).Interface().(Asset))
+				addpd.TagNr = constr
+				if isMap {
+					nameBytes := serialization.NewCustomBytes(name)
+					overallContainer.(map[serialization.CustomBytes]PlutusData.PlutusData)[nameBytes] = addpd
+				} else {
+					if isIndef {
+						overallContainer = append(overallContainer.(PlutusData.PlutusIndefArray), addpd)
+					} else {
+						overallContainer = append(overallContainer.(PlutusData.PlutusDefArray), addpd)
+					}
+				}
 			case "IndefList":
 				container := PlutusData.PlutusIndefArray{}
 				for j := 0; j < values.Field(i).Len(); j++ {
@@ -586,6 +598,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				TagNr:          containerConstr,
 			}, nil
 		default:
+			fmt.Println("HERE 5")
 			return nil, fmt.Errorf("error: unknown type")
 		}
 	}
@@ -766,6 +779,11 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
 						continue
 					}
+					if tps.Field(idx+1).Type.String() == "plutusencoder.Asset" {
+						asset := DecodePlutusAsset(pAEl)
+						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(asset))
+						continue
+					}
 					if tps.Field(idx+1).Type.String() == "bool" {
 						if tps.Field(idx+1).Type.String() != "bool" {
 							return fmt.Errorf("error: Bool field is not bool")
@@ -840,6 +858,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}
 					default:
+						fmt.Println("here 6")
 						return fmt.Errorf("error: unknown type")
 					}
 				}
@@ -854,6 +873,11 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(addr))
 						continue
 					}
+					if tps.Field(idx+1).Type.String() == "plutusencoder.Asset" {
+						asset := DecodePlutusAsset(pAEl)
+						reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(asset))
+						continue
+					}
 					if tps.Field(idx+1).Type.String() == "bool" {
 						if tps.Field(idx+1).Type.String() != "bool" {
 							return fmt.Errorf("error: Bool field is not bool")
@@ -928,10 +952,12 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 							return fmt.Errorf("error at index %d: %v", idx, err)
 						}
 					default:
+						fmt.Println("HERE")
 						return fmt.Errorf("error: unknown type")
 					}
 				}
 			default:
+				fmt.Println("HERE2")
 				return fmt.Errorf("error: unknown type")
 			}
 		case PlutusData.PlutusMap:
@@ -949,6 +975,10 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 					return fmt.Errorf("error: field %s does not exist", idx)
 				}
 				switch field.Type.String() {
+				case "Asset":
+					asset := DecodePlutusAsset(pAEl)
+					reflect.ValueOf(v).Elem().FieldByName(idx).Set(reflect.ValueOf(asset))
+					continue
 				case "Address.Address":
 					addr := DecodePlutusAddress(pAEl, network)
 					reflect.ValueOf(v).Elem().FieldByName(idx).Set(reflect.ValueOf(addr))
@@ -1026,6 +1056,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, Plutusconstr ui
 				}
 			}
 		default:
+			fmt.Println("HERE 3")
 			return fmt.Errorf("error: unknown type")
 		}
 	} else {

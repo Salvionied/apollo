@@ -926,3 +926,30 @@ func TestMap(t *testing.T) {
 	}
 
 }
+
+type AssetTest struct {
+	_     struct{}            `plutusType:"DefList"`
+	Asset plutusencoder.Asset `plutusType:"Asset"`
+}
+
+func TestAsset(t *testing.T) {
+	cborHex := "81a140a1401a05f5e100"
+	resultinStruct := AssetTest{}
+	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	if err != nil {
+		t.Error(err)
+	}
+	// Test remarshal
+	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	if err != nil {
+		t.Error(err)
+	}
+	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
+	if hex.EncodeToString(encoded) != cborHex {
+		t.Error("encoding error", hex.EncodeToString(encoded))
+	}
+
+}
