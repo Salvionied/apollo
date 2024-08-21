@@ -526,6 +526,30 @@ type ReferenceScriptsFees struct {
 	Multiplier float64 `json:"multiplier"`
 }
 
+type OgmiosCostModels struct {
+	V1 []int
+	V2 []int
+}
+
+func (ocm *OgmiosCostModels) UnmarshalJSON(bytes []byte) error {
+	x := make(map[string][]int)
+	err := json.Unmarshal(bytes, &x)
+	if err != nil {
+		return err
+	}
+	v1, ok := x["plutus:v1"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v1': %v", string(bytes))
+	}
+	v2, ok := x["plutus:v2"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v2': %v", string(bytes))
+	}
+	ocm.V1 = v1
+	ocm.V2 = v2
+	return nil
+}
+
 type OgmiosProtocolParameters struct {
 	MinFeeConstant                  AdaLovelace          `json:"minFeeConstant"`
 	MinFeeCoefficient               uint64               `json:"minFeeCoefficient"`
@@ -548,6 +572,7 @@ type OgmiosProtocolParameters struct {
 	CollateralPercentage            uint64               `json:"collateralPercentage"`
 	MaxCollateralInputs             uint64               `json:"maxCollateralInputs"`
 	MinFeeReferenceScripts          ReferenceScriptsFees `json:"minFeeReferenceScripts"`
+	CostModels                      OgmiosCostModels     `json:"plutusCostModels"`
 	Version                         Version              `json:"version"`
 }
 
@@ -577,6 +602,11 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	var ogmiosParams OgmiosProtocolParameters
 	if err := json.Unmarshal(pparams, &ogmiosParams); err != nil {
 		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters")
+	}
+
+	cm := map[Base.CostModelsPlutusVersion]PlutusData.CostModel{
+		Base.CostModelsPlutusV1: ogmiosParams.CostModels.V1,
+		Base.CostModelsPlutusV2: ogmiosParams.CostModels.V2,
 	}
 
 	return Base.ProtocolParameters{
@@ -611,6 +641,7 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
 		CoinsPerUtxoWord:       strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 		MinFeeReferenceScripts: int(ogmiosParams.MinFeeReferenceScripts.Base),
+		CostModels:             cm,
 	}
 }
 
@@ -817,6 +848,16 @@ func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO
 		}
 	}
 	return final_result, nil
+}
+
+func (occ *OgmiosChainContext) CostModelsV1() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV1]
+}
+
+func (occ *OgmiosChainContext) CostModelsV2() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV2]
 }
 
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {

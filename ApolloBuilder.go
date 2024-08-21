@@ -296,9 +296,9 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	isV1 := len(PV1Scripts) > 0
 	if len(redeemers) > 0 {
 		if len(PV2Scripts) > 0 {
-			cost_models = PlutusData.COST_MODELSV2
+			cost_models = PlutusData.CostModelV2(b.Context.CostModelsV2())
 		} else if !isV1 {
-			cost_models = PlutusData.COST_MODELSV2
+			cost_models = PlutusData.CostModelV2(b.Context.CostModelsV2())
 		}
 	}
 	if redeemers == nil {
@@ -319,7 +319,8 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	}
 	var cost_model_bytes []byte
 	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
+		cost_models_v1 := PlutusData.CostModelV1(b.Context.CostModelsV1())
+		cost_model_bytes, err = cbor.Marshal(cost_models_v1)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -333,7 +334,6 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
-
 }
 
 func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {

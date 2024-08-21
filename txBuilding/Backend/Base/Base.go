@@ -65,8 +65,15 @@ type ProtocolParameters struct {
 	CoinsPerUtxoWord       string  `json:"coins_per_utxo_word"`
 	CoinsPerUtxoByte       string  `json:"coins_per_utxo_byte"`
 	MinFeeReferenceScripts int     `json:"min_fee_reference_scripts"`
-	//CostModels            map[string]map[string]any
+	CostModels             map[CostModelsPlutusVersion]PlutusData.CostModel
 }
+
+type CostModelsPlutusVersion int
+
+const (
+	CostModelsPlutusV1 CostModelsPlutusVersion = iota
+	CostModelsPlutusV2
+)
 
 func (p ProtocolParameters) GetCoinsPerUtxoByte() int {
 	return 4310
@@ -186,6 +193,8 @@ type ChainContext interface {
 	EvaluateTxWithAdditionalUtxos([]uint8, []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error)
 	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
 	GetContractCbor(scriptHash string) string
+	CostModelsV1() PlutusData.CostModel
+	CostModelsV2() PlutusData.CostModel
 }
 
 type Epoch struct {

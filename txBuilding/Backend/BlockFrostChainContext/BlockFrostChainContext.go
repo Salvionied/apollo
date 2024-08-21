@@ -494,3 +494,13 @@ func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) string {
 	}
 	return response.Cbor
 }
+
+func (bfc *BlockFrostChainContext) CostModelsV1() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV1: unimplemented")
+	return PlutusData.CostModel(nil)
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV2() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV2: unimplemented")
+	return PlutusData.CostModel(nil)
+}
