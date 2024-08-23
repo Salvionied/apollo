@@ -3,6 +3,7 @@ package plutusencoder_test
 import (
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -1047,4 +1048,54 @@ func TestIntMapOfAsset(t *testing.T) {
 	if hex.EncodeToString(encoded) != cborHex {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
+}
+
+type BigIntStruct struct {
+	_  struct{} `plutusType:"IndefList" plutusConstr:"0"`
+	B1 *big.Int `plutusType:"BigInt"`
+	B2 *big.Int `plutusType:"BigInt"`
+}
+
+func TestBigInts(t *testing.T) {
+	cborHex := "d8799fc249186a00000000000000c24906dadce65874369871ff"
+	resultinStruct := BigIntStruct{}
+	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	if err != nil {
+		t.Error(err)
+	}
+	//Test remarshal
+	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	if err != nil {
+		t.Error(err)
+	}
+	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
+	if hex.EncodeToString(encoded) != cborHex {
+		t.Error("encoding error", hex.EncodeToString(encoded))
+	}
+
+}
+
+func TestIntAsBigInt(t *testing.T) {
+	cborHex := "d8799f0c17ff"
+	resultinStruct := BigIntStruct{}
+	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	if err != nil {
+		t.Error(err)
+	}
+	//Test remarshal
+	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	if err != nil {
+		t.Error(err)
+	}
+	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
+	if hex.EncodeToString(encoded) != cborHex {
+		t.Error("encoding error", hex.EncodeToString(encoded))
+	}
+
 }
