@@ -298,7 +298,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address := plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ := plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq" {
 		t.Error(address, "expected", "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq")
 	}
@@ -307,7 +307,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3" {
 		t.Error(address, "expected", "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3")
 	}
@@ -317,7 +317,7 @@ func TestDecodeAddressStruct(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	address = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh" {
 		t.Error(address, "expected", "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh")
 	}
