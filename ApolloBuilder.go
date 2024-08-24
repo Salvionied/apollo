@@ -708,7 +708,7 @@ func (b *Apollo) estimateFee() int64 {
 		return 0
 	}
 	fakeTxBytes, _ := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem)
+	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, fftx.TransactionBody.ReferenceInputs)
 	estimatedFee += b.FeePadding
 	return estimatedFee
 

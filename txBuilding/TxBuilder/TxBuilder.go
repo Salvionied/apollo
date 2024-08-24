@@ -404,7 +404,7 @@ func (tb *TransactionBuilder) _EstimateFee() int64 {
 	}
 	fullFakeTx, _ := tb._BuildFullFakeTx()
 	fakeTxBytes, _ := cbor.Marshal(fullFakeTx)
-	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem)
+	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem, tb.ReferenceInputs)
 	return estimatedFee
 }
 
@@ -412,6 +412,7 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	if len(tb.Datums) > 0 || len(tb.Redeemers()) > 0 {
 		witnessSet := tb.BuildWitnessSet()
 		sdh, _ := ScriptDataHash(
+			tb.Context,
 			witnessSet,
 		)
 		return &serialization.ScriptDataHash{Payload: sdh.Payload}
@@ -420,7 +421,7 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	return nil
 }
 
-func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
+func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
 	cost_models := map[int]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
@@ -438,7 +439,11 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*se
 	var redeemer_bytes []byte
 
 	if redeemers == nil {
-		redeemer_bytes, _ = hex.DecodeString("A0")
+		if chainContext.Epoch() > 506 {
+			redeemer_bytes, _ = hex.DecodeString("A0")
+		} else {
+			redeemer_bytes, _ = cbor.Marshal([]Redeemer.Redeemer{})
+		}
 	} else {
 		redeemer_bytes, _ = cbor.Marshal(redeemers)
 	}

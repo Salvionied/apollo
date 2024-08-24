@@ -198,7 +198,7 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 			log.Fatal(err, "REQUEST PROTOCOL")
 		}
 		body, err := ioutil.ReadAll(res.Body)
-		var response = Base.ProtocolParameters{}
+		var response = Base.BlockfrostProtocolParams{}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
 			log.Fatal(err, "UNMARSHAL PROTOCOL")
@@ -206,7 +206,7 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 		Cache.Set("latest_epoch_params", response)
 		now := time.Now()
 		Cache.Set("latest_epoch_params_time", now)
-		return response
+		return response.ToBaseParams()
 	} else {
 		return pm
 	}
