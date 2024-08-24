@@ -435,13 +435,14 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*se
 			cost_models = PlutusData.COST_MODELSV2
 		}
 	}
+	var redeemer_bytes []byte
+
 	if redeemers == nil {
-		redeemers = []Redeemer.Redeemer{}
+		redeemer_bytes, _ = hex.DecodeString("A0")
+	} else {
+		redeemer_bytes, _ = cbor.Marshal(redeemers)
 	}
-	redeemer_bytes, err := cbor.Marshal(redeemers)
-	if err != nil {
-		return nil, err
-	}
+
 	var datum_bytes []byte
 	if datums.Len() > 0 {
 
