@@ -119,14 +119,14 @@ func (mcc *MaestroChainContext) LatestEpochParams() Base.ProtocolParameters {
 		log.Fatal(err)
 	}
 	// Map ALL the fields
-	protocolParams.MinFeeConstant = int(ppFromApi.Data.MinFeeConstant)
+	protocolParams.MinFeeConstant = int(ppFromApi.Data.MinFeeConstant.Lovelace)
 	protocolParams.MinFeeCoefficient = int(ppFromApi.Data.MinFeeCoefficient)
-	protocolParams.MaxTxSize = int(ppFromApi.Data.MaxTxSize)
-	protocolParams.MaxBlockSize = int(ppFromApi.Data.MaxBlockBodySize)
-	protocolParams.MaxBlockHeaderSize = int(ppFromApi.Data.MaxBlockHeaderSize)
-	protocolParams.KeyDeposits = fmt.Sprint(ppFromApi.Data.StakeKeyDeposit)
-	protocolParams.PoolDeposits = fmt.Sprint(ppFromApi.Data.PoolDeposit)
-	parsedPoolInfl, _ := strconv.ParseFloat(ppFromApi.Data.PoolInfluence, 32)
+	protocolParams.MaxTxSize = int(ppFromApi.Data.MaxTransactionSize.Bytes)
+	protocolParams.MaxBlockSize = int(ppFromApi.Data.MaxBlockBodySize.Bytes)
+	protocolParams.MaxBlockHeaderSize = int(ppFromApi.Data.MaxBlockHeaderSize.Bytes)
+	protocolParams.KeyDeposits = fmt.Sprint(ppFromApi.Data.StakeCredentialDeposit)
+	protocolParams.PoolDeposits = fmt.Sprint(ppFromApi.Data.StakePoolDeposit)
+	parsedPoolInfl, _ := strconv.ParseFloat(ppFromApi.Data.StakePoolPledgeInfluence, 32)
 	protocolParams.PooolInfluence = float32(parsedPoolInfl)
 	monExp, _ := strconv.ParseFloat(ppFromApi.Data.MonetaryExpansion, 32)
 	protocolParams.MonetaryExpansion = float32(monExp)
@@ -138,9 +138,9 @@ func (mcc *MaestroChainContext) LatestEpochParams() Base.ProtocolParameters {
 	protocolParams.ProtocolMinorVersion = int(ppFromApi.Data.ProtocolVersion.Minor)
 	//CHECK HERE
 	//protocolParams.MinUtxo = ppFromApi.Data.
-	protocolParams.MinPoolCost = fmt.Sprint(ppFromApi.Data.MinPoolCost)
-	protocolParams.PriceMem = parseMaestroFloat(ppFromApi.Data.Prices.Memory)
-	protocolParams.PriceStep = parseMaestroFloat(ppFromApi.Data.Prices.Steps)
+	protocolParams.MinPoolCost = fmt.Sprint(ppFromApi.Data.MinStakePoolCost)
+	protocolParams.PriceMem = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Memory)
+	protocolParams.PriceStep = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Steps)
 	protocolParams.MaxTxExMem = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory)
 	protocolParams.MaxTxExSteps = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Steps)
 	protocolParams.MaxBlockExMem = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerBlock.Memory)
@@ -148,7 +148,7 @@ func (mcc *MaestroChainContext) LatestEpochParams() Base.ProtocolParameters {
 	protocolParams.MaxValSize = fmt.Sprint(ppFromApi.Data.MaxValueSize)
 	protocolParams.CollateralPercent = int(ppFromApi.Data.CollateralPercentage)
 	protocolParams.MaxCollateralInuts = int(ppFromApi.Data.MaxCollateralInputs)
-	protocolParams.CoinsPerUtxoByte = fmt.Sprint(ppFromApi.Data.CoinsPerUtxoByte)
+	//protocolParams.CoinsPerUtxoByte = fmt.Sprint(ppFromApi.Data.CoinsPerUtxoByte)
 	protocolParams.CoinsPerUtxoWord = "0"
 	//protocolParams.CostModels = ppFromApi.Data.CostModels
 	return protocolParams

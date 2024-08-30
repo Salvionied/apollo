@@ -464,7 +464,7 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		MaxValSize:            strconv.FormatUint(ogmiosParams.MaxValSize.Bytes, 10),
 		CollateralPercent:     int(ogmiosParams.CollateralPercentage),
 		MaxCollateralInuts:    int(ogmiosParams.MaxCollateralInputs),
-		CoinsPerUtxoByte:      strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		//CoinsPerUtxoByte:      strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
 		CoinsPerUtxoWord: strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 	}

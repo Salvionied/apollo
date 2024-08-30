@@ -66,7 +66,7 @@ func InitFixedChainContext() FixedChainContext {
 		MaxBlockExSteps:       "40000000000",
 		MaxValSize:            "5000",
 		CoinsPerUtxoWord:      "34482",
-		CoinsPerUtxoByte:      "4310",
+		//CoinsPerUtxoByte:      "4310",
 	},
 		GenesisParams: Base.GenesisParameters{
 			ActiveSlotsCoefficient: 0.05,
