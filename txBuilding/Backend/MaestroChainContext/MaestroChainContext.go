@@ -104,6 +104,9 @@ func (mcc *MaestroChainContext) LatestEpoch() Base.Epoch {
 }
 
 func parseMaestroFloat(floatString string) float32 {
+	if floatString == "" {
+		return 0
+	}
 	splitString := strings.Split(floatString, "/")
 	top := splitString[0]
 	bottom := splitString[1]
