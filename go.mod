@@ -24,7 +24,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.0.0
-	github.com/maestro-org/go-sdk v1.1.3
+	github.com/maestro-org/go-sdk v1.2.0
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.8.0
 )
