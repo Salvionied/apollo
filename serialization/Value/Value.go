@@ -64,14 +64,12 @@ func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
 func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
 	if alVal.HasAssets {
 		if alVal.Am.Coin < 0 {
-			fmt.Println(alVal.ToValue().GetCoin())
 			return nil, errors.New("invalid coin value")
 		}
 		em, _ := cbor.CanonicalEncOptions().EncMode()
 		return em.Marshal(alVal.Am)
 	} else {
 		if alVal.Coin < 0 {
-			fmt.Println(alVal.ToValue().GetCoin())
 			return nil, errors.New("invalid coin value")
 		}
 		return cbor.Marshal(alVal.Coin)
@@ -522,14 +520,12 @@ func (val *Value) UnmarshalCBOR(value []byte) error {
 func (val *Value) MarshalCBOR() ([]byte, error) {
 	if val.HasAssets {
 		if val.Am.Coin < 0 {
-			fmt.Println(val.GetCoin())
 			return nil, errors.New("invalid coin value")
 		}
 		em, _ := cbor.CanonicalEncOptions().EncMode()
 		return em.Marshal(val.Am)
 	} else {
 		if val.Coin < 0 {
-			fmt.Println(val.GetCoin())
 			return nil, errors.New("invalid coin value")
 		}
 		return cbor.Marshal(val.Coin)
