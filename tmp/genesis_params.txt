@@ -1,0 +1,1 @@
+{"active_slots_coefficient":0,"update_quorum":0,"max_lovelace_supply":"","network_magic":0,"epoch_length":0,"system_start":0,"slots_per_kes_period":0,"slot_length":0,"max_kes_evolutions":0,"security_param":0}
