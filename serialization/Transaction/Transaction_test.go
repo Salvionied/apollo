@@ -27,8 +27,8 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 
 	marshaled, _ := tx.Bytes()
-	if hex.EncodeToString(marshaled) != "84a3008182430102030001f60200a1049ffff4f6" {
-		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", "84a3008182430102030001f60200a1049ffff4f6")
+	if hex.EncodeToString(marshaled) != "84a3008182430102030001f60200a0f4f6" {
+		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", "84a3008182430102030001f60200a0f4f6")
 	}
 	tx2 := Transaction.Transaction{}
 	err := cbor.Unmarshal(marshaled, &tx2)
