@@ -557,7 +557,6 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(hex.EncodeToString(total_bytes), hex.EncodeToString(hashBytes))
 	return &serialization.ScriptDataHash{Payload: hashBytes}, nil
 
 }
