@@ -522,13 +522,13 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 			cost_models = PlutusData.COST_MODELSV2
 		}
 	}
-	if redeemers == nil {
-		redeemers = []Redeemer.Redeemer{}
+	var redeemer_bytes []byte
+	if len(redeemers) == 0 {
+		redeemer_bytes, _ = hex.DecodeString("a0")
+	} else {
+		redeemer_bytes, _ = cbor.Marshal(redeemers)
 	}
-	redeemer_bytes, err := cbor.Marshal(redeemers)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 	var datum_bytes []byte
 	if datums.Len() > 0 {
 		datum_bytes, err = cbor.Marshal(datums)
@@ -557,6 +557,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(hex.EncodeToString(total_bytes), hex.EncodeToString(hashBytes))
 	return &serialization.ScriptDataHash{Payload: hashBytes}, nil
 
 }
