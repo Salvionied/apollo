@@ -3,7 +3,6 @@ package Utils
 import (
 	"encoding/hex"
 	"log"
-	"math"
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -56,27 +55,19 @@ func ToCbor(x interface{}) string {
 func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput) int64 {
 	pm := context.GetProtocolParams()
 	addedFee := 0
-	if pm.MaximumReferenceScriptsSize != 0 && len(refInputs) > 0 {
+	refInputsSize := 0
+	if len(refInputs) > 0 {
 		// APPLY CONWAY FEE
-		refInputsSize := 0
 		for _, refInput := range refInputs {
 			utxo := context.GetUtxoFromRef(hex.EncodeToString(refInput.TransactionId), refInput.Index)
 			if utxo == nil {
 				continue
 			}
-			refInputsSize += len(utxo.Output.GetScriptRef().Script.Script)
+			refInputsSize += utxo.Output.GetScriptRef().Len()
 		}
-		var ceil = pm.MinFeeReferenceScriptsRange
-		var base = pm.MinFeeReferenceScriptsBase
-		for refInputsSize > 0 {
-			cur := math.Min(float64(ceil), float64(refInputsSize))
-			curFee := int(cur) * base
-			addedFee += curFee
-			refInputsSize -= ceil
-			ceil += pm.MinFeeReferenceScriptsRange
-			base *= pm.MinFeeReferenceScriptsMultiplier
-		}
+
 	}
+	addedFee = 15 * int(refInputsSize)
 	fee := int64(txSize*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+

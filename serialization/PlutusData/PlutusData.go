@@ -130,8 +130,10 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(format)
 }
 
-type ScriptRef struct {
-	Script _Script
+type ScriptRef []byte
+
+func (sr ScriptRef) Len() int {
+	return len(sr)
 }
 
 type CostModels map[serialization.CustomBytes]CM

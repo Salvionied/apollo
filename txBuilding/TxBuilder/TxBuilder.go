@@ -161,16 +161,16 @@ func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{},
 	if script != nil {
 		tb.InputsToScripts = make(map[string]PlutusData.ScriptHashable)
 	}
-	if utxo.Output.IsPostAlonzo && len(utxo.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script)
+	if utxo.Output.IsPostAlonzo && len(*utxo.Output.PostAlonzo.ScriptRef) > 0 {
+		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(*utxo.Output.GetScriptRef())
 		tb.ReferenceInputs = append(tb.ReferenceInputs, utxo.Input)
-		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script))
+		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(*utxo.Output.GetScriptRef()))
 	} else if script == nil {
 		for _, i := range tb.LoadedUtxos {
-			if i.Output.IsPostAlonzo && len(i.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script)
+			if i.Output.IsPostAlonzo && len(*i.Output.PostAlonzo.ScriptRef) > 0 {
+				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(*i.Output.GetScriptRef())
 				tb.ReferenceInputs = append(tb.ReferenceInputs, i.Input)
-				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script))
+				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(*i.Output.GetScriptRef()))
 				break
 			}
 		}
@@ -469,6 +469,7 @@ func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnes
 			return nil, err
 		}
 	}
+	fmt.Println(cost_model_bytes)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	hash, err := serialization.Blake2bHash(total_bytes)
