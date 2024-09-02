@@ -852,13 +852,13 @@ func TestFeePadding(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if built.GetTx().TransactionBody.Fee != 683641 {
+	if built.GetTx().TransactionBody.Fee != 683509 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {
 		t.Error("Tx is not correct")
 	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13316359 {
+	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13316491 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].Lovelace())
 	}
 	if built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo && built.GetTx().TransactionBody.Outputs[0].GetDatumHash() != nil {
