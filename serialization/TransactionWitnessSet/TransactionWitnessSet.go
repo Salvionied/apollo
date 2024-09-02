@@ -58,14 +58,26 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 			Redeemer:           tws.Redeemer,
 		})
 	}
-	return cbor.Marshal(normaltws{
-		VkeyWitnesses:      tws.VkeyWitnesses,
-		NativeScripts:      tws.NativeScripts,
-		BootstrapWitnesses: tws.BootstrapWitnesses,
-		PlutusV1Script:     tws.PlutusV1Script,
-		PlutusV2Script:     tws.PlutusV2Script,
-		PlutusData:         &tws.PlutusData,
-		Redeemer:           tws.Redeemer,
-	})
+	if len(tws.PlutusData) > 0 {
+		return cbor.Marshal(normaltws{
+			VkeyWitnesses:      tws.VkeyWitnesses,
+			NativeScripts:      tws.NativeScripts,
+			BootstrapWitnesses: tws.BootstrapWitnesses,
+			PlutusV1Script:     tws.PlutusV1Script,
+			PlutusV2Script:     tws.PlutusV2Script,
+			PlutusData:         &tws.PlutusData,
+			Redeemer:           tws.Redeemer,
+		})
+	} else {
+		return cbor.Marshal(normaltws{
+			VkeyWitnesses:      tws.VkeyWitnesses,
+			NativeScripts:      tws.NativeScripts,
+			BootstrapWitnesses: tws.BootstrapWitnesses,
+			PlutusV1Script:     tws.PlutusV1Script,
+			PlutusV2Script:     tws.PlutusV2Script,
+			PlutusData:         nil,
+			Redeemer:           tws.Redeemer,
+		})
+	}
 
 }

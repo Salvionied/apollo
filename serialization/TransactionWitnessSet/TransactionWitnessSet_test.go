@@ -15,7 +15,7 @@ func TestMarshalAndUnmarshalNoScripts(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error marshaling TransactionWitnessSet: %v", err)
 	}
-	if hex.EncodeToString(twsBytes) != "a1049fff" {
+	if hex.EncodeToString(twsBytes) != "a0" {
 		t.Error("TransactionWitnessSet marshaled incorrectly", hex.EncodeToString(twsBytes))
 	}
 }
