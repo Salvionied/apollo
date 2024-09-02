@@ -438,15 +438,13 @@ func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnes
 	}
 	var redeemer_bytes []byte
 
-	if redeemers == nil {
-		if chainContext.Epoch() > 506 {
-			redeemer_bytes, _ = hex.DecodeString("A0")
-		} else {
-			redeemer_bytes, _ = cbor.Marshal([]Redeemer.Redeemer{})
-		}
+	fmt.Println(isV1)
+	if len(redeemers) == 0 {
+		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
 		redeemer_bytes, _ = cbor.Marshal(redeemers)
 	}
+	fmt.Println(redeemer_bytes)
 
 	var datum_bytes []byte
 	if datums.Len() > 0 {
@@ -477,6 +475,7 @@ func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnes
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(hex.EncodeToString(total_bytes))
 	return &serialization.ScriptDataHash{hash}, nil
 
 }
