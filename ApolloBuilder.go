@@ -507,21 +507,29 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if len(b.datums) == 0 && len(b.redeemers) == 0 {
 		return nil, nil
 	}
-	witnessSet := b.buildWitnessSet()
-	cost_models := map[int]cbor.Marshaler{}
-	redeemers := witnessSet.Redeemer
-	PV1Scripts := witnessSet.PlutusV1Script
-	PV2Scripts := witnessSet.PlutusV2Script
-	datums := witnessSet.PlutusData
-
-	isV1 := len(PV1Scripts) > 0
+	redeemers := b.redeemers
+	PV1Scripts := b.v1scripts
+	PV2Scripts := b.v2scripts
+	datums := b.datums
+	usedCms := map[any]cbor.Marshaler{}
 	if len(redeemers) > 0 {
-		if len(PV2Scripts) > 0 {
-			cost_models = PlutusData.COST_MODELSV2
-		} else if !isV1 {
-			cost_models = PlutusData.COST_MODELSV2
+		if len(PV1Scripts) > 0 {
+			usedCms[serialization.CustomBytes{Value: "00"}] = PlutusData.PLUTUSV1COSTMODEL
 		}
+		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
+			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
+		}
+
 	}
+	// 	if len(PV2Scripts) > 0 {
+	// 		cost_models = PlutusData.COST_MODELSV2
+	// 		fmt.Println("USING V2")
+	// 	} else if !isV1 {
+	// 		cost_models = PlutusData.COST_MODELSV2
+	// 		fmt.Println("USING V2")
+	// 	}
+	// }
+
 	var redeemer_bytes []byte
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
@@ -530,8 +538,9 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	var err error
 	var datum_bytes []byte
-	if datums.Len() > 0 {
-		datum_bytes, err = cbor.Marshal(datums)
+	if len(datums) > 0 {
+
+		datum_bytes, err = cbor.Marshal(PlutusData.PlutusIndefArray(datums))
 		if err != nil {
 			return nil, err
 		}
@@ -539,25 +548,47 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		datum_bytes = []byte{}
 	}
 	var cost_model_bytes []byte
-	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
-		if err != nil {
-			return nil, err
-		}
-	}
+	cost_model_bytes, _ = cbor.Marshal(usedCms)
+	//fmt.Println(cost_model_bytes)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
+	// //total_bytes := redeemer_bytes
+	// // Compute all versions of the hash
+	// // with pv1
+	// clmsBytsV1, _ := cbor.Marshal(PlutusData.COST_MODELSV1)
+	// tbytesP1 := append(total_bytes, clmsBytsV1...)
+	// fmt.Println("TOTAL_BYTES", hex.EncodeToString(tbytesP1))
+	// hashP1, err := serialization.Blake2bHash(tbytesP1)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// //fmt.Println("PRE_HASH_PV1", hex.EncodeToString(tbytesP1))
+	// fmt.Println("HASH_PV1", hex.EncodeToString(hashP1))
+	// // with pv2
+	// clmsBytsV2, _ := cbor.Marshal(map[int]cbor.Marshaler{1: PlutusData.PLUTUSV2COSTMODEL})
+	// tbytesP2 := append(total_bytes, clmsBytsV2...)
+	// hashP2, err := serialization.Blake2bHash(tbytesP2)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// //fmt.Println("PRE_HASH_PV2", hex.EncodeToString(tbytesP2))
+	// fmt.Println("HASH_PV2", hex.EncodeToString(hashP2))
+	// // No Pv version
+	// clmsNoHash, _ := hex.DecodeString("a0")
+	// tbytesNoHash := append(total_bytes, clmsNoHash...)
+	// hashNoHash, err := serialization.Blake2bHash(tbytesNoHash)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// //fmt.Println("PRE_HASH_NO_HASH", hex.EncodeToString(tbytesNoHash))
+	// fmt.Println("HASH_NO_HASH", hex.EncodeToString(hashNoHash))
 	total_bytes = append(total_bytes, cost_model_bytes...)
-	hashBytes, err := serialization.Blake2bHash(total_bytes)
+	hash, err := serialization.Blake2bHash(total_bytes)
 	if err != nil {
 		return nil, err
 	}
-	return &serialization.ScriptDataHash{Payload: hashBytes}, nil
+	// fmt.Println("PRE_HASH", hex.EncodeToString(total_bytes))
+	// fmt.Println("HASH", hex.EncodeToString(hash))
+	return &serialization.ScriptDataHash{hash}, nil
 
 }
 
