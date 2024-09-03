@@ -404,7 +404,7 @@ func (tb *TransactionBuilder) _EstimateFee() int64 {
 	}
 	fullFakeTx, _ := tb._BuildFullFakeTx()
 	fakeTxBytes, _ := cbor.Marshal(fullFakeTx)
-	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem, tb.ReferenceInputs)
+	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem, tb.ReferenceInputs, 0)
 	return estimatedFee
 }
 

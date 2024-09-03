@@ -52,10 +52,10 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput) int64 {
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput, includedScriptsLen int) int64 {
 	pm := context.GetProtocolParams()
 	addedFee := 0
-	refInputsSize := 0
+	refInputsSize := 0 + includedScriptsLen
 	if len(refInputs) > 0 {
 		// APPLY CONWAY FEE
 		for _, refInput := range refInputs {
@@ -67,7 +67,7 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInput
 		}
 
 	}
-	addedFee = 15 * int(refInputsSize)
+	addedFee = 20 * int(refInputsSize)
 	fee := int64(txSize*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+
