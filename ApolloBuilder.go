@@ -734,20 +734,15 @@ func (b *Apollo) estimateFee() int64 {
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
 	}
+	for _, mintRedeemer := range b.mintRedeemers {
+		pExU.Sum(mintRedeemer.ExUnits)
+	}
 	fftx, err := b.buildFullFakeTx()
 	if err != nil {
 		return 0
 	}
-	fftxScriptSize := 0
-	for _, v1Script := range b.v1scripts {
-		fftxScriptSize += len(v1Script)
-	}
-	for _, v2Script := range b.v2scripts {
-		fftxScriptSize += len(v2Script)
-	}
-
 	fakeTxBytes, _ := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, fftx.TransactionBody.ReferenceInputs, fftxScriptSize)
+	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, fftx.TransactionBody.ReferenceInputs)
 	estimatedFee += b.FeePadding
 	return estimatedFee
 
