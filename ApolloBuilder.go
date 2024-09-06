@@ -1523,7 +1523,7 @@ func (b *Apollo) SetWalletAsChangeAddress() *Apollo {
 		*Apollo: A pointer to the Apollo object with the transaction signed.
 */
 func (b *Apollo) Sign() *Apollo {
-	signatures := b.wallet.SignTx(*b.tx)
+	signatures := b.wallet.SignTx(*b.tx, append(b.preselectedUtxos, b.collaterals...))
 	b.tx.TransactionWitnessSet = signatures
 	return b
 }
