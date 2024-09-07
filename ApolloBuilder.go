@@ -1895,3 +1895,7 @@ func (b *Apollo) updateExUnitsExact(fee int) *Apollo {
 	}
 	return b
 }
+
+func (b *Apollo) GetPaymentsLength() int {
+	return len(b.payments)
+}
