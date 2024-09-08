@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
@@ -1767,6 +1768,17 @@ func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 */
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)
+	exists := false
+	for _, input := range b.referenceInputs {
+		if bytes.Equal(input.TransactionId, decodedHash) && input.Index == index {
+			exists = true
+			break
+		}
+	}
+	if exists {
+		return b
+	}
+
 	input := TransactionInput.TransactionInput{
 		TransactionId: decodedHash,
 		Index:         index,
