@@ -141,6 +141,9 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 */
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
+	for _, utxo := range utxos {
+		b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+	}
 	return b
 }
 
