@@ -75,6 +75,7 @@ type Apollo struct {
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
+	forceFee           bool
 }
 
 func New(cc Base.ChainContext) *Apollo {
@@ -425,7 +426,7 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	return &tx, nil
 }
 
-func (b *Apollo) estimateFee() int64 {
+func (b *Apollo) GetEstimatedFee() int64 {
 	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
@@ -438,7 +439,19 @@ func (b *Apollo) estimateFee() int64 {
 	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, b.referenceInputs)
 	estimatedFee += b.FeePadding
 	return estimatedFee
+}
 
+func (b *Apollo) estimateFee() int64 {
+	if b.forceFee {
+		return b.Fee
+	}
+	return b.GetEstimatedFee()
+}
+
+func (b *Apollo) ForceFee(fee int64) *Apollo {
+	b.Fee = fee
+	b.forceFee = true
+	return b
 }
 
 func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
