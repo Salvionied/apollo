@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
@@ -51,12 +52,35 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput) int64 {
 	pm := context.GetProtocolParams()
+	addedFee := 0
+	refInputsSize := 0
+	if len(refInputs) > 0 {
+		// APPLY CONWAY FEE
+		for _, refInput := range refInputs {
+			utxo := context.GetUtxoFromRef(hex.EncodeToString(refInput.TransactionId), refInput.Index)
+			if utxo == nil {
+				continue
+			}
+			refInputsSize += utxo.Output.GetScriptRef().Len()
+		}
+
+	}
+	mult := 1.2
+	baseFee := 15.0
+	Range := 25600.0
+	for refInputsSize > 0 {
+		cur := Range
+		curFee := cur * baseFee
+		addedFee += int(curFee)
+		refInputsSize -= int(cur)
+		baseFee = baseFee * mult
+	}
 	fee := int64(txSize*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+
-		int(float32(mem)*pm.PriceMem)) + 10_000
+		int(float32(mem)*pm.PriceMem)) + 10_000 + int64(addedFee)
 	return fee
 }
 

@@ -130,6 +130,10 @@ func NewCustomBytes(value string) CustomBytes {
 	return CustomBytes{Value: hex.EncodeToString([]byte(value))}
 }
 
+func NewCustomBytesInt(value int) CustomBytes {
+	return CustomBytes{Value: fmt.Sprintf("%d", value), tp: "uint64"}
+}
+
 /*
 *
 
