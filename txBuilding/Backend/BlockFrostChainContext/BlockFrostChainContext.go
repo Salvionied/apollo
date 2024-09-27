@@ -418,7 +418,7 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 	req.Header.Set("Content-Type", "application/cbor")
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return serialization.TransactionId{}, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response any
