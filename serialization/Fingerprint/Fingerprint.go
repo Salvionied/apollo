@@ -5,6 +5,7 @@ import (
 
 	"github.com/Salvionied/apollo/crypto/bech32"
 	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"golang.org/x/crypto/blake2b"
 )
@@ -38,4 +39,26 @@ func (f *Fingerprint) String() string {
 	words, _ := bech32.ConvertBits(hashBytes, 8, 5, false)
 	result, _ := bech32.Encode("asset", words)
 	return result
+}
+
+func (f *Fingerprint) ToPlutusData() PlutusData.PlutusData {
+	policyIdValue, _ := hex.DecodeString(f.policyId.Value)
+	assetNameValue, _ := hex.DecodeString(f.assetName.HexString())
+
+	return PlutusData.PlutusData {
+		TagNr: 121,
+		PlutusDataType: PlutusData.PlutusArray,
+		Value: PlutusData.PlutusIndefArray {
+			PlutusData.PlutusData {
+				TagNr: 0,
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value: policyIdValue,
+			},
+			PlutusData.PlutusData {
+				TagNr: 0,
+				PlutusDataType: PlutusData.PlutusBytes,
+				Value: assetNameValue,
+			},
+		},
+	}
 }
