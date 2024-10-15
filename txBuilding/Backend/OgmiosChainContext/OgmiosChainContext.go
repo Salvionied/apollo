@@ -789,12 +789,11 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 		return serialization.TransactionId{}, fmt.Errorf("OgmiosChainContext: SubmitTx: %v", err)
 	}
 	if result.Error != nil {
-		return serialization.TransactionId{}, fmt.Errorf(
-			"OgmiosChainContext: SubmitTx: %v %v %v",
-			result.Error.Code,
-			result.Error.Message,
-			string(result.Error.Data),
-		)
+		return serialization.TransactionId{}, OgmiosError{
+			Code:    result.Error.Code,
+			Message: result.Error.Message,
+			Data:    result.Error.Data,
+		}
 	}
 	return tx.TransactionBody.Id(), nil
 }
@@ -814,6 +813,16 @@ func convertOgmiosRedeemerTag(tag string) (string, error) {
 	}
 }
 
+type OgmiosError struct {
+	Code    int
+	Message string
+	Data    []byte
+}
+
+func (o OgmiosError) Error() string {
+	return fmt.Sprintf("%v %v %v", o.Code, o.Message, string(o.Data))
+}
+
 func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
@@ -829,12 +838,11 @@ func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO
 		)
 	}
 	if eval.Error != nil {
-		return nil, fmt.Errorf(
-			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v %v %v",
-			eval.Error.Code,
-			eval.Error.Message,
-			string(eval.Error.Data),
-		)
+		return nil, OgmiosError{
+			Code:    eval.Error.Code,
+			Message: eval.Error.Message,
+			Data:    eval.Error.Data,
+		}
 	}
 	for _, e := range eval.ExUnits {
 		purpose, err := convertOgmiosRedeemerTag(e.Validator.Purpose)
