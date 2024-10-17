@@ -3,6 +3,7 @@ package Utils
 import (
 	"encoding/hex"
 	"log"
+	"math"
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -69,16 +70,16 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInput
 	}
 	mult := 1.2
 	baseFee := 15.0
-	Range := 256000.0
+	Range := 25600.0
 	for refInputsSize > 0 {
-		cur := Range
+		cur := math.Min(Range, float64(refInputsSize))
 		curFee := cur * baseFee
 		addedFee += int(curFee)
 		refInputsSize -= int(cur)
 		baseFee = baseFee * mult
 	}
 
-	fee := int64(((5/2)*txSize)*pm.MinFeeCoefficient+
+	fee := int64((txSize)*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+
 		int(float32(mem)*pm.PriceMem)) + int64(addedFee)
