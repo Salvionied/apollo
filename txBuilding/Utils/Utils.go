@@ -69,7 +69,7 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInput
 	}
 	mult := 1.2
 	baseFee := 15.0
-	Range := 25600.0
+	Range := 256000.0
 	for refInputsSize > 0 {
 		cur := Range
 		curFee := cur * baseFee
