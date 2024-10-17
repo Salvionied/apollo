@@ -161,16 +161,16 @@ func (tb *TransactionBuilder) AddScriptInput(utxo UTxO.UTxO, script interface{},
 	if script != nil {
 		tb.InputsToScripts = make(map[string]PlutusData.ScriptHashable)
 	}
-	if utxo.Output.IsPostAlonzo && len(utxo.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script)
+	if utxo.Output.IsPostAlonzo && len(*utxo.Output.PostAlonzo.ScriptRef) > 0 {
+		tb.InputsToScripts[Utils.ToCbor(utxo)] = PlutusData.PlutusV2Script(*utxo.Output.GetScriptRef())
 		tb.ReferenceInputs = append(tb.ReferenceInputs, utxo.Input)
-		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(utxo.Output.GetScriptRef().Script.Script))
+		tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(*utxo.Output.GetScriptRef()))
 	} else if script == nil {
 		for _, i := range tb.LoadedUtxos {
-			if i.Output.IsPostAlonzo && len(i.Output.PostAlonzo.ScriptRef.Script.Script) > 0 {
-				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script)
+			if i.Output.IsPostAlonzo && len(*i.Output.PostAlonzo.ScriptRef) > 0 {
+				tb.InputsToScripts[Utils.ToCbor(i)] = PlutusData.PlutusV2Script(*i.Output.GetScriptRef())
 				tb.ReferenceInputs = append(tb.ReferenceInputs, i.Input)
-				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(i.Output.GetScriptRef().Script.Script))
+				tb.ReferenceScripts = append(tb.ReferenceScripts, PlutusData.PlutusV2Script(*i.Output.GetScriptRef()))
 				break
 			}
 		}
@@ -404,7 +404,7 @@ func (tb *TransactionBuilder) _EstimateFee() int64 {
 	}
 	fullFakeTx, _ := tb._BuildFullFakeTx()
 	fakeTxBytes, _ := cbor.Marshal(fullFakeTx)
-	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem)
+	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem, tb.ReferenceInputs)
 	return estimatedFee
 }
 
@@ -412,6 +412,7 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	if len(tb.Datums) > 0 || len(tb.Redeemers()) > 0 {
 		witnessSet := tb.BuildWitnessSet()
 		sdh, _ := ScriptDataHash(
+			tb.Context,
 			witnessSet,
 		)
 		return &serialization.ScriptDataHash{Payload: sdh.Payload}
@@ -420,7 +421,7 @@ func (tb *TransactionBuilder) _ScriptDataHash() *serialization.ScriptDataHash {
 	return nil
 }
 
-func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
+func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
 	cost_models := map[int]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
@@ -435,13 +436,16 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*se
 			cost_models = PlutusData.COST_MODELSV2
 		}
 	}
-	if redeemers == nil {
-		redeemers = []Redeemer.Redeemer{}
+	var redeemer_bytes []byte
+
+	fmt.Println(isV1)
+	if len(redeemers) == 0 {
+		redeemer_bytes, _ = hex.DecodeString("a0")
+	} else {
+		redeemer_bytes, _ = cbor.Marshal(redeemers)
 	}
-	redeemer_bytes, err := cbor.Marshal(redeemers)
-	if err != nil {
-		return nil, err
-	}
+	fmt.Println(redeemer_bytes)
+
 	var datum_bytes []byte
 	if datums.Len() > 0 {
 
@@ -465,12 +469,14 @@ func ScriptDataHash(witnessSet TransactionWitnessSet.TransactionWitnessSet) (*se
 			return nil, err
 		}
 	}
+	fmt.Println(cost_model_bytes)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	hash, err := serialization.Blake2bHash(total_bytes)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(hex.EncodeToString(total_bytes))
 	return &serialization.ScriptDataHash{hash}, nil
 
 }
