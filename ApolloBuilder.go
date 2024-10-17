@@ -746,7 +746,8 @@ func (b *Apollo) estimateFee() int64 {
 		return 0
 	}
 	fakeTxBytes, _ := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, fftx.TransactionBody.ReferenceInputs)
+	fakeTxLength := len([]byte(hex.EncodeToString(fakeTxBytes)))
+	estimatedFee := Utils.Fee(b.Context, fakeTxLength, pExU.Steps, pExU.Mem, fftx.TransactionBody.ReferenceInputs)
 	estimatedFee += b.FeePadding
 	return estimatedFee
 
@@ -928,6 +929,8 @@ func (b *Apollo) updateExUnits() *Apollo {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
+				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
+				redeemer.ExUnits.Steps = int64(float32(redeemer.ExUnits.Steps) * 1.2)
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
@@ -935,6 +938,8 @@ func (b *Apollo) updateExUnits() *Apollo {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
+				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
+				redeemer.ExUnits.Steps = int64(float32(redeemer.ExUnits.Steps) * 1.2)
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
@@ -942,6 +947,8 @@ func (b *Apollo) updateExUnits() *Apollo {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
+				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
+				redeemer.ExUnits.Steps = int64(float32(redeemer.ExUnits.Steps) * 1.2)
 				b.mintRedeemers[k] = redeemer
 			}
 		}
@@ -1913,4 +1920,17 @@ func (b *Apollo) updateExUnitsExact(fee int) *Apollo {
 
 func (b *Apollo) GetPaymentsLength() int {
 	return len(b.payments)
+}
+
+func (b *Apollo) GetRedeemers() map[string]Redeemer.Redeemer {
+	return b.redeemersToUTxO
+}
+
+func (b *Apollo) UpdateRedeemers(newRedeemers map[string]Redeemer.Redeemer) *Apollo {
+	b.redeemersToUTxO = newRedeemers
+	return b
+}
+
+func (b *Apollo) GetSortedInputs() []UTxO.UTxO {
+	return SortUtxos(b.preselectedUtxos)
 }
