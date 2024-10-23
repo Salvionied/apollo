@@ -175,128 +175,127 @@ func TestComplexTxBuild(t *testing.T) {
 
 }
 
-//func TestFakeBurnBalancing(t *testing.T) {
-//	cc := FixedChainContext.InitFixedChainContext()
-//	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
-//	apollob := apollo.New(&cc)
-//	SampleUtxos := `[
-//		"82825820e996196a51c5206aac8114e9e0371968e43b67d8ff4cdf0ab43ff248aa246f1f018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a003cd53eab581c10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6a1444745524f1a001e8480581c1ddcb9c9de95361565392c5bdff64767492d61a96166cb16094e54bea1434f50541a03458925581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa144534e454b1928b0581c29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6a1434d494e1a0cb30355581c5d16cc1a177b5d9ba9cfa9793b07e60f1fb70fea1f8aef064415d114a1434941471b00000022eddeef81581c8a1cfae21368b8bebbbed9800fec304e95cce39a2a57dc35e2e3ebaaa1444d494c4b05581c8b4e239aef4d1d1bc5dd628ff3ce34d392d632e5cda83e42d6fcb1cca14b586572636865723234393301581cd480f68af028d6324ad77df489176e7f5e5d793e09a6b133392ff2f6aa524e7563617374496e63657074696f6e31343101524e7563617374496e63657074696f6e32303601524e7563617374496e63657074696f6e33323101524e7563617374496e63657074696f6e33383501524e7563617374496e63657074696f6e34303001524e7563617374496e63657074696f6e36333701524e7563617374496e63657074696f6e36373001524e7563617374496e63657074696f6e37383701524e7563617374496e63657074696f6e38333301524e7563617374496e63657074696f6e38373001581ce3ff4ab89245ede61b3e2beab0443dbcc7ea8ca2c017478e4e8990e2a549746170707930333831014974617070793034313901497461707079313430390149746170707931343437014974617070793135353001581cf0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9aa24a626c7565646573657274014a6d6f6e74626c616e636f01581cf43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535a144414749581a4ec73bbf",
-//		"8282582023fca3d654c1194e776949626b3794db80a81d66cd3490b04e55268baaf7d392048258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a003385dd",
-//		"8282582023fca3d654c1194e776949626b3794db80a81d66cd3490b04e55268baaf7d392078258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1b00000003c2f30419",
-//		"8282582063ac086da56aaeb699d6296cffc7d3bae4ea9cee1021fd9035e3144d28c195ef018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a001aae3f",
-//		"828258206f173d15f91109f4afbdb72a302f611cb4edd3f34db8f9fd7525310b0e06fc5c048258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a000faa63",
-//		"82825820462161505962663642d522d95220302a5eaaf589cd005357b5c4f6570b0f4f91018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1b0000000682bc10c6"
-//	]`
-//	plutusDataCbor := "d8799fd8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffff581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bc1b0000018a0308bc6fd8799fd8799f4040ffd8799f581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f44534e454bffffffd8799fd87a801a0083deb5ffff"
-//	decodedPlutusData, _ := hex.DecodeString(plutusDataCbor)
-//	pd := PlutusData.PlutusData{}
-//	err := cbor.Unmarshal(decodedPlutusData, &pd)
-//	if err != nil {
-//		t.Error(err)
-//	}
-//	jsonutxos := make([]string, 0)
-//	_ = json.Unmarshal([]byte(SampleUtxos), &jsonutxos)
-//	utxos := make([]UTxO.UTxO, 0)
-//	for _, utxo := range jsonutxos {
-//		var loadedUtxo UTxO.UTxO
-//		decodedUtxo, _ := hex.DecodeString(utxo)
-//		err := cbor.Unmarshal(decodedUtxo, &loadedUtxo)
-//		if err != nil {
-//			t.Error(err)
-//		}
-//		utxos = append(utxos, loadedUtxo)
-//	}
-//	decodedAddress, _ := Address.DecodeAddress("addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4")
-//	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
-//		PayToContract(decodedAddress, &pd,
-//			4000000,
-//			false,
-//			apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "SNEK", 10416)).
-//		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
-//		SetTtl(0 + 300).
-//		SetValidityStart(0).MintAssets(
-//		apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
-//	)
-//	apollob, _, err = apollob.Complete()
-//	if err != nil {
-//		fmt.Println("HERE")
-//		t.Error(err)
-//	}
-//	//t.Error("STOP")
-//	txBytes := apollob.GetTx().Bytes()
-//	fmt.Println(hex.EncodeToString(txBytes))
-//	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
-//	for _, input := range apollob.GetTx().TransactionBody.Inputs {
-//		for _, utxo := range utxos {
-//			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {
-//				//fmt.Println("INPUT", idx, utxo)
-//				inputVal = inputVal.Add(utxo.Output.GetAmount())
-//			}
-//		}
-//	}
-//	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
-//	for _, output := range apollob.GetTx().TransactionBody.Outputs {
-//		outputVal = outputVal.Add(output.GetAmount())
-//	}
-//	outputVal.AddLovelace(apollob.Fee)
-//	outputVal = outputVal.Add(apollob.GetBurns())
-//	fmt.Println("INPUT VAL", inputVal)
-//	fmt.Println("OUTPUT VAL", outputVal)
-//	if !inputVal.Equal(outputVal) {
-//		t.Error("Tx is not balanced")
-//	}
-//	// fmt.Println(apollob.GetTx().TransactionBody.Outputs)
-//	//t.Error("STOP")
-//	if err != nil {
-//		t.Error(err)
-//	}
-//
-//}
+func TestFakeBurnBalancing(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
+	apollob := apollo.New(&cc)
+	SampleUtxos := `[
+		"82825820e996196a51c5206aac8114e9e0371968e43b67d8ff4cdf0ab43ff248aa246f1f018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a003cd53eab581c10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6a1444745524f1a001e8480581c1ddcb9c9de95361565392c5bdff64767492d61a96166cb16094e54bea1434f50541a03458925581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa144534e454b1928b0581c29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6a1434d494e1a0cb30355581c5d16cc1a177b5d9ba9cfa9793b07e60f1fb70fea1f8aef064415d114a1434941471b00000022eddeef81581c8a1cfae21368b8bebbbed9800fec304e95cce39a2a57dc35e2e3ebaaa1444d494c4b05581c8b4e239aef4d1d1bc5dd628ff3ce34d392d632e5cda83e42d6fcb1cca14b586572636865723234393301581cd480f68af028d6324ad77df489176e7f5e5d793e09a6b133392ff2f6aa524e7563617374496e63657074696f6e31343101524e7563617374496e63657074696f6e32303601524e7563617374496e63657074696f6e33323101524e7563617374496e63657074696f6e33383501524e7563617374496e63657074696f6e34303001524e7563617374496e63657074696f6e36333701524e7563617374496e63657074696f6e36373001524e7563617374496e63657074696f6e37383701524e7563617374496e63657074696f6e38333301524e7563617374496e63657074696f6e38373001581ce3ff4ab89245ede61b3e2beab0443dbcc7ea8ca2c017478e4e8990e2a549746170707930333831014974617070793034313901497461707079313430390149746170707931343437014974617070793135353001581cf0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9aa24a626c7565646573657274014a6d6f6e74626c616e636f01581cf43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535a144414749581a4ec73bbf",
+		"8282582023fca3d654c1194e776949626b3794db80a81d66cd3490b04e55268baaf7d392048258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a003385dd",
+		"8282582023fca3d654c1194e776949626b3794db80a81d66cd3490b04e55268baaf7d392078258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1b00000003c2f30419",
+		"8282582063ac086da56aaeb699d6296cffc7d3bae4ea9cee1021fd9035e3144d28c195ef018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a001aae3f",
+		"828258206f173d15f91109f4afbdb72a302f611cb4edd3f34db8f9fd7525310b0e06fc5c048258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a000faa63",
+		"82825820462161505962663642d522d95220302a5eaaf589cd005357b5c4f6570b0f4f91018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1b0000000682bc10c6"
+	]`
+	plutusDataCbor := "d8799fd8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffff581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bc1b0000018a0308bc6fd8799fd8799f4040ffd8799f581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f44534e454bffffffd8799fd87a801a0083deb5ffff"
+	decodedPlutusData, _ := hex.DecodeString(plutusDataCbor)
+	pd := PlutusData.PlutusData{}
+	err := cbor.Unmarshal(decodedPlutusData, &pd)
+	if err != nil {
+		t.Error(err)
+	}
+	jsonutxos := make([]string, 0)
+	_ = json.Unmarshal([]byte(SampleUtxos), &jsonutxos)
+	utxos := make([]UTxO.UTxO, 0)
+	for _, utxo := range jsonutxos {
+		var loadedUtxo UTxO.UTxO
+		decodedUtxo, _ := hex.DecodeString(utxo)
+		err := cbor.Unmarshal(decodedUtxo, &loadedUtxo)
+		if err != nil {
+			t.Error(err)
+		}
+		utxos = append(utxos, loadedUtxo)
+	}
+	decodedAddress, _ := Address.DecodeAddress("addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4")
+	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+		PayToContract(decodedAddress, &pd,
+			4000000,
+			false,
+			apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "SNEK", 10416)).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
+		SetTtl(0 + 300).
+		SetValidityStart(0).MintAssets(
+		apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
+	)
+	apollob, _, err = apollob.Complete()
+	if err != nil {
+		fmt.Println("HERE")
+		t.Error(err)
+	}
+	//t.Error("STOP")
+	txBytes := apollob.GetTx().Bytes()
+	fmt.Println(hex.EncodeToString(txBytes))
+	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, input := range apollob.GetTx().TransactionBody.Inputs {
+		for _, utxo := range utxos {
+			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {
+				//fmt.Println("INPUT", idx, utxo)
+				inputVal = inputVal.Add(utxo.Output.GetAmount())
+			}
+		}
+	}
+	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, output := range apollob.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(output.GetAmount())
+	}
+	outputVal.AddLovelace(apollob.Fee)
+	outputVal = outputVal.Add(apollob.GetBurns())
+	fmt.Println("INPUT VAL", inputVal)
+	fmt.Println("OUTPUT VAL", outputVal)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Tx is not balanced")
+	}
+	// fmt.Println(apollob.GetTx().TransactionBody.Outputs)
+	//t.Error("STOP")
+	if err != nil {
+		t.Error(err)
+	}
+
+}
 
 func makeFakeUtxo(address Address.Address, index int, lovelace int64) UTxO.UTxO {
-       u := UTxO.UTxO{
-               Input: TransactionInput.TransactionInput{
-                       TransactionId: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-                       Index:         index,
-               },
-               Output: TransactionOutput.TransactionOutput{
-                       PreAlonzo: TransactionOutput.TransactionOutputShelley{
-                               Address: address,
-                               Amount: Value.Value{
-                                       Am: Amount.Amount{
-                                               Coin: 0,
-                                       },
-                                       Coin:      lovelace,
-                                       HasAssets: false,
-                               },
-                               DatumHash: serialization.DatumHash(serialization.ConstrainedBytes{Payload: nil}),
-                               HasDatum:  false,
-                       },
-                       IsPostAlonzo: false,
-               },
-       }
-       return u
+	u := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Index:         index,
+		},
+		Output: TransactionOutput.TransactionOutput{
+			PreAlonzo: TransactionOutput.TransactionOutputShelley{
+				Address: address,
+				Amount: Value.Value{
+					Am: Amount.Amount{
+						Coin: 0,
+					},
+					Coin:      lovelace,
+					HasAssets: false,
+				},
+				DatumHash: serialization.DatumHash(serialization.ConstrainedBytes{Payload: nil}),
+				HasDatum:  false,
+			},
+			IsPostAlonzo: false,
+		},
+	}
+	return u
 }
 
 func TestDuplicateInputSelectedInBalancing(t *testing.T) {
-       	cc := FixedChainContext.InitFixedChainContext()
-	
-        apollob := apollo.New(&cc)
+	cc := FixedChainContext.InitFixedChainContext()
+
+	apollob := apollo.New(&cc)
 	utxos := make([]UTxO.UTxO, 0)
 
 	myAddress, _ := Address.DecodeAddress("addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4")
 
-        utxo1 := makeFakeUtxo(myAddress, 0, 100_000_000)
-        utxos = append(utxos, utxo1)
+	utxo1 := makeFakeUtxo(myAddress, 0, 100_000_000)
+	utxos = append(utxos, utxo1)
 
 	apollob = apollob.
-                AddLoadedUTxOs(utxo1).
-                AddInput(utxo1).
-                PayToAddress(myAddress, 100_000_000).
+		AddLoadedUTxOs(utxo1).
+		PayToAddress(myAddress, 90_000_000).
 		SetTtl(0 + 300).
 		SetValidityStart(0).
-                SetChangeAddress(myAddress)
-        apollob, _, err := apollob.Complete()
+		SetChangeAddress(myAddress)
+	apollob, _, err := apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
 		t.Error(err)

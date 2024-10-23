@@ -138,17 +138,14 @@ func (f FixedChainContext) EvaluateTxWithAdditionalUtxos(tx []uint8, utxos []UTx
 	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
 }
 
-
-
 func (f FixedChainContext) GetContractCbor(scriptHash string) string {
 	return ""
 }
 
-
 func (f FixedChainContext) CostModelsV1() PlutusData.CostModel {
-        return PlutusData.CostModel{}
+	return PlutusData.CostModel{}
 }
 
 func (f FixedChainContext) CostModelsV2() PlutusData.CostModel {
-        return PlutusData.CostModel{}
+	return PlutusData.CostModel{}
 }

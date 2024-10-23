@@ -33,7 +33,6 @@ import (
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Utils"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -71,7 +70,7 @@ type Apollo struct {
 	withdrawals        Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
 	nativescripts      []NativeScript.NativeScript
-	usedUtxos          []string
+	usedUtxos          map[string]bool
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
@@ -100,7 +99,7 @@ func New(cc Base.ChainContext) *Apollo {
 		withdrawals:        Withdrawal.New(),
 		Fee:                0,
 		FeePadding:         0,
-		usedUtxos:          make([]string, 0),
+		usedUtxos:          make(map[string]bool, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
 }
@@ -111,9 +110,9 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
-        for _, utxo := range utxos {
-	        b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
-        }
+	for _, utxo := range utxos {
+		b.usedUtxos[utxo.GetKey()] = true
+	}
 	return b
 }
 
@@ -460,7 +459,7 @@ func (b *Apollo) ForceFee(fee int64) *Apollo {
 func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 	availableUtxos := make([]UTxO.UTxO, 0)
 	for _, utxo := range b.utxos {
-		if !slices.Contains(b.usedUtxos, utxo.GetKey()) {
+		if _, exists := b.usedUtxos[utxo.GetKey()]; !exists {
 			availableUtxos = append(availableUtxos, utxo)
 		}
 	}
@@ -597,57 +596,60 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	for _, utxo := range b.preselectedUtxos {
 		selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 	}
+	fmt.Printf("selected amount: %v\n", selectedAmount)
 	mintedValue := b.GetMints()
+	fmt.Printf("minted value: %v\n", mintedValue)
 	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
+	fmt.Printf("requested amount: %v\n", requestedAmount)
 	requestedAmount.AddLovelace(b.estimateFee() + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
+	fmt.Printf("unfulfilled amount: %v\n", unfulfilledAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
-	if unfulfilledAmount.GreaterOrEqual(Value.Value{}) {
+	if !unfulfilledAmount.Less(Value.Value{}) {
 		//BALANCE
 		if len(unfulfilledAmount.GetAssets()) > 0 {
 			//BALANCE WITH ASSETS
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
+					fmt.Printf("balance asset %v %v\n", pol, asset)
+					if amt <= 0 {
+						continue
+					}
 					found := false
 					selectedSoFar := int64(0)
-					usedIdxs := make([]int, 0)
-					for idx, utxo := range available_utxos {
+					for _, utxo := range available_utxos {
+						fmt.Printf("avialable utxo: %v\n", utxo)
 						ma := utxo.Output.GetValue().GetAssets()
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
+							fmt.Printf("sufficient utxo\n")
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
+							fmt.Printf("found!\n")
 							found = true
 							break
 						} else if ma.GetByPolicyAndId(pol, asset) > 0 {
+							fmt.Printf("helper utxo\n")
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
 							if selectedSoFar >= amt {
+								fmt.Printf("found!\n")
 								found = true
 								break
 							}
 						}
 					}
-					newAvailUtxos := make([]UTxO.UTxO, 0)
-					for idx, availutxo := range available_utxos {
-						if !slices.Contains(usedIdxs, idx) {
-							newAvailUtxos = append(newAvailUtxos, availutxo)
-						}
-					}
-					available_utxos = newAvailUtxos
 					if !found {
-                                          return nil, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
+						return nil, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
 					}
 
 				}
@@ -667,7 +669,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 			selectedUtxos = append(selectedUtxos, utxo)
 			selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 			available_utxos = available_utxos[1:]
-			b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+			b.usedUtxos[utxo.GetKey()] = true
 		}
 
 	}
@@ -751,9 +753,8 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 
 }
 
-
 func (b *Apollo) GetMints() Value.Value {
-        mints := Value.Value{}
+	mints := Value.Value{}
 	for _, mintUnit := range b.mint {
 		usedUnit := Unit{
 			PolicyId: mintUnit.PolicyId,
@@ -762,9 +763,8 @@ func (b *Apollo) GetMints() Value.Value {
 		}
 		mints = mints.Add(usedUnit.ToValue())
 	}
-	return mints 
+	return mints
 }
-
 
 func (b *Apollo) GetBurns() (burns Value.Value) {
 	burns = Value.Value{}
@@ -803,7 +803,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	) {
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
-		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
+		b.usedUtxos[sortedUtxos[0].GetKey()] = true
 		return b.addChangeAndFee()
 	}
 	if isOverUtxoLimit(change, b.inputAddresses[0], b.Context) {
@@ -860,7 +860,7 @@ func (b *Apollo) CollectFrom(
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
-	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
+	b.usedUtxos[inputUtxo.GetKey()] = true
 	newRedeemer := Redeemer.Redeemer{
 		Tag:     Redeemer.SPEND,
 		Index:   0, // This will be computed later when we iterate over redeemersToUTxO
@@ -1053,7 +1053,7 @@ func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apol
 	return b
 }
 
-func (b *Apollo) GetUsedUTxOs() []string {
+func (b *Apollo) GetUsedUTxOs() map[string]bool {
 	return b.usedUtxos
 }
 

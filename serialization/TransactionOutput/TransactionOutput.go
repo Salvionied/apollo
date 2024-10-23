@@ -222,7 +222,7 @@ func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 		return to.PostAlonzo.ScriptRef
 	} else {
 		return nil
-        }
+	}
 }
 
 func (to *TransactionOutput) GetValue() Value.Value {
