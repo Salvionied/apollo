@@ -8,6 +8,7 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Asset"
 	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
 	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
+	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 	"github.com/SundaeSwap-finance/apollo/serialization/Policy"
 	"github.com/SundaeSwap-finance/apollo/serialization/Redeemer"
 	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
@@ -133,6 +134,21 @@ func (f FixedChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.Execution
 	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
 }
 
+func (f FixedChainContext) EvaluateTxWithAdditionalUtxos(tx []uint8, utxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
+}
+
+
+
 func (f FixedChainContext) GetContractCbor(scriptHash string) string {
 	return ""
+}
+
+
+func (f FixedChainContext) CostModelsV1() PlutusData.CostModel {
+        return PlutusData.CostModel{}
+}
+
+func (f FixedChainContext) CostModelsV2() PlutusData.CostModel {
+        return PlutusData.CostModel{}
 }

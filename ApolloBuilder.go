@@ -111,6 +111,9 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
+        for _, utxo := range utxos {
+	        b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+        }
 	return b
 }
 
@@ -594,8 +597,8 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	for _, utxo := range b.preselectedUtxos {
 		selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 	}
-	burnedValue := b.GetBurns()
-	selectedAmount = selectedAmount.Add(burnedValue)
+	mintedValue := b.GetMints()
+	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
@@ -644,7 +647,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 					}
 					available_utxos = newAvailUtxos
 					if !found {
-						return nil, nil, errors.New("missing required assets")
+                                          return nil, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
 					}
 
 				}
@@ -747,6 +750,21 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 	return payments
 
 }
+
+
+func (b *Apollo) GetMints() Value.Value {
+        mints := Value.Value{}
+	for _, mintUnit := range b.mint {
+		usedUnit := Unit{
+			PolicyId: mintUnit.PolicyId,
+			Name:     mintUnit.Name,
+			Quantity: mintUnit.Quantity,
+		}
+		mints = mints.Add(usedUnit.ToValue())
+	}
+	return mints 
+}
+
 
 func (b *Apollo) GetBurns() (burns Value.Value) {
 	burns = Value.Value{}
