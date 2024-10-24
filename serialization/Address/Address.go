@@ -186,3 +186,7 @@ func DecodeAddress(value string) (Address, error) {
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
 	}
 }
+
+func (a Address) IsPublicKeyAddress() bool {
+        return a.AddressType == KEY_KEY || a.AddressType== KEY_NONE
+}

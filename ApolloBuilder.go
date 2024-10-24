@@ -499,22 +499,27 @@ func (b *Apollo) setCollateral() *Apollo {
 		len(b.referenceInputs) == 0 {
 		return b
 	}
-	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
-	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) > collateral_amount && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-
-			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
-			if min_lovelace > return_amount {
-				continue
-			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
-				b.collaterals = append(b.collaterals, utxo)
-				b.collateralReturn = &returnOutput
-				b.totalCollateral = collateral_amount
-				return b
-			}
+	for _, utxo := range b.utxos {
+                if len(utxo.Output.GetAmount().GetAssets()) > 0 {
+                        continue
+                }
+		if int(utxo.Output.GetValue().GetCoin()) < collateral_amount {
+                        continue
+                }
+                if !utxo.Output.GetAddress().IsPublicKeyAddress() {
+                        continue
+                }
+		return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
+		min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
+		if min_lovelace > return_amount {
+			continue
+		} else {
+			returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
+			b.collaterals = append(b.collaterals, utxo)
+			b.collateralReturn = &returnOutput
+			b.totalCollateral = collateral_amount
+			return b
 		}
 	}
 	return b
