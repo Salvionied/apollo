@@ -283,35 +283,36 @@ func TestUseInputAsCollateral(t *testing.T) {
 	cc := FixedChainContext.InitFixedChainContext()
 	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
 	myAddress, _ := Address.DecodeAddress("addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w")
+	// dummy script that always passes. we don't actually spend from this
+	// it's just here to encourage apollo to attach a collateral
 	script, err := hex.DecodeString("51010000322253330034a229309b2b2b9a01")
 	apollob := apollo.New(&cc)
 	utxos := make([]UTxO.UTxO, 0)
-        utxos = append(utxos, makeFakeUtxo(myAddress, 0, 100_000_000))
+	utxos = append(utxos, makeFakeUtxo(myAddress, 0, 100_000_000))
 	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
 		PayToAddressBech32(userAddress, int(2_000_000)).
 		SetTtl(0 + 300).
 		SetValidityStart(0)
-        apollob = apollob.AttachV2Script(script)
-        apollob, _, err = apollob.Complete()
+	apollob = apollob.AttachV2Script(script)
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
 		t.Error(err)
 	}
-	//t.Error("STOP")
 	txBytes := apollob.GetTx().Bytes()
 	fmt.Println(hex.EncodeToString(txBytes))
 	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
-        inputs := apollob.GetTx().TransactionBody.Inputs
-        collaterals := apollob.GetTx().TransactionBody.Collateral
-        if len(inputs) != 1 {
-                t.Error("Tx does not have exactly 1 input")
-        }
-        if len(collaterals) != 1 {
-                t.Error("Tx does not have exactly 1 collateral")
-        }
-        if !bytes.Equal(inputs[0].TransactionId, collaterals[0].TransactionId) || inputs[0].Index != collaterals[0].Index {
-               t.Error("Tx does not have the same collateral as its input")
-        }
+	inputs := apollob.GetTx().TransactionBody.Inputs
+	collaterals := apollob.GetTx().TransactionBody.Collateral
+	if len(inputs) != 1 {
+		t.Error("Tx does not have exactly 1 input")
+	}
+	if len(collaterals) != 1 {
+		t.Error("Tx does not have exactly 1 collateral")
+	}
+	if !bytes.Equal(inputs[0].TransactionId, collaterals[0].TransactionId) || inputs[0].Index != collaterals[0].Index {
+		t.Error("Tx does not have the same collateral as its input")
+	}
 	for _, input := range apollob.GetTx().TransactionBody.Inputs {
 		for _, utxo := range utxos {
 			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {

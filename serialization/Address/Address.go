@@ -188,5 +188,5 @@ func DecodeAddress(value string) (Address, error) {
 }
 
 func (a Address) IsPublicKeyAddress() bool {
-        return a.AddressType == KEY_KEY || a.AddressType== KEY_NONE
+	return a.AddressType == KEY_KEY || a.AddressType == KEY_NONE
 }
