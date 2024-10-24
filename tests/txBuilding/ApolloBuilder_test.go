@@ -1,6 +1,7 @@
 package txBuilding_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -278,6 +279,62 @@ func makeFakeUtxo(address Address.Address, index int, lovelace int64) UTxO.UTxO 
 	return u
 }
 
+func TestUseInputAsCollateral(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
+	myAddress, _ := Address.DecodeAddress("addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w")
+	script, err := hex.DecodeString("51010000322253330034a229309b2b2b9a01")
+	apollob := apollo.New(&cc)
+	utxos := make([]UTxO.UTxO, 0)
+        utxos = append(utxos, makeFakeUtxo(myAddress, 0, 100_000_000))
+	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+		PayToAddressBech32(userAddress, int(2_000_000)).
+		SetTtl(0 + 300).
+		SetValidityStart(0)
+        apollob = apollob.AttachV2Script(script)
+        apollob, _, err = apollob.Complete()
+	if err != nil {
+		fmt.Println("HERE")
+		t.Error(err)
+	}
+	//t.Error("STOP")
+	txBytes := apollob.GetTx().Bytes()
+	fmt.Println(hex.EncodeToString(txBytes))
+	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+        inputs := apollob.GetTx().TransactionBody.Inputs
+        collaterals := apollob.GetTx().TransactionBody.Collateral
+        if len(inputs) != 1 {
+                t.Error("Tx does not have exactly 1 input")
+        }
+        if len(collaterals) != 1 {
+                t.Error("Tx does not have exactly 1 collateral")
+        }
+        if !bytes.Equal(inputs[0].TransactionId, collaterals[0].TransactionId) || inputs[0].Index != collaterals[0].Index {
+               t.Error("Tx does not have the same collateral as its input")
+        }
+	for _, input := range apollob.GetTx().TransactionBody.Inputs {
+		for _, utxo := range utxos {
+			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {
+				//fmt.Println("INPUT", idx, utxo)
+				inputVal = inputVal.Add(utxo.Output.GetAmount())
+			}
+		}
+	}
+	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, output := range apollob.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(output.GetAmount())
+	}
+	outputVal.AddLovelace(apollob.Fee)
+	outputVal = outputVal.Add(apollob.GetBurns())
+	fmt.Println("INPUT VAL", inputVal)
+	fmt.Println("OUTPUT VAL", outputVal)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Tx is not balanced")
+	}
+	if err != nil {
+		t.Error(err)
+	}
+}
 
 // func TestScriptAddress(t *testing.T) {
 // 	SC_CBOR := "5901ec01000032323232323232323232322223232533300a3232533300c002100114a066646002002444a66602400429404c8c94ccc040cdc78010018a5113330050050010033015003375c60260046eb0cc01cc024cc01cc024011200048040dd71980398048012400066e3cdd7198031804001240009110d48656c6c6f2c20576f726c642100149858c8014c94ccc028cdc3a400000226464a66602060240042930a99806a49334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375c6020002601000a2a660169212b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e7400163008004320033253330093370e900000089919299980798088010a4c2a66018921334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375c601e002600e0062a660149212b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300700233001001480008888cccc01ccdc38008018061199980280299b8000448008c0380040080088c018dd5000918021baa0015734ae7155ceaab9e5573eae855d11"
