@@ -437,9 +437,12 @@ func TestScriptAddress(t *testing.T) {
 // }
 
 func TestFailedSubmissionThrows(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	apollob := apollo.New(&cc)
-	apollob, err := apollob.
+	apollob, err = apollob.
 		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000).
@@ -454,7 +457,11 @@ func TestFailedSubmissionThrows(t *testing.T) {
 }
 
 func TestBurnPlutus(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
+
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
 	testUtxo := UTxO.UTxO{
@@ -470,7 +477,7 @@ func TestBurnPlutus(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob, err := apollob.
+	apollob, err = apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -492,7 +499,10 @@ func TestBurnPlutus(t *testing.T) {
 }
 
 func TestMintPlutus(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
 	testUtxo := UTxO.UTxO{
@@ -506,7 +516,7 @@ func TestMintPlutus(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob, err := apollob.
+	apollob, err = apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -528,7 +538,10 @@ func TestMintPlutus(t *testing.T) {
 }
 
 func TestMintPlutusWithPayment(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
 	testUtxo := UTxO.UTxO{
@@ -541,7 +554,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 			Value.SimpleValue(15000000, nil)),
 	}
 	apollob := apollo.New(&cc)
-	apollob, err := apollob.
+	apollob, err = apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -571,7 +584,10 @@ func TestMintPlutusWithPayment(t *testing.T) {
 }
 
 func TestGetWallet(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	apollob := apollo.New(&cc)
 	wall := apollob.GetWallet()
 	if wall != nil {
@@ -585,7 +601,10 @@ func TestGetWallet(t *testing.T) {
 }
 
 func TestAddInputs(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -609,7 +628,10 @@ func TestAddInputs(t *testing.T) {
 }
 
 func TestConsumeUtxo(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -657,7 +679,11 @@ func TestConsumeUtxo(t *testing.T) {
 }
 
 func TestConsumeAssetsFromUtxo(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -721,7 +747,10 @@ var InputUtxo = UTxO.UTxO{
 }
 
 func TestPayToContract(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	datum := PlutusData.PlutusData{
 		TagNr:          121,
@@ -777,7 +806,10 @@ func TestPayToContract(t *testing.T) {
 }
 
 func TestRequiredSigner(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
@@ -846,7 +878,10 @@ var collateralUtxo2 = UTxO.UTxO{
 		Value.SimpleValue(10_000_000, nil))}
 
 func TestFeePadding(t *testing.T) {
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).PayToContract(decoded_addr, nil, 1_000_000, false).SetFeePadding(500_000)
@@ -870,7 +905,10 @@ func TestFeePadding(t *testing.T) {
 
 func TestSetCollateral(t *testing.T) {
 	// full 5 ada collateral
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).PayToContract(decoded_addr, nil, 1_000_000, false).SetFeePadding(500_000).AddCollateral(collateralUtxo)
@@ -885,7 +923,10 @@ func TestSetCollateral(t *testing.T) {
 
 func TestCollateralwithReturn(t *testing.T) {
 	// full 5 ada collateral
-	cc := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(BLOCKFROST_BASE_URL_MAINNET, int(MAINNET), "mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT")
+	if err != nil {
+		t.Error(err)
+	}
 	decoded_addr, _ := Address.DecodeAddress("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu")
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).PayToContract(decoded_addr, nil, 1_000_000, false).SetFeePadding(500_000).AddCollateral(collateralUtxo2)
@@ -1028,7 +1069,11 @@ func TestSetChangeAddressBech32(t *testing.T) {
 func TestSetWalletFromBech32(t *testing.T) {
 	cc := apollo.NewEmptyBackend()
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetWalletFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").SetWalletAsChangeAddress().AddInput(InputUtxo)
+	apollob, err := apollob.SetWalletFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").SetWalletAsChangeAddress()
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddInput(InputUtxo)
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -1041,7 +1086,11 @@ func TestSetWalletFromBech32(t *testing.T) {
 func TestRefInput(t *testing.T) {
 	cc := apollo.NewEmptyBackend()
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetWalletFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").SetWalletAsChangeAddress().AddInput(InputUtxo).
+	apollob, err := apollob.SetWalletFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").SetWalletAsChangeAddress()
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddInput(InputUtxo).
 		AddReferenceInput(hex.EncodeToString(InputUtxo.Input.TransactionId), 0).AddCollateral(collateralUtxo)
 	built, err := apollob.Complete()
 	if err != nil {

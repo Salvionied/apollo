@@ -19,7 +19,9 @@ type Unit struct {
 	Quantity int
 }
 
-/**
+/*
+*
+
 	ToValue converts a Unit to a Value object.
 
 	Returns:
@@ -35,7 +37,9 @@ func (u *Unit) ToValue() Value.Value {
 	return val
 }
 
-/**
+/*
+*
+
 	NewUnit creates a new Unit with the provided information.
 
 	Params:
@@ -69,7 +73,9 @@ type Payment struct {
 	IsInline  bool
 }
 
-/**
+/*
+*
+
 	PaymentFromTxOut creates a Payment object from a TransactionOutput.
 
 	Params:
@@ -110,10 +116,12 @@ func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
 	return payment
 }
 
-/**
+/*
+*
+
 	NewPayment creates a new Payment object.
 
-	Params: 
+	Params:
 		receiver (string): The receiver's address.
 		lovelace (int): The amount in Lovelace.
 		units ([]Unit): The assets units to be included.
@@ -130,7 +138,9 @@ func NewPayment(receiver string, lovelace int, units []Unit) *Payment {
 	}
 }
 
-/**
+/*
+*
+
 	NewPaymentFromValue creates a new Payment object from an Address
 	and Value object.
 
@@ -158,7 +168,9 @@ func NewPaymentFromValue(receiver Address.Address, value Value.Value) *Payment {
 	return payment
 }
 
-/**
+/*
+*
+
 	ToValue converts a Payment to a Value object.
 
 	Returns:
@@ -173,7 +185,9 @@ func (p *Payment) ToValue() Value.Value {
 	return v
 }
 
-/**
+/*
+*
+
 	EnsureMinUTXO ensures that the payment amount meets the minimun UTXO requirement.
 
 	Params:
@@ -184,17 +198,23 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 		return
 	}
 	txOut := p.ToTxOut()
-	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
+	coins, err := Utils.MinLovelacePostAlonzo(*txOut, cc)
+	if err != nil {
+		return
+	}
+
 	if int64(p.Lovelace) < coins {
 		p.Lovelace = int(coins)
 	}
 }
 
-/**
-	ToTxOut converts a Payment object to a TransactionOutput object.
+/*
+*
 
-	Returns:
-   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
+		ToTxOut converts a Payment object to a TransactionOutput object.
+
+		Returns:
+	   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
 */
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())

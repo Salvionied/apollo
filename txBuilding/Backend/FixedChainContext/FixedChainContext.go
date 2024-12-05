@@ -82,35 +82,35 @@ func InitFixedChainContext() FixedChainContext {
 		}}
 }
 
-func (f FixedChainContext) GetProtocolParams() Base.ProtocolParameters {
-	return f.ProtocolParams
+func (f FixedChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
+	return f.ProtocolParams, nil
 }
 
-func (f FixedChainContext) GetGenesisParams() Base.GenesisParameters {
-	return f.GenesisParams
+func (f FixedChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
+	return f.GenesisParams, nil
 }
 
 func (f FixedChainContext) Network() int {
 	return f.GenesisParams.NetworkMagic
 }
 
-func (f FixedChainContext) Epoch() int {
-	return 300
+func (f FixedChainContext) Epoch() (int, error) {
+	return 300, nil
 }
 
-func (f FixedChainContext) LastBlockSlot() int {
-	return 2000
+func (f FixedChainContext) LastBlockSlot() (int, error) {
+	return 2000, nil
 }
 
-func (f FixedChainContext) MaxTxFee() int {
-	return 100
+func (f FixedChainContext) MaxTxFee() (int, error) {
+	return 100, nil
 }
 
-func (f FixedChainContext) GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
-	return &UTxO.UTxO{}
+func (f FixedChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error) {
+	return &UTxO.UTxO{}, nil
 }
 
-func (f FixedChainContext) Utxos(address Address.Address) []UTxO.UTxO {
+func (f FixedChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
 	tx_in1 := TransactionInput.TransactionInput{
 		TransactionId: []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
 		Index:         0,
@@ -122,17 +122,17 @@ func (f FixedChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 
 	tx_out1 := TransactionOutput.SimpleTransactionOutput(address, Value.PureLovelaceValue(5000000))
 	tx_out2 := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(6000000, MultiAsset.MultiAsset[int64]{Policy.PolicyId{Value: "11111111111111111111111111111111111111111111111111111111"}: Asset.Asset[int64]{AssetName.NewAssetNameFromString("Token1"): 1, AssetName.NewAssetNameFromString("Token2"): 2}}))
-	return []UTxO.UTxO{{Input: tx_in1, Output: tx_out1}, {Input: tx_in2, Output: tx_out2}}
+	return []UTxO.UTxO{{Input: tx_in1, Output: tx_out1}, {Input: tx_in2, Output: tx_out2}}, nil
 }
 
 func (f FixedChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
 	return serialization.TransactionId{}, nil
 }
 
-func (f FixedChainContext) EvaluateTx(tx []uint8) map[string]Redeemer.ExecutionUnits {
-	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}
+func (f FixedChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.ExecutionUnits, error) {
+	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
 }
 
-func (f FixedChainContext) GetContractCbor(scriptHash string) string {
-	return ""
+func (f FixedChainContext) GetContractCbor(scriptHash string) (string, error) {
+	return "", nil
 }

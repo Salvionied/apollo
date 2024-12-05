@@ -177,17 +177,17 @@ type TxUtxos struct {
 }
 
 type ChainContext interface {
-	GetProtocolParams() ProtocolParameters
-	GetGenesisParams() GenesisParameters
+	GetProtocolParams() (ProtocolParameters, error)
+	GetGenesisParams() (GenesisParameters, error)
 	Network() int
-	Epoch() int
-	MaxTxFee() int
-	LastBlockSlot() int
-	Utxos(address Address.Address) []UTxO.UTxO
+	Epoch() (int, error)
+	MaxTxFee() (int, error)
+	LastBlockSlot() (int, error)
+	Utxos(address Address.Address) ([]UTxO.UTxO, error)
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
-	EvaluateTx([]uint8) map[string]Redeemer.ExecutionUnits
-	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
-	GetContractCbor(scriptHash string) string
+	EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error)
+	GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)
+	GetContractCbor(scriptHash string) (string, error)
 }
 
 type Epoch struct {
@@ -290,12 +290,15 @@ type AddressAmount struct {
 	Quantity string `json:"quantity"`
 }
 
-func Fee(context ChainContext, length int, exec_steps int, max_mem_unit int) int {
-	protocol_param := context.GetProtocolParams()
+func Fee(context ChainContext, length int, exec_steps int, max_mem_unit int) (int, error) {
+	protocol_param, err := context.GetProtocolParams()
+	if err != nil {
+		return 0, nil
+	}
 	return int(length*protocol_param.MinFeeCoefficient) +
 		int(protocol_param.MinFeeConstant) +
 		int(exec_steps*int(protocol_param.PriceStep)) +
-		int(max_mem_unit*int(protocol_param.PriceMem))
+		int(max_mem_unit*int(protocol_param.PriceMem)), nil
 
 }
 

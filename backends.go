@@ -47,28 +47,28 @@ func NewBlockfrostBackend(
 			constants.BLOCKFROST_BASE_URL_MAINNET,
 			int(constants.MAINNET),
 			projectId,
-		), nil
+		)
 	case constants.TESTNET:
 
 		return BlockFrostChainContext.NewBlockfrostChainContext(
 			constants.BLOCKFROST_BASE_URL_TESTNET,
 			int(constants.TESTNET),
 			projectId,
-		), nil
+		)
 	case constants.PREVIEW:
 
 		return BlockFrostChainContext.NewBlockfrostChainContext(
 			constants.BLOCKFROST_BASE_URL_PREVIEW,
 			int(constants.TESTNET),
 			projectId,
-		), nil
+		)
 	case constants.PREPROD:
 
 		return BlockFrostChainContext.NewBlockfrostChainContext(
 			constants.BLOCKFROST_BASE_URL_PREPROD,
 			int(constants.TESTNET),
 			projectId,
-		), nil
+		)
 	default:
 		return BlockFrostChainContext.BlockFrostChainContext{}, fmt.Errorf("Invalid network")
 	}
