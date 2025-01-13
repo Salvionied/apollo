@@ -4,14 +4,14 @@ go 1.20
 
 require (
 	github.com/Salvionied/cbor/v2 v2.6.0
+	github.com/SundaeSwap-finance/kugo v1.0.6-0.20250113214905-5e85003d6383
+	github.com/SundaeSwap-finance/ogmigo v0.8.2-0.20250113211512-19cbb328b538
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/text v0.21.0
 )
 
 require (
-	github.com/SundaeSwap-finance/kugo v1.0.6-0.20250113214905-5e85003d6383 // indirect
-	github.com/SundaeSwap-finance/ogmigo v0.8.2-0.20250113211512-19cbb328b538 // indirect
 	github.com/aws/aws-sdk-go v1.55.5 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
