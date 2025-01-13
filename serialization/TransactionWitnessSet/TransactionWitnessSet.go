@@ -47,37 +47,27 @@ type WithRedeemerNoScripts struct {
 		error: An error if serialization fails.
 */
 func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
-	if len(tws.PlutusV1Script) == 0 && len(tws.Redeemer) > 0 && len(tws.PlutusData) == 0 {
-		return cbor.Marshal(WithRedeemerNoScripts{
-			VkeyWitnesses:      tws.VkeyWitnesses,
-			NativeScripts:      tws.NativeScripts,
-			BootstrapWitnesses: tws.BootstrapWitnesses,
-			PlutusV1Script:     tws.PlutusV1Script,
-			PlutusV2Script:     tws.PlutusV2Script,
-			PlutusData:         nil,
-			Redeemer:           tws.Redeemer,
-		})
+	res := normaltws{}
+	if len(tws.VkeyWitnesses) > 0 {
+		res.VkeyWitnesses = tws.VkeyWitnesses
+	}
+	if len(tws.NativeScripts) > 0 {
+		res.NativeScripts = tws.NativeScripts
+	}
+	if len(tws.BootstrapWitnesses) > 0 {
+		res.BootstrapWitnesses = tws.BootstrapWitnesses
+	}
+	if len(tws.PlutusV1Script) > 0 {
+		res.PlutusV1Script = tws.PlutusV1Script
+	}
+	if len(tws.PlutusV2Script) > 0 {
+		res.PlutusV2Script = tws.PlutusV2Script
 	}
 	if len(tws.PlutusData) > 0 {
-		return cbor.Marshal(normaltws{
-			VkeyWitnesses:      tws.VkeyWitnesses,
-			NativeScripts:      tws.NativeScripts,
-			BootstrapWitnesses: tws.BootstrapWitnesses,
-			PlutusV1Script:     tws.PlutusV1Script,
-			PlutusV2Script:     tws.PlutusV2Script,
-			PlutusData:         &tws.PlutusData,
-			Redeemer:           tws.Redeemer,
-		})
-	} else {
-		return cbor.Marshal(normaltws{
-			VkeyWitnesses:      tws.VkeyWitnesses,
-			NativeScripts:      tws.NativeScripts,
-			BootstrapWitnesses: tws.BootstrapWitnesses,
-			PlutusV1Script:     tws.PlutusV1Script,
-			PlutusV2Script:     tws.PlutusV2Script,
-			PlutusData:         nil,
-			Redeemer:           tws.Redeemer,
-		})
+		res.PlutusData = &tws.PlutusData
 	}
-
+	if len(tws.Redeemer) > 0 {
+		res.Redeemer = tws.Redeemer
+	}
+	return cbor.Marshal(res)
 }

@@ -36,34 +36,38 @@ type GenesisParameters struct {
 }
 
 type ProtocolParameters struct {
-	MinFeeConstant        int     `json:"min_fee_b"`
-	MinFeeCoefficient     int     `json:"min_fee_a"`
-	MaxBlockSize          int     `json:"max_block_size"`
-	MaxTxSize             int     `json:"max_tx_size"`
-	MaxBlockHeaderSize    int     `json:"max_block_header_size"`
-	KeyDeposits           string  `json:"key_deposit"`
-	PoolDeposits          string  `json:"pool_deposit"`
-	PooolInfluence        float32 `json:"a0"`
-	MonetaryExpansion     float32 `json:"rho"`
-	TreasuryExpansion     float32 `json:"tau"`
-	DecentralizationParam float32 `json:"decentralisation_param"`
-	ExtraEntropy          string  `json:"extra_entropy"`
-	ProtocolMajorVersion  int     `json:"protocol_major_ver"`
-	ProtocolMinorVersion  int     `json:"protocol_minor_ver"`
-	MinUtxo               string  `json:"min_utxo"`
-	MinPoolCost           string  `json:"min_pool_cost"`
-	PriceMem              float32 `json:"price_mem"`
-	PriceStep             float32 `json:"price_step"`
-	MaxTxExMem            string  `json:"max_tx_ex_mem"`
-	MaxTxExSteps          string  `json:"max_tx_ex_steps"`
-	MaxBlockExMem         string  `json:"max_block_ex_mem"`
-	MaxBlockExSteps       string  `json:"max_block_ex_steps"`
-	MaxValSize            string  `json:"max_val_size"`
-	CollateralPercent     int     `json:"collateral_percent"`
-	MaxCollateralInuts    int     `json:"max_collateral_inputs"`
-	CoinsPerUtxoWord      string  `json:"coins_per_utxo_word"`
-	CoinsPerUtxoByte      string  `json:"coins_per_utxo_byte"`
-	//CostModels            map[string]map[string]any
+	MinFeeConstant                   int                 `json:"min_fee_b"`
+	MinFeeCoefficient                int                 `json:"min_fee_a"`
+	MaxBlockSize                     int                 `json:"max_block_size"`
+	MaxTxSize                        int                 `json:"max_tx_size"`
+	MaxBlockHeaderSize               int                 `json:"max_block_header_size"`
+	KeyDeposits                      string              `json:"key_deposit"`
+	PoolDeposits                     string              `json:"pool_deposit"`
+	PooolInfluence                   float32             `json:"a0"`
+	MonetaryExpansion                float32             `json:"rho"`
+	TreasuryExpansion                float32             `json:"tau"`
+	DecentralizationParam            float32             `json:"decentralisation_param"`
+	ExtraEntropy                     string              `json:"extra_entropy"`
+	ProtocolMajorVersion             int                 `json:"protocol_major_ver"`
+	ProtocolMinorVersion             int                 `json:"protocol_minor_ver"`
+	MinUtxo                          string              `json:"min_utxo"`
+	MinPoolCost                      string              `json:"min_pool_cost"`
+	PriceMem                         float32             `json:"price_mem"`
+	PriceStep                        float32             `json:"price_step"`
+	MaxTxExMem                       string              `json:"max_tx_ex_mem"`
+	MaxTxExSteps                     string              `json:"max_tx_ex_steps"`
+	MaxBlockExMem                    string              `json:"max_block_ex_mem"`
+	MaxBlockExSteps                  string              `json:"max_block_ex_steps"`
+	MaxValSize                       string              `json:"max_val_size"`
+	CollateralPercent                int                 `json:"collateral_percent"`
+	MaxCollateralInuts               int                 `json:"max_collateral_inputs"`
+	CoinsPerUtxoWord                 string              `json:"coins_per_utxo_word"`
+	CoinsPerUtxoByte                 string              `json:"coins_per_utxo_byte"`
+	CostModels                       map[string][]uint64 `json:"cost_models"`
+	MaximumReferenceScriptsSize      int                 `json:"maximum_reference_scripts_size"`
+	MinFeeReferenceScriptsRange      int                 `json:"min_fee_reference_scripts_range"`
+	MinFeeReferenceScriptsBase       int                 `json:"min_fee_reference_scripts_base"`
+	MinFeeReferenceScriptsMultiplier int                 `json:"min_fee_reference_scripts_multiplier"`
 }
 
 func (p ProtocolParameters) GetCoinsPerUtxoByte() int {
@@ -173,17 +177,17 @@ type TxUtxos struct {
 }
 
 type ChainContext interface {
-	GetProtocolParams() ProtocolParameters
-	GetGenesisParams() GenesisParameters
+	GetProtocolParams() (ProtocolParameters, error)
+	GetGenesisParams() (GenesisParameters, error)
 	Network() int
-	Epoch() int
-	MaxTxFee() int
-	LastBlockSlot() int
-	Utxos(address Address.Address) []UTxO.UTxO
+	Epoch() (int, error)
+	MaxTxFee() (int, error)
+	LastBlockSlot() (int, error)
+	Utxos(address Address.Address) ([]UTxO.UTxO, error)
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
-	EvaluateTx([]uint8) map[string]Redeemer.ExecutionUnits
-	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
-	GetContractCbor(scriptHash string) string
+	EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error)
+	GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)
+	GetContractCbor(scriptHash string) (string, error)
 }
 
 type Epoch struct {
@@ -286,11 +290,85 @@ type AddressAmount struct {
 	Quantity string `json:"quantity"`
 }
 
-func Fee(context ChainContext, length int, exec_steps int, max_mem_unit int) int {
-	protocol_param := context.GetProtocolParams()
+func Fee(context ChainContext, length int, exec_steps int, max_mem_unit int) (int, error) {
+	protocol_param, err := context.GetProtocolParams()
+	if err != nil {
+		return 0, nil
+	}
 	return int(length*protocol_param.MinFeeCoefficient) +
 		int(protocol_param.MinFeeConstant) +
 		int(exec_steps*int(protocol_param.PriceStep)) +
-		int(max_mem_unit*int(protocol_param.PriceMem))
+		int(max_mem_unit*int(protocol_param.PriceMem)), nil
 
+}
+
+type BlockfrostProtocolParams struct {
+	MinFeeConstant        int     `json:"min_fee_b"`
+	MinFeeCoefficient     int     `json:"min_fee_a"`
+	MaxBlockSize          int     `json:"max_block_size"`
+	MaxTxSize             int     `json:"max_tx_size"`
+	MaxBlockHeaderSize    int     `json:"max_block_header_size"`
+	KeyDeposits           string  `json:"key_deposit"`
+	PoolDeposits          string  `json:"pool_deposit"`
+	PooolInfluence        float32 `json:"a0"`
+	MonetaryExpansion     float32 `json:"rho"`
+	TreasuryExpansion     float32 `json:"tau"`
+	DecentralizationParam float32 `json:"decentralisation_param"`
+	ExtraEntropy          string  `json:"extra_entropy"`
+	ProtocolMajorVersion  int     `json:"protocol_major_ver"`
+	ProtocolMinorVersion  int     `json:"protocol_minor_ver"`
+	MinUtxo               string  `json:"min_utxo"`
+	MinPoolCost           string  `json:"min_pool_cost"`
+	PriceMem              float32 `json:"price_mem"`
+	PriceStep             float32 `json:"price_step"`
+	MaxTxExMem            string  `json:"max_tx_ex_mem"`
+	MaxTxExSteps          string  `json:"max_tx_ex_steps"`
+	MaxBlockExMem         string  `json:"max_block_ex_mem"`
+	MaxBlockExSteps       string  `json:"max_block_ex_steps"`
+	MaxValSize            string  `json:"max_val_size"`
+	CollateralPercent     int     `json:"collateral_percent"`
+	MaxCollateralInuts    int     `json:"max_collateral_inputs"`
+	CoinsPerUtxoWord      string  `json:"coins_per_utxo_word"`
+	CoinsPerUtxoByte      string  `json:"coins_per_utxo_byte"`
+	//CostModels                               //map[string][]uint64 `json:"cost_models"`
+	MaximumReferenceScriptsSize      int `json:"maximum_reference_scripts_size"`
+	MinFeeReferenceScriptsRange      int `json:"min_fee_reference_scripts_range"`
+	MinFeeReferenceScriptsBase       int `json:"min_fee_reference_scripts_base"`
+	MinFeeReferenceScriptsMultiplier int `json:"min_fee_reference_scripts_multiplier"`
+}
+
+func (p BlockfrostProtocolParams) ToBaseParams() ProtocolParameters {
+	return ProtocolParameters{
+		MinFeeConstant:                   p.MinFeeConstant,
+		MinFeeCoefficient:                p.MinFeeCoefficient,
+		MaxBlockSize:                     p.MaxBlockSize,
+		MaxTxSize:                        p.MaxTxSize,
+		MaxBlockHeaderSize:               p.MaxBlockHeaderSize,
+		KeyDeposits:                      p.KeyDeposits,
+		PoolDeposits:                     p.PoolDeposits,
+		PooolInfluence:                   p.PooolInfluence,
+		MonetaryExpansion:                p.MonetaryExpansion,
+		TreasuryExpansion:                p.TreasuryExpansion,
+		DecentralizationParam:            p.DecentralizationParam,
+		ExtraEntropy:                     p.ExtraEntropy,
+		ProtocolMajorVersion:             p.ProtocolMajorVersion,
+		ProtocolMinorVersion:             p.ProtocolMinorVersion,
+		MinUtxo:                          p.MinUtxo,
+		MinPoolCost:                      p.MinPoolCost,
+		PriceMem:                         p.PriceMem,
+		PriceStep:                        p.PriceStep,
+		MaxTxExMem:                       p.MaxTxExMem,
+		MaxTxExSteps:                     p.MaxTxExSteps,
+		MaxBlockExMem:                    p.MaxBlockExMem,
+		MaxBlockExSteps:                  p.MaxBlockExSteps,
+		MaxValSize:                       p.MaxValSize,
+		CollateralPercent:                p.CollateralPercent,
+		MaxCollateralInuts:               p.MaxCollateralInuts,
+		CoinsPerUtxoWord:                 p.CoinsPerUtxoWord,
+		CoinsPerUtxoByte:                 p.CoinsPerUtxoByte,
+		MaximumReferenceScriptsSize:      p.MaximumReferenceScriptsSize,
+		MinFeeReferenceScriptsRange:      p.MinFeeReferenceScriptsRange,
+		MinFeeReferenceScriptsBase:       p.MinFeeReferenceScriptsBase,
+		MinFeeReferenceScriptsMultiplier: p.MinFeeReferenceScriptsMultiplier,
+	}
 }

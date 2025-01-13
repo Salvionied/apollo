@@ -26,12 +26,10 @@ import (
 	"github.com/Salvionied/apollo/serialization/Value"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	chainsyncv5 "github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/v6"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
+	"github.com/SundaeSwap-finance/ogmigo"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -140,7 +138,7 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	return &ref, nil
 }
 
-func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
+func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 	txHashRaw, err := hex.DecodeString(u.Transaction.ID)
 	if err != nil {
 		log.Fatal(err, "Failed to decode ogmigo transaction ID")
@@ -173,10 +171,10 @@ func Utxo_OgmigoToApollo(u statequery.Utxo) UTxO.UTxO {
 	}
 }
 
-func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.UTxO, error) {
 	ctx := context.Background()
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
-		Transaction: chainsync.UtxoTxID{
+		Transaction: shared.UtxoTxID{
 			ID: txHash,
 		},
 		Index: uint32(index),
@@ -185,10 +183,10 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UT
 		log.Fatal(err, "REQUEST PROTOCOL")
 	}
 	if len(utxos) == 0 {
-		return nil
+		return nil, nil
 	} else {
 		apolloUtxo := Utxo_OgmigoToApollo(utxos[0])
-		return &apolloUtxo
+		return &apolloUtxo, nil
 	}
 }
 
@@ -209,24 +207,9 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	return amts
 }
 
-// Does chainsync really need to have a different value type from state query?
-// need to double check
-func chainsyncValue_toAddressAmount(v chainsyncv5.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 0)
-	amts = append(amts, Base.AddressAmount{
-		Unit:     "lovelace",
-		Quantity: strconv.FormatInt(v.Coins.Int64(), 10),
-	})
-	for assetId, quantity := range v.Assets {
-		a := string(assetId)
-		policy := a[:56] // always 28 bytes
-		token := a[57:]  // skip the '.'
-		amts = append(amts, Base.AddressAmount{
-			Unit:     policy + token,
-			Quantity: strconv.FormatInt(quantity.Int64(), 10),
-		})
-	}
-	return amts
+func chainsyncValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
+	// same as above
+	return statequeryValue_toAddressAmount(v)
 }
 
 func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
@@ -238,7 +221,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 		queries := make([]chainsync.TxInQuery, chunk_size)
 		for ix, _ := range queries {
 			queries[ix] = chainsync.TxInQuery{
-				Transaction: chainsync.UtxoTxID{
+				Transaction: shared.UtxoTxID{
 					ID: txHash,
 				},
 				Index: uint32(ix),
@@ -385,27 +368,36 @@ type ExUnits struct {
 }
 
 type OgmiosProtocolParameters struct {
-	MinFeeConstant                  Lovelace `json:"minFeeConstant"`
-	MinFeeCoefficient               uint64   `json:"minFeeCoefficient"`
-	MaxBlockSize                    Bytes    `json:"maxBlockBodySize"`
-	MaxTxSize                       Bytes    `json:"maxTransactionSize"`
-	MaxBlockHeaderSize              Bytes    `json:"maxBlockHeaderSize"`
-	KeyDeposits                     Lovelace `json:"stakeCredentialDeposit"`
-	PoolDeposits                    Lovelace `json:"stakePoolDeposit"`
-	PoolInfluence                   string   `json:"stakePoolPledgeInfluence"`
-	MonetaryExpansion               string   `json:"monetaryExpansion"`
-	TreasuryExpansion               string   `json:"treasuryExpansion"`
-	ExtraEntropy                    string   `json:"extraEntropy"`
-	MaxValSize                      Bytes    `json:"maxValueSize"`
-	ScriptExecutionPrices           Prices   `json:"scriptExecutionPrices"`
-	MinUtxoDepositCoefficient       uint64   `json:"minUtxoDepositCoefficient"`
-	MinUtxoDepositConstant          uint64   `json:"minUtxoDepositConstant"`
-	MinStakePoolCost                Lovelace `json:"minStakePoolCost"`
-	MaxExecutionUnitsPerTransaction ExUnits  `json:"maxExecutionUnitsPerTransaction"`
-	MaxExecutionUnitsPerBlock       ExUnits  `json:"maxExecutionUnitsPerBlock"`
-	CollateralPercentage            uint64   `json:"collateralPercentage"`
-	MaxCollateralInputs             uint64   `json:"maxCollateralInputs"`
-	Version                         Version  `json:"version"`
+	MinFeeConstant                  Lovelace               `json:"minFeeConstant"`
+	MinFeeCoefficient               uint64                 `json:"minFeeCoefficient"`
+	MaxBlockSize                    Bytes                  `json:"maxBlockBodySize"`
+	MaxTxSize                       Bytes                  `json:"maxTransactionSize"`
+	MaxBlockHeaderSize              Bytes                  `json:"maxBlockHeaderSize"`
+	KeyDeposits                     Lovelace               `json:"stakeCredentialDeposit"`
+	PoolDeposits                    Lovelace               `json:"stakePoolDeposit"`
+	PoolInfluence                   string                 `json:"stakePoolPledgeInfluence"`
+	MonetaryExpansion               string                 `json:"monetaryExpansion"`
+	TreasuryExpansion               string                 `json:"treasuryExpansion"`
+	ExtraEntropy                    string                 `json:"extraEntropy"`
+	MaxValSize                      Bytes                  `json:"maxValueSize"`
+	ScriptExecutionPrices           Prices                 `json:"scriptExecutionPrices"`
+	MinUtxoDepositCoefficient       uint64                 `json:"minUtxoDepositCoefficient"`
+	MinUtxoDepositConstant          Lovelace               `json:"minUtxoDepositConstant"`
+	MinStakePoolCost                Lovelace               `json:"minStakePoolCost"`
+	MaxExecutionUnitsPerTransaction ExUnits                `json:"maxExecutionUnitsPerTransaction"`
+	MaxExecutionUnitsPerBlock       ExUnits                `json:"maxExecutionUnitsPerBlock"`
+	CollateralPercentage            uint64                 `json:"collateralPercentage"`
+	MaxCollateralInputs             uint64                 `json:"maxCollateralInputs"`
+	MaximumReferenceScriptsSize     uint64                 `json:"maximumReferenceScriptsSize"`
+	MinFeeReferenceScripts          MinFeeReferenceScripts `json:"minFeeReferenceScripts"`
+	Version                         Version                `json:"version"`
+	CostModels                      map[string][]uint64    `json:"plutusCostModels"`
+}
+
+type MinFeeReferenceScripts struct {
+	Range      uint64 `json:"range"`
+	Base       uint64 `json:"base"`
+	Multiplier uint64 `json:"multiplier"`
 }
 
 func ratio(s string) float32 {
@@ -430,7 +422,6 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: protocol parameters request failed")
 	}
-
 	var ogmiosParams OgmiosProtocolParameters
 	if err := json.Unmarshal(pparams, &ogmiosParams); err != nil {
 		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters")
@@ -451,22 +442,36 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		// preview
 		DecentralizationParam: 0,
 		ExtraEntropy:          ogmiosParams.ExtraEntropy,
-		MinUtxo:               strconv.FormatUint(ogmiosParams.MinUtxoDepositConstant, 10),
+		MinUtxo:               strconv.FormatUint(ogmiosParams.MinUtxoDepositConstant.Lovelace, 10),
 		ProtocolMajorVersion:  int(ogmiosParams.Version.Major),
 		ProtocolMinorVersion:  int(ogmiosParams.Version.Minor),
 		MinPoolCost:           strconv.FormatUint(ogmiosParams.MinStakePoolCost.Lovelace, 10),
 		PriceMem:              float32(ogmiosParams.ScriptExecutionPrices.Memory),
 		PriceStep:             float32(ogmiosParams.ScriptExecutionPrices.Cpu),
-		MaxTxExMem:            strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerTransaction.Memory, 10),
-		MaxTxExSteps:          strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerTransaction.Cpu, 10),
-		MaxBlockExMem:         strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerBlock.Memory, 10),
-		MaxBlockExSteps:       strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerBlock.Cpu, 10),
-		MaxValSize:            strconv.FormatUint(ogmiosParams.MaxValSize.Bytes, 10),
-		CollateralPercent:     int(ogmiosParams.CollateralPercentage),
-		MaxCollateralInuts:    int(ogmiosParams.MaxCollateralInputs),
-		//CoinsPerUtxoByte:      strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		MaxTxExMem: strconv.FormatUint(
+			ogmiosParams.MaxExecutionUnitsPerTransaction.Memory,
+			10,
+		),
+		MaxTxExSteps: strconv.FormatUint(
+			ogmiosParams.MaxExecutionUnitsPerTransaction.Cpu,
+			10,
+		),
+		MaxBlockExMem: strconv.FormatUint(
+			ogmiosParams.MaxExecutionUnitsPerBlock.Memory,
+			10,
+		),
+		MaxBlockExSteps:    strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerBlock.Cpu, 10),
+		MaxValSize:         strconv.FormatUint(ogmiosParams.MaxValSize.Bytes, 10),
+		CollateralPercent:  int(ogmiosParams.CollateralPercentage),
+		MaxCollateralInuts: int(ogmiosParams.MaxCollateralInputs),
+		CoinsPerUtxoByte:   strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
-		CoinsPerUtxoWord: strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		CoinsPerUtxoWord:                 strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		MaximumReferenceScriptsSize:      int(ogmiosParams.MaximumReferenceScriptsSize),
+		MinFeeReferenceScriptsRange:      int(ogmiosParams.MinFeeReferenceScripts.Range),
+		MinFeeReferenceScriptsBase:       int(ogmiosParams.MinFeeReferenceScripts.Base),
+		MinFeeReferenceScriptsMultiplier: int(ogmiosParams.MinFeeReferenceScripts.Multiplier),
+		CostModels:                       ogmiosParams.CostModels,
 	}
 }
 
@@ -488,38 +493,38 @@ func (occ *OgmiosChainContext) Network() int {
 	return occ._Network
 }
 
-func (occ *OgmiosChainContext) Epoch() int {
+func (occ *OgmiosChainContext) Epoch() (int, error) {
 	if occ._CheckEpochAndUpdate() {
 		new_epoch := occ.LatestEpoch()
 		occ._epoch = new_epoch.Epoch
 	}
-	return occ._epoch
+	return occ._epoch, nil
 }
 
 // Seems unused
-func (occ *OgmiosChainContext) LastBlockSlot() int {
+func (occ *OgmiosChainContext) LastBlockSlot() (int, error) {
 	block := occ.LatestBlock()
-	return block.Slot
+	return block.Slot, nil
 }
 
-func (occ *OgmiosChainContext) GetGenesisParams() Base.GenesisParameters {
+func (occ *OgmiosChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
 	if occ._CheckEpochAndUpdate() {
 		params := occ.GenesisParams()
 		occ._genesis_param = params
 	}
-	return occ._genesis_param
+	return occ._genesis_param, nil
 }
 
-func (occ *OgmiosChainContext) GetProtocolParams() Base.ProtocolParameters {
+func (occ *OgmiosChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
 	if occ._CheckEpochAndUpdate() {
 		latest_params := occ.LatestEpochParams()
 		occ._protocol_param = latest_params
 	}
-	return occ._protocol_param
+	return occ._protocol_param, nil
 }
 
-func (occ *OgmiosChainContext) MaxTxFee() int {
-	protocol_param := occ.GetProtocolParams()
+func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
+	protocol_param, _ := occ.GetProtocolParams()
 	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
 	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
@@ -527,12 +532,15 @@ func (occ *OgmiosChainContext) MaxTxFee() int {
 
 // Copied from blockfrost context def since it just calls AddressUtxos and then
 // converts
-func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
+func (occ *OgmiosChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
 	results := occ.AddressUtxos(address.String(), true)
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
 		decodedTxId, _ := hex.DecodeString(result.TxHash)
-		tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
+		tx_in := TransactionInput.TransactionInput{
+			TransactionId: decodedTxId,
+			Index:         result.OutputIndex,
+		}
 		amount := result.Amount
 		lovelace_amount := 0
 		multi_assets := MultiAsset.MultiAsset[int64]{}
@@ -559,7 +567,10 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		}
 		final_amount := Value.Value{}
 		if len(multi_assets) > 0 {
-			final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
+			final_amount = Value.Value{
+				Am:        Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets},
+				HasAssets: true,
+			}
 		} else {
 			final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
 		}
@@ -596,13 +607,15 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		}
 		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
 	}
-	return utxos
+	return utxos, nil
 }
 
-func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
+func (occ *OgmiosChainContext) SubmitTx(
+	tx Transaction.Transaction,
+) (serialization.TransactionId, error) {
 	ctx := context.Background()
 	bytes, err := tx.Bytes()
-	err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
 	}
@@ -611,24 +624,24 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (occ *OgmiosChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
 	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
 	}
-	for _, e := range eval {
-		final_result[e.Validator] = Redeemer.ExecutionUnits{
+	for _, e := range eval.ExUnits {
+		final_result[e.Validator.Purpose] = Redeemer.ExecutionUnits{
 			Mem:   int64(e.Budget.Memory),
 			Steps: int64(e.Budget.Cpu),
 		}
 	}
-	return final_result
+	return final_result, nil
 }
 
 // This is unused
-func (occ *OgmiosChainContext) GetContractCbor(scriptHash string) string {
+func (occ *OgmiosChainContext) GetContractCbor(scriptHash string) (string, error) {
 	//TODO
-	return ""
+	return "", nil
 }

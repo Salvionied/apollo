@@ -3,7 +3,6 @@ package MaestroChainContext
 import (
 	"encoding/hex"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -51,20 +50,33 @@ func NewMaestroChainContext(network int, projectId string) (MaestroChainContext,
 	mcc.Init()
 	return mcc, nil
 }
-func (mcc *MaestroChainContext) Init() {
-	latest_epochs := mcc.LatestEpoch()
+func (mcc *MaestroChainContext) Init() error {
+	latest_epochs, err := mcc.LatestEpoch()
+	if err != nil {
+		return err
+	}
 	mcc._epoch_info = latest_epochs
-	params := mcc.GenesisParams()
+	params, err := mcc.GenesisParams()
+	if err != nil {
+		return err
+	}
 	mcc._genesis_param = params
-	latest_params := mcc.LatestEpochParams()
+	latest_params, err := mcc.LatestEpochParams()
+	if err != nil {
+		return err
+	}
 	mcc._protocol_param = latest_params
+	return nil
 }
 
-func (mcc *MaestroChainContext) LatestBlock() Base.Block {
+func (mcc *MaestroChainContext) LatestBlock() (Base.Block, error) {
 	latestBlock := Base.Block{}
-	latestBlockFromApi, _ := mcc.client.LatestBlock()
+	latestBlockFromApi, err := mcc.client.LatestBlock()
+	if err != nil {
+		return latestBlock, err
+	}
 	if latestBlockFromApi == nil {
-		return latestBlock
+		return latestBlock, nil
 	} else {
 		tmpTime, _ := time.Parse("2006-01-02 15:04:05", latestBlockFromApi.Data.Timestamp)
 		latestBlock.Time = int(tmpTime.Unix())
@@ -83,14 +95,14 @@ func (mcc *MaestroChainContext) LatestBlock() Base.Block {
 		latestBlock.NextBlock = latestBlockFromApi.Data.Hash
 		latestBlock.Confirmations = int(latestBlockFromApi.Data.Confirmations)
 	}
-	return latestBlock
+	return latestBlock, nil
 }
 
-func (mcc *MaestroChainContext) LatestEpoch() Base.Epoch {
+func (mcc *MaestroChainContext) LatestEpoch() (Base.Epoch, error) {
 	epoch := Base.Epoch{}
 	latestEpoch, err := mcc.client.CurrentEpoch()
 	if err != nil {
-		return epoch
+		return epoch, err
 	}
 	epoch.ActiveStake = ""
 	epoch.BlockCount = int(latestEpoch.Data.BlkCount)
@@ -99,7 +111,7 @@ func (mcc *MaestroChainContext) LatestEpoch() Base.Epoch {
 	epoch.FirstBlockTime = int(latestEpoch.Data.StartTime)
 	epoch.StartTime = int(latestEpoch.Data.StartTime)
 	epoch.TxCount = int(latestEpoch.Data.TxCount)
-	return epoch
+	return epoch, nil
 
 }
 
@@ -115,11 +127,11 @@ func parseMaestroFloat(floatString string) float32 {
 	return float32(topFloat / bottomFloat)
 }
 
-func (mcc *MaestroChainContext) LatestEpochParams() Base.ProtocolParameters {
+func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, error) {
 	protocolParams := Base.ProtocolParameters{}
 	ppFromApi, err := mcc.client.ProtocolParameters()
 	if err != nil {
-		log.Fatal(err)
+		return protocolParams, err
 	}
 	// Map ALL the fields
 	protocolParams.MinFeeConstant = int(ppFromApi.Data.MinFeeConstant.LovelaceAmount.Lovelace)
@@ -154,59 +166,75 @@ func (mcc *MaestroChainContext) LatestEpochParams() Base.ProtocolParameters {
 	protocolParams.CoinsPerUtxoByte = fmt.Sprint(ppFromApi.Data.MinUtxoDepositCoefficient)
 	protocolParams.CoinsPerUtxoWord = "0"
 	//protocolParams.CostModels = ppFromApi.Data.CostModels
-	return protocolParams
+	return protocolParams, nil
 }
 
-func (mcc *MaestroChainContext) GenesisParams() Base.GenesisParameters {
+func (mcc *MaestroChainContext) GenesisParams() (Base.GenesisParameters, error) {
 	genesisParams := Base.GenesisParameters{}
 	// NO GENESIS PARAMS IN MAESTRO
-	return genesisParams
+	return genesisParams, nil
 }
 
 func (mcc *MaestroChainContext) Network() int {
 	return mcc._Network
 }
 
-func (mcc *MaestroChainContext) Epoch() int {
+func (mcc *MaestroChainContext) Epoch() (int, error) {
 	if time.Since(mcc.latestUpdate) > time.Minute*5 {
-		new_epoch := mcc.LatestEpoch()
+		new_epoch, err := mcc.LatestEpoch()
+		if err != nil {
+			return 0, err
+		}
+
 		mcc._epoch = new_epoch.Epoch
 	}
-	return mcc._epoch
+	return mcc._epoch, nil
 }
 
-func (mcc *MaestroChainContext) LastBlockSlot() int {
-	block := mcc.LatestBlock()
-	return block.Slot
+func (mcc *MaestroChainContext) LastBlockSlot() (int, error) {
+	block, err := mcc.LatestBlock()
+	if err != nil {
+		return 0, err
+	}
+	return block.Slot, nil
 }
 
-func (mcc *MaestroChainContext) GetGenesisParams() Base.GenesisParameters {
+func (mcc *MaestroChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
 	if time.Since(mcc.latestUpdate) > time.Minute*5 {
-		params := mcc.GenesisParams()
+		params, err := mcc.GenesisParams()
+		if err != nil {
+			return Base.GenesisParameters{}, err
+		}
 		mcc._genesis_param = params
 	}
-	return mcc._genesis_param
+	return mcc._genesis_param, nil
 }
 
-func (mcc *MaestroChainContext) GetProtocolParams() Base.ProtocolParameters {
+func (mcc *MaestroChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
 	if time.Since(mcc.latestUpdate) > time.Minute*5 {
-		latest_params := mcc.LatestEpochParams()
+		latest_params, err := mcc.LatestEpochParams()
+		if err != nil {
+			return Base.ProtocolParameters{}, err
+		}
 		mcc._protocol_param = latest_params
 		mcc.latestUpdate = time.Now()
 	}
-	return mcc._protocol_param
+	return mcc._protocol_param, nil
 }
 
-func (mcc *MaestroChainContext) MaxTxFee() int {
-	protocol_param := mcc.GetProtocolParams()
+func (mcc *MaestroChainContext) MaxTxFee() (int, error) {
+	protocol_param, err := mcc.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
 	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
 	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
 	return Base.Fee(mcc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
-func (mcc *MaestroChainContext) TxOuts(txHash string) []Base.Output {
+func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
 	tx, err := mcc.client.TransactionDetails(txHash)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	outputs := make([]Base.Output, 0)
 	for idx, txOut := range tx.Data.Outputs {
@@ -225,22 +253,22 @@ func (mcc *MaestroChainContext) TxOuts(txHash string) []Base.Output {
 		}
 		outputs = append(outputs, output)
 	}
-	return outputs
+	return outputs, nil
 }
-func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.UTxO, error) {
 	var utxo *UTxO.UTxO
 	params := utils.NewParameters()
 	params.WithCbor()
 	txOutputByRef, err := mcc.client.TransactionOutputFromReference(txHash, index, params)
 	if err != nil {
-		return utxo
+		return utxo, err
 	}
 	decodedCbor, _ := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
 	output := TransactionOutput.TransactionOutput{}
 	err = cbor.Unmarshal(decodedCbor, &output)
 	if err != nil {
-		log.Fatal(err)
-		return nil
+
+		return nil, err
 	}
 	decodedHash, _ := hex.DecodeString(txHash)
 	utxo = &UTxO.UTxO{
@@ -250,15 +278,15 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.U
 		},
 		Output: output,
 	}
-	return utxo
+	return utxo, nil
 }
-func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) []Base.AddressUTXO {
+func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Base.AddressUTXO, error) {
 	addressUtxos := make([]Base.AddressUTXO, 0)
 	params := utils.NewParameters()
 	params.ResolveDatums()
 	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(address, params)
 	if err != nil {
-		return addressUtxos
+		return addressUtxos, err
 	}
 
 	for _, maestroUtxo := range utxosAtAddressAtApi.Data {
@@ -283,7 +311,7 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) []Base
 			params.Cursor(utxosAtAddressAtApi.NextCursor)
 			utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(address, params)
 			if err != nil {
-				return addressUtxos
+				return addressUtxos, err
 			}
 			for _, maestroUtxo := range utxosAtAddressAtApi.Data {
 				assets := make([]Base.AddressAmount, 0)
@@ -304,17 +332,17 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) []Base
 		}
 	}
 
-	return addressUtxos
+	return addressUtxos, nil
 
 }
-func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
+func (mcc *MaestroChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
 	utxos := make([]UTxO.UTxO, 0)
 	params := utils.NewParameters()
 	params.WithCbor()
 	params.ResolveDatums()
 	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(address.String(), params)
 	if err != nil {
-		return utxos
+		return utxos, err
 	}
 
 	for _, maestroUtxo := range utxosAtAddressAtApi.Data {
@@ -328,8 +356,7 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
 		err = cbor.Unmarshal(decodedCbor, &output)
 		if err != nil {
-			log.Fatal(err)
-			return nil
+			return nil, err
 		}
 		utxo.Output = output
 		utxos = append(utxos, utxo)
@@ -339,7 +366,7 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		params.Cursor(utxosAtAddressAtApi.NextCursor)
 		utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(address.String(), params)
 		if err != nil {
-			return utxos
+			return utxos, err
 		}
 		for _, maestroUtxo := range utxosAtAddressAtApi.Data {
 			utxo := UTxO.UTxO{}
@@ -352,15 +379,14 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 			decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
 			err = cbor.Unmarshal(decodedCbor, &output)
 			if err != nil {
-				log.Fatal(err)
-				return nil
+				return nil, err
 			}
 			utxo.Output = output
 			utxos = append(utxos, utxo)
 		}
 	}
 
-	return utxos
+	return utxos, nil
 }
 
 func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
@@ -371,7 +397,6 @@ func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serializat
 	txHex := hex.EncodeToString(txBytes)
 	resp, err := mcc.client.SubmitTx(txHex)
 	if err != nil {
-		log.Fatal(err)
 		return serialization.TransactionId{}, err
 	}
 	decodedResponseHash, _ := hex.DecodeString(resp.Data)
@@ -386,12 +411,12 @@ type ExecutionResult struct {
 	Result EvalResult `json:"result"`
 }
 
-func (mcc *MaestroChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	encodedTx := hex.EncodeToString(tx)
 	evaluation, err := mcc.client.EvaluateTx(encodedTx)
 	if err != nil {
-		return final_result
+		return final_result, err
 	}
 	for _, eval := range evaluation {
 		final_result[eval.RedeemerTag+":"+fmt.Sprint(eval.RedeemerIndex)] = Redeemer.ExecutionUnits{
@@ -399,18 +424,18 @@ func (mcc *MaestroChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Execut
 			Steps: eval.ExUnits.Steps,
 		}
 	}
-	return final_result
+	return final_result, nil
 }
 
-func (mcc *MaestroChainContext) GetContractCbor(scriptHash string) string {
+func (mcc *MaestroChainContext) GetContractCbor(scriptHash string) (string, error) {
 	res, err := mcc.client.ScriptByHash(scriptHash)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	scCborBytes := res.Data.Bytes
 	bytes := []byte{}
 	decodedBytes, _ := hex.DecodeString(scCborBytes)
 	_ = cbor.Unmarshal(decodedBytes, &bytes)
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(bytes), nil
 
 }

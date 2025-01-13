@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,7 +46,7 @@ type BlockFrostChainContext struct {
 	CustomSubmissionEndpoints []string
 }
 
-func NewBlockfrostChainContext(baseUrl string, network int, projectId ...string) BlockFrostChainContext {
+func NewBlockfrostChainContext(baseUrl string, network int, projectId ...string) (BlockFrostChainContext, error) {
 	ctx := context.Background()
 	file, err := ioutil.ReadFile("config.ini")
 	var cse []string
@@ -55,10 +55,6 @@ func NewBlockfrostChainContext(baseUrl string, network int, projectId ...string)
 	} else {
 		cse = []string{}
 	}
-	// latest_epochs, err := api.Epoch(ctx)
-	// if err != nil {
-	// 	log.Fatal(err, "LATEST EPOCH")
-	// }
 
 	var _projectId string
 	if len(projectId) > 0 {
@@ -73,70 +69,87 @@ func NewBlockfrostChainContext(baseUrl string, network int, projectId ...string)
 	}
 
 	bfc := BlockFrostChainContext{client: &http.Client{}, _Network: network, _baseUrl: _baseUrl, _projectId: _projectId, ctx: ctx, CustomSubmissionEndpoints: cse}
-	bfc.Init()
-	return bfc
+	err = bfc.Init()
+	if err != nil {
+		return bfc, err
+	}
+	return bfc, nil
 }
-func (bfc *BlockFrostChainContext) Init() {
-	latest_epochs := bfc.LatestEpoch()
+func (bfc *BlockFrostChainContext) Init() error {
+	latest_epochs, err := bfc.LatestEpoch()
+	if err != nil {
+		return err
+	}
 	bfc._epoch_info = latest_epochs
 	//Init Genesis
-	params := bfc.GenesisParams()
+	params, err := bfc.GenesisParams()
+	if err != nil {
+		return err
+	}
 	bfc._genesis_param = params
 	//init epoch
-	latest_params := bfc.LatestEpochParams()
-	bfc._protocol_param = latest_params
-}
-
-func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
-	txOuts := bfc.TxOuts(txHash)
-	for _, txOut := range txOuts {
-		if txOut.OutputIndex == index {
-			return txOut.ToUTxO(txHash)
-		}
+	latest_params, err := bfc.LatestEpochParams()
+	if err != nil {
+		return err
 	}
+	bfc._protocol_param = latest_params
 	return nil
 }
 
-func (bfc *BlockFrostChainContext) TxOuts(txHash string) []Base.Output {
+func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.UTxO, error) {
+	txOuts, err := bfc.TxOuts(txHash)
+	if err != nil {
+		return nil, err
+	}
+	for _, txOut := range txOuts {
+		if txOut.OutputIndex == index {
+			return txOut.ToUTxO(txHash), nil
+		}
+	}
+	return nil, errors.New("UTXO doesn't exist")
+}
+
+func (bfc *BlockFrostChainContext) TxOuts(txHash string) ([]Base.Output, error) {
 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/txs/%s/utxos", bfc._baseUrl, txHash), nil)
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return nil, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response Base.TxUtxos
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return nil, err
 	}
-	return response.Outputs
+	return response.Outputs, nil
 
 }
 
-func (bfc *BlockFrostChainContext) LatestBlock() Base.Block {
+func (bfc *BlockFrostChainContext) LatestBlock() (Base.Block, error) {
+	bb := Base.Block{}
 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/blocks/latest", bfc._baseUrl), nil)
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return bb, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response Base.Block
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return bb, err
 	}
-	return response
+	return response, nil
 }
 
-func (bfc *BlockFrostChainContext) LatestEpoch() Base.Epoch {
-	res := Base.Epoch{}
-	found := Cache.Get[Base.Epoch]("latest_epoch", &res)
+func (bfc *BlockFrostChainContext) LatestEpoch() (Base.Epoch, error) {
+	resultingEpoch := Base.Epoch{}
+	found := Cache.Get[Base.Epoch]("latest_epoch", &resultingEpoch)
 	timest := time.Time{}
 	foundTime := Cache.Get[time.Time]("latest_epoch_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
@@ -146,23 +159,23 @@ func (bfc *BlockFrostChainContext) LatestEpoch() Base.Epoch {
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
-			log.Fatal(err, "REQUEST PROTOCOL")
+			return resultingEpoch, err
 		}
 		body, err := ioutil.ReadAll(res.Body)
 		var response Base.Epoch
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			log.Fatal(err, "UNMARSHAL PROTOCOL")
+			return resultingEpoch, err
 		}
 		Cache.Set("latest_epoch", response)
 		now := time.Now()
 		Cache.Set("latest_epoch_time", now)
-		return response
+		return response, nil
 	} else {
-		return res
+		return resultingEpoch, nil
 	}
 }
-func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) []Base.AddressUTXO {
+func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) ([]Base.AddressUTXO, error) {
 	if gather {
 		var i = 1
 		result := make([]Base.AddressUTXO, 0)
@@ -173,7 +186,7 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) []B
 			}
 			res, err := bfc.client.Do(req)
 			if err != nil {
-				log.Fatal(err, "REQUEST PROTOCOL")
+				return nil, err
 			}
 			body, err := ioutil.ReadAll(res.Body)
 			var response []Base.AddressUTXO
@@ -182,12 +195,12 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) []B
 				break
 			}
 			if err != nil {
-				log.Fatal(err, "UNMARSHAL PROTOCOL")
+				return nil, err
 			}
 			result = append(result, response...)
 			i++
 		}
-		return result
+		return result, nil
 	} else {
 		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/addresses/%s/utxos", bfc._baseUrl, address), nil)
 		if bfc._projectId != "" {
@@ -195,19 +208,19 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) []B
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
-			log.Fatal(err, "REQUEST PROTOCOL")
+			return nil, err
 		}
 		body, err := ioutil.ReadAll(res.Body)
 		var response []Base.AddressUTXO
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			log.Fatal(err, "UNMARSHAL PROTOCOL")
+			return nil, err
 		}
-		return response
+		return response, nil
 	}
 }
 
-func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
+func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters, error) {
 	pm := Base.ProtocolParameters{}
 	found := Cache.Get[Base.ProtocolParameters]("latest_epoch_params", &pm)
 	timest := time.Time{}
@@ -219,24 +232,24 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() Base.ProtocolParameters {
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
-			log.Fatal(err, "REQUEST PROTOCOL")
+			return pm, err
 		}
 		body, err := ioutil.ReadAll(res.Body)
-		var response = Base.ProtocolParameters{}
+		var response = Base.BlockfrostProtocolParams{}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			log.Fatal(err, "UNMARSHAL PROTOCOL")
+			return pm, err
 		}
 		Cache.Set("latest_epoch_params", response)
 		now := time.Now()
 		Cache.Set("latest_epoch_params_time", now)
-		return response
+		return response.ToBaseParams(), nil
 	} else {
-		return pm
+		return pm, nil
 	}
 }
 
-func (bfc *BlockFrostChainContext) GenesisParams() Base.GenesisParameters {
+func (bfc *BlockFrostChainContext) GenesisParams() (Base.GenesisParameters, error) {
 	gp := Base.GenesisParameters{}
 	found := Cache.Get[Base.GenesisParameters]("genesis_params", &gp)
 	timestamp := ""
@@ -252,74 +265,99 @@ func (bfc *BlockFrostChainContext) GenesisParams() Base.GenesisParameters {
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
-			log.Fatal(err, "REQUEST PROTOCOL")
+			return gp, err
 		}
 		body, err := ioutil.ReadAll(res.Body)
 		var response = Base.GenesisParameters{}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			log.Fatal(err, "UNMARSHAL PROTOCOL")
+			return gp, err
 		}
 		Cache.Set("genesis_params", response)
 		now := time.Now()
 		Cache.Set("genesis_params_time", now)
-		return response
+		return response, nil
 	} else {
 
-		return gp
+		return gp, nil
 	}
 }
-func (bfc *BlockFrostChainContext) _CheckEpochAndUpdate() bool {
+func (bfc *BlockFrostChainContext) _CheckEpochAndUpdate() error {
 	if bfc._epoch_info.EndTime <= int(time.Now().Unix()) {
-		latest_epochs := bfc.LatestEpoch()
+		latest_epochs, err := bfc.LatestEpoch()
+		if err != nil {
+			return err
+		}
 		bfc._epoch_info = latest_epochs
-		return true
+		bfc._epoch = latest_epochs.Epoch
+		latestParams, err := bfc.GetProtocolParams()
+		if err != nil {
+			return err
+		}
+		bfc._protocol_param = latestParams
+		latestGensParams, err := bfc.GetGenesisParams()
+		if err != nil {
+			return err
+		}
+		bfc._genesis_param = latestGensParams
+
 	}
-	return false
+	return nil
 }
 
 func (bfc *BlockFrostChainContext) Network() int {
 	return bfc._Network
 }
 
-func (bfc *BlockFrostChainContext) Epoch() int {
-	if bfc._CheckEpochAndUpdate() {
-		new_epoch := bfc.LatestEpoch()
-		bfc._epoch = new_epoch.Epoch
+func (bfc *BlockFrostChainContext) Epoch() (int, error) {
+	err := bfc._CheckEpochAndUpdate()
+	if err != nil {
+		return 0, err
 	}
-	return bfc._epoch
+	return bfc._epoch, nil
 }
 
-func (bfc *BlockFrostChainContext) LastBlockSlot() int {
-	block := bfc.LatestBlock()
-	return block.Slot
-}
-
-func (bfc *BlockFrostChainContext) GetGenesisParams() Base.GenesisParameters {
-	if bfc._CheckEpochAndUpdate() {
-		params := bfc.GenesisParams()
-		bfc._genesis_param = params
+func (bfc *BlockFrostChainContext) LastBlockSlot() (int, error) {
+	block, err := bfc.LatestBlock()
+	if err != nil {
+		return 0, err
 	}
-	return bfc._genesis_param
+	return block.Slot, nil
 }
 
-func (bfc *BlockFrostChainContext) GetProtocolParams() Base.ProtocolParameters {
-	if bfc._CheckEpochAndUpdate() {
-		latest_params := bfc.LatestEpochParams()
-		bfc._protocol_param = latest_params
+func (bfc *BlockFrostChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
+	gp := Base.GenesisParameters{}
+	err := bfc._CheckEpochAndUpdate()
+	if err != nil {
+		return gp, err
 	}
-	return bfc._protocol_param
+	return bfc._genesis_param, nil
 }
 
-func (bfc *BlockFrostChainContext) MaxTxFee() int {
-	protocol_param := bfc.GetProtocolParams()
+func (bfc *BlockFrostChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
+	pps := Base.ProtocolParameters{}
+	err := bfc._CheckEpochAndUpdate()
+	if err != nil {
+		return pps, err
+	}
+	return bfc._protocol_param, nil
+}
+
+func (bfc *BlockFrostChainContext) MaxTxFee() (int, error) {
+	protocol_param, err := bfc.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
 	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
 	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
 	return Base.Fee(bfc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
-func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
-	results := bfc.AddressUtxos(address.String(), true)
+func (bfc *BlockFrostChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
+	results, err := bfc.AddressUtxos(address.String(), true)
+	if err != nil {
+		return nil, err
+	}
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
 		decodedTxId, _ := hex.DecodeString(result.TxHash)
@@ -361,7 +399,7 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 			var x PlutusData.PlutusData
 			err := cbor.Unmarshal(decoded, &x)
 			if err != nil {
-				log.Fatal(err)
+				continue
 			}
 			l := PlutusData.DatumOptionInline(&x)
 
@@ -380,9 +418,10 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) []UTxO.UTxO {
 		}
 		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
 	}
-	return utxos
+	return utxos, nil
 }
-func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, logger chan string) serialization.TransactionId {
+func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, logger chan string) (serialization.TransactionId, error) {
+	resId := serialization.TransactionId{}
 	txBytes, _ := cbor.Marshal(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		logger <- ("Custom Submission Endpoints Found, submitting...")
@@ -395,13 +434,13 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 			req.Header.Set("Content-Type", "application/cbor")
 			res, err := bfc.client.Do(req)
 			if err != nil {
-				log.Fatal(err, "REQUEST PROTOCOL")
+				return resId, err
 			}
 			body, err := ioutil.ReadAll(res.Body)
 			var response any
 			err = json.Unmarshal(body, &response)
 			if err != nil {
-				log.Fatal(err, "UNMARSHAL PROTOCOL")
+				return resId, err
 			}
 			logger <- fmt.Sprint("RESPONSE:", response)
 		}
@@ -413,18 +452,19 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 	req.Header.Set("Content-Type", "application/cbor")
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return resId, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response any
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return resId, err
 	}
 	hash, _ := tx.TransactionBody.Hash()
-	return serialization.TransactionId{Payload: hash}
+	return serialization.TransactionId{Payload: hash}, nil
 }
 func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
+	resId := serialization.TransactionId{}
 	txBytes, _ := cbor.Marshal(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
@@ -435,13 +475,13 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 			req.Header.Set("Content-Type", "application/cbor")
 			res, err := bfc.client.Do(req)
 			if err != nil {
-				log.Fatal(err, "REQUEST PROTOCOL")
+				return resId, err
 			}
 			body, err := ioutil.ReadAll(res.Body)
 			var response any
 			err = json.Unmarshal(body, &response)
 			if err != nil {
-				log.Fatal(err, "UNMARSHAL PROTOCOL")
+				return resId, err
 			}
 		}
 	}
@@ -452,7 +492,7 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 	req.Header.Set("Content-Type", "application/cbor")
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return serialization.TransactionId{}, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response any
@@ -478,7 +518,7 @@ type ExecutionResult struct {
 	Result EvalResult `json:"result"`
 }
 
-func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) map[string]Redeemer.ExecutionUnits {
+func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	encoded := hex.EncodeToString(tx)
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/utils/txs/evaluate", bfc._baseUrl), strings.NewReader(encoded))
 	if bfc._projectId != "" {
@@ -487,45 +527,44 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) map[string]Redeemer.Exe
 	req.Header.Set("Content-Type", "application/cbor")
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return nil, err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var x any
 	err = json.Unmarshal(body, &x)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return nil, err
 	}
 	var response ExecutionResult
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return nil, err
 	}
 	final_result := make(map[string]Redeemer.ExecutionUnits, 0)
 	for k, v := range response.Result.Result {
-
 		final_result[k] = Redeemer.ExecutionUnits{Steps: int64(v["steps"]), Mem: int64(v["memory"])}
 	}
-	return final_result
+	return final_result, nil
 }
 
 type BlockfrostContractCbor struct {
 	Cbor string `json:"cbor"`
 }
 
-func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) string {
+func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) (string, error) {
 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/scripts/%s/cbor", bfc._baseUrl, scriptHash), nil)
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return "", err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	var response BlockfrostContractCbor
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Fatal(err, "UNMARSHAL PROTOCOL")
+		return "", err
 	}
-	return response.Cbor
+	return response.Cbor, nil
 }

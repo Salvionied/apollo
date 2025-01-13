@@ -2,9 +2,10 @@ package Utils
 
 import (
 	"encoding/hex"
-	"log"
+	"math"
 
 	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
@@ -21,7 +22,7 @@ func Contains[T UTxO.Container[any]](container []T, contained T) bool {
 	return false
 }
 
-func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context Base.ChainContext) int64 {
+func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context Base.ChainContext) (int64, error) {
 	constantOverhead := 200
 	amt := output.GetValue()
 	if amt.Coin == 0 {
@@ -38,26 +39,60 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 	}
 	encoded, err := cbor.Marshal(tmp_out)
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
-	return int64((constantOverhead + len(encoded)) * context.GetProtocolParams().GetCoinsPerUtxoByte())
+	pps, err := context.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	return int64((constantOverhead + len(encoded)) * pps.GetCoinsPerUtxoByte()), nil
 }
 
-func ToCbor(x interface{}) string {
+func ToCbor(x interface{}) (string, error) {
 	bytes, err := cbor.Marshal(x)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(bytes), nil
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
-	pm := context.GetProtocolParams()
-	fee := int64(txSize*pm.MinFeeCoefficient+
-		pm.MinFeeConstant+
-		int(float32(steps)*pm.PriceStep)+
-		int(float32(mem)*pm.PriceMem)) + 10_000
-	return fee
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput) (int64, error) {
+	pps, err := context.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	addedFee := 0
+	refInputsSize := 0
+	if len(refInputs) > 0 {
+		// APPLY CONWAY FEE
+		for _, refInput := range refInputs {
+			utxo, err := context.GetUtxoFromRef(hex.EncodeToString(refInput.TransactionId), refInput.Index)
+			if err != nil {
+				continue
+			}
+			if utxo == nil {
+				continue
+			}
+			refInputsSize += utxo.Output.GetScriptRef().Len()
+		}
+
+	}
+	mult := 1.2
+	baseFee := 15.0
+	Range := 25600.0
+	for refInputsSize > 0 {
+		cur := math.Min(Range, float64(refInputsSize))
+		curFee := cur * baseFee
+		addedFee += int(curFee)
+		refInputsSize -= int(cur)
+		baseFee = baseFee * mult
+	}
+
+	fee := int64((txSize)*pps.MinFeeCoefficient+
+		pps.MinFeeConstant+
+		int(float32(steps)*pps.PriceStep)+
+		int(float32(mem)*pps.PriceMem)) + int64(addedFee)
+	return fee, nil
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {
