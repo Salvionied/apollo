@@ -11,15 +11,15 @@ PredefinedPlutusTypes: Address
 Sample
 ```
 type Datum struct {
-    _ struct `plutusType:IndefList plutusConstr:1`
-    Pkh []byte `plutusType:Bytes`
-    Amount int64 `plutusType:Int`
+    _ struct{} `plutusType:"IndefList" plutusConstr:"1"`
+    Pkh []byte `plutusType:"Bytes"`
+    Amount int64 `plutusType:"Int"`
 }
 
 type NestedDatum struct {
-     _ struct `plutusType:IndefList plutusConstr:1`
-    Pkh []byte `plutusType:Bytes`
-    Amount int64 `plutusType:Int`
+     _ struct{} `plutusType:"IndefList" plutusConstr:"1"`
+    Pkh []byte `plutusType:"Bytes"`
+    Amount int64 `plutusType:"Int"`
     Extra Datum
 }
 
@@ -30,14 +30,13 @@ type NestedDatum struct {
 Usage
 Marshaling
 ```
-    d = Datum{...}
+    d := Datum{...}
 
     plutusData, err := plutusencoder.MarshalPlutus(d)
 ```
 Unmarshaling
 ```
-    plutusData = PlutusData.PlutusData{...}
-    d = Datum{...}
+    plutusData := PlutusData.PlutusData{...}
+    d := Datum{...}
     err := plutusencoder.UnmarshalPlutus(d)
-
 ```
