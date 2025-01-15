@@ -60,7 +60,10 @@ func TestMarshalUnmarshalRedeemer(t *testing.T) {
 		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", "840001f6820102")
 	}
 	var red2 Redeemer.Redeemer
-	cbor.Unmarshal(marshaled, &red2)
+	err := cbor.Unmarshal(marshaled, &red2)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	if red2.Tag != red.Tag || red2.Index != red.Index || &red2.Data == &red.Data || &red2.ExUnits == &red.ExUnits {
 		t.Error("Invalid unmarshaling", red2.Tag, red2.Index, red2.Data, red2.ExUnits, "Expected", red.Tag, red.Index, red.Data, red.ExUnits)
 	}

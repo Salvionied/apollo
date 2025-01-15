@@ -65,7 +65,10 @@ func TestNoAssetPreAlonzoMarshaling(t *testing.T) {
 	}
 
 	var unmarshaled Amount.Amount
-	cbor.Unmarshal(marshaled, &unmarshaled)
+	err := cbor.Unmarshal(marshaled, &unmarshaled)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	if !val0.Equal(unmarshaled) {
 		t.Errorf("Unmarshaling failed. Expected: %v, Got: %v", val0, unmarshaled)
 	}
@@ -82,7 +85,10 @@ func TestPreAlonzoMarshalingWAssets(t *testing.T) {
 		t.Errorf("Marshaling failed. Expected: 821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864, Got: %x", marshaled)
 	}
 	var unmarshaled Amount.Amount
-	cbor.Unmarshal(marshaled, &unmarshaled)
+	err := cbor.Unmarshal(marshaled, &unmarshaled)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	if !val0.Equal(unmarshaled) {
 		t.Errorf("Unmarshaling failed. Expected: %v, Got: %v", val0, unmarshaled)
 	}

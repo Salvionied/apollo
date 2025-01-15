@@ -20,10 +20,11 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-type _Script struct {
-	_      struct{} `cbor:",toarray"`
-	Script []byte
-}
+// TODO: remove me
+// type _Script struct {
+// 	_      struct{} `cbor:",toarray"`
+// 	Script []byte
+// }
 
 type DatumType byte
 
@@ -897,7 +898,11 @@ type Datum struct {
 func (pd *Datum) ToPlutusData() PlutusData {
 	var res PlutusData
 	enc, _ := cbor.Marshal(pd)
-	cbor.Unmarshal(enc, &res)
+	err := cbor.Unmarshal(enc, &res)
+	if err != nil {
+		// TODO: return errors
+		return res
+	}
 	return res
 }
 
@@ -1137,7 +1142,11 @@ func (pd *PlutusData) ToDatum() Datum {
 
 	var res Datum
 	enc, _ := cbor.Marshal(pd)
-	cbor.Unmarshal(enc, &res)
+	err := cbor.Unmarshal(enc, &res)
+	if err != nil {
+		// TODO: return errors
+		return res
+	}
 	return res
 }
 
@@ -1457,10 +1466,10 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			return nil
 		}
 	} else {
-		switch x.(type) {
+		switch x := x.(type) {
 		case big.Int:
 			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x.(big.Int)
+			tmpBigInt := x
 			pd.Value = tmpBigInt
 			pd.TagNr = 0
 		case []interface{}:
@@ -1522,7 +1531,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.Value = y
 			pd.TagNr = 0
 		default:
-			fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
+			_ = fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
 		}
 
 	}

@@ -129,7 +129,7 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 			multi_assets[policy_id][asset_name] = int64(asset_quantity)
 		}
 	}
-	final_amount := Value.Value{}
+	var final_amount Value.Value
 	if len(multi_assets) > 0 {
 		final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
 	} else {
@@ -146,7 +146,8 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 		decoded, _ := hex.DecodeString(o.InlineDatum)
 
 		var x PlutusData.PlutusData
-		cbor.Unmarshal(decoded, &x)
+		// TODO: error check correctly
+		_ = cbor.Unmarshal(decoded, &x)
 
 		datum = x
 		tx_out := TransactionOutput.TransactionOutput{

@@ -381,7 +381,7 @@ func (bfc *BlockFrostChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, 
 				multi_assets[policy_id][asset_name] = int64(asset_quantity)
 			}
 		}
-		final_amount := Value.Value{}
+		var final_amount Value.Value
 		if len(multi_assets) > 0 {
 			final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
 		} else {

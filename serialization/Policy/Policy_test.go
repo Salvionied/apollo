@@ -18,7 +18,10 @@ func TestPolicyMarshalingUnmarshaling(t *testing.T) {
 		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", SAMPLE_POLICY)
 	}
 	var p2 Policy.PolicyId
-	cbor.Unmarshal(marshaled, &p2)
+	err := cbor.Unmarshal(marshaled, &p2)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	if p2.Value != SAMPLE_POLICY {
 		t.Error("Invalid unmarshaling", p2.Value, "Expected", SAMPLE_POLICY)
 	}

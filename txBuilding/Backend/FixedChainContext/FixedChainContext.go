@@ -30,7 +30,8 @@ type CborSerializable interface {
 func CheckTwoWayCbor[T CborSerializable](serializable T) {
 	restored := new(T)
 	serialized, _ := cbor.Marshal(serializable)
-	cbor.Unmarshal(serialized, restored)
+	// TODO: properly error check
+	_ = cbor.Unmarshal(serialized, restored)
 	if !reflect.DeepEqual(serializable, restored) {
 		panic("Invalid serialization")
 	}
