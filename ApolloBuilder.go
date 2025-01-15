@@ -622,7 +622,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	// fmt.Println("PRE_HASH", hex.EncodeToString(total_bytes))
 	// fmt.Println("HASH", hex.EncodeToString(hash))
-	return &serialization.ScriptDataHash{hash}, nil
+	return &serialization.ScriptDataHash{Payload: hash}, nil
 
 }
 

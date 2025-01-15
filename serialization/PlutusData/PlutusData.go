@@ -1591,7 +1591,7 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
-	r := serialization.DatumHash{hash.Sum(nil)}
+	r := serialization.DatumHash{Payload: hash.Sum(nil)}
 	return r, nil
 }
 
@@ -1622,7 +1622,7 @@ func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
-	r := serialization.DatumHash{hash.Sum(nil)}
+	r := serialization.DatumHash{Payload: hash.Sum(nil)}
 	return r, nil
 }
 
@@ -1662,7 +1662,14 @@ type PlutusV1Script []byte
 func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
-		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		return Address.Address{
+			PaymentPart: hash.Bytes(),
+			StakingPart: nil,
+			Network:     Address.MAINNET,
+			AddressType: Address.SCRIPT_NONE,
+			HeaderByte:  0b01110001,
+			Hrp:         "addr",
+		}
 	} else {
 		return Address.Address{
 			PaymentPart: hash.Bytes(),
@@ -1692,9 +1699,23 @@ func (ps *PlutusV2Script) ToAddress(stakingCredential []byte, network constants.
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
 		if network == constants.MAINNET {
-			return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_NONE,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr",
+			}
 		} else {
-			return Address.Address{hash.Bytes(), nil, Address.TESTNET, Address.SCRIPT_NONE, 0b01110000, "addr_test"}
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr_test",
+			}
 		}
 	} else {
 		if network == constants.MAINNET {

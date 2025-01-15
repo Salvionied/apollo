@@ -84,13 +84,13 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 func TestValueSerialization(t *testing.T) {
 	ShelleyValueWithNoAssets := Value.PureLovelaceValue(1000000)
 	ShelleyValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
 			AssetName.NewAssetNameFromString("Token1"): 1,
 		},
 	})
 	AlonzoValueWithNoAssets := Value.PureLovelaceValue(1000000).ToAlonzoValue()
 	AlonzoValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
 			AssetName.NewAssetNameFromString("Token1"): 1,
 		},
 	}).ToAlonzoValue()
@@ -121,7 +121,7 @@ func TestTransactionOutputPostAlonzoUtils(t *testing.T) {
 	toWithAssets := TransactionOutput.TransactionOutputAlonzo{
 		Address: addr,
 		Amount: Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-			Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+			Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 				AssetName.NewAssetNameFromString("Token1"): 1,
 			},
 		}).ToAlonzoValue(),
@@ -149,7 +149,7 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 	toWithAssets := TransactionOutput.TransactionOutputShelley{
 		Address: addr,
 		Amount: Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-			Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+			Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 				AssetName.NewAssetNameFromString("Token1"): 1,
 			},
 		}),
@@ -170,7 +170,7 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 var addr, _ = Address.DecodeAddress(TEST_ADDRESS)
 var amNoAssets = Value.PureLovelaceValue(1000000)
 var amWithAssets = Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-	Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+	Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 		AssetName.NewAssetNameFromString("Token1"): 1,
 	},
 })
