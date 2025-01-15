@@ -12,10 +12,7 @@ func Get[T any](key string, val interface{}) bool {
 		return false
 	}
 	err = json.Unmarshal(dat, &val)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func Set[T any](key string, value T) {
