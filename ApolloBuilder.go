@@ -64,6 +64,7 @@ type Apollo struct {
 	FeePadding         int64
 	Ttl                int64
 	ValidityStart      int64
+	collateralAmount   int
 	totalCollateral    int
 	referenceInputs    []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
@@ -869,8 +870,13 @@ Returns:
 */
 
 func (b *Apollo) setCollateral() (*Apollo, error) {
+	collateral_amount := 5_000_000
+
+	if b.collateralAmount > 0 {
+		collateral_amount = b.collateralAmount
+	}
+
 	if len(b.collaterals) > 0 {
-		collateral_amount := 5_000_000
 		for _, utxo := range b.collaterals {
 			if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount+1_000_000 &&
 				len(utxo.Output.GetValue().GetAssets()) <= 5 {
@@ -892,7 +898,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
-	collateral_amount := 5_000_000
+
 	for _, utxo := range availableUtxos {
 		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount &&
 			len(utxo.Output.GetValue().GetAssets()) <= 5 {
@@ -1964,6 +1970,19 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 */
 func (b *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 	b.isEstimateRequired = false
+	return b
+}
+
+/*
+*
+
+		SetCollateralAmount sets the collateral amount for the transaction.
+
+	 	Returns:
+		   	*Apollo: A pointer to the modified Apollo instance with the collateral amount set.
+*/
+func (b *Apollo) SetCollateralAmount(amount int) *Apollo {
+	b.collateralAmount = amount
 	return b
 }
 
