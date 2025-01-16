@@ -207,6 +207,19 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	return amts
 }
 
+func kugoValue_toSharedValue(v kugo.CompatibleValue) shared.Value {
+	result := shared.Value{}
+	for policyId, assets := range v {
+		for assetName, amt := range assets {
+			if _, ok := result[policyId]; !ok {
+				result[policyId] = map[string]num.Int{}
+			}
+			result[policyId][assetName] = amt
+		}
+	}
+	return result
+}
+
 func chainsyncValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	// same as above
 	return statequeryValue_toAddressAmount(v)
@@ -294,7 +307,7 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 		addressUtxos = append(addressUtxos, Base.AddressUTXO{
 			TxHash:      match.TransactionID,
 			OutputIndex: match.OutputIndex,
-			Amount:      chainsyncValue_toAddressAmount(match.Value),
+			Amount:      chainsyncValue_toAddressAmount(kugoValue_toSharedValue(match.Value)),
 			// We probably don't need this info and kupo doesn't provide it in this query
 			Block:       "",
 			DataHash:    match.DatumHash,
