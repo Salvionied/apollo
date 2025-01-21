@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -48,7 +49,7 @@ type BlockFrostChainContext struct {
 
 func NewBlockfrostChainContext(baseUrl string, network int, projectId ...string) (BlockFrostChainContext, error) {
 	ctx := context.Background()
-	file, err := ioutil.ReadFile("config.ini")
+	file, err := os.ReadFile("config.ini")
 	var cse []string
 	if err == nil {
 		cse = strings.Split(string(file), "\n")
@@ -118,7 +119,10 @@ func (bfc *BlockFrostChainContext) TxOuts(txHash string) ([]Base.Output, error) 
 	if err != nil {
 		return nil, err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 	var response Base.TxUtxos
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -138,7 +142,10 @@ func (bfc *BlockFrostChainContext) LatestBlock() (Base.Block, error) {
 	if err != nil {
 		return bb, err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return bb, err
+	}
 	var response Base.Block
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -161,7 +168,10 @@ func (bfc *BlockFrostChainContext) LatestEpoch() (Base.Epoch, error) {
 		if err != nil {
 			return resultingEpoch, err
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return resultingEpoch, err
+		}
 		var response Base.Epoch
 		err = json.Unmarshal(body, &response)
 		if err != nil {
@@ -188,7 +198,10 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) ([]
 			if err != nil {
 				return nil, err
 			}
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return nil, err
+			}
 			var response []Base.AddressUTXO
 			err = json.Unmarshal(body, &response)
 			if len(response) == 0 {
@@ -210,7 +223,10 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) ([]
 		if err != nil {
 			return nil, err
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return nil, err
+		}
 		var response []Base.AddressUTXO
 		err = json.Unmarshal(body, &response)
 		if err != nil {
@@ -234,7 +250,10 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters,
 		if err != nil {
 			return pm, err
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return pm, err
+		}
 		var response = Base.BlockfrostProtocolParams{}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
@@ -267,7 +286,10 @@ func (bfc *BlockFrostChainContext) GenesisParams() (Base.GenesisParameters, erro
 		if err != nil {
 			return gp, err
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return gp, err
+		}
 		var response = Base.GenesisParameters{}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
@@ -436,7 +458,10 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 			if err != nil {
 				return resId, err
 			}
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return resId, err
+			}
 			var response any
 			err = json.Unmarshal(body, &response)
 			if err != nil {
@@ -454,7 +479,10 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 	if err != nil {
 		return resId, err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return resId, err
+	}
 	var response any
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -477,7 +505,10 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 			if err != nil {
 				return resId, err
 			}
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return resId, err
+			}
 			var response any
 			err = json.Unmarshal(body, &response)
 			if err != nil {
@@ -494,7 +525,10 @@ func (bfc *BlockFrostChainContext) SubmitTx(tx Transaction.Transaction) (seriali
 	if err != nil {
 		return serialization.TransactionId{}, err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return serialization.TransactionId{}, err
+	}
 	var response any
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -529,7 +563,10 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Ex
 	if err != nil {
 		return nil, err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 	var x any
 	err = json.Unmarshal(body, &x)
 	if err != nil {
@@ -560,7 +597,10 @@ func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) (string, e
 	if err != nil {
 		return "", err
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
 	var response BlockfrostContractCbor
 	err = json.Unmarshal(body, &response)
 	if err != nil {
