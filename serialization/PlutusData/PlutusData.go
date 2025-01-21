@@ -1301,7 +1301,7 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 						if kvalue, okk := kval["int"]; okk {
 							isInt = true
 							pd := PlutusData{}
-							marshaled := []byte{}
+							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
 
 							err = json.Unmarshal(marshaled, &pd)
@@ -1312,7 +1312,7 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 							IntMap[uint64(parsedInt)] = pd
 						} else {
 							pd := PlutusData{}
-							marshaled := []byte{}
+							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
 
 							err = json.Unmarshal(marshaled, &pd)

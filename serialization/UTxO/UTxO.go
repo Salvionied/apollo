@@ -58,6 +58,6 @@ func (u UTxO) Clone() UTxO {
 		bool: True if the UTxO is equal to the proved object, false otherwise.
 */
 func (u UTxO) EqualTo(other any) bool {
-	ok, other := other.(UTxO)
-	return u.Input.EqualTo(ok.Input) && u.Output.EqualTo(ok.Output)
+	utxo := other.(UTxO)
+	return u.Input.EqualTo(utxo.Input) && u.Output.EqualTo(utxo.Output)
 }

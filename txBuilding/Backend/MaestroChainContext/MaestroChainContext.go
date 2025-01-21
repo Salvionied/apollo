@@ -31,7 +31,7 @@ type MaestroChainContext struct {
 }
 
 func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
-	networkString := "mainnet"
+	var networkString string
 	if network == 0 {
 		networkString = "mainnet"
 	} else if network == 1 {

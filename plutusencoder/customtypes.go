@@ -273,7 +273,7 @@ func DecodePlutusAddress(data PlutusData.PlutusData, network byte) (Address.Addr
 	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
 		return Address.Address{}, fmt.Errorf("error: Invalid Address Data")
 	}
-	isIndef := true
+	var isIndef bool
 	switch data.Value.(type) {
 	case PlutusData.PlutusDefArray:
 		isIndef = false

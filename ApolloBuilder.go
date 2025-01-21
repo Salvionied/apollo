@@ -1576,7 +1576,7 @@ func (a *Apollo) SetWalletFromMnemonic(
 	skh, _ := stakeVerKey.Hash()
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{}
+	var addr Address.Address
 	if network == constants.MAINNET {
 		addr = Address.Address{
 			StakingPart: skh[:],
@@ -1618,7 +1618,7 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{}
+	var addr Address.Address
 	if network == constants.MAINNET {
 		addr = Address.Address{
 			StakingPart: nil,
