@@ -196,7 +196,6 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 	}
 	if selectedValue.Less(Value.Value{}) {
 		panic("selected value is negative")
-		return b
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
