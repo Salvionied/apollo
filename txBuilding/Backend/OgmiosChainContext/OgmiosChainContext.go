@@ -232,7 +232,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 	chunk_size := 10
 	for more_utxos {
 		queries := make([]chainsync.TxInQuery, chunk_size)
-		for ix, _ := range queries {
+		for ix := range queries {
 			queries[ix] = chainsync.TxInQuery{
 				Transaction: shared.UtxoTxID{
 					ID: txHash,
@@ -578,7 +578,7 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, erro
 				multi_assets[policy_id][asset_name] = int64(asset_quantity)
 			}
 		}
-		final_amount := Value.Value{}
+		var final_amount Value.Value
 		if len(multi_assets) > 0 {
 			final_amount = Value.Value{
 				Am:        Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets},
@@ -628,6 +628,9 @@ func (occ *OgmiosChainContext) SubmitTx(
 ) (serialization.TransactionId, error) {
 	ctx := context.Background()
 	bytes, err := tx.Bytes()
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error getting tx bytes")
+	}
 	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")

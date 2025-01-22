@@ -12,17 +12,19 @@ func Get[T any](key string, val interface{}) bool {
 		return false
 	}
 	err = json.Unmarshal(dat, &val)
-	if err != nil {
-	}
-	return true
+	return err == nil
 }
 
 func Set[T any](key string, value T) {
 	val, err := json.Marshal(value)
 	if err != nil {
+		// TODO: proper error handling
+		fmt.Println(err)
 	}
 	err = os.WriteFile(fmt.Sprintf("./tmp/%s.txt", key), val, 0644)
 	if err != nil {
+		// TODO: proper error handling
+		fmt.Println(err)
 	}
 
 }

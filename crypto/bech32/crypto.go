@@ -72,7 +72,7 @@ func Decode(bech string) (string, []byte, error) {
 			moreInfo = fmt.Sprintf("Expected %v, got %v.",
 				expected, checksum)
 		}
-		return "", nil, fmt.Errorf("checksum failed. " + moreInfo)
+		return "", nil, fmt.Errorf("checksum failed. %s", moreInfo)
 	}
 
 	// We exclude the last 6 bytes, which is the checksum.

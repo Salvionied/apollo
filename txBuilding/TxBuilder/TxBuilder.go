@@ -482,7 +482,7 @@ func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnes
 	if err != nil {
 		return nil, err
 	}
-	return &serialization.ScriptDataHash{hash}, nil
+	return &serialization.ScriptDataHash{Payload: hash}, nil
 
 }
 

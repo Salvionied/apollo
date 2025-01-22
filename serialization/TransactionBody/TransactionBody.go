@@ -74,7 +74,7 @@ func (tx *TransactionBody) Id() (serialization.TransactionId, error) {
 	if err != nil {
 		return serialization.TransactionId{}, err
 	}
-	return serialization.TransactionId{bytes}, nil
+	return serialization.TransactionId{Payload: bytes}, nil
 }
 
 func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {

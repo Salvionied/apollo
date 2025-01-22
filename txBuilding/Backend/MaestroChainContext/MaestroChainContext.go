@@ -31,7 +31,7 @@ type MaestroChainContext struct {
 }
 
 func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
-	networkString := "mainnet"
+	var networkString string
 	if network == 0 {
 		networkString = "mainnet"
 	} else if network == 1 {
@@ -47,8 +47,8 @@ func NewMaestroChainContext(network int, projectId string) (MaestroChainContext,
 	mcc := MaestroChainContext{
 		client: maestroClient, _Network: network,
 	}
-	mcc.Init()
-	return mcc, nil
+	err := mcc.Init()
+	return mcc, err
 }
 func (mcc *MaestroChainContext) Init() error {
 	latest_epochs, err := mcc.LatestEpoch()

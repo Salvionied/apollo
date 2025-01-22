@@ -20,10 +20,11 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-type _Script struct {
-	_      struct{} `cbor:",toarray"`
-	Script []byte
-}
+// TODO: remove me
+// type _Script struct {
+// 	_      struct{} `cbor:",toarray"`
+// 	Script []byte
+// }
 
 type DatumType byte
 
@@ -153,7 +154,7 @@ type CM map[string]int
 func (cm CM) MarshalCBOR() ([]byte, error) {
 	res := make([]int, 0)
 	mk := make([]string, 0)
-	for k, _ := range cm {
+	for k := range cm {
 		mk = append(mk, k)
 	}
 	sort.Strings(mk)
@@ -347,15 +348,15 @@ type CostView map[string]int
 		[]byte: The CBOR-encoded byte slice.
 		error: An error if marshaling fails.
 */
-func (cm CostView) MarshalCBOR() ([]byte, error) {
+func (cv CostView) MarshalCBOR() ([]byte, error) {
 	res := make([]int, 0)
 	mk := make([]string, 0)
-	for k, _ := range cm {
+	for k := range cv {
 		mk = append(mk, k)
 	}
 	sort.Strings(mk)
 	for _, v := range mk {
-		res = append(res, cm[v])
+		res = append(res, cv[v])
 	}
 	return cbor.Marshal(res)
 
@@ -897,7 +898,11 @@ type Datum struct {
 func (pd *Datum) ToPlutusData() PlutusData {
 	var res PlutusData
 	enc, _ := cbor.Marshal(pd)
-	cbor.Unmarshal(enc, &res)
+	err := cbor.Unmarshal(enc, &res)
+	if err != nil {
+		// TODO: return errors
+		return res
+	}
 	return res
 }
 
@@ -1137,7 +1142,11 @@ func (pd *PlutusData) ToDatum() Datum {
 
 	var res Datum
 	enc, _ := cbor.Marshal(pd)
-	cbor.Unmarshal(enc, &res)
+	err := cbor.Unmarshal(enc, &res)
+	if err != nil {
+		// TODO: return errors
+		return res
+	}
 	return res
 }
 
@@ -1292,8 +1301,11 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 						if kvalue, okk := kval["int"]; okk {
 							isInt = true
 							pd := PlutusData{}
-							marshaled := []byte{}
+							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
+							if err != nil {
+								return err
+							}
 
 							err = json.Unmarshal(marshaled, &pd)
 							if err != nil {
@@ -1303,8 +1315,11 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 							IntMap[uint64(parsedInt)] = pd
 						} else {
 							pd := PlutusData{}
-							marshaled := []byte{}
+							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
+							if err != nil {
+								return err
+							}
 
 							err = json.Unmarshal(marshaled, &pd)
 							if err != nil {
@@ -1457,10 +1472,10 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			return nil
 		}
 	} else {
-		switch x.(type) {
+		switch x := x.(type) {
 		case big.Int:
 			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x.(big.Int)
+			tmpBigInt := x
 			pd.Value = tmpBigInt
 			pd.TagNr = 0
 		case []interface{}:
@@ -1522,7 +1537,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.Value = y
 			pd.TagNr = 0
 		default:
-			fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
+			_ = fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
 		}
 
 	}
@@ -1582,7 +1597,7 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
-	r := serialization.DatumHash{hash.Sum(nil)}
+	r := serialization.DatumHash{Payload: hash.Sum(nil)}
 	return r, nil
 }
 
@@ -1613,7 +1628,7 @@ func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
-	r := serialization.DatumHash{hash.Sum(nil)}
+	r := serialization.DatumHash{Payload: hash.Sum(nil)}
 	return r, nil
 }
 
@@ -1653,7 +1668,14 @@ type PlutusV1Script []byte
 func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
-		return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+		return Address.Address{
+			PaymentPart: hash.Bytes(),
+			StakingPart: nil,
+			Network:     Address.MAINNET,
+			AddressType: Address.SCRIPT_NONE,
+			HeaderByte:  0b01110001,
+			Hrp:         "addr",
+		}
 	} else {
 		return Address.Address{
 			PaymentPart: hash.Bytes(),
@@ -1683,9 +1705,23 @@ func (ps *PlutusV2Script) ToAddress(stakingCredential []byte, network constants.
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
 		if network == constants.MAINNET {
-			return Address.Address{hash.Bytes(), nil, Address.MAINNET, Address.SCRIPT_NONE, 0b01110001, "addr"}
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_NONE,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr",
+			}
 		} else {
-			return Address.Address{hash.Bytes(), nil, Address.TESTNET, Address.SCRIPT_NONE, 0b01110000, "addr_test"}
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr_test",
+			}
 		}
 	} else {
 		if network == constants.MAINNET {

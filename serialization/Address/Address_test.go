@@ -535,7 +535,10 @@ func TestUnmarshalCbor(t *testing.T) {
 	cbor := "5839019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251"
 	decoded, _ := hex.DecodeString(cbor)
 	addr := Address.Address{}
-	addr.UnmarshalCBOR(decoded)
+	err := addr.UnmarshalCBOR(decoded)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	if addr.String() != "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x" {
 		t.Errorf("\nexpected: %v\nresult: %v", "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", addr.String())
 	}

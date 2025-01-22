@@ -42,7 +42,10 @@ func TestPostAlonzo(t *testing.T) {
 	cborHex := "d8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c47534f4349455459ff1b00002cc16be02b37ff1a001e84801a001e8480ff"
 	decoded_cbor, _ := hex.DecodeString(cborHex)
 	var pd PlutusData.PlutusData
-	cbor.Unmarshal(decoded_cbor, &pd)
+	err := cbor.Unmarshal(decoded_cbor, &pd)
+	if err != nil {
+		t.Error("Failed unmarshaling", err)
+	}
 	txO.IsPostAlonzo = true
 	decoded_address, _ := Address.DecodeAddress("addr1wynp362vmvr8jtc946d3a3utqgclfdl5y9d3kn849e359hsskr20n")
 	txO.PostAlonzo = TransactionOutput.TransactionOutputAlonzo{}
@@ -81,13 +84,13 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 func TestValueSerialization(t *testing.T) {
 	ShelleyValueWithNoAssets := Value.PureLovelaceValue(1000000)
 	ShelleyValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
 			AssetName.NewAssetNameFromString("Token1"): 1,
 		},
 	})
 	AlonzoValueWithNoAssets := Value.PureLovelaceValue(1000000).ToAlonzoValue()
 	AlonzoValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{"115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
 			AssetName.NewAssetNameFromString("Token1"): 1,
 		},
 	}).ToAlonzoValue()
@@ -118,7 +121,7 @@ func TestTransactionOutputPostAlonzoUtils(t *testing.T) {
 	toWithAssets := TransactionOutput.TransactionOutputAlonzo{
 		Address: addr,
 		Amount: Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-			Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+			Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 				AssetName.NewAssetNameFromString("Token1"): 1,
 			},
 		}).ToAlonzoValue(),
@@ -146,7 +149,7 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 	toWithAssets := TransactionOutput.TransactionOutputShelley{
 		Address: addr,
 		Amount: Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-			Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+			Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 				AssetName.NewAssetNameFromString("Token1"): 1,
 			},
 		}),
@@ -167,7 +170,7 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 var addr, _ = Address.DecodeAddress(TEST_ADDRESS)
 var amNoAssets = Value.PureLovelaceValue(1000000)
 var amWithAssets = Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-	Policy.PolicyId{TEST_POLICY}: Asset.Asset[int64]{
+	Policy.PolicyId{Value: TEST_POLICY}: Asset.Asset[int64]{
 		AssetName.NewAssetNameFromString("Token1"): 1,
 	},
 })
@@ -385,9 +388,9 @@ func TestSetDatum(t *testing.T) {
 		t.Error("Error while setting datum")
 	}
 	if clonedAlonzo.GetDatumHash() != nil {
-		t.Error("Error while setting datum")
+		t.Error("Error while getting datum hash")
 	}
 	if clonedShelley.GetDatumHash() == nil {
-
+		t.Error("Error while getting datum hash")
 	}
 }

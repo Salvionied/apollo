@@ -206,16 +206,16 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	if err != nil {
 		return err
 	}
-	switch res.(type) {
+	switch res := res.(type) {
 	case []byte:
 		cb.tp = "bytes"
-		cb.Value = hex.EncodeToString(res.([]byte))
+		cb.Value = hex.EncodeToString(res)
 	case string:
 		cb.tp = "string"
-		cb.Value = res.(string)
+		cb.Value = res
 	case uint64:
 		cb.tp = "uint64"
-		cb.Value = fmt.Sprintf("%d", res.(uint64))
+		cb.Value = fmt.Sprintf("%d", res)
 	default:
 		return fmt.Errorf("invalid type for customBytes")
 	}

@@ -102,6 +102,9 @@ func TestNestedListMarshal(t *testing.T) {
 		t.Error(err)
 	}
 	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
 	fmt.Println(hex.EncodeToString(encoded))
 	if hex.EncodeToString(encoded) != "d87a9f44010203041a000f42409fd87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304ffff" {
 		t.Error("encoding error")
@@ -167,6 +170,9 @@ func TestPlutusMarshal(t *testing.T) {
 		t.Error(err)
 	}
 	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
 	if hex.EncodeToString(encoded) != "d87a9f44010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304ff" {
 		t.Error("encoding error")
 	}
@@ -222,6 +228,9 @@ func TestPDAddressesStruct(t *testing.T) {
 	}
 	fmt.Println(marshaled)
 	encoded, err := cbor.Marshal(marshaled)
+	if err != nil {
+		t.Error(err)
+	}
 	if hex.EncodeToString(encoded) != "d87b81d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff" {
 		t.Error(hex.EncodeToString(encoded))
 	}
@@ -263,7 +272,10 @@ func TestPDAddress(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, _ = cbor.Marshal(pd)
+	encoded, err = cbor.Marshal(pd)
+	if err != nil {
+		t.Error(err)
+	}
 	if hex.EncodeToString(encoded) != "d8799fd87a9f581c4ab17afc9a19a4f06b6fe229f9501e727d3968bff03acb1a8f86acf5ffd8799fd8799fd8799f581cb60abac5d101517cd99ae6c6c9ab582bc8603a07b57941df212782c5ffffffff" {
 		t.Error(hex.EncodeToString(encoded))
 	}

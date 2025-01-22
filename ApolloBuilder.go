@@ -196,7 +196,6 @@ func (b *Apollo) ConsumeAssetsFromUtxo(utxo UTxO.UTxO, payments ...PaymentI) *Ap
 	}
 	if selectedValue.Less(Value.Value{}) {
 		panic("selected value is negative")
-		return b
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
@@ -622,7 +621,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	// fmt.Println("PRE_HASH", hex.EncodeToString(total_bytes))
 	// fmt.Println("HASH", hex.EncodeToString(hash))
-	return &serialization.ScriptDataHash{hash}, nil
+	return &serialization.ScriptDataHash{Payload: hash}, nil
 
 }
 
@@ -829,17 +828,16 @@ func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 */
 func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
-	done := make([]string, 0)
 	for i, utxo := range sorted_inputs {
 		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
 		val, ok := b.redeemersToUTxO[key]
 		if ok && val.Tag == Redeemer.SPEND {
-			done = append(done, key)
 			redeem := b.redeemersToUTxO[key]
 			redeem.Index = i
 			b.redeemersToUTxO[key] = redeem
 		} else if ok && val.Tag == Redeemer.MINT {
-			//TODO: IMPLEMENT FOR MINTS
+			// TODO: IMPLEMENT FOR MINTS
+			continue
 		}
 	}
 	return b
@@ -1577,7 +1575,7 @@ func (a *Apollo) SetWalletFromMnemonic(
 	skh, _ := stakeVerKey.Hash()
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{}
+	var addr Address.Address
 	if network == constants.MAINNET {
 		addr = Address.Address{
 			StakingPart: skh[:],
@@ -1619,7 +1617,7 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
 	vkh, _ := verificationKey.Hash()
 
-	addr := Address.Address{}
+	var addr Address.Address
 	if network == constants.MAINNET {
 		addr = Address.Address{
 			StakingPart: nil,
