@@ -828,17 +828,16 @@ func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 */
 func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
-	done := make([]string, 0)
 	for i, utxo := range sorted_inputs {
 		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
 		val, ok := b.redeemersToUTxO[key]
 		if ok && val.Tag == Redeemer.SPEND {
-			done = append(done, key)
 			redeem := b.redeemersToUTxO[key]
 			redeem.Index = i
 			b.redeemersToUTxO[key] = redeem
 		} else if ok && val.Tag == Redeemer.MINT {
-			//TODO: IMPLEMENT FOR MINTS
+			// TODO: IMPLEMENT FOR MINTS
+			continue
 		}
 	}
 	return b
