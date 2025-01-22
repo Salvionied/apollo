@@ -219,7 +219,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 	chunk_size := 10
 	for more_utxos {
 		queries := make([]chainsync.TxInQuery, chunk_size)
-		for ix, _ := range queries {
+		for ix := range queries {
 			queries[ix] = chainsync.TxInQuery{
 				Transaction: shared.UtxoTxID{
 					ID: txHash,

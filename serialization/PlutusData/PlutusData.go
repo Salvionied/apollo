@@ -154,7 +154,7 @@ type CM map[string]int
 func (cm CM) MarshalCBOR() ([]byte, error) {
 	res := make([]int, 0)
 	mk := make([]string, 0)
-	for k, _ := range cm {
+	for k := range cm {
 		mk = append(mk, k)
 	}
 	sort.Strings(mk)
@@ -348,15 +348,15 @@ type CostView map[string]int
 		[]byte: The CBOR-encoded byte slice.
 		error: An error if marshaling fails.
 */
-func (cm CostView) MarshalCBOR() ([]byte, error) {
+func (cv CostView) MarshalCBOR() ([]byte, error) {
 	res := make([]int, 0)
 	mk := make([]string, 0)
-	for k, _ := range cm {
+	for k := range cv {
 		mk = append(mk, k)
 	}
 	sort.Strings(mk)
 	for _, v := range mk {
-		res = append(res, cm[v])
+		res = append(res, cv[v])
 	}
 	return cbor.Marshal(res)
 
