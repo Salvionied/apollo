@@ -1303,6 +1303,9 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 							pd := PlutusData{}
 							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
+							if err != nil {
+								return err
+							}
 
 							err = json.Unmarshal(marshaled, &pd)
 							if err != nil {
@@ -1314,6 +1317,9 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 							pd := PlutusData{}
 							var marshaled []byte
 							marshaled, err = json.Marshal(vval)
+							if err != nil {
+								return err
+							}
 
 							err = json.Unmarshal(marshaled, &pd)
 							if err != nil {

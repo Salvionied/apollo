@@ -388,9 +388,9 @@ func TestSetDatum(t *testing.T) {
 		t.Error("Error while setting datum")
 	}
 	if clonedAlonzo.GetDatumHash() != nil {
-		t.Error("Error while setting datum")
+		t.Error("Error while getting datum hash")
 	}
 	if clonedShelley.GetDatumHash() == nil {
-
+		t.Error("Error while getting datum hash")
 	}
 }

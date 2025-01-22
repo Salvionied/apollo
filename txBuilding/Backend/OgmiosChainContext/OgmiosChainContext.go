@@ -615,6 +615,9 @@ func (occ *OgmiosChainContext) SubmitTx(
 ) (serialization.TransactionId, error) {
 	ctx := context.Background()
 	bytes, err := tx.Bytes()
+	if err != nil {
+		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error getting tx bytes")
+	}
 	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
