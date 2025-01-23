@@ -85,12 +85,12 @@ func TestNestedListMarshal(t *testing.T) {
 		Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
 		Amount: 1000000,
 		Buyers: []BuyerDatum{
-			BuyerDatum{
+			{
 				Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
 				Amount: 1000000,
 				Skh:    []byte{0x01, 0x02, 0x03, 0x04},
 			},
-			BuyerDatum{
+			{
 				Pkh:    []byte{0x01, 0x02, 0x03, 0x04},
 				Amount: 1000000,
 				Skh:    []byte{0x01, 0x02, 0x03, 0x04},

@@ -61,21 +61,23 @@ func WalletAddressFromBytes(payment []byte, staking []byte, network constants.Ne
 }
 
 /**
-	This function check if the current address is equal to another address.
+This function check if the current address is equal to another address.
 
-	Params:
-		addr (*Address): A pointer to the current address.
-		other (*Address): A pointer to the other address for comparison.
-	
-	Returns:
-		bool: true if the addresses are equal, false otherwise.
+Params:
+	addr (*Address): A pointer to the current address.
+	other (*Address): A pointer to the other address for comparison.
+
+Returns:
+	bool: true if the addresses are equal, false otherwise.
 */
 
 func (addr *Address) Equal(other *Address) bool {
 	return addr.String() == other.String()
 }
 
-/**
+/*
+*
+
 	Debug method returns a formatted string representation of the address for debugging
 
 	Returns:
@@ -85,11 +87,12 @@ func (addr *Address) Debug() string {
 	return fmt.Sprintf("{\nPaymentPart: %v\nStakingPart: %v\nNetwork: %v\nAddressType: %v\nHeaderByte: %v\nHrp: %s\n}", addr.PaymentPart, addr.StakingPart, addr.Network, addr.AddressType, addr.HeaderByte, addr.Hrp)
 }
 
+/*
+*
 
-/**
 	It converts an address to its CBOR (Concise Binary Object Representation) format and returns
 	it as a hexadecimal string. This function marshals the address into its binary representation
-	using the CBOR encoding. In case of success, it returns the binary data encoded as a 
+	using the CBOR encoding. In case of success, it returns the binary data encoded as a
 	hexadecimal string, otherwise a fatal error is logged.
 
 	Returns:
@@ -104,18 +107,22 @@ func (addr *Address) ToCbor() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-/**
-	MarshalCBOR encodes an address to its CBOR (Concise Binary Object Representation) format.
+/*
+*
 
-	Returns:
-	   	[]byte: A slice of bytes representing the address in CBOR format.
-  		error: An error, if any, encountered during the encoding process.
+		MarshalCBOR encodes an address to its CBOR (Concise Binary Object Representation) format.
+
+		Returns:
+		   	[]byte: A slice of bytes representing the address in CBOR format.
+	  		error: An error, if any, encountered during the encoding process.
 */
 func (addr *Address) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(addr.Bytes())
 }
 
-/**
+/*
+*
+
 	UnmarshalCBOR decodes a CBOR (Concise Binary Object Representation) encoded address from a byte slice.
 
 	Params:
@@ -138,7 +145,9 @@ func (addr *Address) UnmarshalCBOR(value []byte) error {
 	return err
 }
 
-/**
+/*
+*
+
 	This function returns the binary representation of the address. It
 	constructs and returns the binary representation of teh address containing
 	the header byte, payment part, and staking part (if present).
@@ -162,7 +171,9 @@ func (addr Address) Bytes() []byte {
 
 }
 
-/**
+/*
+*
+
 	This function returns the string representation of the address.
 
 	Returns:
@@ -177,7 +188,9 @@ func (addr Address) String() string {
 	return result
 }
 
-/**
+/*
+*
+
 	ComputeHrp computes the human-readable part (Hrp) for an address
 	based on its address type and network.
 
@@ -205,8 +218,9 @@ func ComputeHrp(address_type uint8, network uint8) string {
 
 }
 
+/*
+*
 
-/** 
 	This function decodes a string representation of an address into its corresponding Address structure.
 
 	Parameters:

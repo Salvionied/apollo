@@ -1468,14 +1468,14 @@ func TestMapWithCbor(t *testing.T) {
 			PlutusDataType: PlutusData.PlutusMap,
 			Value: map[serialization.CustomBytes]PlutusData.PlutusData{
 
-				serialization.NewCustomBytes("endDate"): PlutusData.PlutusData{
+				serialization.NewCustomBytes("endDate"): {
 					PlutusDataType: PlutusData.PlutusInt,
 					Value:          100,
 				},
-				serialization.NewCustomBytes("startDate"): PlutusData.PlutusData{
+				serialization.NewCustomBytes("startDate"): {
 					PlutusDataType: PlutusData.PlutusInt,
 					Value:          100,
-				}, serialization.NewCustomBytes("price"): PlutusData.PlutusData{
+				}, serialization.NewCustomBytes("price"): {
 					PlutusDataType: PlutusData.PlutusInt,
 					Value:          100,
 				},

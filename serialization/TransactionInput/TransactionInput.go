@@ -12,7 +12,9 @@ type TransactionInput struct {
 	Index         int
 }
 
-/**
+/*
+*
+
 	Clone returns a deep copy of the TransactionInput.
 
 	Returns:
@@ -25,7 +27,9 @@ func (tx TransactionInput) Clone() TransactionInput {
 	}
 }
 
-/**
+/*
+*
+
 	EqualTo checks if the TransactionInput is equal to another TransactionInput.
 
 	Params:
@@ -38,7 +42,9 @@ func (tx TransactionInput) EqualTo(other TransactionInput) bool {
 	return bytes.Equal(tx.TransactionId, other.TransactionId) && tx.Index == other.Index
 }
 
-/**
+/*
+*
+
 	LessThan checks if the TransacctionInput is less than
 	another TransactionInput based on index.
 
@@ -52,7 +58,9 @@ func (tx TransactionInput) LessThan(other TransactionInput) bool {
 	return tx.Index < other.Index
 }
 
-/**
+/*
+*
+
 	String returns a string representationof the TransactionInput
 	in the format "transaction_id.index".
 */
