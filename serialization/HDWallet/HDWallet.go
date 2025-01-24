@@ -200,7 +200,7 @@ func (hd *HDWallet) Derive(index uint32, hardened bool) *HDWallet {
 	return &HDWallet{
 		RootXprivKey: hd.RootXprivKey,
 		XPrivKey:     derived_xprivkey,
-		Path:         hd.Path + "/" + strconv.Itoa(int(index)),
+		Path:         hd.Path + "/" + strconv.FormatUint(uint64(index), 10),
 		Seed:         hd.Seed,
 		Mnemonic:     hd.Mnemonic,
 		Passphrase:   hd.Passphrase,
