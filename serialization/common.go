@@ -3,6 +3,7 @@ package serialization
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 
@@ -115,6 +116,9 @@ func (cb *CustomBytes) Int() (int, error) {
 		value, err := strconv.ParseInt(cb.Value, 10, 64)
 		if err != nil {
 			return 0, err
+		}
+		if value < math.MinInt || value > math.MaxInt {
+			return 0, fmt.Errorf("value out of int range")
 		}
 		return int(value), nil
 	}
