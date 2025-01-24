@@ -8,7 +8,9 @@ import (
 
 type Asset[V int64 | uint64] map[AssetName.AssetName]V
 
-/**
+/*
+*
+
 	Clone creates a deep copy of an Asset map.
 
 	Returns:
@@ -22,8 +24,10 @@ func (ma Asset[V]) Clone() Asset[V] {
 	return result
 }
 
-/**
-	Equal checks if two Asset maps are equal using 
+/*
+*
+
+	Equal checks if two Asset maps are equal using
 	the function DeepEuqal from the package "reflect".
 
 	Parameters:
@@ -36,8 +40,10 @@ func (ma Asset[V]) Equal(other Asset[V]) bool {
 	return reflect.DeepEqual(ma, other)
 }
 
-/**
-	Less function checks if the current Asset map is less than 
+/*
+*
+
+	Less function checks if the current Asset map is less than
 	another Asset map.
 
 	Parameters:
@@ -56,8 +62,10 @@ func (ma Asset[V]) Less(other Asset[V]) bool {
 	return true
 }
 
-/**
-	Greater function checks if the current Asset map is greater than 
+/*
+*
+
+	Greater function checks if the current Asset map is greater than
 	another Asset map.
 
 	Parameters:
@@ -76,7 +84,9 @@ func (ma Asset[V]) Greater(other Asset[V]) bool {
 	return true
 }
 
-/**
+/*
+*
+
 	Sub subtracts another Asset map from the current Asset map.
 
 	Params:
@@ -97,7 +107,9 @@ func (ma Asset[V]) Sub(other Asset[V]) Asset[V] {
 	return ma
 }
 
-/**
+/*
+*
+
 	Add adds another Asset map to the current Asset map.
 
 	Params:
@@ -118,7 +130,9 @@ func (ma Asset[V]) Add(other Asset[V]) Asset[V] {
 	return ma
 }
 
-/**
+/*
+*
+
 	Inverted creates a copy of an Asset map containing opposite amounts
 	of the original one.
 

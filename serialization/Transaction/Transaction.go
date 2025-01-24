@@ -18,8 +18,9 @@ type Transaction struct {
 	AuxiliaryData         *Metadata.AuxiliaryData
 }
 
+/*
+*
 
-/**
 	Bytes returns the CBOR-encoded byte representation
 	of the Transaction.
 
@@ -35,7 +36,9 @@ func (tx *Transaction) Bytes() ([]byte, error) {
 	return cborred, nil
 }
 
-/**
+/*
+*
+
 	Id returns the unique identifier for the transaction.
 
 	Returns:
