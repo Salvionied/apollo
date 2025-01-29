@@ -39,7 +39,7 @@ func NewMaestroChainContext(network int, projectId string) (MaestroChainContext,
 	} else if network == 2 {
 		networkString = "preview"
 	} else if network == 3 {
-		networkString = "pre-prod"
+		networkString = "preprod"
 	} else {
 		return MaestroChainContext{}, fmt.Errorf("Invalid network")
 	}
