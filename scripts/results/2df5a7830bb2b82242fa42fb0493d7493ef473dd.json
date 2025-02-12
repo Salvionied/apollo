@@ -1,0 +1,17 @@
+{
+  "wall_clock_tps": 2067.922792102627,
+  "latency_tps": 207.88853848120792,
+  "avg_latency": 4810270,
+  "failures": 0,
+  "iterations": 100000,
+  "parallelism": 10,
+  "utxo_count": 100,
+  "system_info": {
+    "GoVersion": "go1.23.3",
+    "OS": "linux",
+    "CPUModel": "Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",
+    "TotalMemory": 33419149312,
+    "AvailableMem": 28762677248
+  },
+  "bench_duration": 48357704834
+}
