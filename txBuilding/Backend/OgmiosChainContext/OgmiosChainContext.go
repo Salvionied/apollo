@@ -191,7 +191,7 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.U
 }
 
 func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 1)
+	amts := make([]Base.AddressAmount, 0)
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
