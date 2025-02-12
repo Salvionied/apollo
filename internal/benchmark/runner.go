@@ -13,25 +13,16 @@ import (
 	"github.com/Salvionied/apollo/internal/consts"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 )
 
 type Result struct {
-	Error error
+	Duration time.Duration
+	Error    error
 }
 
 func Run(utxoCount, iterations, parallelism int, backend string, outputFormat string, cpuProfile string) {
-	// CPU profiling: check error when creating file.
-	if cpuProfile != "" {
-		f, err := os.Create(cpuProfile)
-		if err != nil {
-			log.Fatalf("failed to create cpu profile file: %v", err)
-		}
-		defer f.Close()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatalf("could not start CPU profile: %v", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
 
 	ctx, err := GetChainContext(backend)
 	if err != nil {
@@ -53,76 +44,123 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 		log.Fatalf("failed to get last block slot: %v", err)
 	}
 
-	// Warm-up phase.
+	// Warm-up phase before any measurements
 	runtime.GC()
 	time.Sleep(2 * time.Second)
 
-	var wg sync.WaitGroup
-	results := make(chan Result, iterations)
+	if cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			log.Fatalf("failed to create cpu profile file: %v", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatalf("could not start CPU profile: %v", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
-	// Record the overall start time.
-	globalStart := time.Now()
+	var (
+		wg           sync.WaitGroup
+		results      = make(chan Result, iterations)
+		totalLatency time.Duration
+		mu           sync.Mutex
+	)
 
 	sem := make(chan struct{}, parallelism)
+
+	// Actual benchmark start time
+	benchStart := time.Now()
+
 	for i := 0; i < iterations; i++ {
 		wg.Add(1)
 		sem <- struct{}{}
+
 		go func(iter int) {
 			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("Panic in iteration %d: %v", iter, r)
-					results <- Result{Error: fmt.Errorf("panic: %v", r)}
-				}
 				<-sem
 				wg.Done()
+				if r := recover(); r != nil {
+					mu.Lock()
+					results <- Result{
+						Error: fmt.Errorf("panic in iteration %d: %v", iter, r),
+					}
+					mu.Unlock()
+				}
 			}()
 
-			// Initialize a new instance of apollo.Apollo for each iteration.
-			apolloBE := apollo.New(ctx).SetWalletFromBech32(walletAddress.String())
+			// For thread safety
+			clonedUTxOs := make([]UTxO.UTxO, len(userUtxos))
+			copy(clonedUTxOs, userUtxos)
 
-			apolloBE = apolloBE.
-				AddLoadedUTxOs(userUtxos...).
-				SetChangeAddress(walletAddress).
-				AddRequiredSigner(serialization.PubKeyHash(walletAddress.PaymentPart)).
-				SetTtl(int64(lastSlot) + 300)
+			start := time.Now()
+			err := buildTransaction(clonedUTxOs, &walletAddress, ctx, lastSlot, utxoCount)
+			elapsed := time.Since(start)
 
-			for j := 0; j < utxoCount; j++ {
-				apolloBE = apolloBE.PayToAddress(walletAddress, 2_000_000)
-			}
-
-			_, err = apolloBE.Complete()
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
-				results <- Result{Error: fmt.Errorf("tx build failed: %w", err)}
-				return
+				results <- Result{Error: fmt.Errorf("iteration %d: %w", iter, err)}
+			} else {
+				results <- Result{Duration: elapsed}
+				totalLatency += elapsed
 			}
-			results <- Result{}
 		}(i)
 	}
 
 	wg.Wait()
-	globalEnd := time.Now()
 	close(results)
 
-	// Calculate overall elapsed time.
-	totalElapsed := globalEnd.Sub(globalStart)
+	// Calculate metrics
+	benchDuration := time.Since(benchStart)
 	var failures int
-	var successCount int
+	successes := 0
 
 	for res := range results {
 		if res.Error != nil {
 			log.Printf("Error: %v", res.Error)
 			failures++
 		} else {
-			successCount++
+			successes++
 		}
 	}
 
-	if successCount == 0 {
+	if successes == 0 {
 		log.Fatal("All iterations failed! Check logs for errors.")
 	}
 
-	// Calculate transactions per second based on overall elapsed time.
-	tps := float64(successCount) / totalElapsed.Seconds()
+	// Calculate accurate Tx/s metrics
+	actualTxPerSec := float64(successes) / benchDuration.Seconds()
+	latencyPerTx := totalLatency / time.Duration(successes)
 
-	PrintResults(tps, failures, outputFormat)
+	// For comparison: latency-based Tx/s
+	latencyTxPerSec := float64(time.Second) / float64(latencyPerTx)
+	PrintResults(
+		actualTxPerSec,
+		latencyTxPerSec,
+		latencyPerTx,
+		failures,
+		iterations,
+		parallelism,
+		utxoCount,
+		benchDuration,
+		outputFormat,
+	)
+}
+
+func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainContext, lastSlot int, utxoCount int) error {
+	apolloBE := apollo.New(ctx).
+		SetWalletFromBech32(addr.String()).
+		AddLoadedUTxOs(utxos...).
+		SetChangeAddress(*addr).
+		AddRequiredSigner(serialization.PubKeyHash(addr.PaymentPart)).
+		SetTtl(int64(lastSlot) + 300)
+
+	// Add multiple outputs
+	for j := 0; j < utxoCount; j++ {
+		apolloBE = apolloBE.PayToAddress(*addr, 2_000_000)
+	}
+
+	_, err := apolloBE.Complete()
+	return err
 }

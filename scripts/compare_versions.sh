@@ -9,13 +9,13 @@ for version in "${VERSIONS[@]}"; do
         exit 1
     fi
 
-    go build -o "bin/apollo-bench-$version" ./cmd/benchmark || {
+    go build -o "../bin/apollo-bench-$version" ./cmd/benchmark || {
         echo "Error: Build failed for $version"
         exit 1
     }
 
     echo "Benchmarking $version..."
-    "./bin/apollo-bench-$version" --utxo-count 100 --iterations 1000 --output json >"results/$version.json" || {
+    "./bin/apollo-bench-$version" --utxo-count 100 --iterations 100000 --parallelism 10 --backend maestro --output json >"results/$version.json" || {
         echo "Error: Benchmark failed for $version"
     }
 done
