@@ -404,13 +404,13 @@ type OgmiosProtocolParameters struct {
 	MaximumReferenceScriptsSize     uint64                 `json:"maximumReferenceScriptsSize"`
 	MinFeeReferenceScripts          MinFeeReferenceScripts `json:"minFeeReferenceScripts"`
 	Version                         Version                `json:"version"`
-	CostModels                      map[string][]uint64    `json:"plutusCostModels"`
+	CostModels                      map[string][]int64     `json:"plutusCostModels"`
 }
 
 type MinFeeReferenceScripts struct {
-	Range      uint64 `json:"range"`
-	Base       uint64 `json:"base"`
-	Multiplier uint64 `json:"multiplier"`
+	Range      float64 `json:"range"`
+	Base       float64 `json:"base"`
+	Multiplier float64 `json:"multiplier"`
 }
 
 func ratio(s string) float32 {
