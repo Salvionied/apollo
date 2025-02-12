@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"sync"
 	"time"
 
 	"github.com/Salvionied/apollo"
@@ -15,14 +16,20 @@ import (
 )
 
 type Result struct {
-	Duration time.Duration
-	Error    error
+	Error error
 }
 
 func Run(utxoCount, iterations, parallelism int, backend string, outputFormat string, cpuProfile string) {
+	// CPU profiling: check error when creating file.
 	if cpuProfile != "" {
-		f, _ := os.Create(cpuProfile)
-		pprof.StartCPUProfile(f)
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			log.Fatalf("failed to create cpu profile file: %v", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatalf("could not start CPU profile: %v", err)
+		}
 		defer pprof.StopCPUProfile()
 	}
 
@@ -50,12 +57,15 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 	runtime.GC()
 	time.Sleep(2 * time.Second)
 
-	// Run benchmark with parallelism.
-	start := time.Now()
+	var wg sync.WaitGroup
 	results := make(chan Result, iterations)
-	sem := make(chan struct{}, parallelism)
 
+	// Record the overall start time.
+	globalStart := time.Now()
+
+	sem := make(chan struct{}, parallelism)
 	for i := 0; i < iterations; i++ {
+		wg.Add(1)
 		sem <- struct{}{}
 		go func(iter int) {
 			defer func() {
@@ -64,9 +74,10 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 					results <- Result{Error: fmt.Errorf("panic: %v", r)}
 				}
 				<-sem
+				wg.Done()
 			}()
 
-			// Initialize a new instance of apollo.Apollo for each iteration
+			// Initialize a new instance of apollo.Apollo for each iteration.
 			apolloBE := apollo.New(ctx).SetWalletFromBech32(walletAddress.String())
 
 			apolloBE = apolloBE.
@@ -75,34 +86,33 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 				AddRequiredSigner(serialization.PubKeyHash(walletAddress.PaymentPart)).
 				SetTtl(int64(lastSlot) + 300)
 
-			for i := 0; i < utxoCount; i++ {
+			for j := 0; j < utxoCount; j++ {
 				apolloBE = apolloBE.PayToAddress(walletAddress, 2_000_000)
 			}
 
-			_, err = buildAndSerialize(apolloBE)
+			_, err = apolloBE.Complete()
 			if err != nil {
 				results <- Result{Error: fmt.Errorf("tx build failed: %w", err)}
 				return
 			}
-
-			results <- Result{Duration: time.Since(start)}
+			results <- Result{}
 		}(i)
 	}
 
-	// Collect results.
-	var (
-		totalDuration time.Duration
-		failures      int
-		successCount  int
-	)
+	wg.Wait()
+	globalEnd := time.Now()
+	close(results)
 
-	for i := 0; i < iterations; i++ {
-		res := <-results
+	// Calculate overall elapsed time.
+	totalElapsed := globalEnd.Sub(globalStart)
+	var failures int
+	var successCount int
+
+	for res := range results {
 		if res.Error != nil {
 			log.Printf("Error: %v", res.Error)
 			failures++
 		} else {
-			totalDuration += res.Duration
 			successCount++
 		}
 	}
@@ -111,17 +121,8 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 		log.Fatal("All iterations failed! Check logs for errors.")
 	}
 
-	// Calculate Tx/s and print results.
-	avgDuration := totalDuration / time.Duration(successCount)
-	tps := float64(successCount) / avgDuration.Seconds()
+	// Calculate transactions per second based on overall elapsed time.
+	tps := float64(successCount) / totalElapsed.Seconds()
+
 	PrintResults(tps, failures, outputFormat)
-}
-
-func buildAndSerialize(apolloBE *apollo.Apollo) (*apollo.Apollo, error) {
-	apolloBE, err := apolloBE.Complete()
-	if err != nil {
-		return nil, err
-	}
-
-	return apolloBE, nil
 }
