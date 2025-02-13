@@ -43,7 +43,7 @@ Clone the Apollo repository and build the benchmark binary:
 
 ```bash
 git clone https://github.com/Salvionied/apollo.git
-go build -o ./build/apollo-bench ./cmd/benchmark
+go build -o ./bin/apollo-bench ./cmd/benchmark
 ```
 
 ---
