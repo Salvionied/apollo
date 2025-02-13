@@ -4,7 +4,7 @@ set -e # Exit on error
 # Determine directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" # Root directory is "apollo"
-RESULTS_DIR="$ROOT_DIR/results"
+RESULTS_DIR="$SCRIPT_DIR/results"
 BIN_DIR="$ROOT_DIR/bin"
 
 # Ensure the results and bin directories exist
