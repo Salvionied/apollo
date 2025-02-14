@@ -491,7 +491,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 				return fmt.Errorf("error: v is not a PlutusList")
 			}
 			plutusConstr := fields.Tag.Get("plutusConstr")
-			if constr > 1400 || (plutusConstr != fmt.Sprint(constr-121) && plutusConstr != fmt.Sprint(constr-1280)) {
+			if plutusConstr != "" && (constr > 1400 || (plutusConstr != fmt.Sprint(constr-121) && plutusConstr != fmt.Sprint(constr-1280))) {
 				return fmt.Errorf("error: constructorTag does not match, got %s, expected %d", plutusConstr, constr)
 			}
 
@@ -553,17 +553,22 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 						}
 						x, ok := pAEl.Value.(int64)
 						if !ok {
-							return fmt.Errorf("error: Int field is not int64")
+							y, ok := pAEl.Value.(uint64)
+
+							if !ok {
+								return fmt.Errorf("error: Int Data field is not int64")
+							}
+							x = int64(y)
 						}
 
 						reflect.ValueOf(v).Elem().Field(idx + 1).SetInt(x)
 					case PlutusData.PlutusBigInt:
 						if tps.Field(idx+1).Type.String() != "int64" && tps.Field(idx+1).Type.String() != "*big.Int" {
-							return fmt.Errorf("error: Int field is not int64")
+							return fmt.Errorf("error: Int field is not bigInt")
 						}
 						x, ok := pAEl.Value.(big.Int)
 						if !ok {
-							return fmt.Errorf("error: Int field is not int64")
+							return fmt.Errorf("error: Int Data field is not bigInt")
 						}
 						if tps.Field(idx+1).Type.String() == "*big.Int" {
 							reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(&x))
@@ -671,17 +676,22 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 						}
 						x, ok := pAEl.Value.(int64)
 						if !ok {
-							return fmt.Errorf("error: Int field is not int64")
+							y, ok := pAEl.Value.(uint64)
+
+							if !ok {
+								return fmt.Errorf("error: Int Data field is not int64")
+							}
+							x = int64(y)
 						}
 
 						reflect.ValueOf(v).Elem().Field(idx + 1).SetInt(x)
 					case PlutusData.PlutusBigInt:
 						if tps.Field(idx+1).Type.String() != "int64" && tps.Field(idx+1).Type.String() != "*big.Int" {
-							return fmt.Errorf("error: Int field is not int64")
+							return fmt.Errorf("error: Int field is not bigInt")
 						}
 						x, ok := pAEl.Value.(big.Int)
 						if !ok {
-							return fmt.Errorf("error: Int field is not int64")
+							return fmt.Errorf("error: Int Data field is not bigInt")
 						}
 						if tps.Field(idx+1).Type.String() == "*big.Int" {
 							reflect.ValueOf(v).Elem().Field(idx + 1).Set(reflect.ValueOf(&x))
@@ -803,9 +813,15 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 					if pAEl.PlutusDataType != PlutusData.PlutusInt {
 						return fmt.Errorf("error: Int field is not int64")
 					}
+
 					x, ok := pAEl.Value.(int64)
 					if !ok {
-						return fmt.Errorf("error: Int field is not int64")
+						y, ok := pAEl.Value.(uint64)
+
+						if !ok {
+							return fmt.Errorf("error: Int Data field is not int64")
+						}
+						x = int64(y)
 					}
 					reflect.ValueOf(v).Elem().FieldByName(idx).SetInt(x)
 				default:
