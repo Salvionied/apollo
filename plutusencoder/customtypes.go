@@ -17,7 +17,7 @@ type PlutusMarshaler interface {
 	FromPlutusData(pd PlutusData.PlutusData, res interface{}) error
 }
 
-type Asset map[serialization.CustomBytes]map[serialization.CustomBytes]uint64
+type Asset map[serialization.CustomBytes]map[serialization.CustomBytes]int64
 
 func GetAssetPlutusData(assets Asset) PlutusData.PlutusData {
 	outermap := map[serialization.CustomBytes]PlutusData.PlutusData{}
@@ -47,9 +47,19 @@ func DecodePlutusAsset(pd PlutusData.PlutusData) Asset {
 	val, _ := pd.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
 	for key, asset := range val {
 		innerval, _ := asset.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
-		inner := map[serialization.CustomBytes]uint64{}
+		inner := map[serialization.CustomBytes]int64{}
 		for k, v := range innerval {
-			inner[k] = v.Value.(uint64)
+			x, ok := v.Value.(int64)
+			if !ok {
+				y, ok := v.Value.(uint64)
+
+				if !ok {
+					panic("error: Int Data field is not int64")
+				}
+				x = int64(y)
+			}
+
+			inner[k] = x
 		}
 		assets[key] = inner
 	}
