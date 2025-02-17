@@ -1,2 +1,4 @@
 .env
 sample.txt
+/scripts/results
+/bin

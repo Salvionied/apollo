@@ -1,9 +1,9 @@
 {
-  "wall_clock_tps": 3.0414362167910673,
-  "latency_tps": 3.041927063228097,
-  "avg_latency": 328738980,
+  "wall_clock_tps": 1720.5582928938302,
+  "latency_tps": 172.9549033925796,
+  "avg_latency": 5781854,
   "failures": 0,
-  "iterations": 1,
+  "iterations": 10000,
   "parallelism": 10,
   "utxo_count": 100,
   "system_info": {
@@ -11,7 +11,7 @@
     "OS": "linux",
     "CPUModel": "Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",
     "TotalMemory": 33419149312,
-    "AvailableMem": 28496855040
+    "AvailableMem": 28598030336
   },
-  "bench_duration": 328792034
+  "bench_duration": 5812066956
 }

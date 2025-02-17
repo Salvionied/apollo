@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Salvionied/apollo"
-	"github.com/Salvionied/apollo/internal/consts"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/UTxO"
@@ -29,7 +28,7 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 		log.Fatalf("Critical error getting backend chain context: %v", err)
 	}
 
-	walletAddress, err := Address.DecodeAddress(consts.TEST_WALLET_ADDRESS)
+	walletAddress, err := Address.DecodeAddress(TEST_WALLET_ADDRESS)
 	if err != nil {
 		log.Fatalf("Error decoding wallet address: %v", err)
 	}

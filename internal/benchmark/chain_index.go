@@ -3,7 +3,6 @@ package benchmark
 import (
 	"fmt"
 
-	"github.com/Salvionied/apollo/internal/consts"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/MaestroChainContext"
@@ -15,15 +14,15 @@ import (
 type ChainContext interface{}
 
 func OgmiosCTXSetup() OgmiosChainContext.OgmiosChainContext {
-	return OgmiosChainContext.NewOgmiosChainContext(*ogmigo.New(ogmigo.WithEndpoint(consts.OGMIGO_ENDPOINT)), *kugo.New(kugo.WithEndpoint(consts.KUGO_ENDPOINT)))
+	return OgmiosChainContext.NewOgmiosChainContext(*ogmigo.New(ogmigo.WithEndpoint(OGMIGO_ENDPOINT)), *kugo.New(kugo.WithEndpoint(KUGO_ENDPOINT)))
 }
 
 func BlockfrostCTXSetup() (bfc BlockFrostChainContext.BlockFrostChainContext, err error) {
 
 	bfc, err = BlockFrostChainContext.NewBlockfrostChainContext(
-		consts.BFC_API_URL,
-		consts.BFC_NETWORK_ID,
-		consts.BFC_API_KEY,
+		BFC_API_URL,
+		BFC_NETWORK_ID,
+		BFC_API_KEY,
 	)
 
 	if err != nil {
@@ -37,8 +36,8 @@ func BlockfrostCTXSetup() (bfc BlockFrostChainContext.BlockFrostChainContext, er
 func MaestroCTXSetup() (mc MaestroChainContext.MaestroChainContext, err error) {
 
 	mc, err = MaestroChainContext.NewMaestroChainContext(
-		consts.MAESTRO_NETWORK_ID,
-		consts.MAESTRO_API_KEY,
+		MAESTRO_NETWORK_ID,
+		MAESTRO_API_KEY,
 	)
 
 	if err != nil {

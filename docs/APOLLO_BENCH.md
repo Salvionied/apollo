@@ -263,15 +263,32 @@ Run the benchmark binary:
 
 ## Benchmarking Script
 
-The `apollo/scripts/compare_versions.sh` script is used to benchmark two different versions/tag/commit-hash of the Apollo library and store the results in JSON format in the `results/` directory. The script:
+The `apollo/scripts/compare_versions.sh` script allows users to benchmark multiple versions, tags, or commit hashes of the Apollo library by providing them as command-line parameters. The benchmark results are stored as JSON files in the `scripts/results/` directory.
 
-1. Defines two specific versions to compare.
-2. Uses Git worktrees to check out each version in a temporary directory.
-3. Builds the benchmark binary for each version and stores it in `bin/`.
-4. Runs the benchmark and stores the output as JSON files in `results/`.
-5. Cleans up temporary files after execution.
+### How It Works
 
-Users can modify the script to benchmark different versions, adjust benchmark parameters, or integrate additional analysis tools.
+1. Users specify one or more versions when running the script.
+2. The script creates a temporary Git worktree for each version to avoid affecting the current checkout.
+3. It builds the benchmark binary for each specified version and saves it in the `bin/` directory.
+4. The benchmark runs with predefined parameters, and the output is stored in `scripts/results/`.
+5. After execution, the script cleans up temporary files.
+
+### Usage Example
+
+To benchmark multiple versions, run:
+
+```bash
+./compare_versions.sh 2df5a7830bb2b82242fa42fb0493d7493ef473dd 085b0cf55b9665aac19654eded7ea32b410ca342 v1.1.0
+```
+
+This will:
+
+- Checkout each version in a temporary worktree.
+- Build the binary for each version.
+- Run the benchmark for both versions.
+- Save the results in `scripts/results/2df5a7830bb2b82242fa42fb0493d7493ef473dd.json`, `scripts/results/085b0cf55b9665aac19654eded7ea32b410ca342.json` and  `scripts/results/v1.1.0.json`.
+
+Users can provide as many versions as needed, making it easy to compare different releases or commits efficiently.
 
 ---
 
