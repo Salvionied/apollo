@@ -31,12 +31,12 @@ require (
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.33.0
 )
