@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 // func TestScriptDataHash(t *testing.T) {

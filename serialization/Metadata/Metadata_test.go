@@ -6,7 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization/Metadata"
 	"github.com/Salvionied/apollo/serialization/NativeScript"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestAuxiliaryData(t *testing.T) {

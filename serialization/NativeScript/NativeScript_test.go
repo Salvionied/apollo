@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/NativeScript"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestNativeScriptsSerializationAndHash(t *testing.T) {

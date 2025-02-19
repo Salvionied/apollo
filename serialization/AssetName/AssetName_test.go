@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestAssetNameCreators(t *testing.T) {

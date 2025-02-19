@@ -3,7 +3,7 @@ package NativeScript
 import (
 	"github.com/Salvionied/apollo/serialization"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 	"golang.org/x/crypto/blake2b"
 )
 

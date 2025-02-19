@@ -17,7 +17,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Value"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 const TEST_ADDR = "addr_test1vr2p8st5t5cxqglyjky7vk98k7jtfhdpvhl4e97cezuhn0cqcexl7"

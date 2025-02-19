@@ -7,7 +7,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Metadata"
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Transaction struct {

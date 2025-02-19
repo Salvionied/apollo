@@ -6,7 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestMarshalAndUnmarshalNoScripts(t *testing.T) {

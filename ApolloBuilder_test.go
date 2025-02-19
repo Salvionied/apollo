@@ -26,7 +26,7 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 	"github.com/Salvionied/apollo/txBuilding/TxBuilder"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Network int
