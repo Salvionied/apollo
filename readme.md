@@ -16,7 +16,7 @@ import (
     "encoding/hex"
     "fmt"
 
-    "github.com/Salvionied/cbor/v2"
+    "github.com/fxamacker/cbor/v2"
     "github.com/Salvionied/apollo"
     "github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )

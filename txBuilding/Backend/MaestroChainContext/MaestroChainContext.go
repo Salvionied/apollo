@@ -15,7 +15,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/maestro-org/go-sdk/client"
 	"github.com/maestro-org/go-sdk/utils"
 )

@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 	"golang.org/x/crypto/blake2b"
 )
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Key"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 var VkeyHex = "694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"

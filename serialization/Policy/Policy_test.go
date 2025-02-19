@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 const SAMPLE_POLICY = "95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0b55fb00"

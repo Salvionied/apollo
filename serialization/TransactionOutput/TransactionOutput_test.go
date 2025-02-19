@@ -13,7 +13,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 const TEST_POLICY = "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"

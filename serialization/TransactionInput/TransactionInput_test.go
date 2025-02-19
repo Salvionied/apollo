@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 var SAMPLE_TX_IN = TransactionInput.TransactionInput{

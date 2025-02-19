@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 var policy = Policy.PolicyId{Value: "fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61"}

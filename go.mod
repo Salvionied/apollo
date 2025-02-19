@@ -3,10 +3,10 @@ module github.com/Salvionied/apollo
 go 1.20
 
 require (
-	github.com/Salvionied/cbor/v2 v2.6.0
 	github.com/SundaeSwap-finance/kugo v1.1.0
 	github.com/SundaeSwap-finance/ogmigo v0.9.0
 	github.com/fatih/color v1.18.0
+	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.8.1
@@ -18,7 +18,6 @@ require (
 require (
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

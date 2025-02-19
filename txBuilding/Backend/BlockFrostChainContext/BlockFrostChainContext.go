@@ -31,7 +31,7 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Cache"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type BlockFrostChainContext struct {

@@ -32,7 +32,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Utils"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 	"golang.org/x/exp/slices"
 )
 

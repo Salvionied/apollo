@@ -31,7 +31,7 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
 	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type OgmiosChainContext struct {

@@ -149,7 +149,7 @@ import (
         "github.com/Salvionied/apollo/txBuilding/Backend/Base"
         "github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
         "github.com/Salvionied/apollo/txBuilding/Utils"
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
         "golang.org/x/exp/slices"
 )
 
@@ -2328,7 +2328,7 @@ import (
         "github.com/Salvionied/apollo/serialization"
         "github.com/Salvionied/apollo/serialization/Address"
         "github.com/Salvionied/apollo/serialization/PlutusData"
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, error) <span class="cov8" title="1">{
@@ -3217,7 +3217,7 @@ import (
         "github.com/Salvionied/apollo/crypto/bech32"
         "github.com/Salvionied/apollo/serialization"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 const (
@@ -3778,7 +3778,7 @@ import (
         "encoding/hex"
         "errors"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type AssetName struct {
@@ -4102,7 +4102,7 @@ import (
         "github.com/Salvionied/apollo/crypto/bip32"
         "github.com/Salvionied/apollo/serialization"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
         "golang.org/x/crypto/blake2b"
 )
 
@@ -4346,7 +4346,7 @@ import (
 
         "github.com/Salvionied/apollo/serialization"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type MinimalMetadata map[string]any
@@ -4696,7 +4696,7 @@ func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.As
 import (
         "github.com/Salvionied/apollo/serialization"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
         "golang.org/x/crypto/blake2b"
 )
 
@@ -4904,7 +4904,7 @@ import (
         "github.com/Salvionied/apollo/serialization"
         "github.com/Salvionied/apollo/serialization/Address"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 
         "golang.org/x/crypto/blake2b"
 )
@@ -6115,7 +6115,7 @@ import (
         "encoding/hex"
         "errors"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type PolicyId struct {
@@ -6322,7 +6322,7 @@ import (
         "github.com/Salvionied/apollo/serialization/Metadata"
         "github.com/Salvionied/apollo/serialization/TransactionBody"
         "github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type Transaction struct {
@@ -6372,7 +6372,7 @@ import (
         "github.com/Salvionied/apollo/serialization/TransactionOutput"
         "github.com/Salvionied/apollo/serialization/Withdrawal"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
         "golang.org/x/crypto/blake2b"
 )
 
@@ -6504,7 +6504,7 @@ import (
         "github.com/Salvionied/apollo/serialization/PlutusData"
         "github.com/Salvionied/apollo/serialization/Value"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type TransactionOutputAlonzo struct {
@@ -7007,7 +7007,7 @@ import (
         "github.com/Salvionied/apollo/serialization/PlutusData"
         "github.com/Salvionied/apollo/serialization/Redeemer"
         "github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type normaltws struct {
@@ -7148,7 +7148,7 @@ import (
         "github.com/Salvionied/apollo/serialization/Amount"
         "github.com/Salvionied/apollo/serialization/MultiAsset"
 
-        "github.com/Salvionied/cbor/v2"
+        "github.com/fxamacker/cbor/v2"
 )
 
 type Value struct {

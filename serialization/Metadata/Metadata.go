@@ -5,7 +5,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization"
 
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type MinimalMetadata map[string]any

@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/cbor/v2"
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestMarshalAndUnmarshal(t *testing.T) {

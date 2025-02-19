@@ -1,7 +1,5 @@
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
-github.com/Salvionied/cbor/v2 v2.6.0 h1:OEwlZLiodLdNeM9wFoSydLvj6/rHRaxu5G8VzwXSeuY=
-github.com/Salvionied/cbor/v2 v2.6.0/go.mod h1:oFxaUo/mQ5sG1k459nzctGdYa80jy0ZqZ9pln9C/fGw=
 github.com/SundaeSwap-finance/kugo v1.1.0 h1:9fzzqiRcyOD8NF2L7I8aJArtyiYg9pu54SEoFKLs8JI=
 github.com/SundaeSwap-finance/kugo v1.1.0/go.mod h1:J3ePLSTzrEL3wqphzuMeq2KLe3jN0i69gVt3UHUAvhY=
 github.com/SundaeSwap-finance/ogmigo v0.9.0 h1:+W9XuZfyMy2Kx7A4wZAmuks7hyq5TdfvBlUb1JSRP50=
