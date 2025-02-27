@@ -54,6 +54,7 @@ type Apollo struct {
 	requiredSigners    []serialization.PubKeyHash
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
+	v3scripts          []PlutusData.PlutusV3Script
 	redeemers          []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
 	stakeRedeemers     map[string]Redeemer.Redeemer
@@ -493,6 +494,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
@@ -522,6 +524,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
@@ -543,6 +546,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	redeemers := b.redeemers
 	PV1Scripts := b.v1scripts
 	PV2Scripts := b.v2scripts
+	PV3Scripts := b.v3scripts
 	datums := b.datums
 	usedCms := map[any]cbor.Marshaler{}
 	if len(redeemers) > 0 {
@@ -551,6 +555,9 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		}
 		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
 			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
+		}
+		if len(PV3Scripts) > 0 {
+			usedCms[2] = PlutusData.PLUTUSV3COSTMODEL
 		}
 
 	}
@@ -1529,6 +1536,18 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 		}
 	}
 	b.v2scripts = append(b.v2scripts, script)
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
+	return b
+}
+
+func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
+	b.v3scripts = append(b.v3scripts, script)
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
