@@ -1690,6 +1690,72 @@ func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 
 type PlutusV2Script []byte
 
+type PlutusV3Script []byte
+
+func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error) {
+	finalbytes, err := hex.DecodeString("03")
+	if err != nil {
+		return serialization.ScriptHash{}, err
+	}
+	finalbytes = append(finalbytes, ps3...)
+	hash, err := blake2b.New(28, nil)
+	if err != nil {
+		return serialization.ScriptHash{}, err
+	}
+	_, err = hash.Write(finalbytes)
+	if err != nil {
+		return serialization.ScriptHash{}, err
+	}
+	r := serialization.ScriptHash{}
+	copy(r[:], hash.Sum(nil))
+	return r, nil
+}
+
+func (ps3 *PlutusV3Script) ToAddress(stakingCredential []byte, network constants.Network) Address.Address {
+	hash := PlutusScriptHash(ps3)
+	if stakingCredential == nil {
+		if network == constants.MAINNET {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_NONE,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr",
+			}
+		} else {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: nil,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b01110001,
+				Hrp:         "addr_test",
+			}
+		}
+	} else {
+		if network == constants.MAINNET {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.MAINNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010001,
+				Hrp:         "addr",
+			}
+		} else {
+			return Address.Address{
+				PaymentPart: hash.Bytes(),
+				StakingPart: stakingCredential,
+				Network:     Address.TESTNET,
+				AddressType: Address.SCRIPT_KEY,
+				HeaderByte:  0b00010000,
+				Hrp:         "addr_test",
+			}
+		}
+	}
+}
+
 /*
 *
 
