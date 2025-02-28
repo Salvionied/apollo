@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/fatih/color"
@@ -114,14 +115,14 @@ func printColorfulTable(result BenchmarkResult) {
 		failureColor = color.HiRedString
 	}
 	addRow(table, "Failed Transactions",
-		fmt.Sprintf("%s (%d/%d)", failureColor(fmt.Sprintf("%d", result.Failures)), result.Failures, result.Iterations),
+		fmt.Sprintf("%s (%d/%d)", failureColor(strconv.Itoa(result.Failures)), result.Failures, result.Iterations),
 		color.HiWhiteString("Total failed transaction constructions"))
 
 	// Configuration Section
 	addSectionHeader("BENCHMARK CONFIGURATION")
-	addRow(table, "Iterations", fmt.Sprintf("%d", result.Iterations), "")
-	addRow(table, "Parallel Workers", fmt.Sprintf("%d", result.Parallelism), "")
-	addRow(table, "Outputs per TX", fmt.Sprintf("%d", result.UTXOCount), "")
+	addRow(table, "Iterations", strconv.Itoa(result.Iterations), "")
+	addRow(table, "Parallel Workers", strconv.Itoa(result.Parallelism), "")
+	addRow(table, "Outputs per TX", strconv.Itoa(result.UTXOCount), "")
 	addRow(table, "Total Duration", result.BenchDuration.Round(time.Millisecond).String(), "")
 
 	// System Info Section

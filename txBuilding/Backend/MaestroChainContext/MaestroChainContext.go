@@ -2,6 +2,7 @@ package MaestroChainContext
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func NewMaestroChainContext(network int, projectId string) (MaestroChainContext,
 	} else if network == 3 {
 		networkString = "preprod"
 	} else {
-		return MaestroChainContext{}, fmt.Errorf("Invalid network")
+		return MaestroChainContext{}, errors.New("Invalid network")
 	}
 	maestroClient := client.NewClient(projectId, networkString)
 	mcc := MaestroChainContext{
@@ -89,7 +90,7 @@ func (mcc *MaestroChainContext) LatestBlock() (Base.Block, error) {
 		latestBlock.Size = int(latestBlockFromApi.Data.Size)
 		latestBlock.TxCount = len(latestBlockFromApi.Data.TxHashes)
 		latestBlock.Output = latestBlockFromApi.Data.TotalOutputLovelace
-		latestBlock.Fees = fmt.Sprint(latestBlockFromApi.Data.TotalFees)
+		latestBlock.Fees = strconv.FormatInt(latestBlockFromApi.Data.TotalFees, 10)
 		latestBlock.BlockVRF = latestBlockFromApi.Data.VrfKey
 		latestBlock.PreviousBlock = latestBlockFromApi.Data.PreviousBlock
 		latestBlock.NextBlock = latestBlockFromApi.Data.Hash
@@ -139,8 +140,8 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 	protocolParams.MaxTxSize = int(ppFromApi.Data.MaxTransactionSize.Bytes)
 	protocolParams.MaxBlockSize = int(ppFromApi.Data.MaxBlockBodySize.Bytes)
 	protocolParams.MaxBlockHeaderSize = int(ppFromApi.Data.MaxBlockHeaderSize.Bytes)
-	protocolParams.KeyDeposits = fmt.Sprint(ppFromApi.Data.StakeCredentialDeposit.LovelaceAmount.Lovelace)
-	protocolParams.PoolDeposits = fmt.Sprint(ppFromApi.Data.StakePoolDeposit.LovelaceAmount.Lovelace)
+	protocolParams.KeyDeposits = strconv.FormatInt(ppFromApi.Data.StakeCredentialDeposit.LovelaceAmount.Lovelace, 10)
+	protocolParams.PoolDeposits = strconv.FormatInt(ppFromApi.Data.StakePoolDeposit.LovelaceAmount.Lovelace, 10)
 	parsedPoolInfl, _ := strconv.ParseFloat(ppFromApi.Data.StakePoolPledgeInfluence, 32)
 	protocolParams.PooolInfluence = float32(parsedPoolInfl)
 	monExp, _ := strconv.ParseFloat(ppFromApi.Data.MonetaryExpansion, 32)
@@ -153,17 +154,17 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 	protocolParams.ProtocolMinorVersion = int(ppFromApi.Data.ProtocolVersion.Minor)
 	//CHECK HERE
 	//protocolParams.MinUtxo = ppFromApi.Data.
-	protocolParams.MinPoolCost = fmt.Sprint(ppFromApi.Data.MinStakePoolCost.LovelaceAmount.Lovelace)
+	protocolParams.MinPoolCost = strconv.FormatInt(ppFromApi.Data.MinStakePoolCost.LovelaceAmount.Lovelace, 10)
 	protocolParams.PriceMem = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Memory)
 	protocolParams.PriceStep = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Steps)
-	protocolParams.MaxTxExMem = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory)
-	protocolParams.MaxTxExSteps = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Steps)
-	protocolParams.MaxBlockExMem = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerBlock.Memory)
-	protocolParams.MaxBlockExSteps = fmt.Sprint(ppFromApi.Data.MaxExecutionUnitsPerBlock.Steps)
-	protocolParams.MaxValSize = fmt.Sprint(ppFromApi.Data.MaxValueSize.Bytes)
+	protocolParams.MaxTxExMem = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory, 10)
+	protocolParams.MaxTxExSteps = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Steps, 10)
+	protocolParams.MaxBlockExMem = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerBlock.Memory, 10)
+	protocolParams.MaxBlockExSteps = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerBlock.Steps, 10)
+	protocolParams.MaxValSize = strconv.FormatInt(ppFromApi.Data.MaxValueSize.Bytes, 10)
 	protocolParams.CollateralPercent = int(ppFromApi.Data.CollateralPercentage)
 	protocolParams.MaxCollateralInuts = int(ppFromApi.Data.MaxCollateralInputs)
-	protocolParams.CoinsPerUtxoByte = fmt.Sprint(ppFromApi.Data.MinUtxoDepositCoefficient)
+	protocolParams.CoinsPerUtxoByte = strconv.FormatInt(ppFromApi.Data.MinUtxoDepositCoefficient, 10)
 	protocolParams.CoinsPerUtxoWord = "0"
 	//protocolParams.CostModels = ppFromApi.Data.CostModels
 	return protocolParams, nil
@@ -242,7 +243,7 @@ func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
 		for _, addrAmount := range txOut.Assets {
 			amount = append(amount, Base.AddressAmount{
 				Unit:     addrAmount.Unit,
-				Quantity: fmt.Sprint(addrAmount.Amount),
+				Quantity: strconv.FormatInt(addrAmount.Amount, 10),
 			})
 		}
 		output := Base.Output{
@@ -294,7 +295,7 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Bas
 		for _, asset := range maestroUtxo.Assets {
 			assets = append(assets, Base.AddressAmount{
 				Unit:     asset.Unit,
-				Quantity: fmt.Sprint(asset.Amount),
+				Quantity: strconv.FormatInt(asset.Amount, 10),
 			})
 		}
 		utxo := Base.AddressUTXO{
@@ -318,7 +319,7 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Bas
 				for _, asset := range maestroUtxo.Assets {
 					assets = append(assets, Base.AddressAmount{
 						Unit:     asset.Unit,
-						Quantity: fmt.Sprint(asset.Amount),
+						Quantity: strconv.FormatInt(asset.Amount, 10),
 					})
 				}
 				utxo := Base.AddressUTXO{
@@ -419,7 +420,7 @@ func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execu
 		return final_result, err
 	}
 	for _, eval := range evaluation {
-		final_result[eval.RedeemerTag+":"+fmt.Sprint(eval.RedeemerIndex)] = Redeemer.ExecutionUnits{
+		final_result[eval.RedeemerTag+":"+strconv.Itoa(eval.RedeemerIndex)] = Redeemer.ExecutionUnits{
 			Mem:   eval.ExUnits.Mem,
 			Steps: eval.ExUnits.Steps,
 		}
