@@ -64,7 +64,7 @@ func (ew *ExternalWallet) SignTx(
 /*
 *
 
-	PkeyHash returns the public key hash assoicated with an external wallet.
+	PkeyHash returns the public key hash associated with an external wallet.
 	It computes and returns the public key hash based on the PaymentPart
 	of the wallet's address.
 

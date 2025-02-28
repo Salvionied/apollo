@@ -1560,7 +1560,7 @@ type RawPlutusData struct {
 
 	Returns:
 		string: The hexadecimal-encoded CBOR representation of the input value.
-		error: An error if the convertion fails.
+		error: An error if the conversion fails.
 */
 func ToCbor(x interface{}) (string, error) {
 	bytes, err := cbor.Marshal(x)
