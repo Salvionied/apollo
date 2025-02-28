@@ -848,7 +848,7 @@ func (pia PlutusDefArray) Len() int {
 		PlutusIndefArray: A deep copy of the PlutusIndefArray.
 */
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
-	var ret PlutusIndefArray
+	ret := PlutusIndefArray{}
 	for _, v := range *pia {
 		ret = append(ret, v.Clone())
 	}
