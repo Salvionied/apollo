@@ -48,13 +48,13 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	}
 	err := cbor.Unmarshal(b, &cborDatumOption)
 	if err != nil {
-		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", err)
 	}
 	if cborDatumOption.DatumType == DatumTypeInline {
 		var cborDatumInline PlutusData
 		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
 		if errInline != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", errInline)
 		}
 		if cborDatumInline.TagNr != 24 {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
@@ -66,7 +66,7 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		var inline PlutusData
 		err = cbor.Unmarshal(taggedBytes, &inline)
 		if err != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", err)
 		}
 		d.DatumType = DatumTypeInline
 		d.Inline = &inline
@@ -75,7 +75,7 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		var cborDatumHash []byte
 		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
 		if errHash != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errHash)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", errHash)
 		}
 		d.DatumType = DatumTypeHash
 		d.Hash = cborDatumHash
@@ -118,7 +118,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 		format.Tag = DatumTypeInline
 		bytes, err := cbor.Marshal(d.Inline)
 		if err != nil {
-			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
+			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %w", err)
 		}
 		format.Content = &PlutusData{
 			PlutusDataType: PlutusBytes,

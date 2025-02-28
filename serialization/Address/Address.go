@@ -102,7 +102,7 @@ func (addr *Address) Debug() string {
 func (addr *Address) ToCbor() (string, error) {
 	b, err := cbor.Marshal(addr.Bytes())
 	if err != nil {
-		return "", fmt.Errorf("error marshalling address to cbor, %s", err)
+		return "", fmt.Errorf("error marshalling address to cbor, %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
