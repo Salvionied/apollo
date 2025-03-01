@@ -31,7 +31,7 @@ type Transaction struct {
 func (tx *Transaction) Bytes() ([]byte, error) {
 	cborred, err := cbor.Marshal(tx)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling transaction, %s", err)
+		return nil, fmt.Errorf("error marshaling transaction, %w", err)
 	}
 	return cborred, nil
 }
