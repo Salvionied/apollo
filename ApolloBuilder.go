@@ -1213,7 +1213,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 /*
 *
 
-	Check if adding change to a transaction ouput would exceed
+	Check if adding change to a transaction output would exceed
 	the UTxO limit for the given address.
 
 	Params:

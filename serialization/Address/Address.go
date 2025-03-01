@@ -97,7 +97,7 @@ func (addr *Address) Debug() string {
 
 	Returns:
 		string: A hexadecimal string representation of the address in CBOR format.
-		error: An error if the convertion fails.
+		error: An error if the conversion fails.
 */
 func (addr *Address) ToCbor() (string, error) {
 	b, err := cbor.Marshal(addr.Bytes())
@@ -149,7 +149,7 @@ func (addr *Address) UnmarshalCBOR(value []byte) error {
 *
 
 	This function returns the binary representation of the address. It
-	constructs and returns the binary representation of teh address containing
+	constructs and returns the binary representation of the address containing
 	the header byte, payment part, and staking part (if present).
 
 	Returns:

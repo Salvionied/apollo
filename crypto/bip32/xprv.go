@@ -140,7 +140,7 @@ func (x XPrv) Derive(index uint32) XPrv {
 	return XPrv{result}
 }
 
-// DeriveHard derives new XPrv by a hardend index
+// DeriveHard derives new XPrv by a hardened index
 func (x XPrv) DeriveHard(index uint32) XPrv {
 	if index > HardIndex {
 		panic("bip32-ed25519: xprv.DeriveHard: overflow")
