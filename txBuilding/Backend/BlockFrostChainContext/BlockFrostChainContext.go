@@ -215,7 +215,7 @@ func (bfc *BlockFrostChainContext) AddressUtxos(address string, gather bool) ([]
 		}
 		return result, nil
 	} else {
-		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/addresses/%s/utxos", bfc._baseUrl, address), nil)
+		req, _ := http.NewRequestWithContext(bfc.ctx, "GET", fmt.Sprintf("%s/addresses/%s/utxos", bfc._baseUrl, address), nil)
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
@@ -242,7 +242,7 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters,
 	timest := time.Time{}
 	foundTime := Cache.Get[time.Time]("latest_epoch_params_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
-		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/epochs/latest/parameters", bfc._baseUrl), nil)
+		req, _ := http.NewRequestWithContext(bfc.ctx, "GET", fmt.Sprintf("%s/epochs/latest/parameters", bfc._baseUrl), nil)
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
@@ -470,7 +470,7 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(tx Transaction.Transaction, l
 			logger <- fmt.Sprint("RESPONSE:", response)
 		}
 	}
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/tx/submit", bfc._baseUrl), bytes.NewBuffer(txBytes))
+	req, _ := http.NewRequestWithContext(bfc.ctx, "POST", fmt.Sprintf("%s/tx/submit", bfc._baseUrl), bytes.NewBuffer(txBytes))
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
