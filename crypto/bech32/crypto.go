@@ -5,6 +5,7 @@
 package bech32
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -35,7 +36,7 @@ func Decode(bech string) (string, []byte, error) {
 	lower := strings.ToLower(bech)
 	upper := strings.ToUpper(bech)
 	if bech != lower && bech != upper {
-		return "", nil, fmt.Errorf("string not all lowercase or all " +
+		return "", nil, errors.New("string not all lowercase or all " +
 			"uppercase")
 	}
 
@@ -48,7 +49,7 @@ func Decode(bech string) (string, []byte, error) {
 	// or if the string is more than 90 characters in total.
 	one := strings.LastIndexByte(bech, '1')
 	if one < 1 || one+7 > len(bech) {
-		return "", nil, fmt.Errorf("invalid index of 1")
+		return "", nil, errors.New("invalid index of 1")
 	}
 
 	// The human-readable part is everything before the last '1'.
@@ -130,7 +131,7 @@ func toChars(data []byte) (string, error) {
 // to a byte slice where each byte is encoding toBits bits.
 func ConvertBits(data []byte, fromBits, toBits uint8, pad bool) ([]byte, error) {
 	if fromBits < 1 || fromBits > 8 || toBits < 1 || toBits > 8 {
-		return nil, fmt.Errorf("only bit groups between 1 and 8 allowed")
+		return nil, errors.New("only bit groups between 1 and 8 allowed")
 	}
 
 	// The final bytes, each byte encoding toBits bits.
@@ -189,7 +190,7 @@ func ConvertBits(data []byte, fromBits, toBits uint8, pad bool) ([]byte, error) 
 
 	// Any incomplete group must be <= 4 bits, and all zeroes.
 	if filledBits > 0 && (filledBits > 4 || nextByte != 0) {
-		return nil, fmt.Errorf("invalid incomplete group")
+		return nil, errors.New("invalid incomplete group")
 	}
 
 	return regrouped, nil

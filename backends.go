@@ -1,7 +1,7 @@
 package apollo
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/Salvionied/apollo/constants"
 
@@ -70,7 +70,7 @@ func NewBlockfrostBackend(
 			projectId,
 		)
 	default:
-		return BlockFrostChainContext.BlockFrostChainContext{}, fmt.Errorf("Invalid network")
+		return BlockFrostChainContext.BlockFrostChainContext{}, errors.New("Invalid network")
 	}
 }
 

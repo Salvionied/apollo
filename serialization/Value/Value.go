@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/Salvionied/apollo/serialization/Amount"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
@@ -471,7 +472,7 @@ func (val Value) String() string {
 	if val.HasAssets {
 		return fmt.Sprint(val.Am)
 	} else {
-		return fmt.Sprint(val.Coin)
+		return strconv.FormatInt(val.Coin, 10)
 	}
 }
 
