@@ -1,6 +1,6 @@
 module github.com/Salvionied/apollo
 
-go 1.20
+go 1.23.6
 
 require (
 	github.com/SundaeSwap-finance/kugo v1.1.0
