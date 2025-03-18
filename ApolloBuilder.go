@@ -75,6 +75,17 @@ type Apollo struct {
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
 	forceFee           bool
+	referencedScriptVersions map[string]bool
+}
+
+const PlutusV1 = "V1"
+const PlutusV2 = "V2"
+
+func PlutusV1CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytes{Value: "00"}
+}
+func PlutusV2CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytesInt(1)
 }
 
 func New(cc Base.ChainContext) *Apollo {
@@ -101,7 +112,9 @@ func New(cc Base.ChainContext) *Apollo {
 		FeePadding:         0,
 		usedUtxos:          make(map[string]bool, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
-		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
+		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
+		referencedScriptVersions: make(map[string]bool),
+	}
 }
 
 func (b *Apollo) GetWallet() apollotypes.Wallet {
@@ -295,20 +308,12 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 		return nil
 	}
 	witnessSet := b.buildWitnessSet()
-	cost_models := map[int]cbor.Marshaler{}
+	cost_models := map[cbor.Marshaler]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
 	PV2Scripts := witnessSet.PlutusV2Script
 	datums := witnessSet.PlutusData
 
-	isV1 := len(PV1Scripts) > 0
-	if len(redeemers) > 0 {
-		if len(PV2Scripts) > 0 {
-			cost_models = PlutusData.CostModelV2(b.Context.CostModelsV2())
-		} else if !isV1 {
-			cost_models = PlutusData.CostModelV2(b.Context.CostModelsV2())
-		}
-	}
 	if redeemers == nil {
 		redeemers = []Redeemer.Redeemer{}
 	}
@@ -325,19 +330,17 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	} else {
 		datum_bytes = []byte{}
 	}
-	var cost_model_bytes []byte
-	if isV1 {
-		cost_models_v1 := PlutusData.CostModelV1(b.Context.CostModelsV1())
-		cost_model_bytes, err = cbor.Marshal(cost_models_v1)
-		if err != nil {
-			log.Fatal(err)
-		}
 
-	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
-		if err != nil {
-			log.Fatal(err)
-		}
+	var cost_model_bytes []byte
+	if len(PV1Scripts) > 0 || b.referencedScriptVersions[PlutusV1] {
+		cost_models[PlutusV1CostModelKey()] = PlutusData.CostModelV1(b.Context.CostModelsV1())
+	}
+	if len(PV2Scripts) > 0 || b.referencedScriptVersions[PlutusV2] {
+		cost_models[PlutusV2CostModelKey()] = PlutusData.CostModelV2(b.Context.CostModelsV2())
+	}
+	cost_model_bytes, err = cbor.Marshal(cost_models)
+	if err != nil {
+		log.Fatal(err)
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
@@ -1064,6 +1067,18 @@ func (b *Apollo) GetUsedUTxOs() map[string]bool {
 
 func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 	b.isEstimateRequired = true
+	return b
+}
+
+func (b *Apollo) AddReferenceScriptV1(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV1] = true
+	return b
+}
+
+func (b *Apollo) AddReferenceScriptV2(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV2] = true
 	return b
 }
 

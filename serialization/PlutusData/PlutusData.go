@@ -514,20 +514,20 @@ var V2COSTMODELKEYS = []string{
 	"verifySchnorrSecp256k1Signature-memory-arguments",
 }
 
-func CostModelV2(cm CostModel) map[int]cbor.Marshaler {
+func CostModelV2(cm CostModel) cbor.Marshaler {
 	cost := make(map[string]int)
 	for ix, s := range V2COSTMODELKEYS {
 		cost[s] = cm[ix]
 	}
-	return map[int]cbor.Marshaler{1: CostView(cost)}
+	return CostView(cost)
 }
 
-func CostModelV1(cm CostModel) map[serialization.CustomBytes]cbor.Marshaler {
+func CostModelV1(cm CostModel) cbor.Marshaler {
 	cost := make(map[string]int)
 	for ix, s := range V1COSTMODELKEYS {
 		cost[s] = cm[ix]
 	}
-	return map[serialization.CustomBytes]cbor.Marshaler{{Value: "00"}: CM(cost)}
+	return CM(cost)
 }
 
 type PlutusType int
