@@ -75,14 +75,14 @@ func (bfc *BlockFrostChainContext) Init() {
 	bfc._protocol_param = latest_params
 }
 
-func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) (UTxO.UTxO, error) {
 	txOuts := bfc.TxOuts(txHash)
 	for _, txOut := range txOuts {
 		if txOut.OutputIndex == index {
-			return txOut.ToUTxO(txHash)
+			return txOut.ToUTxO(txHash), nil
 		}
 	}
-	return nil
+	return UTxO.UTxO{}, fmt.Errorf("Could not fetch utxo: %v#%v", txHash, index)
 }
 
 func (bfc *BlockFrostChainContext) TxOuts(txHash string) []Base.Output {

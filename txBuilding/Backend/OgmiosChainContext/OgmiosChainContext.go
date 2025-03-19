@@ -264,7 +264,7 @@ func Utxo_ApolloToOgmigo(u UTxO.UTxO) shared.Utxo {
 	}
 }
 
-func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) (UTxO.UTxO, error) {
 	ctx := context.Background()
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{
@@ -276,10 +276,10 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UT
 		log.Fatal(err, "REQUEST PROTOCOL")
 	}
 	if len(utxos) == 0 {
-		return nil
+		return UTxO.UTxO{}, fmt.Errorf("Could not fetch utxo: %v#%v", txHash, index)
 	} else {
 		apolloUtxo := Utxo_OgmigoToApollo(utxos[0])
-		return &apolloUtxo
+		return apolloUtxo, nil
 	}
 }
 

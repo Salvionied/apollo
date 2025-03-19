@@ -431,24 +431,27 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	return &tx, nil
 }
 
-func (b *Apollo) GetEstimatedFee() int64 {
+func (b *Apollo) GetEstimatedFee() (int64, error) {
 	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
 	}
 	fftx, err := b.buildFullFakeTx()
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	fakeTxBytes := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, b.referenceInputs)
+	estimatedFee, err := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, b.referenceInputs)
+	if err != nil {
+		return 0, err
+	}
 	estimatedFee += b.FeePadding
-	return estimatedFee
+	return estimatedFee, nil
 }
 
-func (b *Apollo) estimateFee() int64 {
+func (b *Apollo) estimateFee() (int64, error) {
 	if b.forceFee {
-		return b.Fee
+		return b.Fee, nil
 	}
 	return b.GetEstimatedFee()
 }
@@ -614,7 +617,11 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	fmt.Printf("requested amount: %v\n", requestedAmount)
-	requestedAmount.AddLovelace(b.estimateFee() + constants.MIN_LOVELACE)
+	estimatedFee, err := b.estimateFee()
+	if err != nil {
+		return nil, nil, err
+	}
+	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
 	fmt.Printf("unfulfilled amount: %v\n", unfulfilledAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
@@ -694,7 +701,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 		return nil, tx_cbor, err
 	}
 	//ADDCHANGEANDFEE
-	b = b.addChangeAndFee()
+	b, err = b.addChangeAndFee()
 	//FINALIZE TX
 	body := b.buildTxBody()
 	witnessSet := b.buildWitnessSet()
@@ -790,7 +797,7 @@ func (b *Apollo) GetBurns() (burns Value.Value) {
 	return burns
 }
 
-func (b *Apollo) addChangeAndFee() *Apollo {
+func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	burns := b.GetBurns()
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
@@ -801,7 +808,11 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
-	b.Fee = b.estimateFee()
+	estimatedFee, err := b.estimateFee()
+	if err != nil {
+		return nil, err
+	}
+	b.Fee = estimatedFee
 	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
 
@@ -820,7 +831,10 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		for _, payment := range adjustedPayments {
 			b.payments = append(b.payments, payment)
 		}
-		newestFee := b.estimateFee()
+		newestFee, err := b.estimateFee()
+		if err != nil {
+			return nil, err
+		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
 			adjustedPayments[len(adjustedPayments)-1].Lovelace -= int(difference)
@@ -851,7 +865,10 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		pp := b.payments[:]
 		b.payments = append(b.payments, &payment)
 
-		newestFee := b.estimateFee()
+		newestFee, err := b.estimateFee()
+		if err != nil {
+			return nil, err
+		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
 			payment.Lovelace -= int(difference)
@@ -859,7 +876,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 			b.Fee = newestFee
 		}
 	}
-	return b
+	return b, nil
 }
 
 func (b *Apollo) CollectFrom(
@@ -1013,12 +1030,12 @@ func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	return b, nil
 }
 
-func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
-	utxo := b.Context.GetUtxoFromRef(txHash, txIndex)
-	if utxo == nil {
-		return nil
+func (b *Apollo) UtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error) {
+	utxo, err := b.Context.GetUtxoFromRef(txHash, txIndex)
+	if err != nil {
+		return UTxO.UTxO{}, err
 	}
-	return utxo
+	return utxo, nil
 
 }
 

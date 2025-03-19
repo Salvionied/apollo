@@ -2,6 +2,7 @@ package Utils
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
@@ -52,11 +53,14 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, references []TransactionInput.TransactionInput) int64 {
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, references []TransactionInput.TransactionInput) (int64, error) {
 	pm := context.GetProtocolParams()
 	refScriptsSize := 0
 	for _, input := range references {
-		utxo := context.GetUtxoFromRef(hex.EncodeToString(input.TransactionId), input.Index)
+		utxo, err := context.GetUtxoFromRef(hex.EncodeToString(input.TransactionId), input.Index)
+		if err != nil {
+			return 0, fmt.Errorf("Apollo: Fee failed: %w", err)
+		}
 		script := utxo.Output.GetScriptRef()
 		if script != nil {
 			refScriptsSize += len(script.Script.Script)
@@ -67,7 +71,7 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, referenc
 		int(float32(steps)*pm.PriceStep)+
 		int(float32(mem)*pm.PriceMem)+
 		refScriptsSize*pm.MinFeeReferenceScripts) + 10_000
-	return fee
+	return fee, nil
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {

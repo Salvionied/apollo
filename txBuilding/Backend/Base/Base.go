@@ -100,7 +100,7 @@ type Output struct {
 	ReferenceScriptHash string          `json:"reference_script_hash"`
 }
 
-func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
+func (o Output) ToUTxO(txHash string) UTxO.UTxO {
 	txOut, _ := o.ToTransactionOutput()
 	decodedTxHash, _ := hex.DecodeString(txHash)
 	utxo := UTxO.UTxO{
@@ -110,7 +110,7 @@ func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
 		},
 		Output: txOut,
 	}
-	return &utxo
+	return utxo
 }
 
 func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, PlutusData.PlutusData) {
@@ -191,7 +191,7 @@ type ChainContext interface {
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
 	EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error)
 	EvaluateTxWithAdditionalUtxos([]uint8, []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error)
-	GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO
+	GetUtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error)
 	GetContractCbor(scriptHash string) string
 	CostModelsV1() PlutusData.CostModel
 	CostModelsV2() PlutusData.CostModel
