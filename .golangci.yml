@@ -14,6 +14,7 @@ linters:
     # Defaults above ours below
   presets:
     - performance
+    - unused
 #linters-settings:
 #  errcheck:
 #    check-type-assertions: true
