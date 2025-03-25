@@ -589,6 +589,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	var cost_model_bytes []byte
 	cost_model_bytes, _ = cbor.Marshal(usedCms)
+	fmt.Println("COST MODELS:", hex.EncodeToString(cost_model_bytes))
 	//fmt.Println(cost_model_bytes)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	// //total_bytes := redeemer_bytes
@@ -678,7 +679,7 @@ func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 */
 func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
 	b.mint = append(b.mint, mintUnit)
-	b.mintRedeemers[mintUnit.PolicyId] = redeemer
+	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = redeemer
 	b.isEstimateRequired = true
 	return b
 }
@@ -729,6 +730,11 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 		txb.CollateralReturn = b.collateralReturn
 	}
 	return txb, nil
+}
+
+func (b *Apollo) SetCertificates(c *Certificate.Certificates) *Apollo {
+	b.certificates = c
+	return b
 }
 
 /*
@@ -784,6 +790,9 @@ func (b *Apollo) estimateFee() (int64, error) {
 	}
 	for _, mintRedeemer := range b.mintRedeemers {
 		pExU.Sum(mintRedeemer.ExUnits)
+	}
+	for _, stakeRedeemer := range b.stakeRedeemers {
+		pExU.Sum(stakeRedeemer.ExUnits)
 	}
 	fftx, err := b.buildFullFakeTx()
 	if err != nil {
@@ -899,7 +908,8 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
-		len(b.referenceInputs) == 0 {
+		len(b.referenceInputs) == 0 && len(witnesses.PlutusV3Script) == 0 {
+		fmt.Println("NO COLLATERAL NEEDED")
 		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
@@ -988,7 +998,10 @@ func (b *Apollo) Clone() *Apollo {
 func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, _ := cloned_b.Complete()
+	updated_b, err := cloned_b.Complete()
+	if err != nil {
+		panic(err)
+	}
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
@@ -1006,8 +1019,10 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 	if b.isEstimateRequired {
 		estimated_execution_units, err := b.estimateExunits()
 		if err != nil {
+			fmt.Println(err)
 			return b, errors.New("Could Not Estimate ExUnits")
 		}
+		fmt.Println("ESTIMATED EXUNITS", estimated_execution_units)
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
@@ -1034,6 +1049,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 				redeemer.ExUnits.Steps = int64(float32(redeemer.ExUnits.Steps) * 1.2)
 				b.mintRedeemers[k] = redeemer
 			}
+			fmt.Println("MINT REDEEMER", redeemer)
 		}
 		for _, redeemer := range b.redeemersToUTxO {
 			b.redeemers = append(b.redeemers, redeemer)
@@ -1109,10 +1125,15 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
+	if b.certificates != nil {
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(2_000_000 * len(*b.certificates))))
+	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
 		return b, err
 	}
+	fmt.Println("SELECTED AMT", selectedAmount)
+	fmt.Println("AMT REQ", requestedAmount)
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
@@ -1187,6 +1208,8 @@ func (b *Apollo) Complete() (*Apollo, error) {
 
 	//SET REDEEMER INDEXES
 	b = b.setRedeemerIndexes()
+	fmt.Println("SET INDEXES")
+	fmt.Println(b.mintRedeemers)
 	//SET COLLATERAL
 	b, err = b.setCollateral()
 	if err != nil {
@@ -1377,6 +1400,9 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
+	}
+	if b.certificates != nil {
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(2_000_000 * len(*b.certificates))))
 	}
 	requestedAmount = requestedAmount.Add(burns)
 	var err error
@@ -2099,6 +2125,7 @@ func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.stakeRedeemers[k] = redeemer
 			}
+			fmt.Println("STAKE REDEEMER", redeemer)
 		}
 		for k, redeemer := range b.mintRedeemers {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)

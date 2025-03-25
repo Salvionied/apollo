@@ -397,6 +397,7 @@ func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serializat
 	txHex := hex.EncodeToString(txBytes)
 	resp, err := mcc.client.SubmitTx(txHex)
 	if err != nil {
+
 		return serialization.TransactionId{}, err
 	}
 	decodedResponseHash, _ := hex.DecodeString(resp.Data)
@@ -414,6 +415,7 @@ type ExecutionResult struct {
 func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	encodedTx := hex.EncodeToString(tx)
+	fmt.Println(encodedTx)
 	evaluation, err := mcc.client.EvaluateTx(encodedTx)
 	if err != nil {
 		return final_result, err

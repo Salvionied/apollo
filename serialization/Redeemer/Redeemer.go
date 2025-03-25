@@ -16,7 +16,7 @@ var RdeemerTagNames = map[RedeemerTag]string{
 	0: "spend",
 	1: "mint",
 	2: "certificate",
-	3: "withdrawal",
+	3: "wdrl",
 }
 
 type ExecutionUnits struct {
