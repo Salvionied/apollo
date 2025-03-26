@@ -607,23 +607,19 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	for _, utxo := range b.preselectedUtxos {
 		selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 	}
-	fmt.Printf("selected amount: %v\n", selectedAmount)
 	mintedValue := b.GetMints()
-	fmt.Printf("minted value: %v\n", mintedValue)
 	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
-	fmt.Printf("requested amount: %v\n", requestedAmount)
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
 		return nil, nil, err
 	}
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
-	fmt.Printf("unfulfilled amount: %v\n", unfulfilledAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
@@ -633,31 +629,25 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 			//BALANCE WITH ASSETS
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
-					fmt.Printf("balance asset %v %v\n", pol, asset)
 					if amt <= 0 {
 						continue
 					}
 					found := false
 					selectedSoFar := int64(0)
 					for _, utxo := range available_utxos {
-						fmt.Printf("avialable utxo: %v\n", utxo)
 						ma := utxo.Output.GetValue().GetAssets()
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
-							fmt.Printf("sufficient utxo\n")
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 							b.usedUtxos[utxo.GetKey()] = true
-							fmt.Printf("found!\n")
 							found = true
 							break
 						} else if ma.GetByPolicyAndId(pol, asset) > 0 {
-							fmt.Printf("helper utxo\n")
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 							b.usedUtxos[utxo.GetKey()] = true
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
 							if selectedSoFar >= amt {
-								fmt.Printf("found!\n")
 								found = true
 								break
 							}
@@ -675,9 +665,6 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 				break
 			}
 			if len(available_utxos) == 0 {
-				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
-				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
-
 				return nil, nil, errors.New("not enough funds")
 			}
 			utxo := available_utxos[0]
