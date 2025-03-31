@@ -1,12 +1,11 @@
 module github.com/Salvionied/apollo
 
 go 1.23.6
-
 require (
 	github.com/SundaeSwap-finance/kugo v1.1.0
 	github.com/SundaeSwap-finance/ogmigo v0.9.0
 	github.com/fatih/color v1.18.0
-	github.com/fxamacker/cbor/v2 v2.7.0
+	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.9.1
