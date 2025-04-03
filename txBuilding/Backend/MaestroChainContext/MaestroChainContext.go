@@ -33,16 +33,17 @@ type MaestroChainContext struct {
 
 func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
 	var networkString string
-	if network == 0 {
+	switch network {
+	case 0:
 		networkString = "mainnet"
-	} else if network == 1 {
+	case 1:
 		networkString = "testnet"
-	} else if network == 2 {
+	case 2:
 		networkString = "preview"
-	} else if network == 3 {
+	case 3:
 		networkString = "preprod"
-	} else {
-		return MaestroChainContext{}, errors.New("Invalid network")
+	default:
+		return MaestroChainContext{}, errors.New("invalid network")
 	}
 	maestroClient := client.NewClient(projectId, networkString)
 	mcc := MaestroChainContext{
