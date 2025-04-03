@@ -586,7 +586,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 								for secIdx, arrayElement := range pa {
 									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), network)
 									if err != nil {
-										return fmt.Errorf("error at index %d.%d: %w:", idx, secIdx, err)
+										return fmt.Errorf("error at index %d.%d: %w", idx, secIdx, err)
 									}
 								}
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val)
@@ -601,7 +601,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 								for secIdx, arrayElement := range pa2 {
 									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), network)
 									if err != nil {
-										return fmt.Errorf("error at index %d.%d: %w:", idx, secIdx, err)
+										return fmt.Errorf("error at index %d.%d: %w", idx, secIdx, err)
 									}
 								}
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
@@ -710,7 +710,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 								for secIdx, arrayElement := range pa {
 									err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), network)
 									if err != nil {
-										return fmt.Errorf("error at index %d.%d: %w:", idx, secIdx, err)
+										return fmt.Errorf("error at index %d.%d: %w", idx, secIdx, err)
 									}
 								}
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val)
@@ -725,7 +725,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 								for secIdx, arrayElement := range pa2 {
 									err := unmarshalPlutus(&arrayElement, val2.Index(secIdx).Addr().Interface(), network)
 									if err != nil {
-										return fmt.Errorf("error at index %d.%d: %w:", idx, secIdx, err)
+										return fmt.Errorf("error at index %d.%d: %w", idx, secIdx, err)
 									}
 								}
 								reflect.ValueOf(v).Elem().Field(idx + 1).Set(val2)
@@ -840,7 +840,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 							for secIdx, arrayElement := range pa {
 								err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), network)
 								if err != nil {
-									return fmt.Errorf("error at index %s.%d: %w:", idx, secIdx, err)
+									return fmt.Errorf("error at index %s.%d: %w", idx, secIdx, err)
 								}
 							}
 							reflect.ValueOf(v).Elem().FieldByName(idx).Set(val)
@@ -855,7 +855,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 							for secIdx, arrayElement := range pa {
 								err := unmarshalPlutus(&arrayElement, val.Index(secIdx).Addr().Interface(), network)
 								if err != nil {
-									return fmt.Errorf("error at index %s.%d: %w:", idx, secIdx, err)
+									return fmt.Errorf("error at index %s.%d: %w", idx, secIdx, err)
 								}
 							}
 							reflect.ValueOf(v).Elem().FieldByName(idx).Set(val)

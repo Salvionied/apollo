@@ -153,7 +153,7 @@ func (hd *HDWallet) copy() *HDWallet {
 */
 func (hd *HDWallet) DerivePath(path string) (*HDWallet, error) {
 	if path[:2] != "m/" {
-		return nil, errors.New("Invalid path")
+		return nil, errors.New("invalid path")
 	}
 	derived_wallet := hd.copy()
 	for _, index := range strings.Split(strings.TrimLeft(path, "m/"), "/") {
