@@ -2,6 +2,7 @@ package serialization
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -118,11 +119,11 @@ func (cb *CustomBytes) Int() (int, error) {
 			return 0, err
 		}
 		if value < math.MinInt || value > math.MaxInt {
-			return 0, fmt.Errorf("value out of int range")
+			return 0, errors.New("value out of int range")
 		}
 		return int(value), nil
 	}
-	return 0, fmt.Errorf("not int")
+	return 0, errors.New("not int")
 }
 
 func (cb *CustomBytes) IsInt() bool {
@@ -135,7 +136,7 @@ func NewCustomBytes(value string) CustomBytes {
 }
 
 func NewCustomBytesInt(value int) CustomBytes {
-	return CustomBytes{Value: fmt.Sprintf("%d", value), tp: "uint64"}
+	return CustomBytes{Value: strconv.Itoa(value), tp: "uint64"}
 }
 
 /*
@@ -219,9 +220,9 @@ func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 		cb.Value = res
 	case uint64:
 		cb.tp = "uint64"
-		cb.Value = fmt.Sprintf("%d", res)
+		cb.Value = strconv.FormatUint(res, 10)
 	default:
-		return fmt.Errorf("invalid type for customBytes")
+		return errors.New("invalid type for customBytes")
 	}
 	return nil
 }

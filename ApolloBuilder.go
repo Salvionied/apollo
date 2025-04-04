@@ -835,7 +835,7 @@ func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
 	for i, utxo := range sorted_inputs {
-		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
+		key := hex.EncodeToString(utxo.Input.TransactionId) + strconv.Itoa(utxo.Input.Index)
 		val, ok := b.redeemersToUTxO[key]
 		if ok && val.Tag == Redeemer.SPEND {
 			redeem := b.redeemersToUTxO[key]
@@ -1225,7 +1225,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 /*
 *
 
-	Check if adding change to a transaction ouput would exceed
+	Check if adding change to a transaction output would exceed
 	the UTxO limit for the given address.
 
 	Params:
@@ -1497,7 +1497,7 @@ func (b *Apollo) CollectFrom(
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
 	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
-	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = redeemer
+	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+strconv.Itoa(inputUtxo.Input.Index)] = redeemer
 	return b
 }
 
@@ -2040,7 +2040,7 @@ func (b *Apollo) AddWithdrawal(
 		Data:    redeemerData,
 		ExUnits: Redeemer.ExecutionUnits{}, // This will be filled in when we eval later
 	}
-	b.stakeRedeemers[fmt.Sprint(b.withdrawals.Size()-1)] = newRedeemer
+	b.stakeRedeemers[strconv.Itoa(b.withdrawals.Size()-1)] = newRedeemer
 	return b
 }
 

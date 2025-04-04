@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/Salvionied/apollo/serialization/Amount"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
@@ -462,7 +463,7 @@ func (val Value) GreaterOrEqual(other Value) bool {
 /*
 *
 
-	String reutnrs a string representation of teh Value.
+	String reutnrs a string representation of the Value.
 
 	Returns:
 		string: The string representation of the Value.
@@ -471,7 +472,7 @@ func (val Value) String() string {
 	if val.HasAssets {
 		return fmt.Sprint(val.Am)
 	} else {
-		return fmt.Sprint(val.Coin)
+		return strconv.FormatInt(val.Coin, 10)
 	}
 }
 
@@ -479,7 +480,7 @@ func (val Value) String() string {
 *
 
 		UnmarshalCBOR unmarshals a CBOR-encoded byte slice into the Value,
-		which decoed either a uint64 inot the Coin field or a CBOR-encoded Amount
+		which decoed either a uint64 into the Coin field or a CBOR-encoded Amount
 		into the AlonzoAmount field.
 
 		Params:

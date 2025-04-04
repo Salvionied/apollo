@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Salvionied/apollo/constants"
@@ -48,25 +49,25 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	}
 	err := cbor.Unmarshal(b, &cborDatumOption)
 	if err != nil {
-		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+		return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", err)
 	}
 	if cborDatumOption.DatumType == DatumTypeInline {
 		var cborDatumInline PlutusData
 		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
 		if errInline != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", errInline)
 		}
 		if cborDatumInline.TagNr != 24 {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
 		}
 		taggedBytes, valid := cborDatumInline.Value.([]byte)
 		if !valid {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
+			return errors.New("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
 		}
 		var inline PlutusData
 		err = cbor.Unmarshal(taggedBytes, &inline)
 		if err != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", err)
 		}
 		d.DatumType = DatumTypeInline
 		d.Inline = &inline
@@ -75,7 +76,7 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		var cborDatumHash []byte
 		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
 		if errHash != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errHash)
+			return fmt.Errorf("DatumOption: UnmarshalCBOR: %w", errHash)
 		}
 		d.DatumType = DatumTypeHash
 		d.Hash = cborDatumHash
@@ -118,7 +119,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 		format.Tag = DatumTypeInline
 		bytes, err := cbor.Marshal(d.Inline)
 		if err != nil {
-			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
+			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %w", err)
 		}
 		format.Content = &PlutusData{
 			PlutusDataType: PlutusBytes,
@@ -604,7 +605,7 @@ func (pia PlutusDefArray) Len() int {
 		PlutusIndefArray: A deep copy of the PlutusIndefArray.
 */
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
-	var ret PlutusIndefArray
+	ret := PlutusIndefArray{}
 	for _, v := range *pia {
 		ret = append(ret, v.Clone())
 	}
@@ -1181,7 +1182,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			lenTag := len([]byte(fmt.Sprint(ok.Number)))
+			lenTag := len([]byte(strconv.FormatUint(ok.Number, 10)))
 			if value[lenTag-1] == 0x9f {
 				y := PlutusIndefArray{}
 				err = cbor.Unmarshal(value[lenTag-1:], &y)
@@ -1316,7 +1317,7 @@ type RawPlutusData struct {
 
 	Returns:
 		string: The hexadecimal-encoded CBOR representation of the input value.
-		error: An error if the convertion fails.
+		error: An error if the conversion fails.
 */
 func ToCbor(x interface{}) (string, error) {
 	bytes, err := cbor.Marshal(x)
