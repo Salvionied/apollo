@@ -44,7 +44,6 @@ func (an *AssetName) MarshalCBOR() ([]byte, error) {
 	}
 
 	if len(an.value) > 64 {
-		panic(an.value)
 		return nil, errors.New("invalid asset name length")
 	}
 
