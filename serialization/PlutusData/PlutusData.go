@@ -77,7 +77,7 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		var cborDatumHash []byte
 		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
 		if errHash != nil {
-			return err
+			return errHash
 		}
 		d.DatumType = DatumTypeHash
 		d.Hash = cborDatumHash
