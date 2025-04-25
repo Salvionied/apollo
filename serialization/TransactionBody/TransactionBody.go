@@ -50,7 +50,7 @@ type CborBody struct {
 	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
 	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
 	TotalCollateral   int                                   `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   PlutusData.RefInputs                  `cbor:"18,keyasint"`
+	ReferenceInputs   *PlutusData.RefInputs                 `cbor:"18,keyasint,omitempty"`
 }
 
 func (tx *TransactionBody) Hash() ([]byte, error) {
@@ -96,7 +96,9 @@ func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 		NetworkId:         tx.NetworkId,
 		CollateralReturn:  tx.CollateralReturn,
 		TotalCollateral:   tx.TotalCollateral,
-		ReferenceInputs:   tx.ReferenceInputs,
+	}
+	if len(tx.ReferenceInputs) > 0 {
+		cborBody.ReferenceInputs = &tx.ReferenceInputs
 	}
 	em, _ := cbor.CanonicalEncOptions().EncMode()
 	return em.Marshal(cborBody)
