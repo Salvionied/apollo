@@ -67,7 +67,8 @@ type Apollo struct {
 	ValidityStart      int64
 	collateralAmount   int
 	totalCollateral    int
-	referenceInputs    PlutusData.RefInputs
+	referenceInputs    []TransactionInput.TransactionInput
+	referenceInputsV3  []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
 	withdrawals        *Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
@@ -113,6 +114,7 @@ func New(cc Base.ChainContext) *Apollo {
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
+		referenceInputsV3:  make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
 		mintRedeemers:      make(map[string]Redeemer.Redeemer)}
 }
@@ -556,7 +558,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
 			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
 		}
-		if len(PV3Scripts) > 0 {
+		if len(PV3Scripts) > 0 || len(b.referenceInputsV3) > 0 {
 			usedCms[2] = PlutusData.PLUTUSV3COSTMODEL
 		}
 
@@ -714,7 +716,8 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
 		Withdrawals:       b.withdrawals,
-		ReferenceInputs:   b.referenceInputs}
+		ReferenceInputs:   append(b.referenceInputs, b.referenceInputsV3...),
+	}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
 		txb.CollateralReturn = b.collateralReturn
@@ -898,7 +901,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
-		len(b.referenceInputs) == 0 && len(witnesses.PlutusV3Script) == 0 {
+		len(b.referenceInputs) == 0 && len(witnesses.PlutusV3Script) == 0 && len(b.referenceInputsV3) == 0 {
 		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
@@ -1980,6 +1983,27 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 		Index:         index,
 	}
 	b.referenceInputs = append(b.referenceInputs, input)
+	return b
+}
+
+func (b *Apollo) AddReferenceInputV3(txHash string, index int) *Apollo {
+	decodedHash, _ := hex.DecodeString(txHash)
+	exists := false
+	for _, input := range b.referenceInputsV3 {
+		if bytes.Equal(input.TransactionId, decodedHash) && input.Index == index {
+			exists = true
+			break
+		}
+	}
+	if exists {
+		return b
+	}
+
+	input := TransactionInput.TransactionInput{
+		TransactionId: decodedHash,
+		Index:         index,
+	}
+	b.referenceInputsV3 = append(b.referenceInputsV3, input)
 	return b
 }
 

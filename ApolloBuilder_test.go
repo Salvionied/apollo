@@ -1295,7 +1295,7 @@ func TestRefInput(t *testing.T) {
 		t.Error(err)
 	}
 	if hex.EncodeToString(
-		built.GetTx().TransactionBody.ReferenceInputs.Inputs[0].TransactionId,
+		built.GetTx().TransactionBody.ReferenceInputs[0].TransactionId,
 	) != hex.EncodeToString(
 		InputUtxo.Input.TransactionId,
 	) {
