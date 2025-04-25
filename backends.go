@@ -70,7 +70,7 @@ func NewBlockfrostBackend(
 			projectId,
 		)
 	default:
-		return BlockFrostChainContext.BlockFrostChainContext{}, errors.New("Invalid network")
+		return BlockFrostChainContext.BlockFrostChainContext{}, errors.New("invalid network")
 	}
 }
 

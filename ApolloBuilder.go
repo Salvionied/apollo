@@ -1011,7 +1011,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 	if b.isEstimateRequired {
 		estimated_execution_units, err := b.estimateExunits()
 		if err != nil {
-			return b, errors.New("Could Not Estimate ExUnits")
+			return b, errors.New("could not estimate ExUnits")
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
@@ -1171,14 +1171,12 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				}
 			}
 		}
-		for {
-			if selectedAmount.Greater(
-				requestedAmount.Add(
-					Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false},
-				),
-			) {
-				break
-			}
+		for !selectedAmount.Greater(
+			requestedAmount.Add(
+				Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false},
+			),
+		) {
+
 			if len(available_utxos) == 0 {
 				return nil, errors.New("not enough funds")
 			}
@@ -1410,11 +1408,11 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	}
 	if change.GetCoin() < minLovelaceRequired {
 		if len(b.getAvailableUtxos()) == 0 {
-			return b, errors.New("No Remaining UTxOs")
+			return b, errors.New("no remaining UTxOs")
 		}
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
 		if len(sortedUtxos) == 0 {
-			return b, errors.New("No Remaining UTxOs")
+			return b, errors.New("no remaining UTxOs")
 		}
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())

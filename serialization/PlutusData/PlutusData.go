@@ -49,15 +49,17 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	err := cbor.Unmarshal(b, &cborDatumOption)
 	if err != nil {
 		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+
 	}
-	if cborDatumOption.DatumType == DatumTypeInline {
+	switch cborDatumOption.DatumType {
+	case DatumTypeInline:
 		var cborDatumInline PlutusData
 		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
 		if errInline != nil {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
 		}
 		if cborDatumInline.TagNr != 24 {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
+			return fmt.Errorf("found DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
 		}
 		taggedBytes, valid := cborDatumInline.Value.([]byte)
 		if !valid {
@@ -66,22 +68,22 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		var inline PlutusData
 		err = cbor.Unmarshal(taggedBytes, &inline)
 		if err != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
+			return err
 		}
 		d.DatumType = DatumTypeInline
 		d.Inline = &inline
 		return nil
-	} else if cborDatumOption.DatumType == DatumTypeHash {
+	case DatumTypeHash:
 		var cborDatumHash []byte
 		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
 		if errHash != nil {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errHash)
+			return errHash
 		}
 		d.DatumType = DatumTypeHash
 		d.Hash = cborDatumHash
 		return nil
-	} else {
-		return fmt.Errorf("DatumOption: UnmarshalCBOR: Unknown tag: %v", cborDatumOption.DatumType)
+	default:
+		return fmt.Errorf("unknown tag: %v", cborDatumOption.DatumType)
 	}
 
 }
@@ -118,7 +120,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 		format.Tag = DatumTypeInline
 		bytes, err := cbor.Marshal(d.Inline)
 		if err != nil {
-			return nil, fmt.Errorf("DatumOption: MarshalCBOR(): Failed to marshal inline datum: %v", err)
+			return nil, fmt.Errorf("failed to marshal inline datum: %w", err)
 		}
 		format.Content = &PlutusData{
 			PlutusDataType: PlutusBytes,
@@ -126,7 +128,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 			Value:          bytes,
 		}
 	default:
-		return nil, fmt.Errorf("Invalid DatumOption: %v", d)
+		return nil, fmt.Errorf("invalid DatumOption: %v", d)
 	}
 	return cbor.Marshal(format)
 }
@@ -933,23 +935,24 @@ func (pd *PlutusData) Clone() PlutusData {
 */
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 	//enc, _ := cbor.CanonicalEncOptions().EncMode()
-	if pd.PlutusDataType == PlutusMap {
+	switch pd.PlutusDataType {
+	case PlutusMap:
 		customEnc, _ := cbor.EncOptions{Sort: cbor.SortBytewiseLexical}.EncMode()
 		if pd.TagNr != 0 {
 			return customEnc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 		} else {
 			return customEnc.Marshal(pd.Value)
 		}
-	} else if pd.PlutusDataType == PlutusIntMap {
+	case PlutusIntMap:
 		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
 		if pd.TagNr != 0 {
 			return canonicalenc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 		} else {
 			return canonicalenc.Marshal(pd.Value)
 		}
-	} else if pd.PlutusDataType == PlutusBigInt {
+	case PlutusBigInt:
 		return cbor.Marshal(pd.Value)
-	} else {
+	default:
 		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
 		if pd.TagNr == 0 {
 			return cbor.Marshal(pd.Value)
@@ -1293,7 +1296,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.Value = y
 			pd.TagNr = 0
 		default:
-			_ = fmt.Errorf("Invalid Nested Struct in plutus data %s", reflect.TypeOf(x))
+			_ = fmt.Errorf("invalid nested struct in plutus data %s", reflect.TypeOf(x))
 		}
 
 	}

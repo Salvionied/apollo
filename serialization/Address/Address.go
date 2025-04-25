@@ -241,24 +241,25 @@ func DecodeAddress(value string) (Address, error) {
 	payload := decoded_value[1:]
 	network := (header & 0x0F)
 	addr_type := (header & 0xF0) >> 4
-	if !(network == 0b0000 || network == 0b0001) {
+	if network != 0b0000 && network != 0b0001 {
 		return Address{}, errors.New("invalid network tag")
 	}
-	if addr_type == KEY_KEY {
+	switch addr_type {
+	case KEY_KEY:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_KEY {
+	case SCRIPT_KEY:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == KEY_SCRIPT {
+	case KEY_SCRIPT:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == KEY_NONE {
+	case KEY_NONE:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], make([]byte, 0), network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_SCRIPT {
+	case SCRIPT_SCRIPT:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_NONE {
+	case SCRIPT_NONE:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], make([]byte, 0), network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == NONE_KEY {
+	case NONE_KEY:
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else {
+	default:
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
 	}
 }
