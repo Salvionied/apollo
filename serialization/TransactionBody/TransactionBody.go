@@ -30,7 +30,7 @@ type TransactionBody struct {
 	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
 	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
 	TotalCollateral   int                                   `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   PlutusData.RefInputs                  `cbor:"18,keyasint"`
+	ReferenceInputs   PlutusData.RefInputs                  `cbor:"18,keyasint,omitempty"`
 }
 
 type CborBody struct {

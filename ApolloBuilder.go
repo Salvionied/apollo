@@ -112,7 +112,7 @@ func New(cc Base.ChainContext) *Apollo {
 		Fee:                0,
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
-		referenceInputs:    *PlutusData.NewRefInputs(make([]TransactionInput.TransactionInput, 0)),
+		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
 		mintRedeemers:      make(map[string]Redeemer.Redeemer)}
 }
@@ -553,7 +553,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		if len(PV1Scripts) > 0 {
 			usedCms[serialization.CustomBytes{Value: "00"}] = PlutusData.PLUTUSV1COSTMODEL
 		}
-		if len(PV2Scripts) > 0 || len(b.referenceInputs.Inputs) > 0 {
+		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
 			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
 		}
 		if len(PV3Scripts) > 0 {
@@ -795,7 +795,7 @@ func (b *Apollo) estimateFee() (int64, error) {
 		fakeTxLength,
 		pExU.Steps,
 		pExU.Mem,
-		fftx.TransactionBody.ReferenceInputs.Inputs,
+		fftx.TransactionBody.ReferenceInputs,
 	)
 	if err != nil {
 		return 0, err
@@ -898,7 +898,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
-		len(b.referenceInputs.Inputs) == 0 && len(witnesses.PlutusV3Script) == 0 {
+		len(b.referenceInputs) == 0 && len(witnesses.PlutusV3Script) == 0 {
 		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
@@ -1965,7 +1965,7 @@ func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)
 	exists := false
-	for _, input := range b.referenceInputs.Inputs {
+	for _, input := range b.referenceInputs {
 		if bytes.Equal(input.TransactionId, decodedHash) && input.Index == index {
 			exists = true
 			break
@@ -1979,7 +1979,7 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 		TransactionId: decodedHash,
 		Index:         index,
 	}
-	b.referenceInputs.Inputs = append(b.referenceInputs.Inputs, input)
+	b.referenceInputs = append(b.referenceInputs, input)
 	return b
 }
 

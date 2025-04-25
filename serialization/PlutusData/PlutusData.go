@@ -28,21 +28,16 @@ import (
 // 	Script []byte
 // }
 
-type RefInputs struct {
-	Inputs []TransactionInput.TransactionInput `cbor:"0,keyasint"`
-}
+type RefInputs []TransactionInput.TransactionInput
 
-func NewRefInputs(inputs []TransactionInput.TransactionInput) *RefInputs {
-	return &RefInputs{Inputs: inputs}
-}
 func (r *RefInputs) MarshalCBOR() ([]byte, error) {
-	if len(r.Inputs) == 0 {
+	if len(*r) == 0 {
 		decodedBytes, _ := hex.DecodeString("a0")
 		return decodedBytes, nil
 	}
 	em, _ := cbor.CanonicalEncOptions().EncMode()
 	prefixTag, _ := hex.DecodeString("d90102")
-	marshaled, err := em.Marshal(r.Inputs)
+	marshaled, err := em.Marshal([]TransactionInput.TransactionInput(*r))
 	if err != nil {
 		return nil, fmt.Errorf("RefInputs: MarshalCBOR(): %v", err)
 	}
@@ -55,7 +50,6 @@ func (r *RefInputs) UnmarshalCBOR(b []byte) error {
 		return nil
 	}
 	if hex.EncodeToString(b) == "a0" {
-		r.Inputs = []TransactionInput.TransactionInput{}
 		return nil
 	}
 	// Remove Prefix 258
@@ -68,7 +62,7 @@ func (r *RefInputs) UnmarshalCBOR(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("RefInputs: UnmarshalCBOR(): %v", err)
 	}
-	r.Inputs = inputs
+	*r = RefInputs(inputs)
 	return nil
 }
 

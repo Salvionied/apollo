@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -320,7 +319,7 @@ func TestRefInputs(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to unmarshal empty RefInputs:", err)
 	}
-	if len(unmarshaled.Inputs) != 0 {
+	if len(unmarshaled) != 0 {
 		t.Error("Unmarshaled RefInputs should be empty")
 	}
 	// REMARSHAL TEST
@@ -337,7 +336,7 @@ func TestRefInputs(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to unmarshal empty RefInputs:", err)
 	}
-	if len(unmarshaled2.Inputs) != 0 {
+	if len(unmarshaled2) != 0 {
 		t.Error("Unmarshaled RefInputs should be empty")
 	}
 
@@ -345,14 +344,11 @@ func TestRefInputs(t *testing.T) {
 
 func TestRefInputOne(t *testing.T) {
 	decodedHash, _ := hex.DecodeString("e8a645e941ba725b720b40bfdd903b4e78673364751860eb050ce15fa23a47af")
-	testRefInput := PlutusData.RefInputs{
-		Inputs: []TransactionInput.TransactionInput{
-			{
-				TransactionId: decodedHash,
-				Index:         0,
-			},
-		},
-	}
+	testRefInput := PlutusData.RefInputs{{
+
+		TransactionId: decodedHash,
+		Index:         0,
+	}}
 	marshaled, err := cbor.Marshal(testRefInput)
 	if err != nil {
 		t.Error("Failed to marshal RefInputs:", err)
@@ -365,13 +361,13 @@ func TestRefInputOne(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to unmarshal RefInputs:", err)
 	}
-	if len(unmarshaled.Inputs) != 1 {
+	if len(unmarshaled) != 1 {
 		t.Error("Unmarshaled RefInputs should have one input")
 	}
-	if unmarshaled.Inputs[0].Index != 0 {
+	if unmarshaled[0].Index != 0 {
 		t.Error("Unmarshaled RefInputs should have index 0")
 	}
-	if hex.EncodeToString(unmarshaled.Inputs[0].TransactionId[:]) != "e8a645e941ba725b720b40bfdd903b4e78673364751860eb050ce15fa23a47af" {
+	if hex.EncodeToString(unmarshaled[0].TransactionId[:]) != "e8a645e941ba725b720b40bfdd903b4e78673364751860eb050ce15fa23a47af" {
 		t.Error("Unmarshaled RefInputs should have the same transaction ID")
 	}
 	// REMARSHAL TEST
@@ -388,10 +384,10 @@ func TestRefInputOne(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to unmarshal empty RefInputs:", err)
 	}
-	if len(unmarshaled2.Inputs) != 1 {
+	if len(unmarshaled2) != 1 {
 		t.Error("Unmarshaled RefInputs should have one input")
 	}
-	if unmarshaled2.Inputs[0].Index != 0 {
+	if unmarshaled2[0].Index != 0 {
 		t.Error("Unmarshaled RefInputs should have index 0")
 	}
 
