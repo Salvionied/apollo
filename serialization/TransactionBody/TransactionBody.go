@@ -4,6 +4,7 @@ import (
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Certificate"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
@@ -29,7 +30,7 @@ type TransactionBody struct {
 	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
 	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
 	TotalCollateral   int                                   `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	ReferenceInputs   PlutusData.RefInputs                  `cbor:"18,keyasint"`
 }
 
 type CborBody struct {
@@ -49,7 +50,7 @@ type CborBody struct {
 	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
 	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
 	TotalCollateral   int                                   `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	ReferenceInputs   PlutusData.RefInputs                  `cbor:"18,keyasint"`
 }
 
 func (tx *TransactionBody) Hash() ([]byte, error) {

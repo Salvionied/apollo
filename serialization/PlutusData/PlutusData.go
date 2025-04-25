@@ -15,6 +15,7 @@ import (
 	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/TransactionInput"
 
 	"github.com/fxamacker/cbor/v2"
 
@@ -26,6 +27,50 @@ import (
 // 	_      struct{} `cbor:",toarray"`
 // 	Script []byte
 // }
+
+type RefInputs struct {
+	Inputs []TransactionInput.TransactionInput `cbor:"0,keyasint"`
+}
+
+func NewRefInputs(inputs []TransactionInput.TransactionInput) *RefInputs {
+	return &RefInputs{Inputs: inputs}
+}
+func (r *RefInputs) MarshalCBOR() ([]byte, error) {
+	if len(r.Inputs) == 0 {
+		decodedBytes, _ := hex.DecodeString("a0")
+		return decodedBytes, nil
+	}
+	em, _ := cbor.CanonicalEncOptions().EncMode()
+	prefixTag, _ := hex.DecodeString("d90102")
+	marshaled, err := em.Marshal(r.Inputs)
+	if err != nil {
+		return nil, fmt.Errorf("RefInputs: MarshalCBOR(): %v", err)
+	}
+	res := append(prefixTag, marshaled...)
+	return res, nil
+}
+
+func (r *RefInputs) UnmarshalCBOR(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	if hex.EncodeToString(b) == "a0" {
+		r.Inputs = []TransactionInput.TransactionInput{}
+		return nil
+	}
+	// Remove Prefix 258
+	byteVal := hex.EncodeToString(b)
+	if strings.HasPrefix(byteVal, "d90102") {
+		b = b[3:]
+	}
+	var inputs []TransactionInput.TransactionInput
+	err := cbor.Unmarshal(b, &inputs)
+	if err != nil {
+		return fmt.Errorf("RefInputs: UnmarshalCBOR(): %v", err)
+	}
+	r.Inputs = inputs
+	return nil
+}
 
 type DatumType byte
 
