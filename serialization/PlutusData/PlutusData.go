@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Salvionied/apollo/constants"
@@ -63,7 +64,7 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 		}
 		taggedBytes, valid := cborDatumInline.Value.([]byte)
 		if !valid {
-			return fmt.Errorf("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
+			return errors.New("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
 		}
 		var inline PlutusData
 		err = cbor.Unmarshal(taggedBytes, &inline)
@@ -606,7 +607,7 @@ func (pia PlutusDefArray) Len() int {
 		PlutusIndefArray: A deep copy of the PlutusIndefArray.
 */
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
-	var ret PlutusIndefArray
+	ret := PlutusIndefArray{}
 	for _, v := range *pia {
 		ret = append(ret, v.Clone())
 	}
@@ -1184,7 +1185,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			lenTag := len([]byte(fmt.Sprint(ok.Number)))
+			lenTag := len([]byte(strconv.FormatUint(ok.Number, 10)))
 			if value[lenTag-1] == 0x9f {
 				y := PlutusIndefArray{}
 				err = cbor.Unmarshal(value[lenTag-1:], &y)
