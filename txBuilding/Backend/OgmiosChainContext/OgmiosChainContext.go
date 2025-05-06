@@ -529,6 +529,7 @@ type ReferenceScriptsFees struct {
 type OgmiosCostModels struct {
 	V1 []int
 	V2 []int
+	V3 []int
 }
 
 func (ocm *OgmiosCostModels) UnmarshalJSON(bytes []byte) error {
@@ -545,8 +546,13 @@ func (ocm *OgmiosCostModels) UnmarshalJSON(bytes []byte) error {
 	if !ok {
 		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v2': %v", string(bytes))
 	}
+	v3, ok := x["plutus:v3"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v3': %v", string(bytes))
+	}
 	ocm.V1 = v1
 	ocm.V2 = v2
+	ocm.V3 = v3
 	return nil
 }
 
@@ -607,6 +613,7 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	cm := map[Base.CostModelsPlutusVersion]PlutusData.CostModel{
 		Base.CostModelsPlutusV1: ogmiosParams.CostModels.V1,
 		Base.CostModelsPlutusV2: ogmiosParams.CostModels.V2,
+		Base.CostModelsPlutusV3: ogmiosParams.CostModels.V3,
 	}
 
 	return Base.ProtocolParameters{
@@ -866,6 +873,11 @@ func (occ *OgmiosChainContext) CostModelsV1() PlutusData.CostModel {
 func (occ *OgmiosChainContext) CostModelsV2() PlutusData.CostModel {
 	pparams := occ.GetProtocolParams()
 	return pparams.CostModels[Base.CostModelsPlutusV2]
+}
+
+func (occ *OgmiosChainContext) CostModelsV3() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV3]
 }
 
 func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {

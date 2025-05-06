@@ -504,3 +504,8 @@ func (bfc *BlockFrostChainContext) CostModelsV2() PlutusData.CostModel {
 	log.Fatal("BlockFrostChainContext: CostModelsV2: unimplemented")
 	return PlutusData.CostModel(nil)
 }
+
+func (bfc *BlockFrostChainContext) CostModelsV3() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV3: unimplemented")
+	return PlutusData.CostModel(nil)
+}

@@ -54,6 +54,7 @@ type Apollo struct {
 	requiredSigners    []serialization.PubKeyHash
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
+	v3scripts          []PlutusData.PlutusV3Script
 	redeemers          []Redeemer.Redeemer
 	mintRedeemers      []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
@@ -80,6 +81,7 @@ type Apollo struct {
 
 const PlutusV1 = "V1"
 const PlutusV2 = "V2"
+const PlutusV3 = "V3"
 
 func PlutusV1CostModelKey() serialization.CustomBytes {
     return serialization.CustomBytes{Value: "00"}
@@ -87,6 +89,10 @@ func PlutusV1CostModelKey() serialization.CustomBytes {
 func PlutusV2CostModelKey() serialization.CustomBytes {
     return serialization.CustomBytesInt(1)
 }
+func PlutusV3CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytesInt(2)
+}
+
 
 func New(cc Base.ChainContext) *Apollo {
 	return &Apollo{
@@ -102,6 +108,7 @@ func New(cc Base.ChainContext) *Apollo {
 		requiredSigners:    make([]serialization.PubKeyHash, 0),
 		v1scripts:          make([]PlutusData.PlutusV1Script, 0),
 		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
+		v3scripts:          make([]PlutusData.PlutusV3Script, 0),
 		redeemers:          make([]Redeemer.Redeemer, 0),
 		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
 		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
@@ -183,6 +190,7 @@ func (b *Apollo) AddInputAddressFromBech32(address string) *Apollo {
 }
 
 func (b *Apollo) AddPayment(payment PaymentI) *Apollo {
+	fmt.Printf("addPayment %#v\n", payment)
 	b.payments = append(b.payments, payment)
 	return b
 }
@@ -276,6 +284,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
@@ -297,6 +306,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
@@ -312,11 +322,13 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
 	PV2Scripts := witnessSet.PlutusV2Script
+	PV3Scripts := witnessSet.PlutusV3Script
 	datums := witnessSet.PlutusData
 
 	if redeemers == nil {
 		redeemers = []Redeemer.Redeemer{}
 	}
+	//redeemer_bytes, err := cbor.Marshal(Redeemer.Redeemers{Redeemers: redeemers})
 	redeemer_bytes, err := cbor.Marshal(redeemers)
 	if err != nil {
 		log.Fatal(err)
@@ -338,12 +350,19 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	if len(PV2Scripts) > 0 || b.referencedScriptVersions[PlutusV2] {
 		cost_models[PlutusV2CostModelKey()] = PlutusData.CostModelV2(b.Context.CostModelsV2())
 	}
+	if len(PV3Scripts) > 0 || b.referencedScriptVersions[PlutusV3] {
+		cost_models[PlutusV3CostModelKey()] = PlutusData.CostModelV3(b.Context.CostModelsV3())
+	}
 	cost_model_bytes, err = cbor.Marshal(cost_models)
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("script data hash redeemers pre-image: %v\n", hex.EncodeToString(redeemer_bytes))
+	fmt.Printf("script data hash datums pre-image: %v\n", hex.EncodeToString(datum_bytes))
+	fmt.Printf("script data hash cost models pre-image: %v\n", hex.EncodeToString(cost_model_bytes))
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
+	fmt.Printf("script data hash pre-image: %v\n", hex.EncodeToString(total_bytes))
 	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
 }
 
@@ -619,7 +638,10 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 		return nil, nil, err
 	}
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
+	fmt.Printf("requested   %#v\n", requestedAmount)
+	fmt.Printf("selected    %#v\n", selectedAmount)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
+	fmt.Printf("unfulfilled %#v\n", unfulfilledAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
@@ -895,6 +917,7 @@ func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 
 	return b
 }
+
 func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
 	for _, scriptHash := range b.scriptHashes {
@@ -906,6 +929,20 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
+
+func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
+	b.v3scripts = append(b.v3scripts, script)
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
+	return b
+}
+
+
 
 func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 	paymentPath := "m/1852'/1815'/0'/0/0"
@@ -1085,6 +1122,13 @@ func (b *Apollo) AddReferenceScriptV2(txHash string, index int) *Apollo {
 	b.referencedScriptVersions[PlutusV2] = true
 	return b
 }
+
+func (b *Apollo) AddReferenceScriptV3(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV3] = true
+	return b
+}
+
 
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)

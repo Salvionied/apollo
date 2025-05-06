@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"fmt"
 	"github.com/SundaeSwap-finance/apollo/serialization"
 	"github.com/SundaeSwap-finance/apollo/serialization/Address"
 	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
@@ -125,6 +126,7 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	}
 	txOut := p.ToTxOut()
 	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
+	fmt.Printf("actual lovelace: %v\n", p.Lovelace)
 	if int64(p.Lovelace) < coins {
 		p.Lovelace = int(coins)
 	}

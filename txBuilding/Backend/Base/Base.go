@@ -73,6 +73,7 @@ type CostModelsPlutusVersion int
 const (
 	CostModelsPlutusV1 CostModelsPlutusVersion = iota
 	CostModelsPlutusV2
+	CostModelsPlutusV3
 )
 
 func (p ProtocolParameters) GetCoinsPerUtxoByte() int {
@@ -195,6 +196,7 @@ type ChainContext interface {
 	GetContractCbor(scriptHash string) string
 	CostModelsV1() PlutusData.CostModel
 	CostModelsV2() PlutusData.CostModel
+	CostModelsV3() PlutusData.CostModel
 }
 
 type Epoch struct {

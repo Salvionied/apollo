@@ -42,7 +42,12 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 	if err != nil {
 		log.Fatal(err)
 	}
-	return int64((constantOverhead + len(encoded)) * context.GetProtocolParams().GetCoinsPerUtxoByte())
+	res := int64((constantOverhead + len(encoded)) * context.GetProtocolParams().GetCoinsPerUtxoByte())
+	fmt.Printf("constant overhead: %v\n", constantOverhead)
+	fmt.Printf("encoded: %v\n", len(encoded))
+	fmt.Printf("coins per byte: %v\n", context.GetProtocolParams().GetCoinsPerUtxoByte())
+	fmt.Printf("min lovelace post alonzo: %v\n", res)
+	return res
 }
 
 func ToCbor(x interface{}) string {
