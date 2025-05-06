@@ -126,7 +126,6 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 	}
 	txOut := p.ToTxOut()
 	coins := Utils.MinLovelacePostAlonzo(*txOut, cc)
-	fmt.Printf("actual lovelace: %v\n", p.Lovelace)
 	if int64(p.Lovelace) < coins {
 		p.Lovelace = int(coins)
 	}

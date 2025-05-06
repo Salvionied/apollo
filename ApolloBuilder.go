@@ -190,7 +190,6 @@ func (b *Apollo) AddInputAddressFromBech32(address string) *Apollo {
 }
 
 func (b *Apollo) AddPayment(payment PaymentI) *Apollo {
-	fmt.Printf("addPayment %#v\n", payment)
 	b.payments = append(b.payments, payment)
 	return b
 }
@@ -357,12 +356,8 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("script data hash redeemers pre-image: %v\n", hex.EncodeToString(redeemer_bytes))
-	fmt.Printf("script data hash datums pre-image: %v\n", hex.EncodeToString(datum_bytes))
-	fmt.Printf("script data hash cost models pre-image: %v\n", hex.EncodeToString(cost_model_bytes))
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
-	fmt.Printf("script data hash pre-image: %v\n", hex.EncodeToString(total_bytes))
 	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
 }
 
@@ -638,10 +633,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 		return nil, nil, err
 	}
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
-	fmt.Printf("requested   %#v\n", requestedAmount)
-	fmt.Printf("selected    %#v\n", selectedAmount)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
-	fmt.Printf("unfulfilled %#v\n", unfulfilledAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
@@ -722,7 +714,6 @@ func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainCo
 	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
 	encoded, _ := cbor.Marshal(txOutput)
 	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
-	//fmt.Println(len(encoded), maxValSize)
 	return len(encoded) > maxValSize
 
 }
