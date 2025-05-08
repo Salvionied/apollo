@@ -43,6 +43,8 @@ const BLOCKFROST_BASE_URL_TESTNET = "https://cardano-testnet.blockfrost.io/api"
 const BLOCKFROST_BASE_URL_PREVIEW = "https://cardano-preview.blockfrost.io/api"
 const BLOCKFROST_BASE_URL_PREPROD = "https://cardano-preprod.blockfrost.io/api"
 
+var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
+
 func TestUnmarshal(t *testing.T) {
 	tx := Transaction.Transaction{}
 	cborHex := "84a6008b8258205dc014cbcfd8ce86a4e2acb0c6a447066dfa65706a04820e36e2ec6e2264fbd7068258204c887654fa91f24c8855e2762784a30f079e92e511ae92cf6e755ef1e2cf9b8e068258203af2bb10a835f805419429c31658fc7333a43c9fcedf724b747854f989cea8fa068258205dc014cbcfd8ce86a4e2acb0c6a447066dfa65706a04820e36e2ec6e2264fbd704825820328d53f17cec0c5fe8f7726c2c9be71570918625cdb002b22bde4dcd95844ef0068258203af2bb10a835f805419429c31658fc7333a43c9fcedf724b747854f989cea8fa0482582002414578f8ea5208364f9ee1e28496495e3fdc2a8befc6cf6e2256c70a7d0e5a008258209281c9b455b9ec279c3160ab8efd22aecfc75f8f294bf9942dbd096c405ddf49008258205dc014cbcfd8ce86a4e2acb0c6a447066dfa65706a04820e36e2ec6e2264fbd705825820328d53f17cec0c5fe8f7726c2c9be71570918625cdb002b22bde4dcd95844ef0048258200ed3bbcfaa51dd1db2871195d871ab73c59294c7275e1f46d9c9fa799b66db1801018382583911a65ca58a4e9c755fa830173d2a5caed458ac0c73f97db7faae2e7e3b52563c5410bff6a0d43ccebb7c37e1f69f5eb260552521adff33b9c21a0089544082583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000fd9768258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a0013a461a1581c5d16cc1a177b5d9ba9cfa9793b07e60f1fb70fea1f8aef064415d114a1434941471b0000000ba43b740002000319012c075820b64602eebf602e8bbce198e2a1d6bbb2a109ae87fa5316135d217110d6d946490b5820c1a02dc05beee9b267cd22f449ac15f3d70bda1b47a6b4ad5c855774171705eba1049fd8799fd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd8799fd8799f581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcffd8799fd8799fd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceffffffffd87a80d8799fd8799f581c29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6434d494eff1b00003fd483e52478ff1a001e84801a001e8480fffff5a11902a2a1636d736781781c4d696e737761703a205377617020457861637420496e204f72646572"
@@ -468,7 +470,7 @@ func TestFailedSubmissionThrows(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -492,7 +494,7 @@ func TestBurnPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -547,7 +549,7 @@ func TestMintPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -599,7 +601,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -658,7 +660,7 @@ func TestGetWallet(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -683,7 +685,7 @@ func TestAddInputs(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -718,7 +720,7 @@ func TestConsumeUtxo(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -782,7 +784,7 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -863,7 +865,7 @@ func TestPayToContract(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -930,7 +932,7 @@ func TestRequiredSigner(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -1028,7 +1030,7 @@ func TestFeePadding(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -1069,7 +1071,7 @@ func TestSetCollateral(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
@@ -1097,7 +1099,7 @@ func TestCollateralwithReturn(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
 		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
+		BLOCKFROST_API_KEY,
 	)
 	if err != nil {
 		t.Error(err)
