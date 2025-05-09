@@ -1,7 +1,6 @@
 package apollo
 
 import (
-	"fmt"
 	"github.com/SundaeSwap-finance/apollo/serialization"
 	"github.com/SundaeSwap-finance/apollo/serialization/Address"
 	"github.com/SundaeSwap-finance/apollo/serialization/AssetName"
