@@ -230,10 +230,10 @@ func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 		},
 		Output: TransactionOutput.TransactionOutput{
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
-				Address:   addr,
-				Amount:    v,
-				Datum:     datum,
-				ScriptRef: scriptRef,
+				Address:            addr,
+				Amount:             v,
+				Datum:              datum,
+				ReferenceScriptRef: scriptRef,
 			},
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
 			IsPostAlonzo: true,
@@ -329,7 +329,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				DataHash:            u.DatumHash,
 				InlineDatum:         u.Datum,
 				Collateral:          false, // Can querying ogmios return collateral outputs?
-				ReferenceScriptHash: "",    // TODO
+				ReferenceScriptHash: u.ScriptHash,
 			}
 			outs = append(outs, apolloUtxo)
 		}
@@ -433,9 +433,10 @@ func (occ *OgmiosChainContext) kupoToAddressUtxo(ctx context.Context, match kugo
 		OutputIndex: match.OutputIndex,
 		Amount:      am,
 		// We probably don't need this info and kupo doesn't provide it in this query
-		Block:       "",
-		DataHash:    match.DatumHash,
-		InlineDatum: datum,
+		Block:               "",
+		DataHash:            match.DatumHash,
+		InlineDatum:         datum,
+		ReferenceScriptHash: match.ScriptHash,
 	}
 }
 
@@ -746,7 +747,23 @@ func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result
 		datum_hash = serialization.DatumHash{}
 		copy(datum_hash.Payload[:], result.DataHash[:])
 	}
-	var tx_out TransactionOutput.TransactionOutput
+
+	// Get reference script
+	var refScript []byte
+	if result.ReferenceScriptHash != "" {
+		ref, err := occ.kugo.Script(ctx, result.ReferenceScriptHash)
+		if err != nil {
+			log.Fatal(fmt.Errorf("OgmiosChainContext: failed to query reference script hash: '%v': %w", result.ReferenceScriptHash, err))
+		}
+		raw, err := hex.DecodeString(ref.Script)
+		if err != nil {
+			log.Fatal(fmt.Errorf("OgmiosChainContext: failed to decode reference script bytes from hex: %w", err))
+		}
+		refScript = raw
+	}
+
+	// Get inline datum
+	var inlineDatum *PlutusData.DatumOption
 	if result.InlineDatum != "" {
 		decoded, err := hex.DecodeString(result.InlineDatum)
 		if err != nil {
@@ -757,12 +774,29 @@ func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result
 		if err != nil {
 			log.Fatal(err)
 		}
-		l := PlutusData.DatumOptionInline(&x)
+		inlineDatum = PlutusData.DatumOptionInline(&x)
+	}
+
+	has_alonzo_datum := inlineDatum != nil
+	has_ref_script := refScript != nil
+
+	var tx_out TransactionOutput.TransactionOutput
+	if has_alonzo_datum || has_ref_script {
 		tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 				Address: address,
 				Amount:  final_amount.ToAlonzoValue(),
-				Datum:   &l},
+			},
+		}
+		if inlineDatum != nil {
+			tx_out.PostAlonzo.Datum = inlineDatum
+		}
+		if refScript != nil {
+			tx_out.PostAlonzo.ScriptRef = ScriptRef{
+				Script: InnerScript{
+					Script: refScript,
+				},
+			}
 		}
 	} else {
 		tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{

@@ -292,6 +292,8 @@ type AddressUTXO struct {
 	// The hash of the transaction output datum
 	DataHash    string `json:"data_hash"`
 	InlineDatum string `json:"inline_datum"`
+
+	ReferenceScriptHash string `json:"script_hash"`
 }
 
 type AddressAmount struct {
