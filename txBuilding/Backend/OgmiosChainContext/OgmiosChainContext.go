@@ -26,10 +26,10 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Value"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	"github.com/SundaeSwap-finance/ogmigo/v6"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -414,7 +414,7 @@ func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
 func (occ *OgmiosChainContext) KupoToUtxo(m kugo.Match) UTxO.UTxO {
 	ctx := context.Background()
 	addr, au := occ.kupoToAddressUtxo(ctx, m)
-	return occ.addressUtxoToUtxo(addr, au)
+	return occ.addressUtxoToUtxo(ctx, addr, au)
 }
 
 func (occ *OgmiosChainContext) kupoToAddressUtxo(ctx context.Context, match kugo.Match) (Address.Address, Base.AddressUTXO) {
@@ -708,7 +708,7 @@ func (occ *OgmiosChainContext) MaxTxFee() int {
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
-func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result Base.AddressUTXO) UTxO.UTxO {
+func (occ *OgmiosChainContext) addressUtxoToUtxo(ctx context.Context, address Address.Address, result Base.AddressUTXO) UTxO.UTxO {
 	decodedTxId, _ := hex.DecodeString(result.TxHash)
 	tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
 	amount := result.Amount
@@ -774,7 +774,8 @@ func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result
 		if err != nil {
 			log.Fatal(err)
 		}
-		inlineDatum = PlutusData.DatumOptionInline(&x)
+		option := PlutusData.DatumOptionInline(&x)
+		inlineDatum = &option
 	}
 
 	has_alonzo_datum := inlineDatum != nil
@@ -792,8 +793,8 @@ func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result
 			tx_out.PostAlonzo.Datum = inlineDatum
 		}
 		if refScript != nil {
-			tx_out.PostAlonzo.ScriptRef = ScriptRef{
-				Script: InnerScript{
+			tx_out.PostAlonzo.ScriptRef = &PlutusData.ScriptRef{
+				Script: PlutusData.InnerScript{
 					Script: refScript,
 				},
 			}
@@ -814,10 +815,11 @@ func (occ *OgmiosChainContext) addressUtxoToUtxo(address Address.Address, result
 // Copied from blockfrost context def since it just calls AddressUtxos and then
 // converts
 func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
+	ctx := context.Background()
 	results := occ.AddressUtxos(address.String(), true)
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
-		utxos = append(utxos, occ.addressUtxoToUtxo(address, result))
+		utxos = append(utxos, occ.addressUtxoToUtxo(ctx, address, result))
 	}
 	return utxos
 }

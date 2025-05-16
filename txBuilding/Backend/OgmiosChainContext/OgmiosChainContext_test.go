@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/statequery"
 )
 
 func TestRoundtripUtxo(t *testing.T) {
