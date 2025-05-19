@@ -3,7 +3,7 @@ module github.com/Salvionied/apollo
 go 1.23.6
 
 require (
-	github.com/SundaeSwap-finance/kugo v1.1.0
+	github.com/SundaeSwap-finance/kugo v1.2.0
 	github.com/SundaeSwap-finance/ogmigo v0.10.0
 	github.com/fatih/color v1.18.0
 	github.com/fxamacker/cbor/v2 v2.8.0
@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.1 // indirect
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
