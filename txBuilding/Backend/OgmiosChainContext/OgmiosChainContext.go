@@ -233,7 +233,7 @@ func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 				Address:            addr,
 				Amount:             v,
 				Datum:              datum,
-				ReferenceScriptRef: scriptRef,
+				ScriptRef: scriptRef,
 			},
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
 			IsPostAlonzo: true,
@@ -329,7 +329,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				DataHash:            u.DatumHash,
 				InlineDatum:         u.Datum,
 				Collateral:          false, // Can querying ogmios return collateral outputs?
-				ReferenceScriptHash: u.ScriptHash,
+				ReferenceScriptHash: "", // TODO
 			}
 			outs = append(outs, apolloUtxo)
 		}
