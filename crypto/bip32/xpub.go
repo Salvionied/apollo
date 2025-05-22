@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
+	"slices"
 )
 
 // XPub is exntend public key for ed25519
@@ -18,7 +19,7 @@ func NewXPub(raw []byte) XPub {
 	if len(raw) != XPubSize {
 		panic("bip32-ed25519: NewXPub: size should be 64 bytes")
 	}
-	return XPub{xpub: append([]byte(nil), raw...)}
+	return XPub{xpub: slices.Clone(raw)}
 }
 
 // String implements Stringer interface and returns plain hex string
@@ -28,17 +29,17 @@ func (x XPub) String() string {
 
 // Bytes returns intenal bytes
 func (x XPub) Bytes() []byte {
-	return append([]byte(nil), x.xpub...)
+	return slices.Clone(x.xpub)
 }
 
 // PublicKey returns the current public key
 func (x XPub) PublicKey() []byte {
-	return append([]byte(nil), x.xpub[:32]...)
+	return slices.Clone(x.xpub[:32])
 }
 
 // ChainCode returns chain code bytes
 func (x XPub) ChainCode() []byte {
-	return append([]byte(nil), x.xpub[32:]...)
+	return slices.Clone(x.xpub[32:])
 }
 
 // Derive derives new XPub by a soft index
@@ -49,7 +50,7 @@ func (x XPub) Derive(index uint32) XPub {
 
 	var pubkey [32]byte
 	copy(pubkey[:], x.xpub[:32])
-	chaincode := append([]byte(nil), x.xpub[32:]...)
+	chaincode := slices.Clone(x.xpub[32:])
 
 	zmac := hmac.New(sha512.New, chaincode)
 	imac := hmac.New(sha512.New, chaincode)
