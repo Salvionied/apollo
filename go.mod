@@ -3,8 +3,8 @@ module github.com/Salvionied/apollo
 go 1.23.6
 
 require (
-	github.com/SundaeSwap-finance/kugo v1.1.0
-	github.com/SundaeSwap-finance/ogmigo v0.10.0
+	github.com/SundaeSwap-finance/kugo v1.2.0
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.1
 	github.com/fatih/color v1.18.0
 	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/olekukonko/tablewriter v0.0.5
