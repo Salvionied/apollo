@@ -8,7 +8,6 @@ import (
 	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/crypto/bech32"
 	"github.com/Salvionied/apollo/serialization"
-
 	"github.com/fxamacker/cbor/v2"
 )
 
