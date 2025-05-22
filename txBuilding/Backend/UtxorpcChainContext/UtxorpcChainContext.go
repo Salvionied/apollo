@@ -29,7 +29,6 @@ type UtxorpcChainContext struct {
 
 // Interface requirements
 func (u *UtxorpcChainContext) EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error) {}
-func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)  {}
 func (u *UtxorpcChainContext) GetContractCbor(scriptHash string) (string, error)              {}
 
 func NewUtxorpcChainContext(baseUrl string, network int, dmtrApiKey ...string) (UtxorpcChainContext, error) {
@@ -139,6 +138,28 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		u.latestUpdate = time.Now()
 	}
 	return u._protocol_param, nil
+}
+
+func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)  {
+	addrCbor, err := address.MarshalCBOR()
+	tmpUtxo := &UTxO.UTxO{}
+	resp, err := u.client.ReadUtxo(txHash, uint32(txIndex))
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range resp.Msg.GetItems() {
+		tmpUtxo.Input = TransactionInput.TransactionInput{
+			TransactionId: item.GetTxoRef().GetHash(),
+			Index:         int(item.GetTxoRef().GetIndex()),
+		}
+		tmpOutput := TransactionOutput.TransactionOutput{}
+		err = tmpOutput.UnmarshalCBOR(item.GetNativeBytes())
+		if err != nil {
+			return ret, err
+		}
+		tmpUtxo.Output = tmpOutput
+	}
+	return tmpUtxo, nil
 }
 
 func (u *UtxorpcChainContext) Epoch() (int, error) {
