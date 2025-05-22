@@ -417,7 +417,6 @@ type ExecutionResult struct {
 func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	encodedTx := hex.EncodeToString(tx)
-	fmt.Println(encodedTx)
 	evaluation, err := mcc.client.EvaluateTx(encodedTx)
 	if err != nil {
 		return final_result, err
