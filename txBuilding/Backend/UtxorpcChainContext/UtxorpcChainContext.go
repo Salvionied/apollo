@@ -19,17 +19,14 @@ import (
 )
 
 type UtxorpcChainContext struct {
-	_epoch_info     Base.Epoch
-	_epoch          int
 	_Network        int
-	_genesis_param  Base.GenesisParameters
 	_protocol_param Base.ProtocolParameters
 	client          *utxorpc.UtxorpcClient
 	latestUpdate    time.Time
 }
 
 // Interface requirements (no UTxO RPC equivalent, yet)
-func (u *UtxorpcChainContext) GetContractCbor(scriptHash string) (string, error) {return "", nil}
+func (u *UtxorpcChainContext) GetContractCbor(scriptHash string) (string, error) { return "", nil }
 
 func NewUtxorpcChainContext(baseUrl string, network int, dmtrApiKey ...string) (UtxorpcChainContext, error) {
 	var _dmtrApiKey string
@@ -38,20 +35,21 @@ func NewUtxorpcChainContext(baseUrl string, network int, dmtrApiKey ...string) (
 	}
 	// Check config
 	if baseUrl == "" && _dmtrApiKey == "" {
-		return UtxorpcChainContext{}, fmt.Errorf("You must provide either a URL or a Demeter API key")
+		return UtxorpcChainContext{}, errors.New("provide either a URL or a Demeter API key")
 	}
 
 	var networkString string
-	if network == 0 {
+	switch network {
+	case 0:
 		networkString = "mainnet"
-	} else if network == 1 {
+	case 1:
 		networkString = "testnet" // ?
-	} else if network == 2 {
+	case 2:
 		networkString = "preview"
-	} else if network == 3 {
+	case 3:
 		networkString = "preprod"
-	} else {
-		return UtxorpcChainContext{}, fmt.Errorf("Invalid network")
+	default:
+		return UtxorpcChainContext{}, errors.New("invalid network")
 	}
 	if baseUrl == "" {
 		baseUrl = fmt.Sprintf("https://%s.utxorpc-v0.demeter.run", networkString)
@@ -96,8 +94,8 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		protocolParams.MaxTxSize = int(ppCardano.GetMaxTxSize())
 		protocolParams.MaxBlockSize = int(ppCardano.GetMaxBlockBodySize())
 		protocolParams.MaxBlockHeaderSize = int(ppCardano.GetMaxBlockHeaderSize())
-		protocolParams.KeyDeposits = fmt.Sprintf("%d", ppCardano.GetStakeKeyDeposit())
-		protocolParams.PoolDeposits = fmt.Sprintf("%d", ppCardano.GetPoolDeposit())
+		protocolParams.KeyDeposits = strconv.FormatUint(ppCardano.GetStakeKeyDeposit(), 10)
+		protocolParams.PoolDeposits = strconv.FormatUint(ppCardano.GetPoolDeposit(), 10)
 		protocolParams.PooolInfluence = float32(
 			uint32(ppCardano.GetPoolInfluence().GetNumerator()) / ppCardano.GetPoolInfluence().GetDenominator(),
 		)
@@ -113,21 +111,21 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		protocolParams.ProtocolMinorVersion = int(ppCardano.GetProtocolVersion().GetMinor())
 		//CHECK HERE
 		//protocolParams.MinUtxo = ppFromApi.Data.
-		protocolParams.MinPoolCost = fmt.Sprintf("%d", ppCardano.GetMinPoolCost())
+		protocolParams.MinPoolCost = strconv.FormatUint(ppCardano.GetMinPoolCost(), 10)
 		protocolParams.PriceMem = float32(
 			uint32(ppCardano.GetPrices().GetMemory().GetNumerator()) / ppCardano.GetPrices().GetMemory().GetDenominator(),
 		)
 		protocolParams.PriceStep = float32(
 			uint32(ppCardano.GetPrices().GetSteps().GetNumerator()) / ppCardano.GetPrices().GetSteps().GetDenominator(),
 		)
-		protocolParams.MaxTxExMem = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerTransaction().GetMemory())
-		protocolParams.MaxTxExSteps = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerTransaction().GetSteps())
-		protocolParams.MaxBlockExMem = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerBlock().GetMemory())
-		protocolParams.MaxBlockExSteps = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerBlock().GetSteps())
-		protocolParams.MaxValSize = fmt.Sprintf("%d", ppCardano.GetMaxValueSize())
+		protocolParams.MaxTxExMem = strconv.FormatUint(ppCardano.GetMaxExecutionUnitsPerTransaction().GetMemory(), 10)
+		protocolParams.MaxTxExSteps = strconv.FormatUint(ppCardano.GetMaxExecutionUnitsPerTransaction().GetSteps(), 10)
+		protocolParams.MaxBlockExMem = strconv.FormatUint(ppCardano.GetMaxExecutionUnitsPerBlock().GetMemory(), 10)
+		protocolParams.MaxBlockExSteps = strconv.FormatUint(ppCardano.GetMaxExecutionUnitsPerBlock().GetSteps(), 10)
+		protocolParams.MaxValSize = strconv.FormatUint(ppCardano.GetMaxValueSize(), 10)
 		protocolParams.CollateralPercent = int(ppCardano.GetCollateralPercentage())
 		protocolParams.MaxCollateralInuts = int(ppCardano.GetMaxCollateralInputs())
-		protocolParams.CoinsPerUtxoByte = fmt.Sprint(ppCardano.GetCoinsPerUtxoByte())
+		protocolParams.CoinsPerUtxoByte = strconv.FormatUint(ppCardano.GetCoinsPerUtxoByte(), 10)
 		protocolParams.CoinsPerUtxoWord = "0"
 		protocolParams.CostModels = map[string][]int64{
 			"PlutusV1": ppCardano.GetCostModels().GetPlutusV1().GetValues(),
@@ -140,7 +138,7 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 	return u._protocol_param, nil
 }
 
-func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)  {
+func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error) {
 	tmpUtxo := &UTxO.UTxO{}
 	resp, err := u.client.GetUtxoByRef(txHash, uint32(txIndex))
 	if err != nil {
@@ -226,8 +224,11 @@ func (u *UtxorpcChainContext) LastBlockSlot() (int, error) {
 }
 
 func (u *UtxorpcChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
-	addrCbor, err := address.MarshalCBOR()
 	ret := []UTxO.UTxO{}
+	addrCbor, err := address.MarshalCBOR()
+	if err != nil {
+		return ret, err
+	}
 	var tmpUtxo UTxO.UTxO
 	resp, err := u.client.GetUtxosByAddress(addrCbor)
 	if err != nil {
