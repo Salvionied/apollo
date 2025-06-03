@@ -4,8 +4,8 @@ go 1.23.6
 
 require (
 	filippo.io/edwards25519 v1.1.0
-	github.com/SundaeSwap-finance/kugo v1.1.0
-	github.com/SundaeSwap-finance/ogmigo v0.10.0
+	github.com/SundaeSwap-finance/kugo v1.2.0
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.1
 	github.com/fatih/color v1.18.0
 	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/maestro-org/go-sdk v1.2.1
