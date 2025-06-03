@@ -2,6 +2,7 @@ package UtxorpcChainContext
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -27,9 +28,8 @@ type UtxorpcChainContext struct {
 	latestUpdate    time.Time
 }
 
-// Interface requirements
-func (u *UtxorpcChainContext) EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error) {}
-func (u *UtxorpcChainContext) GetContractCbor(scriptHash string) (string, error)              {}
+// Interface requirements (no UTxO RPC equivalent, yet)
+func (u *UtxorpcChainContext) GetContractCbor(scriptHash string) (string, error) {return "", nil}
 
 func NewUtxorpcChainContext(baseUrl string, network int, dmtrApiKey ...string) (UtxorpcChainContext, error) {
 	var _dmtrApiKey string
@@ -113,7 +113,7 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		protocolParams.ProtocolMinorVersion = int(ppCardano.GetProtocolVersion().GetMinor())
 		//CHECK HERE
 		//protocolParams.MinUtxo = ppFromApi.Data.
-		protocolParams.MinPoolCost = fmt.Sprint("%d", ppCardano.GetMinPoolCost())
+		protocolParams.MinPoolCost = fmt.Sprintf("%d", ppCardano.GetMinPoolCost())
 		protocolParams.PriceMem = float32(
 			uint32(ppCardano.GetPrices().GetMemory().GetNumerator()) / ppCardano.GetPrices().GetMemory().GetDenominator(),
 		)
@@ -121,7 +121,7 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 			uint32(ppCardano.GetPrices().GetSteps().GetNumerator()) / ppCardano.GetPrices().GetSteps().GetDenominator(),
 		)
 		protocolParams.MaxTxExMem = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerTransaction().GetMemory())
-		protocolParams.MaxTxExSteps = fmt.Sprint("%d", ppCardano.GetMaxExecutionUnitsPerTransaction().GetSteps())
+		protocolParams.MaxTxExSteps = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerTransaction().GetSteps())
 		protocolParams.MaxBlockExMem = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerBlock().GetMemory())
 		protocolParams.MaxBlockExSteps = fmt.Sprintf("%d", ppCardano.GetMaxExecutionUnitsPerBlock().GetSteps())
 		protocolParams.MaxValSize = fmt.Sprintf("%d", ppCardano.GetMaxValueSize())
@@ -141,9 +141,8 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 }
 
 func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)  {
-	addrCbor, err := address.MarshalCBOR()
 	tmpUtxo := &UTxO.UTxO{}
-	resp, err := u.client.ReadUtxo(txHash, uint32(txIndex))
+	resp, err := u.client.GetUtxoByRef(txHash, uint32(txIndex))
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +154,46 @@ func (u *UtxorpcChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.
 		tmpOutput := TransactionOutput.TransactionOutput{}
 		err = tmpOutput.UnmarshalCBOR(item.GetNativeBytes())
 		if err != nil {
-			return ret, err
+			return nil, err
 		}
 		tmpUtxo.Output = tmpOutput
 	}
 	return tmpUtxo, nil
+}
+
+func (u *UtxorpcChainContext) EvaluateTx(txBytes []byte) (map[string]Redeemer.ExecutionUnits, error) {
+	eval_resp, err := u.client.EvalTx(hex.EncodeToString(txBytes))
+	if err != nil {
+		return map[string]Redeemer.ExecutionUnits{}, err
+	}
+	resp := make(map[string]Redeemer.ExecutionUnits)
+	// Use single report since we know we have 1 Tx to eval
+	redeemers := eval_resp.Msg.GetReport()[0].GetCardano().GetRedeemers()
+	for _, r := range redeemers {
+		purpose := r.GetPurpose().String()
+		switch purpose {
+		case "REDEEMER_PURPOSE_SPEND":
+			purpose = "spend"
+		case "REDEEMER_PURPOSE_MINT":
+			purpose = "mint"
+		case "REDEEMER_PURPOSE_CERT":
+			purpose = "certificate"
+		case "REDEEMER_PURPOSE_REWARD":
+			purpose = "withdrawal"
+		case "REDEEMER_PURPOSE_VOTE":
+			purpose = "vote"
+		case "REDEEMER_PURPOSE_PROPOSE":
+			purpose = "proposal"
+		default:
+			return resp, errors.New("unknown purpose")
+		}
+		units := r.GetExUnits()
+		resp[fmt.Sprintf("%s:%d", purpose, r.GetIndex())] = Redeemer.ExecutionUnits{
+			Steps: int64(units.GetSteps()),
+			Mem:   int64(units.GetMemory()),
+		}
+	}
+	return resp, nil
 }
 
 func (u *UtxorpcChainContext) Epoch() (int, error) {
