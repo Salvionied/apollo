@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/MaestroChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/OgmiosChainContext"
 	"github.com/SundaeSwap-finance/kugo"
-	"github.com/SundaeSwap-finance/ogmigo"
+	"github.com/SundaeSwap-finance/ogmigo/v6"
 )
 
 type ChainContext interface{}
