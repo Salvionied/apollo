@@ -399,6 +399,7 @@ func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serializat
 	txHex := hex.EncodeToString(txBytes)
 	resp, err := mcc.client.SubmitTx(txHex)
 	if err != nil {
+
 		return serialization.TransactionId{}, err
 	}
 	decodedResponseHash, _ := hex.DecodeString(resp.Data)
