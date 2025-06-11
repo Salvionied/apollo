@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	filippo.io/edwards25519 v1.1.0
 	github.com/SundaeSwap-finance/kugo v1.2.0
-	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.1
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.0.2
 	github.com/fatih/color v1.18.0
 	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/maestro-org/go-sdk v1.2.1
@@ -22,6 +22,7 @@ require (
 require (
 	connectrpc.com/connect v1.18.1 // indirect
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
+	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
