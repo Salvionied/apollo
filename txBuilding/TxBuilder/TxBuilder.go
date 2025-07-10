@@ -852,7 +852,7 @@ func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnes
 // 	if tb.ShouldEstimateExecutionUnits {
 // 		estimated_execution_units := tb._EstimateExecutionUnits(changeAddress, mergeChange, collateralChangeAddress)
 // 		for k, redeemer := range tb.InputsToRedeemers {
-// 			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+// 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 // 			if _, ok := estimated_execution_units[key]; ok {
 // 				redeemer.ExUnits = estimated_execution_units[key]
 // 				tb.InputsToRedeemers[k] = redeemer
