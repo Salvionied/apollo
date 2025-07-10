@@ -1014,7 +1014,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			return b, errors.New("could not estimate ExUnits")
 		}
 		for k, redeemer := range b.redeemersToUTxO {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -1023,7 +1023,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			}
 		}
 		for k, redeemer := range b.stakeRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -1032,7 +1032,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			}
 		}
 		for k, redeemer := range b.mintRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -2117,21 +2117,21 @@ func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
 			return b, err
 		}
 		for k, redeemer := range b.redeemersToUTxO {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.stakeRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.mintRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.mintRedeemers[k] = redeemer
