@@ -1386,7 +1386,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	if b.certificates != nil {
-		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(2_000_000 * len(*b.certificates))))
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(STAKE_DEPOSIT * len(*b.certificates))))
 	}
 	requestedAmount = requestedAmount.Add(burns)
 	var err error
