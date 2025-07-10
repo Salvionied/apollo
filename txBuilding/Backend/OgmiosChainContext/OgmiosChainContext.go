@@ -131,10 +131,18 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	if len(script) == 0 {
 		return nil, nil
 	}
-	var ref PlutusData.ScriptRef
-	if err := json.Unmarshal(script, &ref); err != nil {
+	var tmpData struct {
+		Language string `json:"language"`
+		Cbor     string `json:"cbor"`
+	}
+	if err := json.Unmarshal(script, &tmpData); err != nil {
 		return nil, err
 	}
+	scriptBytes, err := hex.DecodeString(tmpData.Cbor)
+	if err != nil {
+		return nil, err
+	}
+	ref := PlutusData.ScriptRef(scriptBytes)
 	return &ref, nil
 }
 
