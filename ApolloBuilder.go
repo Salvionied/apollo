@@ -39,6 +39,7 @@ import (
 const (
 	EX_MEMORY_BUFFER = 0.2
 	EX_STEP_BUFFER   = 0.2
+	STAKE_DEPOSIT    = 2_000_000
 )
 
 type Apollo struct {
@@ -1115,7 +1116,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	if b.certificates != nil {
-		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(2_000_000 * len(*b.certificates))))
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(STAKE_DEPOSIT * len(*b.certificates))))
 	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
