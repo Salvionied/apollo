@@ -992,7 +992,7 @@ func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 	cloned_b.isEstimateRequired = false
 	updated_b, err := cloned_b.Complete()
 	if err != nil {
-		panic(err)
+		return make(map[string]Redeemer.ExecutionUnits, 0), err
 	}
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
