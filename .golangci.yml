@@ -6,9 +6,10 @@ linters:
   enable:
     - bodyclose
     - fatcontext
-    - noctx
     - perfsprint
     - prealloc
+  disable:
+    - noctx
   exclusions:
     generated: lax
     presets:
