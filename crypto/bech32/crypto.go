@@ -25,7 +25,7 @@ func Decode(bech string) (string, []byte, error) {
 	// 		len(bech))
 	// }
 	// Only	ASCII characters between 33 and 126 are allowed.
-	for i := 0; i < len(bech); i++ {
+	for i := range len(bech) {
 		if bech[i] < 33 || bech[i] > 126 {
 			return "", nil, fmt.Errorf("invalid character in "+
 				"string: '%c'", bech[i])
@@ -103,7 +103,7 @@ func Encode(hrp string, data []byte) (string, error) {
 // index of the correspoding character in 'charset'.
 func toBytes(chars string) ([]byte, error) {
 	decoded := make([]byte, 0, len(chars))
-	for i := 0; i < len(chars); i++ {
+	for i := range len(chars) {
 		index := strings.IndexByte(charset, chars[i])
 		if index < 0 {
 			return nil, fmt.Errorf("invalid character not part of "+
@@ -208,7 +208,7 @@ func bech32Checksum(hrp string, data []byte) []byte {
 	values = append(values, []int{0, 0, 0, 0, 0, 0}...)
 	polymod := bech32Polymod(values) ^ 1
 	res := []byte{}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		res = append(res, byte((polymod>>uint(5*(5-i)))&31))
 	}
 	return res
@@ -220,7 +220,7 @@ func bech32Polymod(values []int) int {
 	for _, v := range values {
 		b := chk >> 25
 		chk = (chk&0x1ffffff)<<5 ^ v
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			if (b>>uint(i))&1 == 1 {
 				chk ^= gen[i]
 			}
@@ -232,11 +232,11 @@ func bech32Polymod(values []int) int {
 // For more details on HRP expansion, please refer to BIP 173.
 func bech32HrpExpand(hrp string) []int {
 	v := make([]int, 0, len(hrp)*2+1)
-	for i := 0; i < len(hrp); i++ {
+	for i := range len(hrp) {
 		v = append(v, int(hrp[i]>>5))
 	}
 	v = append(v, 0)
-	for i := 0; i < len(hrp); i++ {
+	for i := range len(hrp) {
 		v = append(v, int(hrp[i]&31))
 	}
 	return v

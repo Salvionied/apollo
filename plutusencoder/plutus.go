@@ -56,7 +56,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 			return nil, errors.New("error: unknown type")
 		}
 		//get fields
-		for i := 0; i < types.NumField(); i++ {
+		for i := range types.NumField() {
 			f := types.Field(i)
 			if !f.IsExported() {
 				continue
@@ -291,7 +291,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			case "IndefList":
 				container := PlutusData.PlutusIndefArray{}
-				for j := 0; j < values.Field(i).Len(); j++ {
+				for j := range values.Field(i).Len() {
 					pd, err := MarshalPlutus(values.Field(i).Index(j).Interface())
 					if err != nil {
 						return nil, fmt.Errorf("error marshalling: %w", err)
@@ -323,7 +323,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			case "DefList":
 				container := PlutusData.PlutusDefArray{}
-				for j := 0; j < values.Field(i).Len(); j++ {
+				for j := range values.Field(i).Len() {
 					pd, err := MarshalPlutus(values.Field(i).Index(j).Interface())
 					if err != nil {
 						return nil, fmt.Errorf("error marshalling: %w", err)
@@ -354,7 +354,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 				}
 			case "Map":
 				container := map[serialization.CustomBytes]PlutusData.PlutusData{}
-				for j := 0; j < values.Field(i).Len(); j++ {
+				for j := range values.Field(i).Len() {
 					pd, err := MarshalPlutus(values.Field(i).Index(j).Interface())
 					if err != nil {
 						return nil, fmt.Errorf("error marshalling: %w", err)
@@ -759,7 +759,7 @@ func unmarshalPlutus(data *PlutusData.PlutusData, v interface{}, network byte) e
 				field, ok := tps.FieldByName(idx)
 				if !ok {
 					found := false
-					for i := 0; i < tps.NumField(); i++ {
+					for i := range tps.NumField() {
 						if tps.Field(i).Tag.Get("plutusKey") == idx {
 							idx = tps.Field(i).Name
 							field = tps.Field(i)
