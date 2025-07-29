@@ -18,7 +18,7 @@ var TESTADDRESS = "addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg5
 
 func InitUtxos() []UTxO.UTxO {
 	utxos := make([]UTxO.UTxO, 0)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
 			Index:         i,
@@ -40,7 +40,7 @@ func InitUtxos() []UTxO.UTxO {
 }
 func InitUtxosDifferentiated() []UTxO.UTxO {
 	utxos := make([]UTxO.UTxO, 0)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
 			Index:         i,
@@ -49,7 +49,7 @@ func InitUtxosDifferentiated() []UTxO.UTxO {
 		Addr, _ := Address.DecodeAddress(TESTADDRESS)
 		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
 		singleasset := Asset.Asset[int64]{}
-		for j := 0; j < i; j++ {
+		for j := range i {
 			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
 			singleasset[asset_name] = int64((i + 1) * 100)
 		}
@@ -66,7 +66,7 @@ func InitUtxosDifferentiated() []UTxO.UTxO {
 
 func InitUtxosCongested() []UTxO.UTxO {
 	utxos := make([]UTxO.UTxO, 0)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
 			Index:         i,
@@ -75,7 +75,7 @@ func InitUtxosCongested() []UTxO.UTxO {
 		Addr, _ := Address.DecodeAddress(TESTADDRESS)
 		policy := Policy.PolicyId{Value: fmt.Sprintf("0000000000000000000000000000000000000000000000000000000%d", i)[:56]}
 		singleasset := Asset.Asset[int64]{}
-		for j := 0; j < i; j++ {
+		for j := range i {
 			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
 			singleasset[asset_name] = int64((i + 1) * 100)
 		}

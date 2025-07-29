@@ -71,7 +71,7 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 	// Actual benchmark start time
 	benchStart := time.Now()
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		wg.Add(1)
 		sem <- struct{}{}
 
@@ -156,7 +156,7 @@ func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainCo
 		SetTtl(int64(lastSlot) + 300)
 
 	// Add multiple outputs
-	for j := 0; j < utxoCount; j++ {
+	for range utxoCount {
 		apolloBE = apolloBE.PayToAddress(*addr, 2_000_000)
 	}
 

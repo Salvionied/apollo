@@ -6,7 +6,7 @@ func add28Mul8(kl, zl []byte) *[32]byte {
 	var carry uint16 = 0
 	var out [32]byte
 
-	for i := 0; i < 28; i++ {
+	for i := range 28 {
 		r := uint16(kl[i]) + uint16(zl[i])<<3 + carry
 		out[i] = byte(r & 0xff)
 		carry = r >> 8
@@ -25,7 +25,7 @@ func add256Bits(kr, zr []byte) *[32]byte {
 	var carry uint16 = 0
 	var out [32]byte
 
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		r := uint16(kr[i]) + uint16(zr[i]) + carry
 		out[i] = byte(r)
 		carry = r >> 8
