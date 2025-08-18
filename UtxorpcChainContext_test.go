@@ -453,7 +453,6 @@ func TestUTXORPC_PayToContract(t *testing.T) {
 	if built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr != 121 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr)
 	}
-	// quick sanity of bytes serialization
 	if _, err := built.GetTx().Bytes(); err != nil {
 		t.Errorf("failed to serialize tx: %v", err)
 	}

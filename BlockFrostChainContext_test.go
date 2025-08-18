@@ -21,7 +21,6 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )
 
-// Keep this file self-contained for Blockfrost-only tests.
 type Network int
 
 const (
