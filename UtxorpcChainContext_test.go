@@ -42,11 +42,10 @@ func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
-	// We expect submission to fail (unsigned/invalid), i.e., return an error.
 	if _, err = cc.SubmitTx(*apollob.GetTx()); err == nil {
-		t.Error("expected submission error (unsigned tx), got nil")
+		t.Error("DIDNT THROW")
 	}
 }
 
