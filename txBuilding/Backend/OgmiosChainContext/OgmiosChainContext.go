@@ -26,10 +26,10 @@ import (
 	"github.com/Salvionied/apollo/serialization/Value"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	"github.com/SundaeSwap-finance/ogmigo"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo/v6"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -131,10 +131,18 @@ func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, er
 	if len(script) == 0 {
 		return nil, nil
 	}
-	var ref PlutusData.ScriptRef
-	if err := json.Unmarshal(script, &ref); err != nil {
+	var tmpData struct {
+		Language string `json:"language"`
+		Cbor     string `json:"cbor"`
+	}
+	if err := json.Unmarshal(script, &tmpData); err != nil {
 		return nil, err
 	}
+	scriptBytes, err := hex.DecodeString(tmpData.Cbor)
+	if err != nil {
+		return nil, err
+	}
+	ref := PlutusData.ScriptRef(scriptBytes)
 	return &ref, nil
 }
 
@@ -207,7 +215,7 @@ func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	return amts
 }
 
-func kugoValue_toSharedValue(v kugo.CompatibleValue) shared.Value {
+func kugoValue_toSharedValue(v kugo.Value) shared.Value {
 	result := shared.Value{}
 	for policyId, assets := range v {
 		for assetName, amt := range assets {

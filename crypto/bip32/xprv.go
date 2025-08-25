@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"slices"
 
 	"github.com/Salvionied/apollo/crypto/edwards25519"
 )
@@ -36,7 +37,7 @@ func NewXPrv(raw []byte) (XPrv, error) {
 		return XPrv{}, errors.New("bip32-ed25519: NewXPrv: the highest bit of the last byte of seed should be cleared")
 	}
 
-	return XPrv{xprv: append([]byte(nil), raw...)}, nil
+	return XPrv{xprv: slices.Clone(raw)}, nil
 }
 
 // NewRootXPrv creates XPrv by seed(bip39),the seed size should be 32 bytes at least
@@ -70,12 +71,12 @@ func (x XPrv) String() string {
 
 // Bytes returns intenal bytes
 func (x XPrv) Bytes() []byte {
-	return append([]byte(nil), x.xprv...)
+	return slices.Clone(x.xprv)
 }
 
 // ChainCode returns chain code bytes
 func (x XPrv) ChainCode() []byte {
-	return append([]byte(nil), x.xprv[64:]...)
+	return slices.Clone(x.xprv[64:])
 }
 
 // Derive derives new XPrv by an index
@@ -98,11 +99,11 @@ func (x XPrv) Derive(index uint32) XPrv {
 		The I is truncated to right 32 bytes.
 	*/
 
-	ekey := append([]byte(nil), x.xprv[:64]...)
-	chaincode := append([]byte(nil), x.xprv[64:96]...)
+	ekey := slices.Clone(x.xprv[:64])
+	chaincode := slices.Clone(x.xprv[64:96])
 
-	kl := append([]byte(nil), x.xprv[:32]...)
-	kr := append([]byte(nil), x.xprv[32:64]...)
+	kl := slices.Clone(x.xprv[:32])
+	kr := slices.Clone(x.xprv[32:64])
 
 	zmac := hmac.New(sha512.New, chaincode)
 	imac := hmac.New(sha512.New, chaincode)
@@ -140,7 +141,7 @@ func (x XPrv) Derive(index uint32) XPrv {
 	return XPrv{result}
 }
 
-// DeriveHard derives new XPrv by a hardend index
+// DeriveHard derives new XPrv by a hardened index
 func (x XPrv) DeriveHard(index uint32) XPrv {
 	if index > HardIndex {
 		panic("bip32-ed25519: xprv.DeriveHard: overflow")

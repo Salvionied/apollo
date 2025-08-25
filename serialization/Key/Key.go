@@ -34,7 +34,7 @@ func Sign(message []byte, sk []byte) ([]byte, error) {
 	if len(sk) != ed25519.PrivateKeySize {
 		sk, err := bip32.NewXPrv(sk)
 		if err != nil {
-			return nil, fmt.Errorf("error creating signing key from bytes, %s", err)
+			return nil, fmt.Errorf("error creating signing key from bytes, %w", err)
 		}
 		signature := sk.Sign(message)
 		return signature, nil

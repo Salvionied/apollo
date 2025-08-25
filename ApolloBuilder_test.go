@@ -10,11 +10,8 @@ import (
 	"github.com/Salvionied/apollo"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -23,25 +20,48 @@ import (
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/serialization/Value"
 	testutils "github.com/Salvionied/apollo/testUtils"
-	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
 	"github.com/Salvionied/apollo/txBuilding/TxBuilder"
 	"github.com/fxamacker/cbor/v2"
 )
 
-type Network int
-
-const (
-	MAINNET Network = iota
-	TESTNET
-	PREVIEW
-	PREPROD
-)
-
-const BLOCKFROST_BASE_URL_MAINNET = "https://cardano-mainnet.blockfrost.io/api"
 const BLOCKFROST_BASE_URL_TESTNET = "https://cardano-testnet.blockfrost.io/api"
 const BLOCKFROST_BASE_URL_PREVIEW = "https://cardano-preview.blockfrost.io/api"
 const BLOCKFROST_BASE_URL_PREPROD = "https://cardano-preprod.blockfrost.io/api"
+
+var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
+
+var decoded_addr, _ = Address.DecodeAddress(
+	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+)
+
+var InputUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
+		Index:         1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
+		Index:         1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(5_000_000, nil))}
+
+var collateralUtxo2 = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
+		Index:         1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(10_000_000, nil))}
 
 func TestUnmarshal(t *testing.T) {
 	tx := Transaction.Transaction{}
@@ -464,668 +484,6 @@ func TestScriptAddress(t *testing.T) {
 
 // }
 
-func TestFailedSubmissionThrows(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
-		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
-		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
-		PayToAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 10_000_000).
-		Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = cc.SubmitTx(*apollob.GetTx())
-	if err == nil {
-		t.Error("DIDNT THROW")
-	}
-}
-
-func TestBurnPlutus(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15000000, MultiAsset.MultiAsset[int64]{
-				policy: Asset.Asset[int64]{AssetName.NewAssetNameFromString("TEST"): 1},
-			})),
-	}
-
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
-		AddLoadedUTxOs(testUtxo).
-		SetChangeAddress(decoded_addr).
-		MintAssetsWithRedeemer(
-			apollo.Unit{
-				PolicyId: policy.String(),
-				Name:     "TEST",
-				Quantity: int(-1),
-			},
-			Redeemer.Redeemer{},
-		).
-		Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	txBytes, err := apollob.GetTx().Bytes()
-	if err != nil {
-		t.Error(err)
-	}
-	if hex.EncodeToString(
-		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00e1eefb021a0002f2c509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354200b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
-		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
-	}
-}
-
-func TestMintPlutus(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15000000, nil)),
-	}
-
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
-		AddLoadedUTxOs(testUtxo).
-		SetChangeAddress(decoded_addr).
-		MintAssetsWithRedeemer(
-			apollo.Unit{
-				PolicyId: policy.String(),
-				Name:     "TEST",
-				Quantity: int(1),
-			},
-			Redeemer.Redeemer{},
-		).
-		Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	txBytes, err := apollob.GetTx().Bytes()
-	if err != nil {
-		t.Error(err)
-	}
-	if hex.EncodeToString(
-		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00e1e193a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401021a0003002d09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
-		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
-	}
-}
-
-func TestMintPlutusWithPayment(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15000000, nil)),
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
-		AddLoadedUTxOs(testUtxo).
-		SetChangeAddress(decoded_addr).
-		MintAssetsWithRedeemer(
-			apollo.Unit{
-				PolicyId: policy.String(),
-				Name:     "TEST",
-				Quantity: int(1),
-			},
-			Redeemer.Redeemer{},
-		).PayToAddress(
-		decoded_addr,
-		1200000,
-		apollo.NewUnit(
-			policy.String(),
-			"TEST",
-			1,
-		),
-	).Complete()
-
-	if err != nil {
-		t.Error(err)
-	}
-	txBytes, err := apollob.GetTx().Bytes()
-	if err != nil {
-		t.Error(err)
-	}
-	if hex.EncodeToString(
-		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a001484d0a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cd466b021a0003168509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
-		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
-	}
-}
-
-func TestGetWallet(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	apollob := apollo.New(&cc)
-	wall := apollob.GetWallet()
-	if wall != nil {
-		t.Error("Wallet should be nil")
-	}
-	apollob = apollob.SetWalletFromBech32(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	wallet := apollob.GetWallet()
-	if wallet.GetAddress().
-		String() !=
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu" {
-		t.Error("Wallet address is not correct")
-	}
-}
-
-func TestAddInputs(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15000000, nil)),
-	}
-	apollob := apollo.New(&cc)
-	apollob = apollob.AddInput(testUtxo).SetChangeAddress(decoded_addr)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if !built.GetTx().TransactionBody.Inputs[0].EqualTo(testUtxo.Input) {
-		t.Error("Tx is not correct")
-	}
-
-}
-
-func TestConsumeUtxo(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15_000_000, nil)),
-	}
-	biAdaUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 1,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15_000_000, nil)),
-	}
-
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
-		ConsumeUTxO(testUtxo,
-			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
-			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if !built.GetTx().TransactionBody.Inputs[0].EqualTo(testUtxo.Input) {
-		t.Error("Tx is not correct")
-	}
-	if len(built.GetTx().TransactionBody.Outputs) != 4 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 2_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 2_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[2].Lovelace() != 11_000_000 {
-		t.Error("Tx is not correct")
-	}
-}
-
-func TestConsumeAssetsFromUtxo(t *testing.T) {
-
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	testUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 0,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15_000_000, MultiAsset.MultiAsset[int64]{
-				Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}: Asset.Asset[int64]{
-					AssetName.NewAssetNameFromString("TEST"): 1,
-				},
-			})),
-	}
-	biAdaUtxo := UTxO.UTxO{
-		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte(
-				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-			),
-			Index: 1,
-		},
-		Output: TransactionOutput.SimpleTransactionOutput(
-			decoded_addr,
-			Value.SimpleValue(15_000_000, nil)),
-	}
-
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
-		ConsumeAssetsFromUtxo(testUtxo,
-			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, []apollo.Unit{apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "TEST", 1)}),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if !built.GetTx().TransactionBody.Inputs[0].EqualTo(testUtxo.Input) {
-		t.Error("Tx is not correct")
-	}
-	if len(built.GetTx().TransactionBody.Outputs) != 3 {
-		t.Error("Tx is not correct")
-	}
-
-	if len(built.GetTx().TransactionBody.Outputs[0].GetValue().GetAssets()) != 1 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 15_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if len(built.GetTx().TransactionBody.Outputs[1].GetValue().GetAssets()) != 0 {
-		t.Error("Tx is not correct")
-	}
-}
-
-var decoded_addr, _ = Address.DecodeAddress(
-	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-)
-
-var InputUtxo = UTxO.UTxO{
-	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
-	},
-	Output: TransactionOutput.SimpleTransactionOutput(
-		decoded_addr,
-		Value.SimpleValue(15_000_000, nil)),
-}
-
-func TestPayToContract(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	datum := PlutusData.PlutusData{
-		TagNr:          121,
-		PlutusDataType: PlutusData.PlutusBytes,
-		Value:          []byte("Hello, World!")}
-
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
-		PayToContract(decoded_addr, &datum, 1_000_000, false).
-		PayToContract(decoded_addr, &datum, 1_000_000, true)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(built.GetTx().TransactionBody.Outputs) != 3 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 1_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo {
-		t.Error("Tx is not correct")
-	}
-	if !built.GetTx().TransactionBody.Outputs[1].IsPostAlonzo {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[0].GetDatumHash() == nil {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].GetDatumHash() != nil {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionWitnessSet.PlutusData == nil {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].GetDatum() == nil {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[0].GetDatum() != nil {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr != 121 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr)
-	}
-	txBytes, _ := built.GetTx().Bytes()
-	if hex.EncodeToString(
-		txBytes,
-	) != "84a4008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536010183835839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a000f4240582037ead362f4ab7844a8416b045caa46a91066d391c16ae4d4a81557f14f7a0984a3005839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9011a000f4240028201d81850d8794d48656c6c6f2c20576f726c6421825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00c333d3021a0003296d0b5820a1f321beb89d87d81b931988fc9561df62357c5b845ff48fdb926265a43110e2a1049fd8794d48656c6c6f2c20576f726c6421fff5f6" {
-		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
-	}
-
-}
-
-func TestRequiredSigner(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
-		AddRequiredSignerFromAddress(decoded_addr, true, true)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(built.GetTx().TransactionBody.RequiredSigners) != 2 {
-		t.Error("Tx is not correct")
-	}
-	if hex.EncodeToString(
-		built.GetTx().TransactionBody.RequiredSigners[0][:],
-	) != hex.EncodeToString(
-		decoded_addr.PaymentPart,
-	) {
-		t.Error("Tx is not correct")
-	}
-	if hex.EncodeToString(
-		built.GetTx().TransactionBody.RequiredSigners[1][:],
-	) != hex.EncodeToString(
-		decoded_addr.StakingPart,
-	) {
-		t.Error("Tx is not correct")
-	}
-	apollob = apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
-		AddRequiredSignerFromBech32(decoded_addr.String(), true, true)
-	built, err = apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(built.GetTx().TransactionBody.RequiredSigners) != 2 {
-		t.Error("Tx is not correct")
-	}
-	if hex.EncodeToString(
-		built.GetTx().TransactionBody.RequiredSigners[0][:],
-	) != hex.EncodeToString(
-		decoded_addr.PaymentPart,
-	) {
-		t.Error("Tx is not correct")
-	}
-	if hex.EncodeToString(
-		built.GetTx().TransactionBody.RequiredSigners[1][:],
-	) != hex.EncodeToString(
-		decoded_addr.StakingPart,
-	) {
-		t.Error("Tx is not correct")
-	}
-
-	apollob = apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
-		AddRequiredSigner(serialization.PubKeyHash(decoded_addr.PaymentPart))
-	built, err = apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(built.GetTx().TransactionBody.RequiredSigners) != 1 {
-		t.Error("Tx is not correct")
-	}
-	if hex.EncodeToString(
-		built.GetTx().TransactionBody.RequiredSigners[0][:],
-	) != hex.EncodeToString(
-		decoded_addr.PaymentPart,
-	) {
-		t.Error("Tx is not correct")
-	}
-}
-
-var collateralUtxo = UTxO.UTxO{
-	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
-	},
-	Output: TransactionOutput.SimpleTransactionOutput(
-		decoded_addr,
-		Value.SimpleValue(5_000_000, nil))}
-
-var collateralUtxo2 = UTxO.UTxO{
-	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
-	},
-	Output: TransactionOutput.SimpleTransactionOutput(
-		decoded_addr,
-		Value.SimpleValue(10_000_000, nil))}
-
-func TestFeePadding(t *testing.T) {
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
-		AddLoadedUTxOs(InputUtxo).
-		PayToContract(decoded_addr, nil, 1_000_000, false).
-		SetFeePadding(500_000)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if built.GetTx().TransactionBody.Fee != 691637 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
-	}
-	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13308363 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].Lovelace())
-	}
-	if built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo &&
-		built.GetTx().TransactionBody.Outputs[0].GetDatumHash() != nil {
-		t.Error(
-			"Tx is not correct",
-			built.GetTx().TransactionBody.Outputs[0].GetDatumHash(),
-			built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo,
-		)
-	}
-}
-
-func TestSetCollateral(t *testing.T) {
-	// full 5 ada collateral
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
-		AddLoadedUTxOs(InputUtxo).
-		PayToContract(decoded_addr, nil, 1_000_000, false).
-		SetFeePadding(500_000).
-		AddCollateral(collateralUtxo)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo.Input) {
-		t.Error("Tx is not correct")
-	}
-}
-
-func TestCollateralwithReturn(t *testing.T) {
-	// full 5 ada collateral
-	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
-		int(MAINNET),
-		"mainnetVueasSgKfYhM4PQBq0UGipAyHBpbX4oT",
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	decoded_addr, _ := Address.DecodeAddress(
-		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
-	)
-	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
-		AddLoadedUTxOs(InputUtxo).
-		PayToContract(decoded_addr, nil, 1_000_000, false).
-		SetFeePadding(500_000).
-		AddCollateral(collateralUtxo2)
-	built, err := apollob.Complete()
-	if err != nil {
-		t.Error(err)
-	}
-	if built.GetTx().TransactionBody.TotalCollateral != 5_000_000 {
-		t.Error("Tx is not correct")
-	}
-	if built.GetTx().TransactionBody.CollateralReturn.Lovelace() != 5_000_000 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.CollateralReturn)
-	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo2.Input) {
-		t.Error("Tx is not correct")
-	}
-}
-
 func TestRedeemerCollect(t *testing.T) {
 	cc := apollo.NewEmptyBackend()
 	decoded_addr, _ := Address.DecodeAddress(
@@ -1417,7 +775,7 @@ func TestMapPDDecodeEncode(t *testing.T) {
 }
 
 func TestMapPdRecode(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 
 		pdCbor := "d8799fa200a140a1401a01312d0001a09fd8799f4040ffd8799f581c95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0b55fb004448554e54ffffd8799f581c500cebfc153990c15c001e3441a0e0774634cfe1864d4f2e07e17474472f426b424b4f41ffa3457072696365d87b9fd8799f1b0001b57b632d33951b00071afd498d0000ffff47656e6444617465d905009f1b000003bb2cc3d418ff49737461727444617465d905009f1b00000092f3973818ffa0ff"
 		pd := PlutusData.PlutusData{}
@@ -1439,7 +797,7 @@ func TestMapPdRecode(t *testing.T) {
 }
 
 func TestRecodeTx(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		txCbor := "84ac0083825820cda3926787c51f124e530d255fe8841aac9eed3be2fe518c8a44c801e75b204e0182582010453108b22eb9ea4c43e2aef257f269b6624f39dce0175fff44513bcc2f297200825820cda3926787c51f124e530d255fe8841aac9eed3be2fe518c8a44c801e75b204e040185a30058391155ff0e63efa0694e8065122c552e80c7b51768b7f20917af25752a7cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce01821a004c4b40a2581c420000029ad9527271b1b1e3c27ee065c18df70a4a4cfc3093a41a44a14341584f1a45632e08581cc6b287b7b14d19db292f203824ac676b128eeebe8d09c3612755a09ba14754514e634d504101028201d81858d9d8799fa200a1581c420000029ad9527271b1b1e3c27ee065c18df70a4a4cfc3093a41a44a14341584f1a45632e0801a09fd8799f581c420000029ad9527271b1b1e3c27ee065c18df70a4a4cfc3093a41a444341584fffd8799f4040ffffd8799f581cc6b287b7b14d19db292f203824ac676b128eeebe8d09c3612755a09b4754514e634d5041ffa3457072696365d87b9fd8799f1b00029e05316a59991b000005af3107a400ffff47656e6444617465d905009f1b000003bb2cc3d418ff49737461727444617465d905009f1b00000092f3973818ffa0ff8258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a001e8480a1581cc6b287b7b14d19db292f203824ac676b128eeebe8d09c3612755a09ba14754514e634d5041018258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a001e8480a1581cf0fc4932134ad45a42ef9e5591a16dc88fff230bc4487eb0f1774f8ca1475250364146484101825839018b0fac6777891b925d646af1727d1ef288338f7966455a93ce31dfbc3120b7074a8521bcc9ea2f05e38cf8924ffb7bc871ebfaa35ae98bf21a000f42408258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a1deeb464021a0004c1b2031a074cf233075820b83a67b95c0136a1490445e62f9878de1ed0a5f3fd0e7d143741a923d88f820e081a074ceeaf09a1581cc6b287b7b14d19db292f203824ac676b128eeebe8d09c3612755a09ba14754514e634d5041020b58208a0898f7e654d715598e9bd1bd6d9467bd35cd41e112edfb0b704895592949040d81825820b65b15369b13ee118915606e86f28f0a84df22f599deafbd11aa9b7671623655000e82581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bc581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce108258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce1a00181f91111a004c4b40a2068159022659022301000032323232323232323232323232223232323232533300c3370e9000001099999199111980711299980a80089128008a99980919baf301630180010041300530180011300230170010012322230020033756602c0026ea4004dd7180900099199180511998011bab001232223002003374c002244a002464a66601e6ae8c0044894004488c00800ccc02894ccc03ccdd78009ba8480004894004488c00800c004004dd598091918091809180900098088021299980699807180780099111801001a4008264649319999806111299980a00089128008a9998089801180b800899111801001980b800899801801180b0009199119baf374e60300046e9cc06000530012bd8799fd8799f5820cda3926787c51f124e530d255fe8841aac9eed3be2fe518c8a44c801e75b204eff01ff00001001200116332300c22533301300114bd700998079801980b0009801180a8009180a180a8009bac30130051533300d3300e300f0013222300200332337029000000a40082930b0b0b180980118070009baa300f300e002300f300e001300e001223300422533300b00110051323330053011300f00223300933760601c602000600200420026004601a00200297adef6c602323002233002002001230022330020020015740ae6888cc0088cc0088cdc38010008a5013300124a0294494ccc00800448940044c94ccc00c0044c888c00800cdd69804180300109128009802000aab9f5573aae895d0918011baa0015573d0581840100d87980821a0001778c1a0225e159f5a21902a2a1636d7367816f44657868756e7465722054726164651902d1a178386336623238376237623134643139646232393266323033383234616336373662313238656565626538643039633336313237353561303962a16754514e634d5041a964616c676fa4646c696e6b82784068747470733a2f2f6170702e61786f2e74726164652f636f6d706f7365722f61326634383739302d393432362d343361372d383134372d61656135313761386363663761646e616d656c536d617274204d61726b6574647574786f82784036393762386437356463323736613835383734653834363438313738626635653538363862646335356461623161323338613136643834343835613765626165a2696e756d657261746f728200806b64656e6f6d696e61746f72820181016b6465736372697074696f6e6064696e6974a263414441a2696e756d657261746f728200806b64656e6f6d696e61746f72820181016341584fa2696e756d657261746f728201811a45632e086b64656e6f6d696e61746f7282018101646e616d6577536d617274204d61726b6574203c41584f2c204144413e65696d6167657835697066733a2f2f516d517a4a64464e7a39564e42384e53764c6242546a4e7a6f74794e59353656387376664141557a5259626e3738657374726174a3646c696e6b782d68747470733a2f2f6170702e61786f2e74726164652f737472617465676965732f766965772f54514e634d5041646e616d65606b6465736372697074696f6e60666173736574738281783e3432303030303032396164393532373237316231623165336332376565303635633138646637306134613463666333303933613431613434343135383466816066706172616d73a4657072696365a2696e756d657261746f728201821ad77c1fd1016b64656e6f6d696e61746f728201811a0400000066616d6f756e74a2696e756d657261746f728201811a45632e086b64656e6f6d696e61746f728201810167656e644461746574323039392d31322d33315432333a35393a35395a6973746172744461746574313938392d31322d33315432333a35393a35395a67776562736974657168747470733a2f2f61786f2e7472616465696d656469615479706569696d6167652f706e67"
 		tx := Transaction.Transaction{}
 		decodedCbor, _ := hex.DecodeString(txCbor)
@@ -1462,7 +820,7 @@ func TestRecodeTx(t *testing.T) {
 }
 
 func TestMapWithCbor(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		data := PlutusData.PlutusData{
 			TagNr:          121,
 			PlutusDataType: PlutusData.PlutusMap,

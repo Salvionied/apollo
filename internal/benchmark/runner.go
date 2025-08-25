@@ -85,7 +85,7 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 	// Actual benchmark start time
 	benchStart := time.Now()
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		wg.Add(1)
 		sem <- struct{}{}
 

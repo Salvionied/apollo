@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -34,10 +35,10 @@ func main() {
 
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if utxoCount <= 0 {
-			return fmt.Errorf("--utxo-count must be > 0")
+			return errors.New("--utxo-count must be > 0")
 		}
 		if iterations <= 0 {
-			return fmt.Errorf("--iterations must be > 0")
+			return errors.New("--iterations must be > 0")
 		}
 		return nil
 	}

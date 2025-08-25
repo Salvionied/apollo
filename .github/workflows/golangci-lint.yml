@@ -12,21 +12,15 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
-          cache: false
+          go-version: 1.24.x
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          args: --timeout=10m
-          # Only show new issues in a PR but show all issues for pushes
-          # only-new-issues: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+        uses: golangci/golangci-lint-action@v8

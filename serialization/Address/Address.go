@@ -8,7 +8,6 @@ import (
 	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/crypto/bech32"
 	"github.com/Salvionied/apollo/serialization"
-
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -97,12 +96,12 @@ func (addr *Address) Debug() string {
 
 	Returns:
 		string: A hexadecimal string representation of the address in CBOR format.
-		error: An error if the convertion fails.
+		error: An error if the conversion fails.
 */
 func (addr *Address) ToCbor() (string, error) {
 	b, err := cbor.Marshal(addr.Bytes())
 	if err != nil {
-		return "", fmt.Errorf("error marshalling address to cbor, %s", err)
+		return "", fmt.Errorf("error marshalling address to cbor, %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
@@ -149,7 +148,7 @@ func (addr *Address) UnmarshalCBOR(value []byte) error {
 *
 
 	This function returns the binary representation of the address. It
-	constructs and returns the binary representation of teh address containing
+	constructs and returns the binary representation of the address containing
 	the header byte, payment part, and staking part (if present).
 
 	Returns:
@@ -242,24 +241,25 @@ func DecodeAddress(value string) (Address, error) {
 	payload := decoded_value[1:]
 	network := (header & 0x0F)
 	addr_type := (header & 0xF0) >> 4
-	if !(network == 0b0000 || network == 0b0001) {
+	if network != 0b0000 && network != 0b0001 {
 		return Address{}, errors.New("invalid network tag")
 	}
-	if addr_type == KEY_KEY {
+	switch addr_type {
+	case KEY_KEY:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_KEY {
+	case SCRIPT_KEY:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == KEY_SCRIPT {
+	case KEY_SCRIPT:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == KEY_NONE {
+	case KEY_NONE:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], make([]byte, 0), network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_SCRIPT {
+	case SCRIPT_SCRIPT:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], payload[serialization.VERIFICATION_KEY_HASH_SIZE:], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == SCRIPT_NONE {
+	case SCRIPT_NONE:
 		return Address{payload[:serialization.VERIFICATION_KEY_HASH_SIZE], make([]byte, 0), network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else if addr_type == NONE_KEY {
+	case NONE_KEY:
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
-	} else {
+	default:
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
 	}
 }

@@ -12,7 +12,7 @@ const (
 )
 
 // See https://ogmios.dev/mini-protocols/local-tx-submission/#evaluatetx
-var RdeemerTagNames = map[RedeemerTag]string{
+var RedeemerTagNames = map[RedeemerTag]string{
 	0: "spend",
 	1: "mint",
 	2: "certificate",

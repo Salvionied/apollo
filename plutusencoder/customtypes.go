@@ -1,7 +1,7 @@
 package plutusencoder
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
@@ -275,13 +275,13 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 			},
 		}, nil
 	default:
-		return nil, fmt.Errorf("error: Pointer Addresses are not supported")
+		return nil, errors.New("error: Pointer Addresses are not supported")
 	}
 }
 
 func DecodePlutusAddress(data PlutusData.PlutusData, network byte) (Address.Address, error) {
 	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
-		return Address.Address{}, fmt.Errorf("error: Invalid Address Data")
+		return Address.Address{}, errors.New("error: Invalid Address Data")
 	}
 	var isIndef bool
 	switch data.Value.(type) {
@@ -290,7 +290,7 @@ func DecodePlutusAddress(data PlutusData.PlutusData, network byte) (Address.Addr
 	case PlutusData.PlutusIndefArray:
 		isIndef = true
 	default:
-		return Address.Address{}, fmt.Errorf("error: Invalid Address Data")
+		return Address.Address{}, errors.New("error: Invalid Address Data")
 	}
 	if isIndef {
 		pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)

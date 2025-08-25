@@ -1,0 +1,34 @@
+version: "2"
+run:
+  issues-exit-code: 1
+  tests: false
+linters:
+  enable:
+    - bodyclose
+    - fatcontext
+    - perfsprint
+    - prealloc
+  disable:
+    - noctx
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - docs
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

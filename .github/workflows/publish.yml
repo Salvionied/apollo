@@ -10,6 +10,8 @@ concurrency: ${{ github.ref }}
 jobs:
   create-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       RELEASE_ID: ${{ steps.create-release.outputs.result }}
     steps:
@@ -37,4 +39,4 @@ jobs:
 
       # This updates the documentation on pkg.go.dev and the latest version available via the Go module proxy
       - name: Pull new module version
-        uses: andrewslotin/go-proxy-pull-action@v1.2.0
+        uses: andrewslotin/go-proxy-pull-action@v1.3.0

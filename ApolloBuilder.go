@@ -39,6 +39,7 @@ import (
 const (
 	EX_MEMORY_BUFFER = 0.2
 	EX_STEP_BUFFER   = 0.2
+	STAKE_DEPOSIT    = 2_000_000
 )
 
 type Apollo struct {
@@ -54,6 +55,7 @@ type Apollo struct {
 	requiredSigners    []serialization.PubKeyHash
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
+	v3scripts          []PlutusData.PlutusV3Script
 	redeemers          []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
 	stakeRedeemers     map[string]Redeemer.Redeemer
@@ -67,6 +69,7 @@ type Apollo struct {
 	collateralAmount   int
 	totalCollateral    int
 	referenceInputs    []TransactionInput.TransactionInput
+	referenceInputsV3  []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
 	withdrawals        *Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
@@ -112,6 +115,7 @@ func New(cc Base.ChainContext) *Apollo {
 		FeePadding:         0,
 		usedUtxos:          make([]string, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
+		referenceInputsV3:  make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
 		mintRedeemers:      make(map[string]Redeemer.Redeemer)}
 }
@@ -493,6 +497,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
@@ -522,6 +527,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
@@ -543,6 +549,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	redeemers := b.redeemers
 	PV1Scripts := b.v1scripts
 	PV2Scripts := b.v2scripts
+	PV3Scripts := b.v3scripts
 	datums := b.datums
 	usedCms := map[any]cbor.Marshaler{}
 	if len(redeemers) > 0 {
@@ -552,16 +559,11 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
 			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
 		}
+		if len(PV3Scripts) > 0 || len(b.referenceInputsV3) > 0 {
+			usedCms[2] = PlutusData.PLUTUSV3COSTMODEL
+		}
 
 	}
-	// 	if len(PV2Scripts) > 0 {
-	// 		cost_models = PlutusData.COST_MODELSV2
-	// 		fmt.Println("USING V2")
-	// 	} else if !isV1 {
-	// 		cost_models = PlutusData.COST_MODELSV2
-	// 		fmt.Println("USING V2")
-	// 	}
-	// }
 
 	var redeemer_bytes []byte
 	if len(redeemers) == 0 {
@@ -582,7 +584,6 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	}
 	var cost_model_bytes []byte
 	cost_model_bytes, _ = cbor.Marshal(usedCms)
-	//fmt.Println(cost_model_bytes)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	// //total_bytes := redeemer_bytes
 	// // Compute all versions of the hash
@@ -671,7 +672,7 @@ func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 */
 func (b *Apollo) MintAssetsWithRedeemer(mintUnit Unit, redeemer Redeemer.Redeemer) *Apollo {
 	b.mint = append(b.mint, mintUnit)
-	b.mintRedeemers[mintUnit.PolicyId] = redeemer
+	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = redeemer
 	b.isEstimateRequired = true
 	return b
 }
@@ -716,12 +717,18 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
 		Withdrawals:       b.withdrawals,
-		ReferenceInputs:   b.referenceInputs}
+		ReferenceInputs:   append(b.referenceInputs, b.referenceInputsV3...),
+	}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
 		txb.CollateralReturn = b.collateralReturn
 	}
 	return txb, nil
+}
+
+func (b *Apollo) SetCertificates(c *Certificate.Certificates) *Apollo {
+	b.certificates = c
+	return b
 }
 
 /*
@@ -778,6 +785,9 @@ func (b *Apollo) estimateFee() (int64, error) {
 	for _, mintRedeemer := range b.mintRedeemers {
 		pExU.Sum(mintRedeemer.ExUnits)
 	}
+	for _, stakeRedeemer := range b.stakeRedeemers {
+		pExU.Sum(stakeRedeemer.ExUnits)
+	}
 	fftx, err := b.buildFullFakeTx()
 	if err != nil {
 		return 0, err
@@ -829,7 +839,7 @@ func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 func (b *Apollo) setRedeemerIndexes() *Apollo {
 	sorted_inputs := SortInputs(b.preselectedUtxos)
 	for i, utxo := range sorted_inputs {
-		key := hex.EncodeToString(utxo.Input.TransactionId) + fmt.Sprint(utxo.Input.Index)
+		key := hex.EncodeToString(utxo.Input.TransactionId) + strconv.Itoa(utxo.Input.Index)
 		val, ok := b.redeemersToUTxO[key]
 		if ok && val.Tag == Redeemer.SPEND {
 			redeem := b.redeemersToUTxO[key]
@@ -892,7 +902,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	witnesses := b.buildWitnessSet()
 	if len(witnesses.PlutusV1Script) == 0 &&
 		len(witnesses.PlutusV2Script) == 0 &&
-		len(b.referenceInputs) == 0 {
+		len(b.referenceInputs) == 0 && len(witnesses.PlutusV3Script) == 0 && len(b.referenceInputsV3) == 0 {
 		return b, nil
 	}
 	availableUtxos := b.getAvailableUtxos()
@@ -981,7 +991,10 @@ func (b *Apollo) Clone() *Apollo {
 func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, _ := cloned_b.Complete()
+	updated_b, err := cloned_b.Complete()
+	if err != nil {
+		return make(map[string]Redeemer.ExecutionUnits, 0), err
+	}
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
@@ -999,10 +1012,10 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 	if b.isEstimateRequired {
 		estimated_execution_units, err := b.estimateExunits()
 		if err != nil {
-			return b, errors.New("Could Not Estimate ExUnits")
+			return b, errors.New("could not estimate ExUnits")
 		}
 		for k, redeemer := range b.redeemersToUTxO {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -1011,7 +1024,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			}
 		}
 		for k, redeemer := range b.stakeRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -1020,7 +1033,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			}
 		}
 		for k, redeemer := range b.mintRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				redeemer.ExUnits.Mem = int64(float32(redeemer.ExUnits.Mem) * 1.2)
@@ -1102,6 +1115,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
+	if b.certificates != nil {
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(STAKE_DEPOSIT * len(*b.certificates))))
+	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
 		return b, err
@@ -1156,14 +1172,12 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				}
 			}
 		}
-		for {
-			if selectedAmount.Greater(
-				requestedAmount.Add(
-					Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false},
-				),
-			) {
-				break
-			}
+		for !selectedAmount.Greater(
+			requestedAmount.Add(
+				Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false},
+			),
+		) {
+
 			if len(available_utxos) == 0 {
 				return nil, errors.New("not enough funds")
 			}
@@ -1213,7 +1227,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 /*
 *
 
-	Check if adding change to a transaction ouput would exceed
+	Check if adding change to a transaction output would exceed
 	the UTxO limit for the given address.
 
 	Params:
@@ -1371,6 +1385,9 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
+	if b.certificates != nil {
+		requestedAmount = requestedAmount.Add(Value.PureLovelaceValue(int64(STAKE_DEPOSIT * len(*b.certificates))))
+	}
 	requestedAmount = requestedAmount.Add(burns)
 	var err error
 	b.Fee, err = b.estimateFee()
@@ -1392,11 +1409,11 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	}
 	if change.GetCoin() < minLovelaceRequired {
 		if len(b.getAvailableUtxos()) == 0 {
-			return b, errors.New("No Remaining UTxOs")
+			return b, errors.New("no remaining UTxOs")
 		}
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
 		if len(sortedUtxos) == 0 {
-			return b, errors.New("No Remaining UTxOs")
+			return b, errors.New("no remaining UTxOs")
 		}
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
 		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
@@ -1482,7 +1499,7 @@ func (b *Apollo) CollectFrom(
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
 	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
-	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+fmt.Sprint(inputUtxo.Input.Index)] = redeemer
+	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+strconv.Itoa(inputUtxo.Input.Index)] = redeemer
 	return b
 }
 
@@ -1529,6 +1546,18 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 		}
 	}
 	b.v2scripts = append(b.v2scripts, script)
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
+	return b
+}
+
+func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
+	b.v3scripts = append(b.v3scripts, script)
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
@@ -1956,6 +1985,27 @@ func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	return b
 }
 
+func (b *Apollo) AddReferenceInputV3(txHash string, index int) *Apollo {
+	decodedHash, _ := hex.DecodeString(txHash)
+	exists := false
+	for _, input := range b.referenceInputsV3 {
+		if bytes.Equal(input.TransactionId, decodedHash) && input.Index == index {
+			exists = true
+			break
+		}
+	}
+	if exists {
+		return b
+	}
+
+	input := TransactionInput.TransactionInput{
+		TransactionId: decodedHash,
+		Index:         index,
+	}
+	b.referenceInputsV3 = append(b.referenceInputsV3, input)
+	return b
+}
+
 /*
 *
 
@@ -2013,7 +2063,7 @@ func (b *Apollo) AddWithdrawal(
 		Data:    redeemerData,
 		ExUnits: Redeemer.ExecutionUnits{}, // This will be filled in when we eval later
 	}
-	b.stakeRedeemers[fmt.Sprint(b.withdrawals.Size()-1)] = newRedeemer
+	b.stakeRedeemers[strconv.Itoa(b.withdrawals.Size()-1)] = newRedeemer
 	return b
 }
 
@@ -2068,21 +2118,21 @@ func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
 			return b, err
 		}
 		for k, redeemer := range b.redeemersToUTxO {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.stakeRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
 		for k, redeemer := range b.mintRedeemers {
-			key := fmt.Sprintf("%s:%d", Redeemer.RdeemerTagNames[redeemer.Tag], redeemer.Index)
+			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
 				b.mintRedeemers[k] = redeemer

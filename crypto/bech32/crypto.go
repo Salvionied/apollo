@@ -5,6 +5,7 @@
 package bech32
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -24,7 +25,7 @@ func Decode(bech string) (string, []byte, error) {
 	// 		len(bech))
 	// }
 	// Only	ASCII characters between 33 and 126 are allowed.
-	for i := 0; i < len(bech); i++ {
+	for i := range len(bech) {
 		if bech[i] < 33 || bech[i] > 126 {
 			return "", nil, fmt.Errorf("invalid character in "+
 				"string: '%c'", bech[i])
@@ -35,7 +36,7 @@ func Decode(bech string) (string, []byte, error) {
 	lower := strings.ToLower(bech)
 	upper := strings.ToUpper(bech)
 	if bech != lower && bech != upper {
-		return "", nil, fmt.Errorf("string not all lowercase or all " +
+		return "", nil, errors.New("string not all lowercase or all " +
 			"uppercase")
 	}
 
@@ -48,7 +49,7 @@ func Decode(bech string) (string, []byte, error) {
 	// or if the string is more than 90 characters in total.
 	one := strings.LastIndexByte(bech, '1')
 	if one < 1 || one+7 > len(bech) {
-		return "", nil, fmt.Errorf("invalid index of 1")
+		return "", nil, errors.New("invalid index of 1")
 	}
 
 	// The human-readable part is everything before the last '1'.
@@ -102,7 +103,7 @@ func Encode(hrp string, data []byte) (string, error) {
 // index of the correspoding character in 'charset'.
 func toBytes(chars string) ([]byte, error) {
 	decoded := make([]byte, 0, len(chars))
-	for i := 0; i < len(chars); i++ {
+	for i := range len(chars) {
 		index := strings.IndexByte(charset, chars[i])
 		if index < 0 {
 			return nil, fmt.Errorf("invalid character not part of "+
@@ -130,7 +131,7 @@ func toChars(data []byte) (string, error) {
 // to a byte slice where each byte is encoding toBits bits.
 func ConvertBits(data []byte, fromBits, toBits uint8, pad bool) ([]byte, error) {
 	if fromBits < 1 || fromBits > 8 || toBits < 1 || toBits > 8 {
-		return nil, fmt.Errorf("only bit groups between 1 and 8 allowed")
+		return nil, errors.New("only bit groups between 1 and 8 allowed")
 	}
 
 	// The final bytes, each byte encoding toBits bits.
@@ -189,7 +190,7 @@ func ConvertBits(data []byte, fromBits, toBits uint8, pad bool) ([]byte, error) 
 
 	// Any incomplete group must be <= 4 bits, and all zeroes.
 	if filledBits > 0 && (filledBits > 4 || nextByte != 0) {
-		return nil, fmt.Errorf("invalid incomplete group")
+		return nil, errors.New("invalid incomplete group")
 	}
 
 	return regrouped, nil
@@ -206,8 +207,8 @@ func bech32Checksum(hrp string, data []byte) []byte {
 	values := append(bech32HrpExpand(hrp), integers...)
 	values = append(values, []int{0, 0, 0, 0, 0, 0}...)
 	polymod := bech32Polymod(values) ^ 1
-	var res []byte
-	for i := 0; i < 6; i++ {
+	res := []byte{}
+	for i := range 6 {
 		res = append(res, byte((polymod>>uint(5*(5-i)))&31))
 	}
 	return res
@@ -219,7 +220,7 @@ func bech32Polymod(values []int) int {
 	for _, v := range values {
 		b := chk >> 25
 		chk = (chk&0x1ffffff)<<5 ^ v
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			if (b>>uint(i))&1 == 1 {
 				chk ^= gen[i]
 			}
@@ -231,11 +232,11 @@ func bech32Polymod(values []int) int {
 // For more details on HRP expansion, please refer to BIP 173.
 func bech32HrpExpand(hrp string) []int {
 	v := make([]int, 0, len(hrp)*2+1)
-	for i := 0; i < len(hrp); i++ {
+	for i := range len(hrp) {
 		v = append(v, int(hrp[i]>>5))
 	}
 	v = append(v, 0)
-	for i := 0; i < len(hrp); i++ {
+	for i := range len(hrp) {
 		v = append(v, int(hrp[i]&31))
 	}
 	return v
