@@ -3,6 +3,7 @@ package benchmark
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -12,6 +13,7 @@ import (
 	"github.com/Salvionied/apollo"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 )
@@ -28,15 +30,27 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 		log.Fatalf("Critical error getting backend chain context: %v", err)
 	}
 
-	walletAddress, err := Address.DecodeAddress(TEST_WALLET_ADDRESS)
+	senderWalletAddress, err := Address.DecodeAddress(TEST_WALLET_ADDRESS_1)
 	if err != nil {
 		log.Fatalf("Error decoding wallet address: %v", err)
 	}
 
-	userUtxos, err := ctx.Utxos(walletAddress)
+	receiverWalletAddress, err := Address.DecodeAddress(TEST_WALLET_ADDRESS_2)
+	if err != nil {
+		log.Fatalf("Error decoding wallet address: %v", err)
+	}
+
+	userUtxos, err := ctx.Utxos(senderWalletAddress)
 	if err != nil {
 		log.Fatalf("failed to get UTXOs: %v", err)
 	}
+
+	// Aggregate & merge assets upfront
+	var assetList []apollo.Unit
+	for _, utxo := range userUtxos {
+		assetList = append(assetList, MultiAssetToUnits(utxo.Output.GetValue().GetAssets())...)
+	}
+	assetList = MergeUnits(assetList)
 
 	lastSlot, err := ctx.LastBlockSlot()
 	if err != nil {
@@ -93,7 +107,7 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 			copy(clonedUTxOs, userUtxos)
 
 			start := time.Now()
-			err := buildTransaction(clonedUTxOs, &walletAddress, ctx, lastSlot, utxoCount)
+			err := buildTransaction(clonedUTxOs, &receiverWalletAddress, ctx, lastSlot, utxoCount, assetList)
 			elapsed := time.Since(start)
 
 			mu.Lock()
@@ -147,7 +161,7 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 	)
 }
 
-func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainContext, lastSlot int, utxoCount int) error {
+func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainContext, lastSlot int, utxoCount int, assets []apollo.Unit) error {
 	apolloBE := apollo.New(ctx).
 		SetWalletFromBech32(addr.String()).
 		AddLoadedUTxOs(utxos...).
@@ -156,10 +170,91 @@ func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainCo
 		SetTtl(int64(lastSlot) + 300)
 
 	// Add multiple outputs
-	for j := 0; j < utxoCount; j++ {
-		apolloBE = apolloBE.PayToAddress(*addr, 2_000_000)
+	distributedAssets := DistributeAssets(assets, utxoCount)
+	for _, assetGroup := range distributedAssets {
+		apolloBE = apolloBE.PayToAddress(*addr, 2_000_000, assetGroup...)
 	}
 
 	_, err := apolloBE.Complete()
+
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return err
+	// }
+	// tx := apolloBE.GetTx()
+	// cbor, err := Utils.ToCbor(tx)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return err
+	// }
+	// log.Println("Tx CBOR:", cbor)
+
 	return err
+}
+
+func MultiAssetToUnits(ma MultiAsset.MultiAsset[int64]) []apollo.Unit {
+	units := make([]apollo.Unit, 0, len(ma))
+	for policyId, assets := range ma {
+		if policyId.Value == "" {
+			continue
+		}
+		for assetName, quantity := range assets {
+			units = append(units, apollo.Unit{
+				PolicyId: policyId.Value,
+				Name:     assetName.String(),
+				Quantity: int(quantity),
+			})
+		}
+	}
+	return units
+}
+
+func MergeUnits(units []apollo.Unit) []apollo.Unit {
+	unitMap := make(map[string]apollo.Unit, len(units))
+
+	for _, unit := range units {
+		key := unit.PolicyId + ":" + unit.Name
+		if existing, found := unitMap[key]; found {
+			existing.Quantity += unit.Quantity
+			unitMap[key] = existing
+		} else {
+			unitMap[key] = unit
+		}
+	}
+
+	mergedUnits := make([]apollo.Unit, 0, len(unitMap))
+	for _, unit := range unitMap {
+		mergedUnits = append(mergedUnits, unit)
+	}
+	return mergedUnits
+}
+
+// Distribute assets across multiple outputs
+func DistributeAssets(units []apollo.Unit, utxoCount int) [][]apollo.Unit {
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	outputs := make([][]apollo.Unit, utxoCount)
+
+	for _, unit := range units {
+		remaining := unit.Quantity
+		for remaining > 0 {
+			idx := rnd.Intn(utxoCount)
+			quantity := min(remaining, rnd.Intn(remaining/2+1)+1)
+			outputs[idx] = append(outputs[idx], apollo.Unit{
+				PolicyId: unit.PolicyId,
+				Name:     unit.Name,
+				Quantity: quantity,
+			})
+			remaining -= quantity
+		}
+	}
+
+	return outputs
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

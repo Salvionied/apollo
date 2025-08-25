@@ -1,9 +1,9 @@
 #!/bin/bash
-set -e  # Exit on error
+set -e # Exit on error
 
 # Determine directories (assuming script is in apollo/scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"  # Root is 'apollo'
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" # Root is 'apollo'
 RESULTS_DIR="$SCRIPT_DIR/results"
 BIN_DIR="$ROOT_DIR/bin"
 
@@ -36,16 +36,16 @@ for version in "${VERSIONS[@]}"; do
     fi
 
     printf "${CYAN}[%s] Building binary for version: %s...${RESET}\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$version"
-    pushd "$WORKTREE_DIR" > /dev/null
+    pushd "$WORKTREE_DIR" >/dev/null
     if ! go build -o "$BIN_DIR/apollo-bench-$version" ./cmd/benchmark; then
         echo -e "${RED}Error: Build failed for $version${RESET}"
-        popd > /dev/null
+        popd >/dev/null
         exit 1
     fi
-    popd > /dev/null
+    popd >/dev/null
 
     printf "${CYAN}[%s] Benchmarking version: %s...${RESET}\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$version"
-    if ! "$BIN_DIR/apollo-bench-$version" --utxo-count 100 --iterations 10000 --parallelism 10 --backend maestro --output json > "$RESULTS_DIR/$version.json"; then
+    if ! "$BIN_DIR/apollo-bench-$version" --utxo-count 100 --iterations 10000 --parallelism 10 --backend maestro --output json >"$RESULTS_DIR/$version.json"; then
         echo -e "${RED}Error: Benchmark failed for $version${RESET}"
     else
         echo -e "${GREEN}Benchmark successful for $version! Output stored in $RESULTS_DIR/$version.json${RESET}"
