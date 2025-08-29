@@ -50,7 +50,9 @@ func (ma Asset[V]) Equal(other Asset[V]) bool {
 		other (Asset[V]): The other Asset map to compare to.
 
 	Returns:
-	  	bool: true if the current Asset map is less than the other, false otherwise.
+
+
+	bool: true if the current Asset map is less than the other, false otherwise.
 */
 func (ma Asset[V]) Less(other Asset[V]) bool {
 	for asset, amount := range ma {
@@ -72,7 +74,9 @@ func (ma Asset[V]) Less(other Asset[V]) bool {
 		other (Asset[V]): The other Asset map to compare to.
 
 	Returns:
-	  	bool: true if the current Asset map is greater than the other, false otherwise.
+
+
+	bool: true if the current Asset map is greater than the other, false otherwise.
 */
 func (ma Asset[V]) Greater(other Asset[V]) bool {
 	for asset, amount := range ma {

@@ -16,7 +16,10 @@ func TestMarshalAndUnmarshalNoScripts(t *testing.T) {
 		t.Errorf("Error marshaling TransactionWitnessSet: %v", err)
 	}
 	if hex.EncodeToString(twsBytes) != "a0" {
-		t.Error("TransactionWitnessSet marshaled incorrectly", hex.EncodeToString(twsBytes))
+		t.Error(
+			"TransactionWitnessSet marshaled incorrectly",
+			hex.EncodeToString(twsBytes),
+		)
 	}
 }
 
@@ -35,6 +38,9 @@ func TestMarshalBasicPlutus(t *testing.T) {
 		t.Errorf("Error marshaling TransactionWitnessSet: %v", err)
 	}
 	if hex.EncodeToString(twsBytes) != "a1049f43010203ff" {
-		t.Error("TransactionWitnessSet marshaled incorrectly", hex.EncodeToString(twsBytes))
+		t.Error(
+			"TransactionWitnessSet marshaled incorrectly",
+			hex.EncodeToString(twsBytes),
+		)
 	}
 }

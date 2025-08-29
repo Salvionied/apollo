@@ -33,7 +33,10 @@ func TestMarshal(t *testing.T) {
 		t.Errorf("AssetName should marshal")
 	}
 	if hex.EncodeToString(val) != "4474657374" {
-		t.Errorf("AssetName should be '4474657374', %s", hex.EncodeToString(val))
+		t.Errorf(
+			"AssetName should be '4474657374', %s",
+			hex.EncodeToString(val),
+		)
 	}
 
 	an2 := AssetName.AssetName{}
@@ -71,14 +74,18 @@ func TestEmptyNameMarshal(t *testing.T) {
 }
 
 func TestInvalidAssetNameCreation(t *testing.T) {
-	assetName := AssetName.NewAssetNameFromHexString("fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61")
+	assetName := AssetName.NewAssetNameFromHexString(
+		"fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
+	)
 	if assetName != nil {
 		t.Errorf("AssetName should be nil")
 	}
 }
 
 func TestInvalidLengthOnMarshal(t *testing.T) {
-	assetName := AssetName.NewAssetNameFromString("fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61")
+	assetName := AssetName.NewAssetNameFromString(
+		"fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
+	)
 	_, err := assetName.MarshalCBOR()
 	if err == nil {
 		t.Errorf("AssetName should not marshal")
@@ -86,7 +93,9 @@ func TestInvalidLengthOnMarshal(t *testing.T) {
 }
 
 func TestInvalidUnMarshal(t *testing.T) {
-	decoded, _ := hex.DecodeString("fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61")
+	decoded, _ := hex.DecodeString(
+		"fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
+	)
 	marshaled, _ := cbor.Marshal(decoded)
 	assetName := AssetName.AssetName{}
 	err := assetName.UnmarshalCBOR(marshaled)

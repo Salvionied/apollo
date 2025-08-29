@@ -49,7 +49,9 @@ type AikenPlutusJSON struct {
 	Returns:
 		(*PlutusData.PlutusV2Script, error): A pointer to a Plutus V2 script and an error (if any).
 */
-func (apj *AikenPlutusJSON) GetScript(name string) (*PlutusData.PlutusV2Script, error) {
+func (apj *AikenPlutusJSON) GetScript(
+	name string,
+) (*PlutusData.PlutusV2Script, error) {
 	for _, validator := range apj.Validators {
 		if validator.Title == name {
 			decoded_string, err := hex.DecodeString(validator.CompiledCode)

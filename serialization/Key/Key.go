@@ -24,6 +24,8 @@ type SigningKey struct {
 
 	Params:
 		message ([]byte): The message to sign.
+
+
 		sk ([]byte): The signing key, which can be either an extended or an ed25519 private key.
 
 	Returns:
@@ -34,7 +36,10 @@ func Sign(message []byte, sk []byte) ([]byte, error) {
 	if len(sk) != ed25519.PrivateKeySize {
 		sk, err := bip32.NewXPrv(sk)
 		if err != nil {
-			return nil, fmt.Errorf("error creating signing key from bytes, %w", err)
+			return nil, fmt.Errorf(
+				"error creating signing key from bytes, %w",
+				err,
+			)
 		}
 		signature := sk.Sign(message)
 		return signature, nil
@@ -97,7 +102,9 @@ func (vk *VerificationKey) UnmarshalCBOR(data []byte) error {
 	MarshalCBOR marshals the VerificationKey instance into CBOR data.
 
 	Returns:
-		([]byte, error): The CBOR-encoded data and error if marshaling fails, nil otherwise.
+
+
+	([]byte, error): The CBOR-encoded data and error if marshaling fails, nil otherwise.
 */
 func (vk *VerificationKey) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(vk.Payload)
@@ -114,7 +121,9 @@ func (vk *VerificationKey) MarshalCBOR() ([]byte, error) {
 
 	Returns:
 		(*VerificationKey, error): A VerificationKey instance and an error
-								   if decoding or unmarshaling fails, nil otherwise.
+
+
+	if decoding or unmarshaling fails, nil otherwise.
 */
 func VerificationKeyFromCbor(cbor_string string) (*VerificationKey, error) {
 	vkey := new(VerificationKey)
@@ -169,7 +178,10 @@ func PaymentKeyPairGenerate() (*PaymentKeyPair, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &PaymentKeyPair{VerificationKey{publicKey}, SigningKey{privateKey}}, nil
+	return &PaymentKeyPair{
+		VerificationKey{publicKey},
+		SigningKey{privateKey},
+	}, nil
 }
 
 type PaymentSigningKey SigningKey

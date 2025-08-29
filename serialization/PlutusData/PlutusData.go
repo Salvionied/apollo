@@ -60,11 +60,16 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
 		}
 		if cborDatumInline.TagNr != 24 {
-			return fmt.Errorf("found DatumTypeInline but Tag was not 24: %v", cborDatumInline.TagNr)
+			return fmt.Errorf(
+				"found DatumTypeInline but Tag was not 24: %v",
+				cborDatumInline.TagNr,
+			)
 		}
 		taggedBytes, valid := cborDatumInline.Value.([]byte)
 		if !valid {
-			return errors.New("DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array")
+			return errors.New(
+				"DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array",
+			)
 		}
 		var inline PlutusData
 		err = cbor.Unmarshal(taggedBytes, &inline)
@@ -348,7 +353,307 @@ func (cma CostModelArray) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(res)
 }
 
-var PLUTUSV3COSTMODEL = CostModelArray([]int32{100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100, 16000, 100, 94375, 32, 132994, 32, 61462, 4, 72010, 178, 0, 1, 22151, 32, 91189, 769, 4, 2, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 1, 1000, 42921, 4, 2, 24548, 29498, 38, 1, 898148, 27279, 1, 51775, 558, 1, 39184, 1000, 60594, 1, 141895, 32, 83150, 32, 15299, 32, 76049, 1, 13169, 4, 22100, 10, 28999, 74, 1, 28999, 74, 1, 43285, 552, 1, 44749, 541, 1, 33852, 32, 68246, 32, 72362, 32, 7243, 32, 7391, 32, 11546, 32, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 90434, 519, 0, 1, 74433, 32, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 1, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 955506, 213312, 0, 2, 270652, 22588, 4, 1457325, 64566, 4, 20467, 1, 4, 0, 141992, 32, 100788, 420, 1, 1, 81663, 32, 59498, 32, 20142, 32, 24588, 32, 20744, 32, 25933, 32, 24623, 32, 43053543, 10, 53384111, 14333, 10, 43574283, 26308, 10, 16000, 100, 16000, 100, 962335, 18, 2780678, 6, 442008, 1, 52538055, 3756, 18, 267929, 18, 76433006, 8868, 18, 52948122, 18, 1995836, 36, 3227919, 12, 901022, 1, 166917843, 4307, 36, 284546, 36, 158221314, 26549, 36, 74698472, 36, 333849714, 1, 254006273, 72, 2174038, 72, 2261318, 64571, 4, 207616, 8310, 4, 1293828, 28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194, 159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1, 1964219, 24520, 3})
+var PLUTUSV3COSTMODEL = CostModelArray(
+	[]int32{
+		100788,
+		420,
+		1,
+		1,
+		1000,
+		173,
+		0,
+		1,
+		1000,
+		59957,
+		4,
+		1,
+		11183,
+		32,
+		201305,
+		8356,
+		4,
+		16000,
+		100,
+		16000,
+		100,
+		16000,
+		100,
+		16000,
+		100,
+		16000,
+		100,
+		16000,
+		100,
+		100,
+		100,
+		16000,
+		100,
+		94375,
+		32,
+		132994,
+		32,
+		61462,
+		4,
+		72010,
+		178,
+		0,
+		1,
+		22151,
+		32,
+		91189,
+		769,
+		4,
+		2,
+		85848,
+		123203,
+		7305,
+		-900,
+		1716,
+		549,
+		57,
+		85848,
+		0,
+		1,
+		1,
+		1000,
+		42921,
+		4,
+		2,
+		24548,
+		29498,
+		38,
+		1,
+		898148,
+		27279,
+		1,
+		51775,
+		558,
+		1,
+		39184,
+		1000,
+		60594,
+		1,
+		141895,
+		32,
+		83150,
+		32,
+		15299,
+		32,
+		76049,
+		1,
+		13169,
+		4,
+		22100,
+		10,
+		28999,
+		74,
+		1,
+		28999,
+		74,
+		1,
+		43285,
+		552,
+		1,
+		44749,
+		541,
+		1,
+		33852,
+		32,
+		68246,
+		32,
+		72362,
+		32,
+		7243,
+		32,
+		7391,
+		32,
+		11546,
+		32,
+		85848,
+		123203,
+		7305,
+		-900,
+		1716,
+		549,
+		57,
+		85848,
+		0,
+		1,
+		90434,
+		519,
+		0,
+		1,
+		74433,
+		32,
+		85848,
+		123203,
+		7305,
+		-900,
+		1716,
+		549,
+		57,
+		85848,
+		0,
+		1,
+		1,
+		85848,
+		123203,
+		7305,
+		-900,
+		1716,
+		549,
+		57,
+		85848,
+		0,
+		1,
+		955506,
+		213312,
+		0,
+		2,
+		270652,
+		22588,
+		4,
+		1457325,
+		64566,
+		4,
+		20467,
+		1,
+		4,
+		0,
+		141992,
+		32,
+		100788,
+		420,
+		1,
+		1,
+		81663,
+		32,
+		59498,
+		32,
+		20142,
+		32,
+		24588,
+		32,
+		20744,
+		32,
+		25933,
+		32,
+		24623,
+		32,
+		43053543,
+		10,
+		53384111,
+		14333,
+		10,
+		43574283,
+		26308,
+		10,
+		16000,
+		100,
+		16000,
+		100,
+		962335,
+		18,
+		2780678,
+		6,
+		442008,
+		1,
+		52538055,
+		3756,
+		18,
+		267929,
+		18,
+		76433006,
+		8868,
+		18,
+		52948122,
+		18,
+		1995836,
+		36,
+		3227919,
+		12,
+		901022,
+		1,
+		166917843,
+		4307,
+		36,
+		284546,
+		36,
+		158221314,
+		26549,
+		36,
+		74698472,
+		36,
+		333849714,
+		1,
+		254006273,
+		72,
+		2174038,
+		72,
+		2261318,
+		64571,
+		4,
+		207616,
+		8310,
+		4,
+		1293828,
+		28716,
+		63,
+		0,
+		1,
+		1006041,
+		43623,
+		251,
+		0,
+		1,
+		100181,
+		726,
+		719,
+		0,
+		1,
+		100181,
+		726,
+		719,
+		0,
+		1,
+		100181,
+		726,
+		719,
+		0,
+		1,
+		107878,
+		680,
+		0,
+		1,
+		95336,
+		1,
+		281145,
+		18848,
+		0,
+		1,
+		180194,
+		159,
+		1,
+		1,
+		158519,
+		8942,
+		0,
+		1,
+		159378,
+		8813,
+		0,
+		1,
+		107490,
+		3298,
+		1,
+		106057,
+		655,
+		1,
+		1964219,
+		24520,
+		3,
+	},
+)
 
 /*
 *
@@ -553,7 +858,10 @@ var PLUTUSV2COSTMODEL = CostView{
 }
 
 var COST_MODELSV2 = map[int]cbor.Marshaler{1: PLUTUSV2COSTMODEL}
-var COST_MODELSV1 = map[serialization.CustomBytes]cbor.Marshaler{{Value: "00"}: PLUTUSV1COSTMODEL}
+
+var COST_MODELSV1 = map[serialization.CustomBytes]cbor.Marshaler{
+	{Value: "00"}: PLUTUSV1COSTMODEL,
+}
 
 type PlutusType int
 
@@ -617,7 +925,9 @@ func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
 /*
 *
 
-		MarshalCBOR encodes the PlutusIndefArray into a CBOR-encoded byte
+	MarshalCBOR encodes the PlutusIndefArray into a CBOR-encoded byte
+
+
 		slice, in which it serializes the elements in indefinite-length array format.
 
 		Returns:
@@ -684,7 +994,9 @@ func (pd *Datum) Clone() Datum {
 /*
 *
 
-		MarshalCBOR encodes the Datum into a CBOR-encoded byte slice,
+	MarshalCBOR encodes the Datum into a CBOR-encoded byte slice,
+
+
 		it applies a CBOR tag, if TagNr is not 0, otherwise it marshals the Value
 
 		Returns:
@@ -702,7 +1014,9 @@ func (pd Datum) MarshalCBOR() ([]uint8, error) {
 /*
 *
 
-		UnmarshalCBOR decodes a CBOR-encoded byte slice into a Datum.
+	UnmarshalCBOR decodes a CBOR-encoded byte slice into a Datum.
+
+
 		It handles different Plutus data types and applies appropriate decoding logic.
 
 		Returns:
@@ -938,16 +1252,22 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 	//enc, _ := cbor.CanonicalEncOptions().EncMode()
 	switch pd.PlutusDataType {
 	case PlutusMap:
-		customEnc, _ := cbor.EncOptions{Sort: cbor.SortBytewiseLexical}.EncMode()
+		customEnc, _ := cbor.EncOptions{
+			Sort: cbor.SortBytewiseLexical,
+		}.EncMode()
 		if pd.TagNr != 0 {
-			return customEnc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+			return customEnc.Marshal(
+				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
+			)
 		} else {
 			return customEnc.Marshal(pd.Value)
 		}
 	case PlutusIntMap:
 		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
 		if pd.TagNr != 0 {
-			return canonicalenc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+			return canonicalenc.Marshal(
+				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
+			)
 		} else {
 			return canonicalenc.Marshal(pd.Value)
 		}
@@ -1336,6 +1656,8 @@ func ToCbor(x interface{}) (string, error) {
 		PlutusDataHash computes the hash of a PlutusData structure using the Blake2b algorithm.
 
 	 	Params:
+
+
 		   	pd (*PlutusData): A pointer to the PlutusData structure to be hashed.
 
 		Returns:
@@ -1420,10 +1742,12 @@ type PlutusV1Script []byte
 		ToAddress converts a PlutusV1Script to an Address with an optional staking credential.
 
 	 	Params:
-	   		stakingCredential ([]byte): The staking credential to include in the address.
 
-	 	Returns:
-	   		Address.Address: The generated address.
+
+	  		stakingCredential ([]byte): The staking credential to include in the address.
+
+		Returns:
+	  		Address.Address: The generated address.
 */
 func (ps *PlutusV1Script) ToAddress(stakingCredential []byte) Address.Address {
 	hash := PlutusScriptHash(ps)
@@ -1471,7 +1795,10 @@ func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error) {
 	return r, nil
 }
 
-func (ps3 *PlutusV3Script) ToAddress(stakingCredential []byte, network constants.Network) Address.Address {
+func (ps3 *PlutusV3Script) ToAddress(
+	stakingCredential []byte,
+	network constants.Network,
+) Address.Address {
 	hash := PlutusScriptHash(ps3)
 	if stakingCredential == nil {
 		if network == constants.MAINNET {
@@ -1522,12 +1849,17 @@ func (ps3 *PlutusV3Script) ToAddress(stakingCredential []byte, network constants
 		ToAddress converts a PlutusV2Script to an Address with an optional staking credential.
 
 	 	Params:
-	   		stakingCredential ([]byte): The staking credential to include in the address.
 
-	 	Returns:
-	   		Address.Address: The generated address.
+
+	  		stakingCredential ([]byte): The staking credential to include in the address.
+
+		Returns:
+	  		Address.Address: The generated address.
 */
-func (ps *PlutusV2Script) ToAddress(stakingCredential []byte, network constants.Network) Address.Address {
+func (ps *PlutusV2Script) ToAddress(
+	stakingCredential []byte,
+	network constants.Network,
+) Address.Address {
 	hash := PlutusScriptHash(ps)
 	if stakingCredential == nil {
 		if network == constants.MAINNET {

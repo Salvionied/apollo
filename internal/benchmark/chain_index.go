@@ -14,7 +14,10 @@ import (
 type ChainContext interface{}
 
 func OgmiosCTXSetup() OgmiosChainContext.OgmiosChainContext {
-	return OgmiosChainContext.NewOgmiosChainContext(*ogmigo.New(ogmigo.WithEndpoint(OGMIGO_ENDPOINT)), *kugo.New(kugo.WithEndpoint(KUGO_ENDPOINT)))
+	return OgmiosChainContext.NewOgmiosChainContext(
+		*ogmigo.New(ogmigo.WithEndpoint(OGMIGO_ENDPOINT)),
+		*kugo.New(kugo.WithEndpoint(KUGO_ENDPOINT)),
+	)
 }
 
 func BlockfrostCTXSetup() (bfc BlockFrostChainContext.BlockFrostChainContext, err error) {
@@ -53,13 +56,19 @@ func GetChainContext(backend string) (Base.ChainContext, error) {
 	case "maestro":
 		mc, err := MaestroCTXSetup()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Maestro chain context: %w", err)
+			return nil, fmt.Errorf(
+				"failed to create Maestro chain context: %w",
+				err,
+			)
 		}
 		return &mc, nil
 	case "blockfrost":
 		bfc, err := BlockfrostCTXSetup()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Blockfrost chain context: %w", err)
+			return nil, fmt.Errorf(
+				"failed to create Blockfrost chain context: %w",
+				err,
+			)
 		}
 		return &bfc, nil
 	case "ogmios":

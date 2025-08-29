@@ -10,14 +10,23 @@ import (
 	"github.com/Salvionied/apollo/serialization/Value"
 )
 
-var policyT1 = Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
-var policyT2 = Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f"}
+var policyT1 = Policy.PolicyId{
+	Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e",
+}
+
+var policyT2 = Policy.PolicyId{
+	Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f",
+}
 var assetNameT1 = AssetName.NewAssetNameFromString("token1")
 var assetNameT2 = AssetName.NewAssetNameFromString("token2")
 
 func TestMultiAssetAddition(t *testing.T) {
-	policy_id := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
-	policy_id2 := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f"}
+	policy_id := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e",
+	}
+	policy_id2 := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f",
+	}
 	asset_name1 := AssetName.NewAssetNameFromString("token1")
 	asset_name2 := AssetName.NewAssetNameFromString("token2")
 
@@ -81,8 +90,12 @@ func TestMultiAssetAddition(t *testing.T) {
 }
 
 func TestMultiAssetComparison(t *testing.T) {
-	policy_id := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
-	policy_id2 := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f"}
+	policy_id := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e",
+	}
+	policy_id2 := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f",
+	}
 	asset_name1 := AssetName.NewAssetNameFromString("token1")
 	asset_name2 := AssetName.NewAssetNameFromString("token2")
 	asset_name3 := AssetName.NewAssetNameFromString("token3")
@@ -92,7 +105,11 @@ func TestMultiAssetComparison(t *testing.T) {
 	}
 
 	b := MultiAsset.MultiAsset[int64]{
-		policy_id: Asset.Asset[int64]{asset_name1: 1, asset_name2: 2, asset_name3: 3},
+		policy_id: Asset.Asset[int64]{
+			asset_name1: 1,
+			asset_name2: 2,
+			asset_name3: 3,
+		},
 	}
 
 	c := MultiAsset.MultiAsset[int64]{
@@ -139,8 +156,12 @@ func TestMultiAssetComparison(t *testing.T) {
 }
 
 func TestValues(t *testing.T) {
-	policy_id := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
-	policy_id2 := Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f"}
+	policy_id := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e",
+	}
+	policy_id2 := Policy.PolicyId{
+		Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490f",
+	}
 	asset_name1 := AssetName.NewAssetNameFromString("token1")
 	asset_name2 := AssetName.NewAssetNameFromString("token2")
 
@@ -239,19 +260,40 @@ func TestGetByPolicyAndId(t *testing.T) {
 		policyT2: Asset.Asset[int64]{assetNameT1: 3, assetNameT2: 4},
 	}
 	if ma.GetByPolicyAndId(policyT1, assetNameT1) != 1 {
-		t.Errorf("Expected 1, got %d", ma.GetByPolicyAndId(policyT1, assetNameT1))
+		t.Errorf(
+			"Expected 1, got %d",
+			ma.GetByPolicyAndId(policyT1, assetNameT1),
+		)
 	}
 	if ma.GetByPolicyAndId(policyT1, assetNameT2) != 2 {
-		t.Errorf("Expected 2, got %d", ma.GetByPolicyAndId(policyT1, assetNameT2))
+		t.Errorf(
+			"Expected 2, got %d",
+			ma.GetByPolicyAndId(policyT1, assetNameT2),
+		)
 	}
 	if ma.GetByPolicyAndId(policyT2, assetNameT1) != 3 {
-		t.Errorf("Expected 3, got %d", ma.GetByPolicyAndId(policyT2, assetNameT1))
+		t.Errorf(
+			"Expected 3, got %d",
+			ma.GetByPolicyAndId(policyT2, assetNameT1),
+		)
 	}
 	if ma.GetByPolicyAndId(policyT2, assetNameT2) != 4 {
-		t.Errorf("Expected 4, got %d", ma.GetByPolicyAndId(policyT2, assetNameT2))
+		t.Errorf(
+			"Expected 4, got %d",
+			ma.GetByPolicyAndId(policyT2, assetNameT2),
+		)
 	}
-	if ma.GetByPolicyAndId(policyT2, AssetName.NewAssetNameFromString("token3")) != 0 {
-		t.Errorf("Expected 0, got %d", ma.GetByPolicyAndId(policyT2, AssetName.NewAssetNameFromString("token3")))
+	if ma.GetByPolicyAndId(
+		policyT2,
+		AssetName.NewAssetNameFromString("token3"),
+	) != 0 {
+		t.Errorf(
+			"Expected 0, got %d",
+			ma.GetByPolicyAndId(
+				policyT2,
+				AssetName.NewAssetNameFromString("token3"),
+			),
+		)
 	}
 }
 
@@ -408,9 +450,11 @@ func TestFilter(t *testing.T) {
 		policyT1: Asset.Asset[int64]{assetNameT1: 2, assetNameT2: 1},
 	}
 
-	ma2 := ma.Filter(func(policy Policy.PolicyId, assetName AssetName.AssetName, qty int64) bool {
-		return assetName == assetNameT1 && qty == 2
-	})
+	ma2 := ma.Filter(
+		func(policy Policy.PolicyId, assetName AssetName.AssetName, qty int64) bool {
+			return assetName == assetNameT1 && qty == 2
+		},
+	)
 
 	if ma2[policyT1][assetNameT1] != 2 {
 		t.Errorf("Expected 2, got %d", ma2[policyT1][assetNameT1])

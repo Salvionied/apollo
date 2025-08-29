@@ -69,7 +69,9 @@ func TestBurnPlutus(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -80,7 +82,9 @@ func TestBurnPlutus(t *testing.T) {
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
 			Value.SimpleValue(15000000, MultiAsset.MultiAsset[int64]{
-				policy: Asset.Asset[int64]{AssetName.NewAssetNameFromString("TEST"): 1},
+				policy: Asset.Asset[int64]{
+					AssetName.NewAssetNameFromString("TEST"): 1,
+				},
 			})),
 	}
 
@@ -123,7 +127,9 @@ func TestMintPlutus(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -175,7 +181,9 @@ func TestMintPlutusWithPayment(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -402,13 +410,17 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 
-	if len(built.GetTx().TransactionBody.Outputs[0].GetValue().GetAssets()) != 1 {
+	if len(
+		built.GetTx().TransactionBody.Outputs[0].GetValue().GetAssets(),
+	) != 1 {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 15_000_000 {
 		t.Error("Tx is not correct")
 	}
-	if len(built.GetTx().TransactionBody.Outputs[1].GetValue().GetAssets()) != 0 {
+	if len(
+		built.GetTx().TransactionBody.Outputs[1].GetValue().GetAssets(),
+	) != 0 {
 		t.Error("Tx is not correct")
 	}
 }
@@ -469,7 +481,10 @@ func TestPayToContract(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr != 121 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr)
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr,
+		)
 	}
 	txBytes, _ := built.GetTx().Bytes()
 	if hex.EncodeToString(
@@ -588,7 +603,10 @@ func TestFeePadding(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13308363 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].Lovelace())
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.Outputs[1].Lovelace(),
+		)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo &&
 		built.GetTx().TransactionBody.Outputs[0].GetDatumHash() != nil {
@@ -623,7 +641,9 @@ func TestSetCollateral(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo.Input) {
+	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(
+		collateralUtxo.Input,
+	) {
 		t.Error("Tx is not correct")
 	}
 }
@@ -655,9 +675,14 @@ func TestCollateralwithReturn(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.CollateralReturn.Lovelace() != 5_000_000 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.CollateralReturn)
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.CollateralReturn,
+		)
 	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo2.Input) {
+	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(
+		collateralUtxo2.Input,
+	) {
 		t.Error("Tx is not correct")
 	}
 }

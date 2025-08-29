@@ -26,15 +26,21 @@ type XPrv struct {
 // NewXPrv creates XPrv by plain xprv bytes
 func NewXPrv(raw []byte) (XPrv, error) {
 	if len(raw) != XPrvSize {
-		return XPrv{}, errors.New("bip32-ed25519: NewXPrv: size should be 96 bytes")
+		return XPrv{}, errors.New(
+			"bip32-ed25519: NewXPrv: size should be 96 bytes",
+		)
 	}
 
 	if (raw[0] & 0b0000_0111) != 0b0000_0000 {
-		return XPrv{}, errors.New("bip32-ed25519: NewXPrv: the lowest 3 bits of the first byte of seed should be cleared")
+		return XPrv{}, errors.New(
+			"bip32-ed25519: NewXPrv: the lowest 3 bits of the first byte of seed should be cleared",
+		)
 	}
 
 	if (raw[31] & 0b1100_0000) != 0b0100_0000 {
-		return XPrv{}, errors.New("bip32-ed25519: NewXPrv: the highest bit of the last byte of seed should be cleared")
+		return XPrv{}, errors.New(
+			"bip32-ed25519: NewXPrv: the highest bit of the last byte of seed should be cleared",
+		)
 	}
 
 	return XPrv{xprv: slices.Clone(raw)}, nil

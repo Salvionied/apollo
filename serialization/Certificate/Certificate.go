@@ -17,7 +17,11 @@ type Certificate struct {
 	StakeCredential *StakeCredential
 }
 
-func NewCertificateFromAddress(addr []byte, code int, credentialType int) Certificate {
+func NewCertificateFromAddress(
+	addr []byte,
+	code int,
+	credentialType int,
+) Certificate {
 	return Certificate{
 		Code: code,
 		StakeCredential: &StakeCredential{

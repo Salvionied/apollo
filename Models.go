@@ -79,6 +79,8 @@ type Payment struct {
 	PaymentFromTxOut creates a Payment object from a TransactionOutput.
 
 	Params:
+
+
 		txOut (*TransactionOutput.TransactionOutput): The TransactionOutput to create the Payment.
 
 	Returns:
@@ -211,10 +213,12 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 /*
 *
 
-		ToTxOut converts a Payment object to a TransactionOutput object.
+	ToTxOut converts a Payment object to a TransactionOutput object.
 
-		Returns:
-	   		*TransactionOutput.TransactionOutput: The created TransactionOutput object.
+	Returns:
+
+
+	*TransactionOutput.TransactionOutput: The created TransactionOutput object.
 */
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
 	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())

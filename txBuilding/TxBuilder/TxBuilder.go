@@ -431,7 +431,10 @@ import (
 // 	return nil
 // }
 
-func ScriptDataHash(chainContext Base.ChainContext, witnessSet TransactionWitnessSet.TransactionWitnessSet) (*serialization.ScriptDataHash, error) {
+func ScriptDataHash(
+	chainContext Base.ChainContext,
+	witnessSet TransactionWitnessSet.TransactionWitnessSet,
+) (*serialization.ScriptDataHash, error) {
 	cost_models := map[int]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script

@@ -97,7 +97,8 @@ func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
 		[]byte: The computed hash or nil if all metadata fileds are empty.
 */
 func (ad *AuxiliaryData) Hash() []byte {
-	if len(ad._basicMeta) != 0 || len(ad._ShelleyMeta.Metadata) != 0 || len(ad._AlonzoMeta.Metadata) != 0 {
+	if len(ad._basicMeta) != 0 || len(ad._ShelleyMeta.Metadata) != 0 ||
+		len(ad._AlonzoMeta.Metadata) != 0 {
 		marshaled, _ := cbor.Marshal(ad)
 		hash, err := serialization.Blake2bHash(marshaled)
 		if err != nil {
@@ -145,10 +146,13 @@ func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
 	if len(ad._basicMeta) != 0 {
 		return enc.Marshal(ad._basicMeta)
 	}
-	if len(ad._AlonzoMeta.Metadata) != 0 || len(ad._AlonzoMeta.NativeScripts) != 0 || len(ad._AlonzoMeta.PlutusScripts) != 0 {
+	if len(ad._AlonzoMeta.Metadata) != 0 ||
+		len(ad._AlonzoMeta.NativeScripts) != 0 ||
+		len(ad._AlonzoMeta.PlutusScripts) != 0 {
 		return enc.Marshal(ad._AlonzoMeta)
 	}
-	if len(ad._ShelleyMeta.Metadata) == 0 && len(ad._ShelleyMeta.NativeScripts) == 0 {
+	if len(ad._ShelleyMeta.Metadata) == 0 &&
+		len(ad._ShelleyMeta.NativeScripts) == 0 {
 		return enc.Marshal(nil)
 	}
 	return enc.Marshal(ad._ShelleyMeta)

@@ -64,8 +64,13 @@ func TestFingerprintSet(t *testing.T) {
 		assetName := AssetName.NewAssetNameFromHexString(data.assetNameHex)
 		fingerprint := Fingerprint.New(policyId, assetName)
 		if fingerprint.String() != data.fingerprint {
-			t.Errorf("\nPolicyId: %v\nAssetName: %v\nFingerprint: %v\nExpected: %v",
-				data.policyId, data.assetNameHex, fingerprint.String(), data.fingerprint)
+			t.Errorf(
+				"\nPolicyId: %v\nAssetName: %v\nFingerprint: %v\nExpected: %v",
+				data.policyId,
+				data.assetNameHex,
+				fingerprint.String(),
+				data.fingerprint,
+			)
 		}
 	}
 }

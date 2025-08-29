@@ -11,7 +11,9 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-var policy = Policy.PolicyId{Value: "fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61"}
+var policy = Policy.PolicyId{
+	Value: "fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
+}
 var assetNamet1 = AssetName.NewAssetNameFromString("test")
 var assetNamet2 = AssetName.NewAssetNameFromString("test2")
 
@@ -70,7 +72,11 @@ func TestNoAssetPreAlonzoMarshaling(t *testing.T) {
 		t.Error("Failed unmarshaling", err)
 	}
 	if !val0.Equal(unmarshaled) {
-		t.Errorf("Unmarshaling failed. Expected: %v, Got: %v", val0, unmarshaled)
+		t.Errorf(
+			"Unmarshaling failed. Expected: %v, Got: %v",
+			val0,
+			unmarshaled,
+		)
 	}
 }
 
@@ -81,8 +87,13 @@ func TestPreAlonzoMarshalingWAssets(t *testing.T) {
 			policy: {assetNamet1: 100},
 		}}
 	marshaled, _ := cbor.Marshal(val0)
-	if hex.EncodeToString(marshaled) != "821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864" {
-		t.Errorf("Marshaling failed. Expected: 821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864, Got: %x", marshaled)
+	if hex.EncodeToString(
+		marshaled,
+	) != "821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864" {
+		t.Errorf(
+			"Marshaling failed. Expected: 821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864, Got: %x",
+			marshaled,
+		)
 	}
 	var unmarshaled Amount.Amount
 	err := cbor.Unmarshal(marshaled, &unmarshaled)
@@ -90,7 +101,11 @@ func TestPreAlonzoMarshalingWAssets(t *testing.T) {
 		t.Error("Failed unmarshaling", err)
 	}
 	if !val0.Equal(unmarshaled) {
-		t.Errorf("Unmarshaling failed. Expected: %v, Got: %v", val0, unmarshaled)
+		t.Errorf(
+			"Unmarshaling failed. Expected: %v, Got: %v",
+			val0,
+			unmarshaled,
+		)
 	}
 }
 
@@ -105,7 +120,10 @@ func TestToAlonzoAmount(t *testing.T) {
 		t.Errorf("Coin value should be 100, got %d", alonzoAmount.Coin)
 	}
 	if alonzoAmount.Value[policy][assetNamet1] != 100 {
-		t.Errorf("Asset value should be 100, got %d", alonzoAmount.Value[policy][assetNamet1])
+		t.Errorf(
+			"Asset value should be 100, got %d",
+			alonzoAmount.Value[policy][assetNamet1],
+		)
 	}
 }
 
@@ -120,7 +138,10 @@ func TestFromAlonzoAmount(t *testing.T) {
 		t.Errorf("Coin value should be 100, got %d", amount.Coin)
 	}
 	if amount.Value[policy][assetNamet1] != 100 {
-		t.Errorf("Asset value should be 100, got %d", amount.Value[policy][assetNamet1])
+		t.Errorf(
+			"Asset value should be 100, got %d",
+			amount.Value[policy][assetNamet1],
+		)
 	}
 }
 
@@ -306,10 +327,16 @@ func TestSubCoinAndAsset(t *testing.T) {
 		t.Errorf("Asset should be 1, got %d", len(val.Value))
 	}
 	if val.Value[policy][assetNamet1] != 1 {
-		t.Errorf("Asset value should be 1, got %d", val.Value[policy][assetNamet1])
+		t.Errorf(
+			"Asset value should be 1, got %d",
+			val.Value[policy][assetNamet1],
+		)
 	}
 	if val.Value[policy][assetNamet2] != 1 {
-		t.Errorf("Asset value should be 1, got %d", val.Value[policy][assetNamet2])
+		t.Errorf(
+			"Asset value should be 1, got %d",
+			val.Value[policy][assetNamet2],
+		)
 	}
 }
 
@@ -330,10 +357,16 @@ func TestAdd(t *testing.T) {
 		t.Errorf("Asset should be 1, got %d", len(val0.Value))
 	}
 	if val0.Value[policy][assetNamet1] != 100 {
-		t.Errorf("Asset value should be 100, got %d", val0.Value[policy][assetNamet1])
+		t.Errorf(
+			"Asset value should be 100, got %d",
+			val0.Value[policy][assetNamet1],
+		)
 	}
 	if val0.Value[policy][assetNamet2] != 100 {
-		t.Errorf("Asset value should be 100, got %d", val0.Value[policy][assetNamet2])
+		t.Errorf(
+			"Asset value should be 100, got %d",
+			val0.Value[policy][assetNamet2],
+		)
 	}
 
 }

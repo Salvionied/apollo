@@ -12,11 +12,21 @@ import (
 )
 
 func TestUTxOUTils(t *testing.T) {
-	addr, _ := Address.DecodeAddress("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh")
-	decodedTxHash, _ := hex.DecodeString("a357be4527a7afc2cebf37259fd4c5f220540d7dca90721e386cfe4865c107c6")
+	addr, _ := Address.DecodeAddress(
+		"addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh",
+	)
+	decodedTxHash, _ := hex.DecodeString(
+		"a357be4527a7afc2cebf37259fd4c5f220540d7dca90721e386cfe4865c107c6",
+	)
 	utxo := UTxO.UTxO{
-		Input:  TransactionInput.TransactionInput{TransactionId: decodedTxHash, Index: 0},
-		Output: TransactionOutput.SimpleTransactionOutput(addr, Value.PureLovelaceValue(1000000)),
+		Input: TransactionInput.TransactionInput{
+			TransactionId: decodedTxHash,
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			addr,
+			Value.PureLovelaceValue(1000000),
+		),
 	}
 	if utxo.GetKey() != "a357be4527a7afc2cebf37259fd4c5f220540d7dca90721e386cfe4865c107c6:0" {
 		t.Errorf("UTxO key is incorrect")
@@ -28,10 +38,18 @@ func TestUTxOUTils(t *testing.T) {
 }
 
 func TestEqualTo(t *testing.T) {
-	addr, _ := Address.DecodeAddress("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh")
+	addr, _ := Address.DecodeAddress(
+		"addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh",
+	)
 	utxo := UTxO.UTxO{
-		Input:  TransactionInput.TransactionInput{TransactionId: []byte{0x01, 0x02, 0x03}, Index: 0},
-		Output: TransactionOutput.SimpleTransactionOutput(addr, Value.PureLovelaceValue(1000000)),
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			addr,
+			Value.PureLovelaceValue(1000000),
+		),
 	}
 	utxo2 := utxo.Clone()
 	if !utxo.EqualTo(utxo2) {

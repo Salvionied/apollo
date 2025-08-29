@@ -129,7 +129,11 @@ func toChars(data []byte) (string, error) {
 
 // ConvertBits converts a byte slice where each byte is encoding fromBits bits,
 // to a byte slice where each byte is encoding toBits bits.
-func ConvertBits(data []byte, fromBits, toBits uint8, pad bool) ([]byte, error) {
+func ConvertBits(
+	data []byte,
+	fromBits, toBits uint8,
+	pad bool,
+) ([]byte, error) {
 	if fromBits < 1 || fromBits > 8 || toBits < 1 || toBits > 8 {
 		return nil, errors.New("only bit groups between 1 and 8 allowed")
 	}

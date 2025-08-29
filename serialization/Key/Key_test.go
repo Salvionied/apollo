@@ -10,11 +10,13 @@ import (
 )
 
 var VkeyHex = "694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
+
 var SkeyHex = "48fe4baedf13260eb3e2138542bc843e4d272942d405edd3ce4e8eae3ef9eafe694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
 var Skey, _ = Key.SigningKeyFromHexString(SkeyHex)
 var Vkey, _ = Key.VerificationKeyFromHexString(VkeyHex)
 
 var VkeyCBOR = "5820694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
+
 var SkeyCBOR = "584048fe4baedf13260eb3e2138542bc843e4d272942d405edd3ce4e8eae3ef9eafe694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
 
 func TestGenerateKeyPair(t *testing.T) {
@@ -135,7 +137,9 @@ func TestHash(t *testing.T) {
 	if len(hash) != 28 {
 		t.Errorf("Blake224Hash() failed")
 	}
-	if hex.EncodeToString(hash[:]) != "0d06154ce8bf87d8823dc69fb1e9a9459755d9092e87108bd11fc8cc" {
+	if hex.EncodeToString(
+		hash[:],
+	) != "0d06154ce8bf87d8823dc69fb1e9a9459755d9092e87108bd11fc8cc" {
 		t.Errorf("Blake224Hash() failed, got %s", hex.EncodeToString(hash[:]))
 	}
 }
@@ -148,7 +152,9 @@ func TestVerificationKeyHash(t *testing.T) {
 	if len(hash) != 28 {
 		t.Errorf("Hash() failed")
 	}
-	if hex.EncodeToString(hash[:]) != "b9df52987c59eec967744e77840acf844d5619daea5890f6a6539079" {
+	if hex.EncodeToString(
+		hash[:],
+	) != "b9df52987c59eec967744e77840acf844d5619daea5890f6a6539079" {
 		t.Errorf("Hash() failed, got %s", hex.EncodeToString(hash[:]))
 	}
 }

@@ -31,7 +31,10 @@ type MaestroChainContext struct {
 	latestUpdate    time.Time
 }
 
-func NewMaestroChainContext(network int, projectId string) (MaestroChainContext, error) {
+func NewMaestroChainContext(
+	network int,
+	projectId string,
+) (MaestroChainContext, error) {
 	var networkString string
 	switch network {
 	case 0:
@@ -136,14 +139,27 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 		return protocolParams, err
 	}
 	// Map ALL the fields
-	protocolParams.MinFeeConstant = int(ppFromApi.Data.MinFeeConstant.LovelaceAmount.Lovelace)
+	protocolParams.MinFeeConstant = int(
+		ppFromApi.Data.MinFeeConstant.LovelaceAmount.Lovelace,
+	)
 	protocolParams.MinFeeCoefficient = int(ppFromApi.Data.MinFeeCoefficient)
 	protocolParams.MaxTxSize = int(ppFromApi.Data.MaxTransactionSize.Bytes)
 	protocolParams.MaxBlockSize = int(ppFromApi.Data.MaxBlockBodySize.Bytes)
-	protocolParams.MaxBlockHeaderSize = int(ppFromApi.Data.MaxBlockHeaderSize.Bytes)
-	protocolParams.KeyDeposits = strconv.FormatInt(ppFromApi.Data.StakeCredentialDeposit.LovelaceAmount.Lovelace, 10)
-	protocolParams.PoolDeposits = strconv.FormatInt(ppFromApi.Data.StakePoolDeposit.LovelaceAmount.Lovelace, 10)
-	parsedPoolInfl, _ := strconv.ParseFloat(ppFromApi.Data.StakePoolPledgeInfluence, 32)
+	protocolParams.MaxBlockHeaderSize = int(
+		ppFromApi.Data.MaxBlockHeaderSize.Bytes,
+	)
+	protocolParams.KeyDeposits = strconv.FormatInt(
+		ppFromApi.Data.StakeCredentialDeposit.LovelaceAmount.Lovelace,
+		10,
+	)
+	protocolParams.PoolDeposits = strconv.FormatInt(
+		ppFromApi.Data.StakePoolDeposit.LovelaceAmount.Lovelace,
+		10,
+	)
+	parsedPoolInfl, _ := strconv.ParseFloat(
+		ppFromApi.Data.StakePoolPledgeInfluence,
+		32,
+	)
 	protocolParams.PooolInfluence = float32(parsedPoolInfl)
 	monExp, _ := strconv.ParseFloat(ppFromApi.Data.MonetaryExpansion, 32)
 	protocolParams.MonetaryExpansion = float32(monExp)
@@ -151,21 +167,50 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 	protocolParams.TreasuryExpansion = float32(tresExp)
 	protocolParams.DecentralizationParam = 0
 	protocolParams.ExtraEntropy = ""
-	protocolParams.ProtocolMajorVersion = int(ppFromApi.Data.ProtocolVersion.Major)
-	protocolParams.ProtocolMinorVersion = int(ppFromApi.Data.ProtocolVersion.Minor)
+	protocolParams.ProtocolMajorVersion = int(
+		ppFromApi.Data.ProtocolVersion.Major,
+	)
+	protocolParams.ProtocolMinorVersion = int(
+		ppFromApi.Data.ProtocolVersion.Minor,
+	)
 	//CHECK HERE
 	//protocolParams.MinUtxo = ppFromApi.Data.
-	protocolParams.MinPoolCost = strconv.FormatInt(ppFromApi.Data.MinStakePoolCost.LovelaceAmount.Lovelace, 10)
-	protocolParams.PriceMem = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Memory)
-	protocolParams.PriceStep = parseMaestroFloat(ppFromApi.Data.ScriptExecutionPrices.Steps)
-	protocolParams.MaxTxExMem = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory, 10)
-	protocolParams.MaxTxExSteps = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerTransaction.Steps, 10)
-	protocolParams.MaxBlockExMem = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerBlock.Memory, 10)
-	protocolParams.MaxBlockExSteps = strconv.FormatInt(ppFromApi.Data.MaxExecutionUnitsPerBlock.Steps, 10)
-	protocolParams.MaxValSize = strconv.FormatInt(ppFromApi.Data.MaxValueSize.Bytes, 10)
+	protocolParams.MinPoolCost = strconv.FormatInt(
+		ppFromApi.Data.MinStakePoolCost.LovelaceAmount.Lovelace,
+		10,
+	)
+	protocolParams.PriceMem = parseMaestroFloat(
+		ppFromApi.Data.ScriptExecutionPrices.Memory,
+	)
+	protocolParams.PriceStep = parseMaestroFloat(
+		ppFromApi.Data.ScriptExecutionPrices.Steps,
+	)
+	protocolParams.MaxTxExMem = strconv.FormatInt(
+		ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory,
+		10,
+	)
+	protocolParams.MaxTxExSteps = strconv.FormatInt(
+		ppFromApi.Data.MaxExecutionUnitsPerTransaction.Steps,
+		10,
+	)
+	protocolParams.MaxBlockExMem = strconv.FormatInt(
+		ppFromApi.Data.MaxExecutionUnitsPerBlock.Memory,
+		10,
+	)
+	protocolParams.MaxBlockExSteps = strconv.FormatInt(
+		ppFromApi.Data.MaxExecutionUnitsPerBlock.Steps,
+		10,
+	)
+	protocolParams.MaxValSize = strconv.FormatInt(
+		ppFromApi.Data.MaxValueSize.Bytes,
+		10,
+	)
 	protocolParams.CollateralPercent = int(ppFromApi.Data.CollateralPercentage)
 	protocolParams.MaxCollateralInuts = int(ppFromApi.Data.MaxCollateralInputs)
-	protocolParams.CoinsPerUtxoByte = strconv.FormatInt(ppFromApi.Data.MinUtxoDepositCoefficient, 10)
+	protocolParams.CoinsPerUtxoByte = strconv.FormatInt(
+		ppFromApi.Data.MinUtxoDepositCoefficient,
+		10,
+	)
 	protocolParams.CoinsPerUtxoWord = "0"
 	//protocolParams.CostModels = ppFromApi.Data.CostModels
 	return protocolParams, nil
@@ -257,11 +302,19 @@ func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
 	}
 	return outputs, nil
 }
-func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.UTxO, error) {
+
+func (mcc *MaestroChainContext) GetUtxoFromRef(
+	txHash string,
+	index int,
+) (*UTxO.UTxO, error) {
 	var utxo *UTxO.UTxO
 	params := utils.NewParameters()
 	params.WithCbor()
-	txOutputByRef, err := mcc.client.TransactionOutputFromReference(txHash, index, params)
+	txOutputByRef, err := mcc.client.TransactionOutputFromReference(
+		txHash,
+		index,
+		params,
+	)
 	if err != nil {
 		return utxo, err
 	}
@@ -282,7 +335,11 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.
 	}
 	return utxo, nil
 }
-func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Base.AddressUTXO, error) {
+
+func (mcc *MaestroChainContext) AddressUtxos(
+	address string,
+	gather bool,
+) ([]Base.AddressUTXO, error) {
 	addressUtxos := make([]Base.AddressUTXO, 0)
 	params := utils.NewParameters()
 	params.ResolveDatums()
@@ -311,7 +368,10 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Bas
 	if gather {
 		for utxosAtAddressAtApi.NextCursor != "" {
 			params.Cursor(utxosAtAddressAtApi.NextCursor)
-			utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(address, params)
+			utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(
+				address,
+				params,
+			)
 			if err != nil {
 				return addressUtxos, err
 			}
@@ -337,12 +397,18 @@ func (mcc *MaestroChainContext) AddressUtxos(address string, gather bool) ([]Bas
 	return addressUtxos, nil
 
 }
-func (mcc *MaestroChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
+
+func (mcc *MaestroChainContext) Utxos(
+	address Address.Address,
+) ([]UTxO.UTxO, error) {
 	utxos := make([]UTxO.UTxO, 0)
 	params := utils.NewParameters()
 	params.WithCbor()
 	params.ResolveDatums()
-	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(address.String(), params)
+	utxosAtAddressAtApi, err := mcc.client.UtxosAtAddress(
+		address.String(),
+		params,
+	)
 	if err != nil {
 		return utxos, err
 	}
@@ -366,7 +432,10 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, err
 
 	for utxosAtAddressAtApi.NextCursor != "" {
 		params.Cursor(utxosAtAddressAtApi.NextCursor)
-		utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(address.String(), params)
+		utxosAtAddressAtApi, err = mcc.client.UtxosAtAddress(
+			address.String(),
+			params,
+		)
 		if err != nil {
 			return utxos, err
 		}
@@ -391,7 +460,9 @@ func (mcc *MaestroChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, err
 	return utxos, nil
 }
 
-func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
+func (mcc *MaestroChainContext) SubmitTx(
+	tx Transaction.Transaction,
+) (serialization.TransactionId, error) {
 	txBytes, err := tx.Bytes()
 	if err != nil {
 		return serialization.TransactionId{}, err
@@ -403,7 +474,9 @@ func (mcc *MaestroChainContext) SubmitTx(tx Transaction.Transaction) (serializat
 		return serialization.TransactionId{}, err
 	}
 	decodedResponseHash, _ := hex.DecodeString(resp.Data)
-	return serialization.TransactionId{Payload: []byte(decodedResponseHash)}, nil
+	return serialization.TransactionId{
+		Payload: []byte(decodedResponseHash),
+	}, nil
 }
 
 type EvalResult struct {
@@ -414,7 +487,9 @@ type ExecutionResult struct {
 	Result EvalResult `json:"result"`
 }
 
-func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
+func (mcc *MaestroChainContext) EvaluateTx(
+	tx []byte,
+) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	encodedTx := hex.EncodeToString(tx)
 	evaluation, err := mcc.client.EvaluateTx(encodedTx)
@@ -430,7 +505,9 @@ func (mcc *MaestroChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execu
 	return final_result, nil
 }
 
-func (mcc *MaestroChainContext) GetContractCbor(scriptHash string) (string, error) {
+func (mcc *MaestroChainContext) GetContractCbor(
+	scriptHash string,
+) (string, error) {
 	res, err := mcc.client.ScriptByHash(scriptHash)
 	if err != nil {
 		return "", err
