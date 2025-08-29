@@ -15,7 +15,10 @@ type Fingerprint struct {
 	assetName *AssetName.AssetName
 }
 
-func New(policyId *Policy.PolicyId, assetName *AssetName.AssetName) *Fingerprint {
+func New(
+	policyId *Policy.PolicyId,
+	assetName *AssetName.AssetName,
+) *Fingerprint {
 	return &Fingerprint{
 		policyId:  policyId,
 		assetName: assetName,

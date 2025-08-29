@@ -17,6 +17,7 @@ import (
 )
 
 const TEST_POLICY = "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"
+
 const TEST_ADDRESS = "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh"
 
 func TestTransactionOutputWithDatumHash(t *testing.T) {
@@ -47,7 +48,9 @@ func TestPostAlonzo(t *testing.T) {
 		t.Error("Failed unmarshaling", err)
 	}
 	txO.IsPostAlonzo = true
-	decoded_address, _ := Address.DecodeAddress("addr1wynp362vmvr8jtc946d3a3utqgclfdl5y9d3kn849e359hsskr20n")
+	decoded_address, _ := Address.DecodeAddress(
+		"addr1wynp362vmvr8jtc946d3a3utqgclfdl5y9d3kn849e359hsskr20n",
+	)
 	txO.PostAlonzo = TransactionOutput.TransactionOutputAlonzo{}
 	txO.PostAlonzo.Address = decoded_address
 	txO.PostAlonzo.Amount = Value.PureLovelaceValue(1000000).ToAlonzoValue()
@@ -83,17 +86,21 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 
 func TestValueSerialization(t *testing.T) {
 	ShelleyValueWithNoAssets := Value.PureLovelaceValue(1000000)
-	ShelleyValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
-			AssetName.NewAssetNameFromString("Token1"): 1,
+	ShelleyValueWithAssets := Value.SimpleValue(
+		1_000_000,
+		MultiAsset.MultiAsset[int64]{
+			Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
+				AssetName.NewAssetNameFromString("Token1"): 1,
+			},
 		},
-	})
+	)
 	AlonzoValueWithNoAssets := Value.PureLovelaceValue(1000000).ToAlonzoValue()
 	AlonzoValueWithAssets := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
 		Policy.PolicyId{Value: "115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818"}: Asset.Asset[int64]{
 			AssetName.NewAssetNameFromString("Token1"): 1,
 		},
-	}).ToAlonzoValue()
+	}).
+		ToAlonzoValue()
 	ShelleyValueWithNoAssetsBytes, _ := cbor.Marshal(ShelleyValueWithNoAssets)
 	ShelleyValueWithAssetsBytes, _ := cbor.Marshal(ShelleyValueWithAssets)
 	AlonzoValueWithNoAssetsBytes, _ := cbor.Marshal(AlonzoValueWithNoAssets)
@@ -104,10 +111,14 @@ func TestValueSerialization(t *testing.T) {
 	if hex.EncodeToString(AlonzoValueWithNoAssetsBytes) != "1a000f4240" {
 		t.Error("AlonzoValueWithNoAssetsBytes")
 	}
-	if hex.EncodeToString(ShelleyValueWithAssetsBytes) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
+	if hex.EncodeToString(
+		ShelleyValueWithAssetsBytes,
+	) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
 		t.Error("ShelleyValueWithAssetsBytes")
 	}
-	if hex.EncodeToString(AlonzoValueWithAssetsBytes) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
+	if hex.EncodeToString(
+		AlonzoValueWithAssetsBytes,
+	) != "821a000f4240a1581c115a3b670ea8b6b99d1c3d1d8041d7da9bd0b45532c24481cdbd9818a146546f6b656e3101" {
 		t.Error("AlonzoValueWithAssetsBytes")
 	}
 }
@@ -128,10 +139,15 @@ func TestTransactionOutputPostAlonzoUtils(t *testing.T) {
 	}
 	clonedNoAssets := toNoAssets.Clone()
 	clonedWithAssets := toWithAssets.Clone()
-	if !toNoAssets.Amount.ToValue().Equal(clonedNoAssets.Amount.ToValue()) || toNoAssets.Address.String() != clonedNoAssets.Address.String() || &toNoAssets == &clonedNoAssets {
+	if !toNoAssets.Amount.ToValue().Equal(clonedNoAssets.Amount.ToValue()) ||
+		toNoAssets.Address.String() != clonedNoAssets.Address.String() ||
+		&toNoAssets == &clonedNoAssets {
 		t.Error("Error while cloning")
 	}
-	if !toWithAssets.Amount.ToValue().Equal(clonedWithAssets.Amount.ToValue()) || toWithAssets.Address.String() != clonedWithAssets.Address.String() || &toWithAssets == &clonedWithAssets {
+	if !toWithAssets.Amount.ToValue().
+		Equal(clonedWithAssets.Amount.ToValue()) ||
+		toWithAssets.Address.String() != clonedWithAssets.Address.String() ||
+		&toWithAssets == &clonedWithAssets {
 		t.Error("Error while cloning with assets")
 	}
 
@@ -156,10 +172,19 @@ func TestTransactionOutputShelleyUtils(t *testing.T) {
 	}
 	clonedNoAssets := toNoAssets.Clone()
 	clonedWithAssets := toWithAssets.Clone()
-	if !toNoAssets.Amount.Equal(clonedNoAssets.Amount) { //|| toNoAssets.Address.String() != clonedNoAssets.Address.String() || &toNoAssets == &clonedNoAssets {
-		t.Error("Error while cloning og:", toNoAssets.Amount.String(), "cloned:", clonedNoAssets.Amount.String())
+	if !toNoAssets.Amount.Equal(
+		clonedNoAssets.Amount,
+	) { //|| toNoAssets.Address.String() != clonedNoAssets.Address.String() || &toNoAssets == &clonedNoAssets {
+		t.Error(
+			"Error while cloning og:",
+			toNoAssets.Amount.String(),
+			"cloned:",
+			clonedNoAssets.Amount.String(),
+		)
 	}
-	if !toWithAssets.Amount.Equal(clonedWithAssets.Amount) || toWithAssets.Address.String() != clonedWithAssets.Address.String() || &toWithAssets == &clonedWithAssets {
+	if !toWithAssets.Amount.Equal(clonedWithAssets.Amount) ||
+		toWithAssets.Address.String() != clonedWithAssets.Address.String() ||
+		&toWithAssets == &clonedWithAssets {
 		t.Error("Error while cloning with assets")
 	}
 	if toNoAssets.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh:1000000 DATUM: " {

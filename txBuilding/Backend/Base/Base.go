@@ -131,7 +131,13 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 	}
 	var final_amount Value.Value
 	if len(multi_assets) > 0 {
-		final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
+		final_amount = Value.Value{
+			Am: Amount.Amount{
+				Coin:  int64(lovelace_amount),
+				Value: multi_assets,
+			},
+			HasAssets: true,
+		}
 	} else {
 		final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
 	}
@@ -163,11 +169,14 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 		}
 		return tx_out
 	}
-	tx_out := TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
-		Address:   address,
-		Amount:    final_amount,
-		DatumHash: datum_hash,
-		HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+	tx_out := TransactionOutput.TransactionOutput{
+		PreAlonzo: TransactionOutput.TransactionOutputShelley{
+			Address:   address,
+			Amount:    final_amount,
+			DatumHash: datum_hash,
+			HasDatum:  len(datum_hash.Payload) > 0},
+		IsPostAlonzo: false,
+	}
 	return tx_out
 }
 
@@ -291,7 +300,12 @@ type AddressAmount struct {
 	Quantity string `json:"quantity"`
 }
 
-func Fee(context ChainContext, length int, exec_steps int, max_mem_unit int) (int, error) {
+func Fee(
+	context ChainContext,
+	length int,
+	exec_steps int,
+	max_mem_unit int,
+) (int, error) {
 	protocol_param, err := context.GetProtocolParams()
 	if err != nil {
 		return 0, nil

@@ -65,7 +65,10 @@ func DecodePlutusAsset(pd PlutusData.PlutusData) Asset {
 	}
 	return assets
 }
-func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, error) {
+
+func GetAddressPlutusData(
+	address Address.Address,
+) (*PlutusData.PlutusData, error) {
 	switch address.AddressType {
 	case Address.KEY_KEY:
 		return &PlutusData.PlutusData{
@@ -279,8 +282,12 @@ func GetAddressPlutusData(address Address.Address) (*PlutusData.PlutusData, erro
 	}
 }
 
-func DecodePlutusAddress(data PlutusData.PlutusData, network byte) (Address.Address, error) {
-	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 && len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
+func DecodePlutusAddress(
+	data PlutusData.PlutusData,
+	network byte,
+) (Address.Address, error) {
+	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 &&
+		len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
 		return Address.Address{}, errors.New("error: Invalid Address Data")
 	}
 	var isIndef bool

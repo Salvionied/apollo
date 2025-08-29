@@ -176,7 +176,9 @@ func (val Value) Clone() Value {
 	AddAssets adds MultiAsset assets to a Value.
 
 	Params:
-		other (MultiAsset.MultiAsset[int64]): the MultiAssets assets to be added.
+
+
+	other (MultiAsset.MultiAsset[int64]): the MultiAssets assets to be added.
 */
 func (val *Value) AddAssets(other MultiAsset.MultiAsset[int64]) {
 	if !val.HasAssets {
@@ -386,10 +388,13 @@ func (val Value) Sub(other Value) Value {
 		other (Value): The Value to compare.
 
 	Returns:
-		bool: True if the current value is less than the other Value, false otherwise.
+
+
+	bool: True if the current value is less than the other Value, false otherwise.
 */
 func (val Value) Less(other Value) bool {
-	return val.GetCoin() <= other.GetCoin() && val.GetAssets().Less(other.GetAssets())
+	return val.GetCoin() <= other.GetCoin() &&
+		val.GetAssets().Less(other.GetAssets())
 }
 
 /*
@@ -401,7 +406,9 @@ func (val Value) Less(other Value) bool {
 		other (Value): The Value to compare.
 
 	Returns:
-		bool: True if the current value is equal to the other Value, false otherwise.
+
+
+	bool: True if the current value is equal to the other Value, false otherwise.
 */
 func (val Value) Equal(other Value) bool {
 	if val.HasAssets != other.HasAssets {
@@ -423,7 +430,9 @@ func (val Value) Equal(other Value) bool {
 		other (Value): The Value to compare.
 
 	Returns:
-		bool: True if the current value is less than or equal to the other Value, false otherwise.
+
+
+	bool: True if the current value is less than or equal to the other Value, false otherwise.
 */
 func (val Value) LessOrEqual(other Value) bool {
 	return val.Equal(other) || val.Less(other)
@@ -438,10 +447,13 @@ func (val Value) LessOrEqual(other Value) bool {
 		other (Value): The Value to compare.
 
 	Returns:
-		bool: True if the current value is greater than the other Value, false otherwise.
+
+
+	bool: True if the current value is greater than the other Value, false otherwise.
 */
 func (val Value) Greater(other Value) bool {
-	return val.GetCoin() >= other.GetCoin() && val.GetAssets().Greater(other.GetAssets())
+	return val.GetCoin() >= other.GetCoin() &&
+		val.GetAssets().Greater(other.GetAssets())
 
 }
 
@@ -454,7 +466,9 @@ func (val Value) Greater(other Value) bool {
 		other (Value): The Value to compare.
 
 	Returns:
-		bool: True if the current value is greater than or equal to the other Value, false otherwise.
+
+
+	bool: True if the current value is greater than or equal to the other Value, false otherwise.
 */
 func (val Value) GreaterOrEqual(other Value) bool {
 	return val.Greater(other) || val.Equal(other)
@@ -479,7 +493,9 @@ func (val Value) String() string {
 /*
 *
 
-		UnmarshalCBOR unmarshals a CBOR-encoded byte slice into the Value,
+	UnmarshalCBOR unmarshals a CBOR-encoded byte slice into the Value,
+
+
 		which decoed either a uint64 into the Coin field or a CBOR-encoded Amount
 		into the AlonzoAmount field.
 
@@ -543,7 +559,9 @@ func (val *Value) MarshalCBOR() ([]byte, error) {
 			coin (int64): The amount of Lovelace (coin) to set in the Value.
 
 		Returns:
-			Value: The Value with the specified amount of Lovelace and no assets.
+
+
+	Value: The Value with the specified amount of Lovelace and no assets.
 */
 func PureLovelaceValue(coin int64) Value {
 	return Value{Coin: coin, HasAssets: false}

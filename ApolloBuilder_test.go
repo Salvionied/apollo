@@ -37,8 +37,10 @@ var decoded_addr, _ = Address.DecodeAddress(
 
 var InputUtxo = UTxO.UTxO{
 	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
 	},
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
@@ -47,8 +49,10 @@ var InputUtxo = UTxO.UTxO{
 
 var collateralUtxo = UTxO.UTxO{
 	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
 	},
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
@@ -56,8 +60,10 @@ var collateralUtxo = UTxO.UTxO{
 
 var collateralUtxo2 = UTxO.UTxO{
 	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-		Index:         1,
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
 	},
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
@@ -101,7 +107,8 @@ func TestEnsureTxIsBalanced(t *testing.T) {
 		utxos = append(utxos, loadedUtxo)
 	}
 	fmt.Println(utxos)
-	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+	apollob = apollob.AddInputAddressFromBech32(userAddress).
+		AddLoadedUTxOs(utxos...).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300)
 	apollob, err := apollob.Complete()
@@ -173,7 +180,8 @@ func TestComplexTxBuild(t *testing.T) {
 	decodedAddress, _ := Address.DecodeAddress(
 		"addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4",
 	)
-	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+	apollob = apollob.AddInputAddressFromBech32(userAddress).
+		AddLoadedUTxOs(utxos...).
 		PayToContract(decodedAddress, &pd,
 			4000000,
 			false,
@@ -253,7 +261,8 @@ func TestFakeBurnBalancing(t *testing.T) {
 	decodedAddress, _ := Address.DecodeAddress(
 		"addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4",
 	)
-	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+	apollob = apollob.AddInputAddressFromBech32(userAddress).
+		AddLoadedUTxOs(utxos...).
 		PayToContract(decodedAddress, &pd,
 			4000000,
 			false,
@@ -261,9 +270,10 @@ func TestFakeBurnBalancing(t *testing.T) {
 		).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300).
-		SetValidityStart(0).MintAssets(
-		apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
-	)
+		SetValidityStart(0).
+		MintAssets(
+			apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
+		)
 	apollob, err = apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
@@ -506,7 +516,8 @@ func TestRedeemerCollect(t *testing.T) {
 	utxos := testutils.InitUtxosDifferentiated()
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...).
 		CollectFrom(InputUtxo, redeemer).
-		AttachDatum(&datum).AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
+		AttachDatum(&datum).
+		AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -683,7 +694,8 @@ func TestExactComplete(t *testing.T) {
 	utxos := testutils.InitUtxosDifferentiated()
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...).
 		CollectFrom(InputUtxo, redeemer).
-		AttachDatum(&datum).AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
+		AttachDatum(&datum).
+		AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
 	built, err := apollob.CompleteExact(200_000)
 	if err != nil {
 		t.Error(err)
@@ -878,7 +890,10 @@ func TestScriptDataHashConway(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	hash, err := TxBuilder.ScriptDataHash(FixedChainContext.InitFixedChainContext(), WitnessSet)
+	hash, err := TxBuilder.ScriptDataHash(
+		FixedChainContext.InitFixedChainContext(),
+		WitnessSet,
+	)
 	if err != nil {
 		t.Error(err)
 	}
@@ -892,7 +907,10 @@ func TestScriptDataHashConway(t *testing.T) {
 
 func TestEmptyRedeemerHashConway(t *testing.T) {
 	wts := TransactionWitnessSet.TransactionWitnessSet{}
-	hash, err := TxBuilder.ScriptDataHash(FixedChainContext.InitFixedChainContext(), wts)
+	hash, err := TxBuilder.ScriptDataHash(
+		FixedChainContext.InitFixedChainContext(),
+		wts,
+	)
 	if err != nil {
 		t.Error(err)
 	}

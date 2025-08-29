@@ -22,7 +22,10 @@ type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
 	Returns:
 		V: The asset amount.
 */
-func (ma MultiAsset[V]) GetByPolicyAndId(pol Policy.PolicyId, asset_name AssetName.AssetName) V {
+func (ma MultiAsset[V]) GetByPolicyAndId(
+	pol Policy.PolicyId,
+	asset_name AssetName.AssetName,
+) V {
 	for policy, asset := range ma {
 
 		if policy.String() == pol.String() {
@@ -102,7 +105,9 @@ func (ma MultiAsset[V]) Equal(other MultiAsset[V]) bool {
 		other MultiAsset[V]: The other MultiAsset to compare.
 
 	Returns:
-		bool: True if the current MultiAsset is less than the other, false otherwise.
+
+
+	bool: True if the current MultiAsset is less than the other, false otherwise.
 */
 func (ma MultiAsset[V]) Less(other MultiAsset[V]) bool {
 	for policy, asset := range ma {
@@ -125,7 +130,9 @@ func (ma MultiAsset[V]) Less(other MultiAsset[V]) bool {
 		other MultiAsset[V]: The other MultiAsset to compare.
 
 	Returns:
-		bool: True if the current MultiAsset is greater than the other, false otherwise.
+
+
+	bool: True if the current MultiAsset is greater than the other, false otherwise.
 */
 func (ma MultiAsset[V]) Greater(other MultiAsset[V]) bool {
 	for policy, asset := range ma {
@@ -192,12 +199,16 @@ func (ma MultiAsset[V]) Add(other MultiAsset[V]) MultiAsset[V] {
 	satisfy the filter function.
 
 	Params:
+
+
 		f func(policy Policy.PolicyId, asset Asset.Asset[V]) bool: The filter function.
 
 	Returns:
 		MultiAsset[V]: The filtered MultiAsset.
 */
-func (ma MultiAsset[V]) Filter(f func(policy Policy.PolicyId, asset AssetName.AssetName, quantity V) bool) MultiAsset[V] {
+func (ma MultiAsset[V]) Filter(
+	f func(policy Policy.PolicyId, asset AssetName.AssetName, quantity V) bool,
+) MultiAsset[V] {
 	result := make(MultiAsset[V])
 	for policy, asset := range ma {
 		for assetName, amount := range asset {

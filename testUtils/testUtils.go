@@ -25,8 +25,12 @@ func InitUtxos() []UTxO.UTxO {
 		}
 
 		Addr, _ := Address.DecodeAddress(TESTADDRESS)
-		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
-		asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", i))
+		policy := Policy.PolicyId{
+			Value: "00000000000000000000000000000000000000000000000000000000",
+		}
+		asset_name := AssetName.NewAssetNameFromString(
+			fmt.Sprintf("token%d", i),
+		)
 		Asset := Asset.Asset[int64]{
 			asset_name: int64((i + 1) * 100)}
 		assets := MultiAsset.MultiAsset[int64]{policy: Asset}
@@ -47,10 +51,14 @@ func InitUtxosDifferentiated() []UTxO.UTxO {
 		}
 
 		Addr, _ := Address.DecodeAddress(TESTADDRESS)
-		policy := Policy.PolicyId{Value: "00000000000000000000000000000000000000000000000000000000"}
+		policy := Policy.PolicyId{
+			Value: "00000000000000000000000000000000000000000000000000000000",
+		}
 		singleasset := Asset.Asset[int64]{}
 		for j := range i {
-			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
+			asset_name := AssetName.NewAssetNameFromString(
+				fmt.Sprintf("token%d", j),
+			)
 			singleasset[asset_name] = int64((i + 1) * 100)
 		}
 
@@ -73,10 +81,14 @@ func InitUtxosCongested() []UTxO.UTxO {
 		}
 
 		Addr, _ := Address.DecodeAddress(TESTADDRESS)
-		policy := Policy.PolicyId{Value: fmt.Sprintf("0000000000000000000000000000000000000000000000000000000%d", i)[:56]}
+		policy := Policy.PolicyId{
+			Value: fmt.Sprintf("0000000000000000000000000000000000000000000000000000000%d", i)[:56],
+		}
 		singleasset := Asset.Asset[int64]{}
 		for j := range i {
-			asset_name := AssetName.NewAssetNameFromString(fmt.Sprintf("token%d", j))
+			asset_name := AssetName.NewAssetNameFromString(
+				fmt.Sprintf("token%d", j),
+			)
 			singleasset[asset_name] = int64((i + 1) * 100)
 		}
 

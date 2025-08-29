@@ -25,7 +25,8 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 	copy(res, utxos)
 	// Sort UTXOs first by large ADA-only UTXOs, then by assets
 	sort.Slice(res, func(i, j int) bool {
-		if !res[i].Output.GetValue().HasAssets && !res[j].Output.GetValue().HasAssets {
+		if !res[i].Output.GetValue().HasAssets &&
+			!res[j].Output.GetValue().HasAssets {
 			return res[i].Output.Lovelace() > res[j].Output.Lovelace()
 		} else if res[i].Output.GetValue().HasAssets && res[j].Output.GetValue().HasAssets {
 			return res[i].Output.GetAmount().Greater(res[j].Output.GetAmount())

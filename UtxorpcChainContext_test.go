@@ -61,7 +61,9 @@ func TestUTXORPC_BurnPlutus(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -72,7 +74,9 @@ func TestUTXORPC_BurnPlutus(t *testing.T) {
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
 			Value.SimpleValue(15_000_000, MultiAsset.MultiAsset[int64]{
-				policy: Asset.Asset[int64]{AssetName.NewAssetNameFromString("TEST"): 1},
+				policy: Asset.Asset[int64]{
+					AssetName.NewAssetNameFromString("TEST"): 1,
+				},
 			})),
 	}
 	apollob := apollo.New(&cc)
@@ -113,7 +117,9 @@ func TestUTXORPC_MintPlutus(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -169,7 +175,9 @@ func TestUTXORPCMintPlutusWithPayment(t *testing.T) {
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
-	policy := Policy.PolicyId{Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f"}
+	policy := Policy.PolicyId{
+		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+	}
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: []byte(
@@ -177,7 +185,10 @@ func TestUTXORPCMintPlutusWithPayment(t *testing.T) {
 			),
 			Index: 0,
 		},
-		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
 	}
 
 	apollob := apollo.New(&cc)
@@ -288,8 +299,10 @@ func TestUTXORPC_ConsumeUtxo(t *testing.T) {
 	)
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-			Index:         0,
+			TransactionId: []byte(
+				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+			),
+			Index: 0,
 		},
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
@@ -297,8 +310,10 @@ func TestUTXORPC_ConsumeUtxo(t *testing.T) {
 	}
 	biAdaUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-			Index:         1,
+			TransactionId: []byte(
+				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+			),
+			Index: 1,
 		},
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
@@ -348,8 +363,10 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 	)
 	testUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-			Index:         0,
+			TransactionId: []byte(
+				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+			),
+			Index: 0,
 		},
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
@@ -361,8 +378,10 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 	}
 	biAdaUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056"),
-			Index:         1,
+			TransactionId: []byte(
+				"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+			),
+			Index: 1,
 		},
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
@@ -372,8 +391,17 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).
 		ConsumeAssetsFromUtxo(testUtxo,
-			apollo.NewPayment(decoded_addr_for_fixtures.String(), 2_000_000,
-				[]apollo.Unit{apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "TEST", 1)}),
+			apollo.NewPayment(
+				decoded_addr_for_fixtures.String(),
+				2_000_000,
+				[]apollo.Unit{
+					apollo.NewUnit(
+						"279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+						"TEST",
+						1,
+					),
+				},
+			),
 		).
 		AddLoadedUTxOs(biAdaUtxo)
 
@@ -459,7 +487,10 @@ func TestUTXORPC_PayToContract(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr != 121 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr)
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.Outputs[1].GetDatum().TagNr,
+		)
 	}
 	if _, err := built.GetTx().Bytes(); err != nil {
 		t.Errorf("failed to serialize tx: %v", err)
@@ -574,7 +605,10 @@ func TestUTXORPC_FeePadding(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13308363 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.Outputs[1].Lovelace())
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.Outputs[1].Lovelace(),
+		)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].IsPostAlonzo &&
 		built.GetTx().TransactionBody.Outputs[0].GetDatumHash() != nil {
@@ -609,7 +643,9 @@ func TestUTXORPC_SetCollateral(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo.Input) {
+	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(
+		collateralUtxo.Input,
+	) {
 		t.Error("Tx is not correct")
 	}
 }
@@ -641,9 +677,14 @@ func TestUTXORPC_CollateralWithReturn(t *testing.T) {
 		t.Error("Tx is not correct")
 	}
 	if built.GetTx().TransactionBody.CollateralReturn.Lovelace() != 5_000_000 {
-		t.Error("Tx is not correct", built.GetTx().TransactionBody.CollateralReturn)
+		t.Error(
+			"Tx is not correct",
+			built.GetTx().TransactionBody.CollateralReturn,
+		)
 	}
-	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(collateralUtxo2.Input) {
+	if !built.GetTx().TransactionBody.Collateral[0].EqualTo(
+		collateralUtxo2.Input,
+	) {
 		t.Error("Tx is not correct")
 	}
 }

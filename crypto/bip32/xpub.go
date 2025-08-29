@@ -68,7 +68,9 @@ func (x XPub) Derive(index uint32) XPub {
 
 	left, ok := pointPlus(&pubkey, pointOfTrunc28Mul8(zmac.Sum(nil)[:32]))
 	if !ok {
-		panic("bip32-ed25519: can't convert bytes to edwards25519.ExtendedGroupElement")
+		panic(
+			"bip32-ed25519: can't convert bytes to edwards25519.ExtendedGroupElement",
+		)
 	}
 
 	var out [64]byte

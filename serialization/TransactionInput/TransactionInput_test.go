@@ -24,7 +24,12 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 		t.Error("Invalid unmarshaling", txIn2.Index, "Expected", 0)
 	}
 	if txIn2.TransactionId[0] != 0x01 {
-		t.Error("Invalid unmarshaling", txIn2.TransactionId[0], "Expected", 0x01)
+		t.Error(
+			"Invalid unmarshaling",
+			txIn2.TransactionId[0],
+			"Expected",
+			0x01,
+		)
 	}
 }
 

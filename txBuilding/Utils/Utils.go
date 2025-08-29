@@ -22,7 +22,10 @@ func Contains[T UTxO.Container[any]](container []T, contained T) bool {
 	return false
 }
 
-func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context Base.ChainContext) (int64, error) {
+func MinLovelacePostAlonzo(
+	output TransactionOutput.TransactionOutput,
+	context Base.ChainContext,
+) (int64, error) {
 	constantOverhead := 200
 	amt := output.GetValue()
 	if amt.Coin == 0 {
@@ -45,7 +48,9 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 	if err != nil {
 		return 0, err
 	}
-	return int64((constantOverhead + len(encoded)) * pps.GetCoinsPerUtxoByte()), nil
+	return int64(
+		(constantOverhead + len(encoded)) * pps.GetCoinsPerUtxoByte(),
+	), nil
 }
 
 func ToCbor(x interface{}) (string, error) {
@@ -56,7 +61,13 @@ func ToCbor(x interface{}) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInputs []TransactionInput.TransactionInput) (int64, error) {
+func Fee(
+	context Base.ChainContext,
+	txSize int,
+	steps int64,
+	mem int64,
+	refInputs []TransactionInput.TransactionInput,
+) (int64, error) {
 	pps, err := context.GetProtocolParams()
 	if err != nil {
 		return 0, err
@@ -66,7 +77,10 @@ func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, refInput
 	if len(refInputs) > 0 {
 		// APPLY CONWAY FEE
 		for _, refInput := range refInputs {
-			utxo, err := context.GetUtxoFromRef(hex.EncodeToString(refInput.TransactionId), refInput.Index)
+			utxo, err := context.GetUtxoFromRef(
+				hex.EncodeToString(refInput.TransactionId),
+				refInput.Index,
+			)
 			if err != nil {
 				continue
 			}

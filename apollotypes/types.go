@@ -95,11 +95,13 @@ type GenericWallet struct {
 	PkeyHash calculates and returns the public key hash associated with a generic wallet.
 
 
-		It computes the public key hash by calling the Hash() method on the wallet's VerificationKey.
-		Then it returns as a serialization.PubKeyHas type.
+	It computes the public key hash by calling the Hash() method on the wallet's VerificationKey.
+	Then it returns as a serialization.PubKeyHas type.
 
-		Returns:
-	   		serialization.PubKeyHash: The public key hash of the generic wallet.
+	Returns:
+
+
+	serialization.PubKeyHash: The public key hash of the generic wallet.
 */
 func (gw *GenericWallet) PkeyHash() serialization.PubKeyHash {
 	res, _ := gw.VerificationKey.Hash()
@@ -184,7 +186,9 @@ func isKeyHashUsedFromUtxos(
 	keyHash serialization.PubKeyHash,
 ) bool {
 	for _, utxo := range usedUtxos {
-		utxoKeyHash := serialization.PubKeyHash(utxo.Output.GetAddress().PaymentPart)
+		utxoKeyHash := serialization.PubKeyHash(
+			utxo.Output.GetAddress().PaymentPart,
+		)
 		if utxoKeyHash == keyHash {
 			return true
 		}

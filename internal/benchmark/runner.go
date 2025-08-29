@@ -21,7 +21,12 @@ type Result struct {
 	Error    error
 }
 
-func Run(utxoCount, iterations, parallelism int, backend string, outputFormat string, cpuProfile string) {
+func Run(
+	utxoCount, iterations, parallelism int,
+	backend string,
+	outputFormat string,
+	cpuProfile string,
+) {
 
 	ctx, err := GetChainContext(backend)
 	if err != nil {
@@ -93,7 +98,13 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 			copy(clonedUTxOs, userUtxos)
 
 			start := time.Now()
-			err := buildTransaction(clonedUTxOs, &walletAddress, ctx, lastSlot, utxoCount)
+			err := buildTransaction(
+				clonedUTxOs,
+				&walletAddress,
+				ctx,
+				lastSlot,
+				utxoCount,
+			)
 			elapsed := time.Since(start)
 
 			mu.Lock()
@@ -147,7 +158,13 @@ func Run(utxoCount, iterations, parallelism int, backend string, outputFormat st
 	)
 }
 
-func buildTransaction(utxos []UTxO.UTxO, addr *Address.Address, ctx Base.ChainContext, lastSlot int, utxoCount int) error {
+func buildTransaction(
+	utxos []UTxO.UTxO,
+	addr *Address.Address,
+	ctx Base.ChainContext,
+	lastSlot int,
+	utxoCount int,
+) error {
 	apolloBE := apollo.New(ctx).
 		SetWalletFromBech32(addr.String()).
 		AddLoadedUTxOs(utxos...).

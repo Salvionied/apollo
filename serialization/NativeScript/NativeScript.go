@@ -181,11 +181,21 @@ func (ns *NativeScript) MarshalCBOR() ([]uint8, error) {
 	case 0:
 		return cbor.Marshal(SerialHash{Tag: ns.Tag, Value: ns.KeyHash})
 	case 1:
-		return cbor.Marshal(SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts})
+		return cbor.Marshal(
+			SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts},
+		)
 	case 2:
-		return cbor.Marshal(SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts})
+		return cbor.Marshal(
+			SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts},
+		)
 	case 3:
-		return cbor.Marshal(SerialNok{Tag: ns.Tag, NoK: ns.NoK, NativeScripts: ns.NativeScripts})
+		return cbor.Marshal(
+			SerialNok{
+				Tag:           ns.Tag,
+				NoK:           ns.NoK,
+				NativeScripts: ns.NativeScripts,
+			},
+		)
 	case 4:
 		return cbor.Marshal(SerialInt{Tag: ns.Tag, Value: ns.Before})
 	case 5:

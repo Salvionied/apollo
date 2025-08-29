@@ -104,7 +104,10 @@ Returns:
 	error: An error if the new wallet fails.
 */
 
-func NewHDWalletFromMnemonic(mnemonic string, passphrase string) (*HDWallet, error) {
+func NewHDWalletFromMnemonic(
+	mnemonic string,
+	passphrase string,
+) (*HDWallet, error) {
 	mnemo := norm.NFKD.String(mnemonic)
 	entropy, error := bip39.EntropyFromMnemonic(mnemonic)
 	if error != nil {
@@ -158,7 +161,11 @@ func (hd *HDWallet) DerivePath(path string) (*HDWallet, error) {
 	derived_wallet := hd.copy()
 	for _, index := range strings.Split(strings.TrimLeft(path, "m/"), "/") {
 		if strings.HasSuffix(index, "'") {
-			ind_val, err := strconv.ParseUint(string(index[:len(index)-1]), 10, 32)
+			ind_val, err := strconv.ParseUint(
+				string(index[:len(index)-1]),
+				10,
+				32,
+			)
 
 			if err != nil {
 				return nil, err
@@ -187,6 +194,8 @@ func (hd *HDWallet) DerivePath(path string) (*HDWallet, error) {
 
 	Params:
 		index (uint32): The index for derivation.
+
+
 		hardened (bool): A flag indicating whether to perform a hardened derivation.
 
 	Returns:

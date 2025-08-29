@@ -15,7 +15,8 @@ func TestExecutionUnitsFunctions(t *testing.T) {
 		Steps: 2,
 	}
 	exClone := ex1.Clone()
-	if exClone.Mem != ex1.Mem || exClone.Steps != ex1.Steps || &exClone == &ex1 {
+	if exClone.Mem != ex1.Mem || exClone.Steps != ex1.Steps ||
+		&exClone == &ex1 {
 		t.Error("Clone failed")
 	}
 
@@ -40,7 +41,9 @@ func TestRedeemerClone(t *testing.T) {
 		},
 	}
 	redClone := red.Clone()
-	if redClone.Tag != red.Tag || redClone.Index != red.Index || &redClone.Data == &red.Data || &redClone.ExUnits == &red.ExUnits {
+	if redClone.Tag != red.Tag || redClone.Index != red.Index ||
+		&redClone.Data == &red.Data ||
+		&redClone.ExUnits == &red.ExUnits {
 		t.Error("Clone failed")
 	}
 }
@@ -57,14 +60,32 @@ func TestMarshalUnmarshalRedeemer(t *testing.T) {
 	}
 	marshaled, _ := cbor.Marshal(red)
 	if hex.EncodeToString(marshaled) != "840001f6820102" {
-		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", "840001f6820102")
+		t.Error(
+			"Invalid marshaling",
+			hex.EncodeToString(marshaled),
+			"Expected",
+			"840001f6820102",
+		)
 	}
 	var red2 Redeemer.Redeemer
 	err := cbor.Unmarshal(marshaled, &red2)
 	if err != nil {
 		t.Error("Failed unmarshaling", err)
 	}
-	if red2.Tag != red.Tag || red2.Index != red.Index || &red2.Data == &red.Data || &red2.ExUnits == &red.ExUnits {
-		t.Error("Invalid unmarshaling", red2.Tag, red2.Index, red2.Data, red2.ExUnits, "Expected", red.Tag, red.Index, red.Data, red.ExUnits)
+	if red2.Tag != red.Tag || red2.Index != red.Index ||
+		&red2.Data == &red.Data ||
+		&red2.ExUnits == &red.ExUnits {
+		t.Error(
+			"Invalid unmarshaling",
+			red2.Tag,
+			red2.Index,
+			red2.Data,
+			red2.ExUnits,
+			"Expected",
+			red.Tag,
+			red.Index,
+			red.Data,
+			red.ExUnits,
+		)
 	}
 }

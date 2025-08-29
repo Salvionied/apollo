@@ -67,7 +67,50 @@ func TestMarshalCBOR(t *testing.T) {
 				},
 				HasAssets: true,
 			}, expected: expectedResult{
-				Result:  hex.EncodeToString([]byte{0x82, 0x1A, 0x00, 0x01E, 0x84, 0x80, 0xA1, 0x58, 0x1C, 0x72, 0x5B, 0xA1, 0x6E, 0x74, 0x4A, 0xBF, 0x20, 0x74, 0xC9, 0x51, 0xC3, 0x20, 0xFC, 0xC9, 0x2E, 0xA0, 0x15, 0x8E, 0xD7, 0xBB, 0x32, 0x5B, 0x09, 0x2A, 0x58, 0x24, 0x5D, 0xA1, 0x40, 0x01}),
+				Result: hex.EncodeToString(
+					[]byte{
+						0x82,
+						0x1A,
+						0x00,
+						0x01E,
+						0x84,
+						0x80,
+						0xA1,
+						0x58,
+						0x1C,
+						0x72,
+						0x5B,
+						0xA1,
+						0x6E,
+						0x74,
+						0x4A,
+						0xBF,
+						0x20,
+						0x74,
+						0xC9,
+						0x51,
+						0xC3,
+						0x20,
+						0xFC,
+						0xC9,
+						0x2E,
+						0xA0,
+						0x15,
+						0x8E,
+						0xD7,
+						0xBB,
+						0x32,
+						0x5B,
+						0x09,
+						0x2A,
+						0x58,
+						0x24,
+						0x5D,
+						0xA1,
+						0x40,
+						0x01,
+					},
+				),
 				IsError: false,
 			},
 		},
@@ -79,7 +122,13 @@ func TestMarshalCBOR(t *testing.T) {
 			result := hex.EncodeToString(res)
 			if testCase.expected.IsError {
 				if err == nil {
-					t.Errorf("\ntest: %v\ninput: %v\nexpected: %v\nresult: %v", name, testCase.input, testCase.expected.Error, result)
+					t.Errorf(
+						"\ntest: %v\ninput: %v\nexpected: %v\nresult: %v",
+						name,
+						testCase.input,
+						testCase.expected.Error,
+						result,
+					)
 				} else if err.Error() != testCase.expected.Error {
 					t.Errorf("\ntest: %v\ninput: %v\nexpected: %v\nresult: %v", name, testCase.input, testCase.expected.Error, err.Error())
 				}
@@ -121,8 +170,14 @@ func TestEquality(t *testing.T) {
 }
 
 var testValue = Value.PureLovelaceValue(10_000_000)
-var testPolicy = Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}
-var testAssetName = AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e")
+
+var testPolicy = Policy.PolicyId{
+	Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e",
+}
+
+var testAssetName = AssetName.NewAssetNameFromHexString(
+	"5365636f6e6454657374746f6b656e",
+)
 var testAsset = Asset.Asset[int64]{
 	*testAssetName: 10000000,
 	*AssetName.NewAssetNameFromHexString("54657374746f6b656e"): 10000000,
@@ -139,7 +194,10 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		t.Errorf("error while marshaling: %v", err)
 	}
 	if hex.EncodeToString(marshaled) != "1a00989680" {
-		t.Error("marshaled value should be equal to the expected one", hex.EncodeToString(marshaled))
+		t.Error(
+			"marshaled value should be equal to the expected one",
+			hex.EncodeToString(marshaled),
+		)
 	}
 	unmarshaled := Value.AlonzoValue{}
 	err = cbor.Unmarshal(marshaled, &unmarshaled)
@@ -154,8 +212,13 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
-	if hex.EncodeToString(marshaled) != "821a00989680a1581cec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490ea24954657374746f6b656e1a009896804f5365636f6e6454657374746f6b656e1a00989680" {
-		t.Error("marshaled value should be equal to the expected one", hex.EncodeToString(marshaled))
+	if hex.EncodeToString(
+		marshaled,
+	) != "821a00989680a1581cec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490ea24954657374746f6b656e1a009896804f5365636f6e6454657374746f6b656e1a00989680" {
+		t.Error(
+			"marshaled value should be equal to the expected one",
+			hex.EncodeToString(marshaled),
+		)
 	}
 	unmarshaled = Value.AlonzoValue{}
 	err = cbor.Unmarshal(marshaled, &unmarshaled)
@@ -222,18 +285,26 @@ func TestAddAssets(t *testing.T) {
 	}
 
 	original.AddAssets(testMultiAsset)
-	if !original.Equal(Value.SimpleValue(10_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-			*testAssetName: 20000000,
-			*AssetName.NewAssetNameFromHexString("54657374746f6b656e"): 20000000,
-		},
-	})) {
-		t.Error("og value should be equal to the testValueWithAssets", original.String())
+	if !original.Equal(
+		Value.SimpleValue(10_000_000, MultiAsset.MultiAsset[int64]{
+			Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
+				*testAssetName: 20000000,
+				*AssetName.NewAssetNameFromHexString("54657374746f6b656e"): 20000000,
+			},
+		}),
+	) {
+		t.Error(
+			"og value should be equal to the testValueWithAssets",
+			original.String(),
+		)
 	}
 }
 
 func TestSimpleValue(t *testing.T) {
-	newValNoToken := Value.SimpleValue(10_000_000, MultiAsset.MultiAsset[int64]{})
+	newValNoToken := Value.SimpleValue(
+		10_000_000,
+		MultiAsset.MultiAsset[int64]{},
+	)
 	if !newValNoToken.Equal(testValue) {
 		t.Errorf("newValNoToken should be equal to testValue")
 	}
@@ -345,12 +416,14 @@ func TestAdd(t *testing.T) {
 	// Test adding assets
 	original = testValueWithAssets
 	original = original.Add(testValueWithAssets)
-	if !original.Equal(Value.SimpleValue(20_000_000, MultiAsset.MultiAsset[int64]{
-		Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-			*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 20000000,
-			*AssetName.NewAssetNameFromHexString("54657374746f6b656e"):             20000000,
-		},
-	})) {
+	if !original.Equal(
+		Value.SimpleValue(20_000_000, MultiAsset.MultiAsset[int64]{
+			Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
+				*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 20000000,
+				*AssetName.NewAssetNameFromHexString("54657374746f6b656e"):             20000000,
+			},
+		}),
+	) {
 		t.Errorf("original value should be equal to the testValueWithAssets")
 	}
 
@@ -388,7 +461,10 @@ func TestMarshalAndUmnarshalNormalValue(t *testing.T) {
 		t.Errorf("error while marshaling: %v", err)
 	}
 	if hex.EncodeToString(marshaled) != "1a00989680" {
-		t.Error("marshaled value should be equal to the expected one", hex.EncodeToString(marshaled))
+		t.Error(
+			"marshaled value should be equal to the expected one",
+			hex.EncodeToString(marshaled),
+		)
 	}
 	unmarshaled := Value.Value{}
 	err = cbor.Unmarshal(marshaled, &unmarshaled)

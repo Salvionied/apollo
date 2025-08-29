@@ -107,31 +107,125 @@ func (f FixedChainContext) MaxTxFee() (int, error) {
 	return 100, nil
 }
 
-func (f FixedChainContext) GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error) {
+func (f FixedChainContext) GetUtxoFromRef(
+	txHash string,
+	txIndex int,
+) (*UTxO.UTxO, error) {
 	return &UTxO.UTxO{}, nil
 }
 
 func (f FixedChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
 	tx_in1 := TransactionInput.TransactionInput{
-		TransactionId: []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
-		Index:         0,
+		TransactionId: []byte{
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+			0x01,
+		},
+		Index: 0,
 	}
 	tx_in2 := TransactionInput.TransactionInput{
-		TransactionId: []byte{0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02},
-		Index:         1,
+		TransactionId: []byte{
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+			0x02,
+		},
+		Index: 1,
 	}
 
-	tx_out1 := TransactionOutput.SimpleTransactionOutput(address, Value.PureLovelaceValue(5000000))
-	tx_out2 := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(6000000, MultiAsset.MultiAsset[int64]{Policy.PolicyId{Value: "11111111111111111111111111111111111111111111111111111111"}: Asset.Asset[int64]{AssetName.NewAssetNameFromString("Token1"): 1, AssetName.NewAssetNameFromString("Token2"): 2}}))
-	return []UTxO.UTxO{{Input: tx_in1, Output: tx_out1}, {Input: tx_in2, Output: tx_out2}}, nil
+	tx_out1 := TransactionOutput.SimpleTransactionOutput(
+		address,
+		Value.PureLovelaceValue(5000000),
+	)
+	tx_out2 := TransactionOutput.SimpleTransactionOutput(
+		address,
+		Value.SimpleValue(
+			6000000,
+			MultiAsset.MultiAsset[int64]{
+				Policy.PolicyId{Value: "11111111111111111111111111111111111111111111111111111111"}: Asset.Asset[int64]{
+					AssetName.NewAssetNameFromString("Token1"): 1,
+					AssetName.NewAssetNameFromString("Token2"): 2,
+				},
+			},
+		),
+	)
+	return []UTxO.UTxO{
+		{Input: tx_in1, Output: tx_out1},
+		{Input: tx_in2, Output: tx_out2},
+	}, nil
 }
 
-func (f FixedChainContext) SubmitTx(tx Transaction.Transaction) (serialization.TransactionId, error) {
+func (f FixedChainContext) SubmitTx(
+	tx Transaction.Transaction,
+) (serialization.TransactionId, error) {
 	return serialization.TransactionId{}, nil
 }
 
-func (f FixedChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.ExecutionUnits, error) {
-	return map[string]Redeemer.ExecutionUnits{"spend:0": {Mem: 399882, Steps: 175940720}}, nil
+func (f FixedChainContext) EvaluateTx(
+	tx []uint8,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return map[string]Redeemer.ExecutionUnits{
+		"spend:0": {Mem: 399882, Steps: 175940720},
+	}, nil
 }
 
 func (f FixedChainContext) GetContractCbor(scriptHash string) (string, error) {

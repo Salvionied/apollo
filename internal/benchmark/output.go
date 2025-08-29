@@ -24,9 +24,13 @@ type BenchmarkResult struct {
 	BenchDuration time.Duration `json:"bench_duration"`
 }
 
-func PrintResults(wallClockTPS, latencyTPS float64, avgLatency time.Duration,
-	failures, iterations, parallelism, utxoCount int, benchDuration time.Duration,
-	format string) {
+func PrintResults(
+	wallClockTPS, latencyTPS float64,
+	avgLatency time.Duration,
+	failures, iterations, parallelism, utxoCount int,
+	benchDuration time.Duration,
+	format string,
+) {
 
 	result := BenchmarkResult{
 		WallClockTPS:  wallClockTPS,
@@ -105,8 +109,12 @@ func printColorfulTable(result BenchmarkResult) {
 		color.HiGreenString("Actual transactions processed per second"))
 	addRow(table, "Latency-based Tx/s", fmt.Sprintf("%.2f", result.LatencyTPS),
 		color.HiYellowString("Theoretical maximum based on average latency"))
-	addRow(table, "Avg Latency/Transaction", result.AvgLatency.Round(time.Microsecond).String(),
-		color.HiWhiteString("Mean time to build and validate one transaction"))
+	addRow(
+		table,
+		"Avg Latency/Transaction",
+		result.AvgLatency.Round(time.Microsecond).String(),
+		color.HiWhiteString("Mean time to build and validate one transaction"),
+	)
 
 	// Failure Analysis Section
 	addSectionHeader("FAILURE ANALYSIS")
@@ -114,30 +122,67 @@ func printColorfulTable(result BenchmarkResult) {
 	if result.Failures > 0 {
 		failureColor = color.HiRedString
 	}
-	addRow(table, "Failed Transactions",
-		fmt.Sprintf("%s (%d/%d)", failureColor(strconv.Itoa(result.Failures)), result.Failures, result.Iterations),
-		color.HiWhiteString("Total failed transaction constructions"))
+	addRow(
+		table,
+		"Failed Transactions",
+		fmt.Sprintf(
+			"%s (%d/%d)",
+			failureColor(strconv.Itoa(result.Failures)),
+			result.Failures,
+			result.Iterations,
+		),
+		color.HiWhiteString("Total failed transaction constructions"),
+	)
 
 	// Configuration Section
 	addSectionHeader("BENCHMARK CONFIGURATION")
 	addRow(table, "Iterations", strconv.Itoa(result.Iterations), "")
 	addRow(table, "Parallel Workers", strconv.Itoa(result.Parallelism), "")
 	addRow(table, "Outputs per TX", strconv.Itoa(result.UTXOCount), "")
-	addRow(table, "Total Duration", result.BenchDuration.Round(time.Millisecond).String(), "")
+	addRow(
+		table,
+		"Total Duration",
+		result.BenchDuration.Round(time.Millisecond).String(),
+		"",
+	)
 
 	// System Info Section
 	addSectionHeader("SYSTEM INFORMATION")
 	addRow(table, "CPU Model", result.SystemInfo.CPUModel, "")
-	addRow(table, "Total Memory", fmt.Sprintf("%d GB", result.SystemInfo.TotalMemory/1e9), "")
-	addRow(table, "Available Memory", fmt.Sprintf("%d GB", result.SystemInfo.AvailableMem/1e9), "")
+	addRow(
+		table,
+		"Total Memory",
+		fmt.Sprintf("%d GB", result.SystemInfo.TotalMemory/1e9),
+		"",
+	)
+	addRow(
+		table,
+		"Available Memory",
+		fmt.Sprintf("%d GB", result.SystemInfo.AvailableMem/1e9),
+		"",
+	)
 	addRow(table, "Go Version", result.SystemInfo.GoVersion, "")
-	addRow(table, "OS/Arch", fmt.Sprintf("%s/%s", result.SystemInfo.OS, runtime.GOARCH), "")
+	addRow(
+		table,
+		"OS/Arch",
+		fmt.Sprintf("%s/%s", result.SystemInfo.OS, runtime.GOARCH),
+		"",
+	)
 
 	// Efficiency Section
 	addSectionHeader("EFFICIENCY ANALYSIS")
-	addRow(table, "Throughput Efficiency",
-		fmt.Sprintf("%s%.1f%%", color.HiCyanString(""), (result.WallClockTPS/result.LatencyTPS)*100),
-		color.HiWhiteString("Ratio of actual vs theoretical maximum throughput"))
+	addRow(
+		table,
+		"Throughput Efficiency",
+		fmt.Sprintf(
+			"%s%.1f%%",
+			color.HiCyanString(""),
+			(result.WallClockTPS/result.LatencyTPS)*100,
+		),
+		color.HiWhiteString(
+			"Ratio of actual vs theoretical maximum throughput",
+		),
+	)
 
 	table.Render()
 }

@@ -26,7 +26,9 @@ func TestNativeScriptsSerializationAndHash(t *testing.T) {
 		t.Errorf("InvalidReserialization")
 	}
 	hash, _ := nativeScript.Hash()
-	if hex.EncodeToString(hash.Bytes()) != "1d8b26107c604d36e24963be3ba26f264245cae0e10c7fa15846efd2" {
+	if hex.EncodeToString(
+		hash.Bytes(),
+	) != "1d8b26107c604d36e24963be3ba26f264245cae0e10c7fa15846efd2" {
 		t.Errorf("Invalid Hashing Of NativeScript")
 	}
 }
@@ -45,22 +47,40 @@ func TestSerializeAndDeserializeAnyType(t *testing.T) {
 	ibBytes, _ := ib.MarshalCBOR()
 	ihBytes, _ := ih.MarshalCBOR()
 	if hex.EncodeToString(pknsBytes) != "82004474657374" {
-		t.Errorf("Invalid serialization of ScriptPubKey %s", hex.EncodeToString(pknsBytes))
+		t.Errorf(
+			"Invalid serialization of ScriptPubKey %s",
+			hex.EncodeToString(pknsBytes),
+		)
 	}
 	if hex.EncodeToString(anyBytes) != "82028182004474657374" {
-		t.Errorf("Invalid serialization of ScriptAny %s", hex.EncodeToString(anyBytes))
+		t.Errorf(
+			"Invalid serialization of ScriptAny %s",
+			hex.EncodeToString(anyBytes),
+		)
 	}
 	if hex.EncodeToString(allBytes) != "82018182028182004474657374" {
-		t.Errorf("Invalid serialization of ScriptAll %s", hex.EncodeToString(allBytes))
+		t.Errorf(
+			"Invalid serialization of ScriptAll %s",
+			hex.EncodeToString(allBytes),
+		)
 	}
 	if hex.EncodeToString(nokBytes) != "8303018182018182028182004474657374" {
-		t.Errorf("Invalid serialization of ScriptNofK %s", hex.EncodeToString(nokBytes))
+		t.Errorf(
+			"Invalid serialization of ScriptNofK %s",
+			hex.EncodeToString(nokBytes),
+		)
 	}
 	if hex.EncodeToString(ibBytes) != "820401" {
-		t.Errorf("Invalid serialization of InvalidBefore %s", hex.EncodeToString(ibBytes))
+		t.Errorf(
+			"Invalid serialization of InvalidBefore %s",
+			hex.EncodeToString(ibBytes),
+		)
 	}
 	if hex.EncodeToString(ihBytes) != "820501" {
-		t.Errorf("Invalid serialization of InvalidHereafter %s", hex.EncodeToString(ihBytes))
+		t.Errorf(
+			"Invalid serialization of InvalidHereafter %s",
+			hex.EncodeToString(ihBytes),
+		)
 	}
 	pknsDeserialized := NativeScript.NativeScript{}
 	anyDeserialized := NativeScript.NativeScript{}

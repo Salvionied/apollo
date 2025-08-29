@@ -28,7 +28,11 @@ type UTxO struct {
 		string: The unique key representing the UTxO.
 */
 func (u UTxO) GetKey() string {
-	return fmt.Sprintf("%s:%d", hex.EncodeToString(u.Input.TransactionId), u.Input.Index)
+	return fmt.Sprintf(
+		"%s:%d",
+		hex.EncodeToString(u.Input.TransactionId),
+		u.Input.Index,
+	)
 }
 
 /*

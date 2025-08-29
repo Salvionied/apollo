@@ -44,7 +44,10 @@ type OgmiosChainContext struct {
 	kugo            kugo.Client
 }
 
-func NewOgmiosChainContext(ogmigoClient ogmigo.Client, kugoClient kugo.Client) OgmiosChainContext {
+func NewOgmiosChainContext(
+	ogmigoClient ogmigo.Client,
+	kugoClient kugo.Client,
+) OgmiosChainContext {
 	occ := OgmiosChainContext{
 		ogmigo: ogmigoClient,
 		kugo:   kugoClient,
@@ -63,7 +66,9 @@ func (occ *OgmiosChainContext) Init() {
 	occ._protocol_param = latest_params
 }
 
-func multiAsset_OgmigoToApollo(m map[string]map[string]num.Int) MultiAsset.MultiAsset[int64] {
+func multiAsset_OgmigoToApollo(
+	m map[string]map[string]num.Int,
+) MultiAsset.MultiAsset[int64] {
 	if len(m) == 0 {
 		return nil
 	}
@@ -106,12 +111,20 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 	if d != "" {
 		datumBytes, err := hex.DecodeString(d)
 		if err != nil {
-			log.Fatal(err, "OgmiosChainContext: Failed to decode datum from hex: %v", d)
+			log.Fatal(
+				err,
+				"OgmiosChainContext: Failed to decode datum from hex: %v",
+				d,
+			)
 		}
 		var pd PlutusData.PlutusData
 		err = cbor.Unmarshal(datumBytes, &pd)
 		if err != nil {
-			log.Fatal(err, "OgmiosChainContext: datum is not valid plutus data: %v", d)
+			log.Fatal(
+				err,
+				"OgmiosChainContext: datum is not valid plutus data: %v",
+				d,
+			)
 		}
 		res := PlutusData.DatumOptionInline(&pd)
 		return &res
@@ -119,7 +132,11 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 	if dh != "" {
 		datumHashBytes, err := hex.DecodeString(dh)
 		if err != nil {
-			log.Fatal(err, "OgmiosChainContext: Failed to decode datum hash from hex: %v", dh)
+			log.Fatal(
+				err,
+				"OgmiosChainContext: Failed to decode datum hash from hex: %v",
+				dh,
+			)
 		}
 		res := PlutusData.DatumOptionHash(datumHashBytes)
 		return &res
@@ -127,7 +144,9 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 	return nil
 }
 
-func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, error) {
+func scriptRef_OgmigoToApollo(
+	script json.RawMessage,
+) (*PlutusData.ScriptRef, error) {
 	if len(script) == 0 {
 		return nil, nil
 	}
@@ -179,7 +198,10 @@ func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 	}
 }
 
-func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) (*UTxO.UTxO, error) {
+func (occ *OgmiosChainContext) GetUtxoFromRef(
+	txHash string,
+	index int,
+) (*UTxO.UTxO, error) {
 	ctx := context.Background()
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{
@@ -274,7 +296,10 @@ func (occ *OgmiosChainContext) LatestBlock() Base.Block {
 	ctx := context.Background()
 	point, err := occ.ogmigo.ChainTip(ctx)
 	if err != nil {
-		log.Fatal("OgmiosChainContext: LatestBlock: failed to request chain tip", err)
+		log.Fatal(
+			"OgmiosChainContext: LatestBlock: failed to request chain tip",
+			err,
+		)
 	}
 	s, ok := point.PointStruct()
 	if !ok {
@@ -290,17 +315,27 @@ func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
 	ctx := context.Background()
 	current, err := occ.ogmigo.CurrentEpoch(ctx)
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: LatestEpoch: failed to request current epoch")
+		log.Fatal(
+			err,
+			"OgmiosChainContext: LatestEpoch: failed to request current epoch",
+		)
 	}
 	return Base.Epoch{
 		Epoch: int(current),
 	}
 }
 
-func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.AddressUTXO {
+func (occ *OgmiosChainContext) AddressUtxos(
+	address string,
+	gather bool,
+) []Base.AddressUTXO {
 	ctx := context.Background()
 	addressUtxos := make([]Base.AddressUTXO, 0)
-	matches, err := occ.kugo.Matches(ctx, kugo.OnlyUnspent(), kugo.Address(address))
+	matches, err := occ.kugo.Matches(
+		ctx,
+		kugo.OnlyUnspent(),
+		kugo.Address(address),
+	)
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
 	}
@@ -309,13 +344,18 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 		if match.DatumType == "inline" {
 			datum, err = occ.kugo.Datum(ctx, match.DatumHash)
 			if err != nil {
-				log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
+				log.Fatal(
+					err,
+					"OgmiosChainContext: AddressUtxos: kupo datum request failed",
+				)
 			}
 		}
 		addressUtxos = append(addressUtxos, Base.AddressUTXO{
 			TxHash:      match.TransactionID,
 			OutputIndex: match.OutputIndex,
-			Amount:      chainsyncValue_toAddressAmount(kugoValue_toSharedValue(match.Value)),
+			Amount: chainsyncValue_toAddressAmount(
+				kugoValue_toSharedValue(match.Value),
+			),
 			// We probably don't need this info and kupo doesn't provide it in this query
 			Block:       "",
 			DataHash:    match.DatumHash,
@@ -441,11 +481,17 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	ctx := context.Background()
 	pparams, err := occ.ogmigo.CurrentProtocolParameters(ctx)
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: protocol parameters request failed")
+		log.Fatal(
+			err,
+			"OgmiosChainContext: LatestEpochParams: protocol parameters request failed",
+		)
 	}
 	var ogmiosParams OgmiosProtocolParameters
 	if err := json.Unmarshal(pparams, &ogmiosParams); err != nil {
-		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters")
+		log.Fatal(
+			err,
+			"OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters",
+		)
 	}
 
 	return Base.ProtocolParameters{
@@ -454,21 +500,35 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		MaxBlockSize:       int(ogmiosParams.MaxBlockSize.Bytes),
 		MaxTxSize:          int(ogmiosParams.MaxTxSize.Bytes),
 		MaxBlockHeaderSize: int(ogmiosParams.MaxBlockHeaderSize.Bytes),
-		KeyDeposits:        strconv.FormatUint(ogmiosParams.KeyDeposits.Lovelace, 10),
-		PoolDeposits:       strconv.FormatUint(ogmiosParams.PoolDeposits.Lovelace, 10),
-		PooolInfluence:     ratio(ogmiosParams.PoolInfluence),
-		MonetaryExpansion:  ratio(ogmiosParams.MonetaryExpansion),
-		TreasuryExpansion:  ratio(ogmiosParams.TreasuryExpansion),
+		KeyDeposits: strconv.FormatUint(
+			ogmiosParams.KeyDeposits.Lovelace,
+			10,
+		),
+		PoolDeposits: strconv.FormatUint(
+			ogmiosParams.PoolDeposits.Lovelace,
+			10,
+		),
+		PooolInfluence:    ratio(ogmiosParams.PoolInfluence),
+		MonetaryExpansion: ratio(ogmiosParams.MonetaryExpansion),
+		TreasuryExpansion: ratio(ogmiosParams.TreasuryExpansion),
 		// Unsure if ogmios reports this, but it's 0 on mainnet and
 		// preview
 		DecentralizationParam: 0,
 		ExtraEntropy:          ogmiosParams.ExtraEntropy,
-		MinUtxo:               strconv.FormatUint(ogmiosParams.MinUtxoDepositConstant.Lovelace, 10),
-		ProtocolMajorVersion:  int(ogmiosParams.Version.Major),
-		ProtocolMinorVersion:  int(ogmiosParams.Version.Minor),
-		MinPoolCost:           strconv.FormatUint(ogmiosParams.MinStakePoolCost.Lovelace, 10),
-		PriceMem:              float32(ogmiosParams.ScriptExecutionPrices.Memory),
-		PriceStep:             float32(ogmiosParams.ScriptExecutionPrices.Cpu),
+		MinUtxo: strconv.FormatUint(
+			ogmiosParams.MinUtxoDepositConstant.Lovelace,
+			10,
+		),
+		ProtocolMajorVersion: int(ogmiosParams.Version.Major),
+		ProtocolMinorVersion: int(ogmiosParams.Version.Minor),
+		MinPoolCost: strconv.FormatUint(
+			ogmiosParams.MinStakePoolCost.Lovelace,
+			10,
+		),
+		PriceMem: float32(
+			ogmiosParams.ScriptExecutionPrices.Memory,
+		),
+		PriceStep: float32(ogmiosParams.ScriptExecutionPrices.Cpu),
 		MaxTxExMem: strconv.FormatUint(
 			ogmiosParams.MaxExecutionUnitsPerTransaction.Memory,
 			10,
@@ -481,18 +541,38 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 			ogmiosParams.MaxExecutionUnitsPerBlock.Memory,
 			10,
 		),
-		MaxBlockExSteps:    strconv.FormatUint(ogmiosParams.MaxExecutionUnitsPerBlock.Cpu, 10),
-		MaxValSize:         strconv.FormatUint(ogmiosParams.MaxValSize.Bytes, 10),
+		MaxBlockExSteps: strconv.FormatUint(
+			ogmiosParams.MaxExecutionUnitsPerBlock.Cpu,
+			10,
+		),
+		MaxValSize: strconv.FormatUint(
+			ogmiosParams.MaxValSize.Bytes,
+			10,
+		),
 		CollateralPercent:  int(ogmiosParams.CollateralPercentage),
 		MaxCollateralInuts: int(ogmiosParams.MaxCollateralInputs),
-		CoinsPerUtxoByte:   strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		CoinsPerUtxoByte: strconv.FormatUint(
+			ogmiosParams.MinUtxoDepositCoefficient,
+			10,
+		),
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
-		CoinsPerUtxoWord:                 strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
-		MaximumReferenceScriptsSize:      int(ogmiosParams.MaximumReferenceScriptsSize),
-		MinFeeReferenceScriptsRange:      int(ogmiosParams.MinFeeReferenceScripts.Range),
-		MinFeeReferenceScriptsBase:       int(ogmiosParams.MinFeeReferenceScripts.Base),
-		MinFeeReferenceScriptsMultiplier: int(ogmiosParams.MinFeeReferenceScripts.Multiplier),
-		CostModels:                       ogmiosParams.CostModels,
+		CoinsPerUtxoWord: strconv.FormatUint(
+			ogmiosParams.MinUtxoDepositCoefficient,
+			10,
+		),
+		MaximumReferenceScriptsSize: int(
+			ogmiosParams.MaximumReferenceScriptsSize,
+		),
+		MinFeeReferenceScriptsRange: int(
+			ogmiosParams.MinFeeReferenceScripts.Range,
+		),
+		MinFeeReferenceScriptsBase: int(
+			ogmiosParams.MinFeeReferenceScripts.Base,
+		),
+		MinFeeReferenceScriptsMultiplier: int(
+			ogmiosParams.MinFeeReferenceScripts.Multiplier,
+		),
+		CostModels: ogmiosParams.CostModels,
 	}
 }
 
@@ -553,7 +633,9 @@ func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
 
 // Copied from blockfrost context def since it just calls AddressUtxos and then
 // converts
-func (occ *OgmiosChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, error) {
+func (occ *OgmiosChainContext) Utxos(
+	address Address.Address,
+) ([]UTxO.UTxO, error) {
 	results := occ.AddressUtxos(address.String(), true)
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
@@ -589,7 +671,10 @@ func (occ *OgmiosChainContext) Utxos(address Address.Address) ([]UTxO.UTxO, erro
 		var final_amount Value.Value
 		if len(multi_assets) > 0 {
 			final_amount = Value.Value{
-				Am:        Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets},
+				Am: Amount.Amount{
+					Coin:  int64(lovelace_amount),
+					Value: multi_assets,
+				},
 				HasAssets: true,
 			}
 		} else {
@@ -648,7 +733,9 @@ func (occ *OgmiosChainContext) SubmitTx(
 
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.ExecutionUnits, error) {
+func (occ *OgmiosChainContext) EvaluateTx(
+	tx []uint8,
+) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
 	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
@@ -665,7 +752,9 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []uint8) (map[string]Redeemer.Execu
 }
 
 // This is unused
-func (occ *OgmiosChainContext) GetContractCbor(scriptHash string) (string, error) {
+func (occ *OgmiosChainContext) GetContractCbor(
+	scriptHash string,
+) (string, error) {
 	//TODO
 	return "", nil
 }

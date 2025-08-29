@@ -14,7 +14,10 @@ func New() Withdrawal {
 func (w *Withdrawal) Add(stakeAddress [29]byte, amount int) error {
 	_, exists := (*w)[stakeAddress]
 	if exists {
-		return fmt.Errorf("Withdrawal.Add: key already exists in map: %v", stakeAddress)
+		return fmt.Errorf(
+			"Withdrawal.Add: key already exists in map: %v",
+			stakeAddress,
+		)
 	}
 	(*w)[stakeAddress] = amount
 	return nil

@@ -791,7 +791,11 @@ func (p *PreComputedGroupElement) Zero() {
 	FeZero(&p.xy2d)
 }
 
-func GeAdd(r *CompletedGroupElement, p *ExtendedGroupElement, q *CachedGroupElement) {
+func GeAdd(
+	r *CompletedGroupElement,
+	p *ExtendedGroupElement,
+	q *CachedGroupElement,
+) {
 	var t0 FieldElement
 
 	FeAdd(&r.X, &p.Y, &p.X)
@@ -807,7 +811,11 @@ func GeAdd(r *CompletedGroupElement, p *ExtendedGroupElement, q *CachedGroupElem
 	FeSub(&r.T, &t0, &r.T)
 }
 
-func geSub(r *CompletedGroupElement, p *ExtendedGroupElement, q *CachedGroupElement) {
+func geSub(
+	r *CompletedGroupElement,
+	p *ExtendedGroupElement,
+	q *CachedGroupElement,
+) {
 	var t0 FieldElement
 
 	FeAdd(&r.X, &p.Y, &p.X)
@@ -823,7 +831,11 @@ func geSub(r *CompletedGroupElement, p *ExtendedGroupElement, q *CachedGroupElem
 	FeAdd(&r.T, &t0, &r.T)
 }
 
-func geMixedAdd(r *CompletedGroupElement, p *ExtendedGroupElement, q *PreComputedGroupElement) {
+func geMixedAdd(
+	r *CompletedGroupElement,
+	p *ExtendedGroupElement,
+	q *PreComputedGroupElement,
+) {
 	var t0 FieldElement
 
 	FeAdd(&r.X, &p.Y, &p.X)
@@ -838,7 +850,11 @@ func geMixedAdd(r *CompletedGroupElement, p *ExtendedGroupElement, q *PreCompute
 	FeSub(&r.T, &t0, &r.T)
 }
 
-func geMixedSub(r *CompletedGroupElement, p *ExtendedGroupElement, q *PreComputedGroupElement) {
+func geMixedSub(
+	r *CompletedGroupElement,
+	p *ExtendedGroupElement,
+	q *PreComputedGroupElement,
+) {
 	var t0 FieldElement
 
 	FeAdd(&r.X, &p.Y, &p.X)
@@ -887,7 +903,12 @@ func slide(r *[256]int8, a *[32]byte) {
 // where a = a[0]+256*a[1]+...+256^31 a[31].
 // and b = b[0]+256*b[1]+...+256^31 b[31].
 // B is the Ed25519 base point (x,4/5) with x positive.
-func GeDoubleScalarMultVartime(r *ProjectiveGroupElement, a *[32]byte, A *ExtendedGroupElement, b *[32]byte) {
+func GeDoubleScalarMultVartime(
+	r *ProjectiveGroupElement,
+	a *[32]byte,
+	A *ExtendedGroupElement,
+	b *[32]byte,
+) {
 	var aSlide, bSlide [256]int8
 	var Ai [8]CachedGroupElement // A,3A,5A,7A,9A,11A,13A,15A
 	var t CompletedGroupElement
@@ -1790,7 +1811,12 @@ func ScReduce(out *[32]byte, s *[64]byte) {
 }
 
 // order is the order of Curve25519 in little-endian form.
-var order = [4]uint64{0x5812631a5cf5d3ed, 0x14def9dea2f79cd6, 0, 0x1000000000000000}
+var order = [4]uint64{
+	0x5812631a5cf5d3ed,
+	0x14def9dea2f79cd6,
+	0,
+	0x1000000000000000,
+}
 
 // ScMinimal returns true if the given scalar is less than the order of the
 // curve.

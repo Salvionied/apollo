@@ -34,7 +34,9 @@ func NewEmptyBackend() FixedChainContext.FixedChainContext {
 		network (Network): The network to configure the BlockFrost context for.
 
 	Returns:
-		BlockFrostChainContext.BlockFrostChainContext: A BlockFrostChainContext instance configured for the specified network.
+
+
+	BlockFrostChainContext.BlockFrostChainContext: A BlockFrostChainContext instance configured for the specified network.
 */
 func NewBlockfrostBackend(
 	projectId string,
@@ -70,7 +72,9 @@ func NewBlockfrostBackend(
 			projectId,
 		)
 	default:
-		return BlockFrostChainContext.BlockFrostChainContext{}, errors.New("invalid network")
+		return BlockFrostChainContext.BlockFrostChainContext{}, errors.New(
+			"invalid network",
+		)
 	}
 }
 

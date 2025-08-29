@@ -54,7 +54,12 @@ func TestSerializeAndDeserializePlutusData(t *testing.T) {
 	}
 	marshaled, _ := cbor.Marshal(pd)
 	if hex.EncodeToString(marshaled) != cborHex {
-		t.Error("Invalid marshaling", hex.EncodeToString(marshaled), "Expected", cborHex)
+		t.Error(
+			"Invalid marshaling",
+			hex.EncodeToString(marshaled),
+			"Expected",
+			cborHex,
+		)
 	}
 }
 

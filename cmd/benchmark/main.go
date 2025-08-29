@@ -22,16 +22,29 @@ func main() {
 	cmd := &cobra.Command{
 		Use: "apollo-bench",
 		Run: func(cmd *cobra.Command, args []string) {
-			benchmark.Run(utxoCount, iterations, parallelism, backend, outputFormat, cpuProfile)
+			benchmark.Run(
+				utxoCount,
+				iterations,
+				parallelism,
+				backend,
+				outputFormat,
+				cpuProfile,
+			)
 		},
 	}
 
-	cmd.Flags().IntVarP(&utxoCount, "utxo-count", "u", 10, "Number of UTXOs to test")
-	cmd.Flags().IntVarP(&iterations, "iterations", "i", 1000, "Number of transactions to build")
-	cmd.Flags().IntVarP(&parallelism, "parallelism", "p", 4, "Number of parallel goroutines")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format (table/json)")
-	cmd.Flags().StringVarP(&backend, "backend", "b", "maestro", "Backend Chain Indexer")
-	cmd.Flags().StringVarP(&cpuProfile, "cpu-profile", "c", "", "Write CPU profile to file")
+	cmd.Flags().
+		IntVarP(&utxoCount, "utxo-count", "u", 10, "Number of UTXOs to test")
+	cmd.Flags().
+		IntVarP(&iterations, "iterations", "i", 1000, "Number of transactions to build")
+	cmd.Flags().
+		IntVarP(&parallelism, "parallelism", "p", 4, "Number of parallel goroutines")
+	cmd.Flags().
+		StringVarP(&outputFormat, "output", "o", "table", "Output format (table/json)")
+	cmd.Flags().
+		StringVarP(&backend, "backend", "b", "maestro", "Backend Chain Indexer")
+	cmd.Flags().
+		StringVarP(&cpuProfile, "cpu-profile", "c", "", "Write CPU profile to file")
 
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if utxoCount <= 0 {

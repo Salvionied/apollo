@@ -36,10 +36,13 @@ func (tx TransactionInput) Clone() TransactionInput {
 		other TransactionInput: The TransactionInput to compare.
 
 	Returns:
-		bool: True if the TransactionInput is equal to the other TransactionInput, false otherwise.
+
+
+	bool: True if the TransactionInput is equal to the other TransactionInput, false otherwise.
 */
 func (tx TransactionInput) EqualTo(other TransactionInput) bool {
-	return bytes.Equal(tx.TransactionId, other.TransactionId) && tx.Index == other.Index
+	return bytes.Equal(tx.TransactionId, other.TransactionId) &&
+		tx.Index == other.Index
 }
 
 /*
@@ -52,7 +55,9 @@ func (tx TransactionInput) EqualTo(other TransactionInput) bool {
 		other TransactionInput: The TransactionInput to compare.
 
 	Returns:
-		bool: True if the TransactionInput is less than the other TransactionInput, false otherwise.
+
+
+	bool: True if the TransactionInput is less than the other TransactionInput, false otherwise.
 */
 func (tx TransactionInput) LessThan(other TransactionInput) bool {
 	return tx.Index < other.Index
