@@ -11,7 +11,7 @@ require (
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.1
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/utxorpc/go-sdk v0.0.0-20250603130048-8c2c6c6648ea
 	golang.org/x/crypto v0.41.0
@@ -31,7 +31,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/utxorpc/go-codegen v0.16.0 // indirect
