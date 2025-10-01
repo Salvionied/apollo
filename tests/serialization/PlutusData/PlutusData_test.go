@@ -1,6 +1,7 @@
 package plutusdata_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -303,4 +304,24 @@ func TestPlutusDataFromJson(t *testing.T) {
 	}
 	//t.Error("test")
 
+}
+
+func TestRoundTripDefiniteDatum(t *testing.T) {
+	var pd PlutusData.PlutusData
+	datumBytes, err := hex.DecodeString("d879844100d87982d87982d87982d87981581c49ce0fc15732f1bb8c9c82f2224329a49cbb41e81c52e8a7fce5cf98d87a80d87a80d87a801a002625a0d87983d879801903e8d879811903e8")
+	if err != nil {
+		t.Error("couldn't decode hex")
+	}
+	if err := cbor.Unmarshal(datumBytes, &pd); err != nil {
+		t.Error("couldn't decode")
+	}
+	newBytes, err := cbor.Marshal(pd)
+	if err != nil {
+		t.Error("couldn't encode")
+	}
+	if !bytes.Equal(datumBytes, newBytes) {
+		fmt.Println(hex.EncodeToString(datumBytes))
+		fmt.Println(hex.EncodeToString(newBytes))
+		t.Error("failed roundtrip")
+	}
 }

@@ -40,7 +40,7 @@ type Address struct {
 	Hrp         string
 }
 
-func WalletAddressFromBytes(payment []byte, staking []byte, network constants.Network) *Address {
+func AddressFromBytes(payment []byte, paymentIsScript bool, staking []byte, stakingIsScript bool, network constants.Network) *Address {
 	var addr Address
 	addr.PaymentPart = payment
 	addr.StakingPart = staking
@@ -49,12 +49,30 @@ func WalletAddressFromBytes(payment []byte, staking []byte, network constants.Ne
 	} else {
 		addr.Network = TESTNET
 	}
-	if len(payment) == 0 {
+	if len(payment) == 0 && len(staking) == 0 {
 		return nil
+	} else if len(payment) == 0 {
+		if stakingIsScript {
+			addr.AddressType = NONE_SCRIPT
+		} else {
+			addr.AddressType = NONE_KEY
+		}
 	} else if len(staking) == 0 {
-		addr.AddressType = KEY_NONE
+		if paymentIsScript {
+			addr.AddressType = SCRIPT_NONE
+		} else {
+			addr.AddressType = KEY_NONE
+		}
 	} else {
-		addr.AddressType = KEY_KEY
+		if paymentIsScript && stakingIsScript {
+			addr.AddressType = SCRIPT_SCRIPT
+		} else if paymentIsScript && !stakingIsScript {
+			addr.AddressType = SCRIPT_KEY
+		} else if !paymentIsScript && stakingIsScript {
+			addr.AddressType = KEY_SCRIPT
+		} else {
+			addr.AddressType = KEY_KEY
+		}
 	}
 	addr.HeaderByte = (addr.AddressType << 4) | addr.Network
 	addr.Hrp = ComputeHrp(addr.AddressType, addr.Network)
@@ -167,4 +185,8 @@ func DecodeAddress(value string) (Address, error) {
 	} else {
 		return Address{make([]byte, 0), payload[:serialization.VERIFICATION_KEY_HASH_SIZE], network, addr_type, header, ComputeHrp(addr_type, network)}, nil
 	}
+}
+
+func (a Address) IsPublicKeyAddress() bool {
+	return a.AddressType == KEY_KEY || a.AddressType == KEY_NONE
 }

@@ -1,7 +1,6 @@
 package apollo
 
 import (
-	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -34,7 +33,6 @@ import (
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/BlockFrostChainContext"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Utils"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -49,12 +47,14 @@ type Apollo struct {
 	auxiliaryData      *Metadata.AuxiliaryData
 	utxos              []UTxO.UTxO
 	preselectedUtxos   []UTxO.UTxO
+	additionalUtxos    []UTxO.UTxO
 	inputAddresses     []Address.Address
 	tx                 *Transaction.Transaction
 	datums             []PlutusData.PlutusData
 	requiredSigners    []serialization.PubKeyHash
 	v1scripts          []PlutusData.PlutusV1Script
 	v2scripts          []PlutusData.PlutusV2Script
+	v3scripts          []PlutusData.PlutusV3Script
 	redeemers          []Redeemer.Redeemer
 	mintRedeemers      []Redeemer.Redeemer
 	redeemersToUTxO    map[string]Redeemer.Redeemer
@@ -71,11 +71,28 @@ type Apollo struct {
 	withdrawals        Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
 	nativescripts      []NativeScript.NativeScript
-	usedUtxos          []string
+	usedUtxos          map[string]bool
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
+	forceFee           bool
+	referencedScriptVersions map[string]bool
 }
+
+const PlutusV1 = "V1"
+const PlutusV2 = "V2"
+const PlutusV3 = "V3"
+
+func PlutusV1CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytes{Value: "00"}
+}
+func PlutusV2CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytesInt(1)
+}
+func PlutusV3CostModelKey() serialization.CustomBytes {
+    return serialization.CustomBytesInt(2)
+}
+
 
 func New(cc Base.ChainContext) *Apollo {
 	return &Apollo{
@@ -91,6 +108,7 @@ func New(cc Base.ChainContext) *Apollo {
 		requiredSigners:    make([]serialization.PubKeyHash, 0),
 		v1scripts:          make([]PlutusData.PlutusV1Script, 0),
 		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
+		v3scripts:          make([]PlutusData.PlutusV3Script, 0),
 		redeemers:          make([]Redeemer.Redeemer, 0),
 		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
 		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
@@ -99,9 +117,11 @@ func New(cc Base.ChainContext) *Apollo {
 		withdrawals:        Withdrawal.New(),
 		Fee:                0,
 		FeePadding:         0,
-		usedUtxos:          make([]string, 0),
+		usedUtxos:          make(map[string]bool, 0),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
-		referenceScripts:   make([]PlutusData.ScriptHashable, 0)}
+		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
+		referencedScriptVersions: make(map[string]bool),
+	}
 }
 
 func (b *Apollo) GetWallet() apollotypes.Wallet {
@@ -110,6 +130,9 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
+	for _, utxo := range utxos {
+		b.usedUtxos[utxo.GetKey()] = true
+	}
 	return b
 }
 
@@ -150,6 +173,11 @@ func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	return b
 }
 
+func (b *Apollo) SetAdditionalUTxOs(utxos []UTxO.UTxO) *Apollo {
+	b.additionalUtxos = utxos
+	return b
+}
+
 func (b *Apollo) AddInputAddress(address Address.Address) *Apollo {
 	b.inputAddresses = append(b.inputAddresses, address)
 	return b
@@ -177,6 +205,11 @@ func (b *Apollo) PayToAddress(address Address.Address, lovelace int, units ...Un
 
 func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 	b.datums = append(b.datums, *pd)
+	return b
+}
+
+func (b *Apollo) PayToContractAsHash(contractAddress Address.Address, pdHash []byte, lovelace int, isInline bool, units ...Unit) *Apollo {
+	b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, pdHash, false})
 	return b
 }
 
@@ -250,6 +283,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 	}
@@ -271,6 +305,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
+		PlutusV3Script: b.v3scripts,
 		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
@@ -282,23 +317,17 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 		return nil
 	}
 	witnessSet := b.buildWitnessSet()
-	cost_models := map[int]cbor.Marshaler{}
+	cost_models := map[cbor.Marshaler]cbor.Marshaler{}
 	redeemers := witnessSet.Redeemer
 	PV1Scripts := witnessSet.PlutusV1Script
 	PV2Scripts := witnessSet.PlutusV2Script
+	PV3Scripts := witnessSet.PlutusV3Script
 	datums := witnessSet.PlutusData
 
-	isV1 := len(PV1Scripts) > 0
-	if len(redeemers) > 0 {
-		if len(PV2Scripts) > 0 {
-			cost_models = PlutusData.COST_MODELSV2
-		} else if !isV1 {
-			cost_models = PlutusData.COST_MODELSV2
-		}
-	}
 	if redeemers == nil {
 		redeemers = []Redeemer.Redeemer{}
 	}
+	//redeemer_bytes, err := cbor.Marshal(Redeemer.Redeemers{Redeemers: redeemers})
 	redeemer_bytes, err := cbor.Marshal(redeemers)
 	if err != nil {
 		log.Fatal(err)
@@ -312,23 +341,24 @@ func (b *Apollo) scriptDataHash() *serialization.ScriptDataHash {
 	} else {
 		datum_bytes = []byte{}
 	}
-	var cost_model_bytes []byte
-	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
-		if err != nil {
-			log.Fatal(err)
-		}
 
-	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
-		if err != nil {
-			log.Fatal(err)
-		}
+	var cost_model_bytes []byte
+	if len(PV1Scripts) > 0 || b.referencedScriptVersions[PlutusV1] {
+		cost_models[PlutusV1CostModelKey()] = PlutusData.CostModelV1(b.Context.CostModelsV1())
+	}
+	if len(PV2Scripts) > 0 || b.referencedScriptVersions[PlutusV2] {
+		cost_models[PlutusV2CostModelKey()] = PlutusData.CostModelV2(b.Context.CostModelsV2())
+	}
+	if len(PV3Scripts) > 0 || b.referencedScriptVersions[PlutusV3] {
+		cost_models[PlutusV3CostModelKey()] = PlutusData.CostModelV3(b.Context.CostModelsV3())
+	}
+	cost_model_bytes, err = cbor.Marshal(cost_models)
+	if err != nil {
+		log.Fatal(err)
 	}
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	return &serialization.ScriptDataHash{Payload: serialization.Blake2bHash(total_bytes)}
-
 }
 
 func (b *Apollo) getMints() MultiAsset.MultiAsset[int64] {
@@ -415,26 +445,41 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 	return &tx, nil
 }
 
-func (b *Apollo) estimateFee() int64 {
+func (b *Apollo) GetEstimatedFee() (int64, error) {
 	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
 	}
 	fftx, err := b.buildFullFakeTx()
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	fakeTxBytes := fftx.Bytes()
-	estimatedFee := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem)
+	estimatedFee, err := Utils.Fee(b.Context, len(fakeTxBytes), pExU.Steps, pExU.Mem, b.referenceInputs)
+	if err != nil {
+		return 0, err
+	}
 	estimatedFee += b.FeePadding
-	return estimatedFee
+	return estimatedFee, nil
+}
 
+func (b *Apollo) estimateFee() (int64, error) {
+	if b.forceFee {
+		return b.Fee, nil
+	}
+	return b.GetEstimatedFee()
+}
+
+func (b *Apollo) ForceFee(fee int64) *Apollo {
+	b.Fee = fee
+	b.forceFee = true
+	return b
 }
 
 func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 	availableUtxos := make([]UTxO.UTxO, 0)
 	for _, utxo := range b.utxos {
-		if !slices.Contains(b.usedUtxos, utxo.GetKey()) {
+		if _, exists := b.usedUtxos[utxo.GetKey()]; !exists {
 			availableUtxos = append(availableUtxos, utxo)
 		}
 	}
@@ -474,22 +519,27 @@ func (b *Apollo) setCollateral() *Apollo {
 		len(b.referenceInputs) == 0 {
 		return b
 	}
-	availableUtxos := b.getAvailableUtxos()
 	collateral_amount := 5_000_000
-	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) > collateral_amount && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-
-			return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
-			min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
-			if min_lovelace > return_amount {
-				continue
-			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
-				b.collaterals = append(b.collaterals, utxo)
-				b.collateralReturn = &returnOutput
-				b.totalCollateral = collateral_amount
-				return b
-			}
+	for _, utxo := range b.utxos {
+		if len(utxo.Output.GetAmount().GetAssets()) > 0 {
+			continue
+		}
+		if int(utxo.Output.GetValue().GetCoin()) < collateral_amount {
+			continue
+		}
+		if !utxo.Output.GetAddress().IsPublicKeyAddress() {
+			continue
+		}
+		return_amount := utxo.Output.GetValue().GetCoin() - int64(collateral_amount)
+		min_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount)), b.Context)
+		if min_lovelace > return_amount {
+			continue
+		} else {
+			returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.PureLovelaceValue(return_amount))
+			b.collaterals = append(b.collaterals, utxo)
+			b.collateralReturn = &returnOutput
+			b.totalCollateral = collateral_amount
+			return b
 		}
 	}
 	return b
@@ -500,19 +550,20 @@ func (b *Apollo) Clone() *Apollo {
 	return &clone
 }
 
-func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
+func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, []byte, error) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, _ := cloned_b.Complete()
+	updated_b, _, _ := cloned_b.Complete()
 	//updated_b = updated_b.fakeWitness()
 	tx_cbor, _ := cbor.Marshal(updated_b.tx)
-	return b.Context.EvaluateTx(tx_cbor)
+	result, err := b.Context.EvaluateTxWithAdditionalUtxos(tx_cbor, b.additionalUtxos)
+	return result, tx_cbor, err
 }
-func (b *Apollo) updateExUnits() (*Apollo, error) {
+func (b *Apollo) updateExUnits() (*Apollo, []byte, error) {
 	if b.isEstimateRequired {
-		estimated_execution_units, err := b.estimateExunits()
+		estimated_execution_units, tx_cbor, err := b.estimateExunits()
 		if err != nil {
-			return nil, err
+			return nil, tx_cbor, err
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
@@ -555,54 +606,60 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			b.redeemers = append(b.redeemers, redeemer)
 		}
 	}
-	return b, nil
+	return b, nil, nil
 }
 
 func (b *Apollo) GetTx() *Transaction.Transaction {
 	return b.tx
 }
 
-func (b *Apollo) Complete() (*Apollo, error) {
+// If this fails due to a script failure, it returns the failed tx cbor as
+// bytes for diagnostic purposes.
+func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	selectedUtxos := make([]UTxO.UTxO, 0)
 	selectedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
 		selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 	}
-	burnedValue := b.GetBurns()
-	selectedAmount = selectedAmount.Add(burnedValue)
+	mintedValue := b.GetMints()
+	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
-	requestedAmount.AddLovelace(b.estimateFee() + constants.MIN_LOVELACE)
+	estimatedFee, err := b.estimateFee()
+	if err != nil {
+		return nil, nil, err
+	}
+	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
 	unfulfilledAmount = unfulfilledAmount.RemoveZeroAssets()
 	available_utxos := SortUtxos(b.getAvailableUtxos())
 	//BALANCE TX
-	if unfulfilledAmount.GreaterOrEqual(Value.Value{}) {
+	if !unfulfilledAmount.Less(Value.Value{}) {
 		//BALANCE
 		if len(unfulfilledAmount.GetAssets()) > 0 {
 			//BALANCE WITH ASSETS
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
+					if amt <= 0 {
+						continue
+					}
 					found := false
 					selectedSoFar := int64(0)
-					usedIdxs := make([]int, 0)
-					for idx, utxo := range available_utxos {
+					for _, utxo := range available_utxos {
 						ma := utxo.Output.GetValue().GetAssets()
 						if ma.GetByPolicyAndId(pol, asset) >= amt {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
 							found = true
 							break
 						} else if ma.GetByPolicyAndId(pol, asset) > 0 {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
-							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
 							if selectedSoFar >= amt {
 								found = true
@@ -610,15 +667,8 @@ func (b *Apollo) Complete() (*Apollo, error) {
 							}
 						}
 					}
-					newAvailUtxos := make([]UTxO.UTxO, 0)
-					for idx, availutxo := range available_utxos {
-						if !slices.Contains(usedIdxs, idx) {
-							newAvailUtxos = append(newAvailUtxos, availutxo)
-						}
-					}
-					available_utxos = newAvailUtxos
 					if !found {
-						return nil, errors.New("missing required assets")
+						return nil, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
 					}
 
 				}
@@ -629,16 +679,13 @@ func (b *Apollo) Complete() (*Apollo, error) {
 				break
 			}
 			if len(available_utxos) == 0 {
-				fmt.Println(selectedAmount.Greater(requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false})))
-				fmt.Println(selectedAmount, requestedAmount.Add(Value.Value{Am: Amount.Amount{}, Coin: 1_000_000, HasAssets: false}))
-
-				return nil, errors.New("not enough funds")
+				return nil, nil, errors.New("not enough funds")
 			}
 			utxo := available_utxos[0]
 			selectedUtxos = append(selectedUtxos, utxo)
 			selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 			available_utxos = available_utxos[1:]
-			b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+			b.usedUtxos[utxo.GetKey()] = true
 		}
 
 	}
@@ -650,24 +697,23 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET COLLATERAL
 	b = b.setCollateral()
 	//UPDATE EXUNITS
-	b, err := b.updateExUnits()
+	b, tx_cbor, err := b.updateExUnits()
 	if err != nil {
-		return nil, err
+		return nil, tx_cbor, err
 	}
 	//ADDCHANGEANDFEE
-	b = b.addChangeAndFee()
+	b, err = b.addChangeAndFee()
 	//FINALIZE TX
 	body := b.buildTxBody()
 	witnessSet := b.buildWitnessSet()
 	b.tx = &Transaction.Transaction{TransactionBody: body, TransactionWitnessSet: witnessSet, AuxiliaryData: b.auxiliaryData, Valid: true}
-	return b, nil
+	return b, nil, nil
 }
 
 func isOverUtxoLimit(change Value.Value, address Address.Address, b Base.ChainContext) bool {
 	txOutput := TransactionOutput.SimpleTransactionOutput(address, Value.SimpleValue(0, change.GetAssets()))
 	encoded, _ := cbor.Marshal(txOutput)
 	maxValSize, _ := strconv.Atoi(b.GetProtocolParams().MaxValSize)
-	//fmt.Println(len(encoded), maxValSize)
 	return len(encoded) > maxValSize
 
 }
@@ -722,6 +768,19 @@ func splitPayments(c Value.Value, a Address.Address, b Base.ChainContext) []*Pay
 
 }
 
+func (b *Apollo) GetMints() Value.Value {
+	mints := Value.Value{}
+	for _, mintUnit := range b.mint {
+		usedUnit := Unit{
+			PolicyId: mintUnit.PolicyId,
+			Name:     mintUnit.Name,
+			Quantity: mintUnit.Quantity,
+		}
+		mints = mints.Add(usedUnit.ToValue())
+	}
+	return mints
+}
+
 func (b *Apollo) GetBurns() (burns Value.Value) {
 	burns = Value.Value{}
 	for _, mintUnit := range b.mint {
@@ -738,7 +797,7 @@ func (b *Apollo) GetBurns() (burns Value.Value) {
 	return burns
 }
 
-func (b *Apollo) addChangeAndFee() *Apollo {
+func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	burns := b.GetBurns()
 	providedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {
@@ -749,7 +808,11 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
-	b.Fee = b.estimateFee()
+	estimatedFee, err := b.estimateFee()
+	if err != nil {
+		return nil, err
+	}
+	b.Fee = estimatedFee
 	requestedAmount.AddLovelace(b.Fee)
 	change := providedAmount.Sub(requestedAmount)
 
@@ -759,7 +822,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 	) {
 		sortedUtxos := SortUtxos(b.getAvailableUtxos())
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
-		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
+		b.usedUtxos[sortedUtxos[0].GetKey()] = true
 		return b.addChangeAndFee()
 	}
 	if isOverUtxoLimit(change, b.inputAddresses[0], b.Context) {
@@ -768,7 +831,10 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		for _, payment := range adjustedPayments {
 			b.payments = append(b.payments, payment)
 		}
-		newestFee := b.estimateFee()
+		newestFee, err := b.estimateFee()
+		if err != nil {
+			return nil, err
+		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
 			adjustedPayments[len(adjustedPayments)-1].Lovelace -= int(difference)
@@ -799,7 +865,10 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 		pp := b.payments[:]
 		b.payments = append(b.payments, &payment)
 
-		newestFee := b.estimateFee()
+		newestFee, err := b.estimateFee()
+		if err != nil {
+			return nil, err
+		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
 			payment.Lovelace -= int(difference)
@@ -807,7 +876,7 @@ func (b *Apollo) addChangeAndFee() *Apollo {
 			b.Fee = newestFee
 		}
 	}
-	return b
+	return b, nil
 }
 
 func (b *Apollo) CollectFrom(
@@ -816,7 +885,7 @@ func (b *Apollo) CollectFrom(
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
-	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
+	b.usedUtxos[inputUtxo.GetKey()] = true
 	newRedeemer := Redeemer.Redeemer{
 		Tag:     Redeemer.SPEND,
 		Index:   0, // This will be computed later when we iterate over redeemersToUTxO
@@ -839,6 +908,7 @@ func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 
 	return b
 }
+
 func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
 	for _, scriptHash := range b.scriptHashes {
@@ -850,6 +920,20 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
 	return b
 }
+
+func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
+	hash := PlutusData.PlutusScriptHash(script)
+	for _, scriptHash := range b.scriptHashes {
+		if scriptHash == hex.EncodeToString(hash.Bytes()) {
+			return b
+		}
+	}
+	b.v3scripts = append(b.v3scripts, script)
+	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
+	return b
+}
+
+
 
 func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 	paymentPath := "m/1852'/1815'/0'/0/0"
@@ -886,11 +970,7 @@ func (a *Apollo) SetWalletFromKeypair(vkey string, skey string, network constant
 	if err != nil {
 		fmt.Println("SetWalletFromKeypair: Failed to decode skey")
 	}
-	// There are two slightly different interpretations of ed25519,
-	// depending on which thing you call the "private key".
-	// cardano-cli and the golang library crypto/ed25519 take opposite
-	// interpretations. NewKeyFromSeed performs the necessary conversion.
-	signingKey := Key.SigningKey{Payload: ed25519.NewKeyFromSeed(signingKey_bytes)}
+	signingKey := Key.SigningKey{Payload: signingKey_bytes}
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
 	vkh, _ := verificationKey.Hash()
 
@@ -965,12 +1045,12 @@ func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	return b, nil
 }
 
-func (b *Apollo) UtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
-	utxo := b.Context.GetUtxoFromRef(txHash, txIndex)
-	if utxo == nil {
-		return nil
+func (b *Apollo) UtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error) {
+	utxo, err := b.Context.GetUtxoFromRef(txHash, txIndex)
+	if err != nil {
+		return UTxO.UTxO{}, err
 	}
-	return utxo
+	return utxo, nil
 
 }
 
@@ -1013,7 +1093,7 @@ func (b *Apollo) SetShelleyMetadata(metadata Metadata.ShelleyMaryMetadata) *Apol
 	return b
 }
 
-func (b *Apollo) GetUsedUTxOs() []string {
+func (b *Apollo) GetUsedUTxOs() map[string]bool {
 	return b.usedUtxos
 }
 
@@ -1021,6 +1101,25 @@ func (b *Apollo) SetEstimationExUnitsRequired() *Apollo {
 	b.isEstimateRequired = true
 	return b
 }
+
+func (b *Apollo) AddReferenceScriptV1(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV1] = true
+	return b
+}
+
+func (b *Apollo) AddReferenceScriptV2(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV2] = true
+	return b
+}
+
+func (b *Apollo) AddReferenceScriptV3(txHash string, index int) *Apollo {
+	b.AddReferenceInput(txHash, index)
+	b.referencedScriptVersions[PlutusV3] = true
+	return b
+}
+
 
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)

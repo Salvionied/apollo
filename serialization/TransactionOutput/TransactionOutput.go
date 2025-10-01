@@ -221,7 +221,7 @@ func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.ScriptRef
 	} else {
-		return new(PlutusData.ScriptRef)
+		return nil
 	}
 }
 

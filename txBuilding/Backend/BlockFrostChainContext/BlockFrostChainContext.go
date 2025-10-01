@@ -75,14 +75,14 @@ func (bfc *BlockFrostChainContext) Init() {
 	bfc._protocol_param = latest_params
 }
 
-func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func (bfc *BlockFrostChainContext) GetUtxoFromRef(txHash string, index int) (UTxO.UTxO, error) {
 	txOuts := bfc.TxOuts(txHash)
 	for _, txOut := range txOuts {
 		if txOut.OutputIndex == index {
-			return txOut.ToUTxO(txHash)
+			return txOut.ToUTxO(txHash), nil
 		}
 	}
-	return nil
+	return UTxO.UTxO{}, fmt.Errorf("Could not fetch utxo: %v#%v", txHash, index)
 }
 
 func (bfc *BlockFrostChainContext) TxOuts(txHash string) []Base.Output {
@@ -471,6 +471,10 @@ func (bfc *BlockFrostChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Ex
 	return final_result, nil
 }
 
+func (bfc *BlockFrostChainContext) EvaluateTxWithAdditionalUtxos(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	return nil, fmt.Errorf("EvaluateTxWithAdditionalUtxos: Not implemented")
+}
+
 type BlockfrostContractCbor struct {
 	Cbor string `json:"cbor"`
 }
@@ -489,4 +493,19 @@ func (bfc *BlockFrostChainContext) GetContractCbor(scriptHash string) string {
 		log.Fatal(err, "UNMARSHAL PROTOCOL")
 	}
 	return response.Cbor
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV1() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV1: unimplemented")
+	return PlutusData.CostModel(nil)
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV2() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV2: unimplemented")
+	return PlutusData.CostModel(nil)
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV3() PlutusData.CostModel {
+	log.Fatal("BlockFrostChainContext: CostModelsV3: unimplemented")
+	return PlutusData.CostModel(nil)
 }

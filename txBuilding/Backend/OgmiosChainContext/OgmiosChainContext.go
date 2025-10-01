@@ -26,11 +26,10 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Value"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	"github.com/SundaeSwap-finance/ogmigo/v6"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/statequery"
+	"github.com/SundaeSwap-finance/ogmigo"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -84,6 +83,18 @@ func multiAsset_OgmigoToApollo(m map[string]map[string]num.Int) MultiAsset.Multi
 	return assetMap
 }
 
+func multiAsset_ApolloToOgmigo(ma MultiAsset.MultiAsset[int64]) map[string]map[string]num.Int {
+	assetMap := make(map[string]map[string]num.Int)
+	for policy, asset := range ma {
+		tokensMap := make(map[string]num.Int)
+		for assetName, amount := range asset {
+			tokensMap[assetName.HexString()] = num.Int64(amount)
+		}
+		assetMap[policy.Value] = tokensMap
+	}
+	return assetMap
+}
+
 func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 	val := v.AssetsExceptAda()
 	ass := multiAsset_OgmigoToApollo(val)
@@ -101,6 +112,20 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 		},
 		Coin:      0,
 		HasAssets: true,
+	}
+}
+
+func value_ApolloToOgmigo(v Value.AlonzoValue) shared.Value {
+	if v.HasAssets {
+		result := multiAsset_ApolloToOgmigo(v.Am.Value)
+		result["ada"] = make(map[string]num.Int)
+		result["ada"]["lovelace"] = num.Int64(v.Am.Coin)
+		return result
+	} else {
+		result := make(map[string]map[string]num.Int)
+		result["ada"] = make(map[string]num.Int)
+		result["ada"]["lovelace"] = num.Int64(v.Coin)
+		return result
 	}
 }
 
@@ -129,18 +154,61 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 	return nil
 }
 
+func datum_ApolloToOgmigo(pd *PlutusData.DatumOption) (string, string, error) {
+	switch pd.DatumType {
+	case PlutusData.DatumTypeHash:
+		return "", hex.EncodeToString(pd.Hash), nil
+	case PlutusData.DatumTypeInline:
+		bytes, err := cbor.Marshal(pd.Inline)
+		if err != nil {
+			return "", "", err
+		}
+		return hex.EncodeToString(bytes), "", nil
+	default:
+		return "", "", fmt.Errorf("datum_ApolloToOgmigo: unknown type tag for DatumOption: %v", pd.DatumType)
+	}
+}
+
 func scriptRef_OgmigoToApollo(script json.RawMessage) (*PlutusData.ScriptRef, error) {
 	if len(script) == 0 {
 		return nil, nil
 	}
-	var ref PlutusData.ScriptRef
+	var ref struct {
+		Language string
+		Cbor     string
+	}
 	if err := json.Unmarshal(script, &ref); err != nil {
 		return nil, err
 	}
-	return &ref, nil
+	if ref.Language == "" {
+		return nil, fmt.Errorf("can't parse script ref (missing 'language') '%s'", string(script))
+	}
+	if ref.Cbor == "" {
+		return nil, fmt.Errorf("can't parse script ref (missing 'cbor') '%s'", string(script))
+	}
+	cborRaw, err := hex.DecodeString(ref.Cbor)
+	if err != nil {
+		return nil, err
+	}
+	return &PlutusData.ScriptRef{
+		Script: PlutusData.InnerScript{
+			Script: cborRaw,
+		},
+	}, nil
 }
 
-func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
+func scriptRef_ApolloToOgmigo(script *PlutusData.ScriptRef) (json.RawMessage, error) {
+	if script == nil {
+		return nil, nil
+	}
+	enc, err := json.Marshal(script)
+	if err != nil {
+		return nil, err
+	}
+	return enc, nil
+}
+
+func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 	txHashRaw, err := hex.DecodeString(u.Transaction.ID)
 	if err != nil {
 		log.Fatal(err, "Failed to decode ogmigo transaction ID")
@@ -162,9 +230,9 @@ func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
 		},
 		Output: TransactionOutput.TransactionOutput{
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
-				Address:   addr,
-				Amount:    v,
-				Datum:     datum,
+				Address:            addr,
+				Amount:             v,
+				Datum:              datum,
 				ScriptRef: scriptRef,
 			},
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
@@ -173,7 +241,30 @@ func Utxo_OgmigoToApollo(u statequery.TxOut) UTxO.UTxO {
 	}
 }
 
-func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
+func Utxo_ApolloToOgmigo(u UTxO.UTxO) shared.Utxo {
+	amount := value_ApolloToOgmigo(u.Output.GetValue().ToAlonzoValue())
+	datum, datumHash, err := datum_ApolloToOgmigo(u.Output.GetDatumOption())
+	if err != nil {
+		log.Fatal(err, "Failed to convert apollo datum object to ogmigo format")
+	}
+	scriptRef, err := scriptRef_ApolloToOgmigo(u.Output.GetScriptRef())
+	if err != nil {
+		log.Fatal(err, "Failed to convert apollo script ref to ogmigo format")
+	}
+	return shared.Utxo{
+		Transaction: shared.UtxoTxID{
+			ID: hex.EncodeToString(u.Input.TransactionId),
+		},
+		Index:     uint32(u.Input.Index),
+		Address:   u.Output.GetAddress().String(),
+		Value:     amount,
+		Datum:     datum,
+		DatumHash: datumHash,
+		Script:    scriptRef,
+	}
+}
+
+func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) (UTxO.UTxO, error) {
 	ctx := context.Background()
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{
@@ -185,14 +276,14 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UT
 		log.Fatal(err, "REQUEST PROTOCOL")
 	}
 	if len(utxos) == 0 {
-		return nil
+		return UTxO.UTxO{}, fmt.Errorf("Could not fetch utxo: %v#%v", txHash, index)
 	} else {
 		apolloUtxo := Utxo_OgmigoToApollo(utxos[0])
-		return &apolloUtxo
+		return apolloUtxo, nil
 	}
 }
 
-func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
+func ogmiosValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 	amts := make([]Base.AddressAmount, 0)
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
@@ -230,7 +321,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 			more_utxos = false
 		}
 		for _, u := range us {
-			am := statequeryValue_toAddressAmount(u.Value)
+			am := ogmiosValue_toAddressAmount(u.Value)
 			apolloUtxo := Base.Output{
 				Address:             u.Address,
 				Amount:              am,
@@ -238,7 +329,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				DataHash:            u.DatumHash,
 				InlineDatum:         u.Datum,
 				Collateral:          false, // Can querying ogmios return collateral outputs?
-				ReferenceScriptHash: "",    // TODO
+				ReferenceScriptHash: "", // TODO
 			}
 			outs = append(outs, apolloUtxo)
 		}
@@ -320,6 +411,35 @@ func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
 	}
 }
 
+func (occ *OgmiosChainContext) KupoToUtxo(m kugo.Match) UTxO.UTxO {
+	ctx := context.Background()
+	addr, au := occ.kupoToAddressUtxo(ctx, m)
+	return occ.addressUtxoToUtxo(ctx, addr, au)
+}
+
+func (occ *OgmiosChainContext) kupoToAddressUtxo(ctx context.Context, match kugo.Match) (Address.Address, Base.AddressUTXO) {
+	datum := ""
+	var err error
+	if match.DatumType == "inline" {
+		datum, err = occ.kugo.Datum(ctx, match.DatumHash)
+		if err != nil {
+			log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
+		}
+	}
+	am := ogmiosValue_toAddressAmount(shared.Value(match.Value))
+	addr, _ := Address.DecodeAddress(match.Address)
+	return addr, Base.AddressUTXO{
+		TxHash:      match.TransactionID,
+		OutputIndex: match.OutputIndex,
+		Amount:      am,
+		// We probably don't need this info and kupo doesn't provide it in this query
+		Block:               "",
+		DataHash:            match.DatumHash,
+		InlineDatum:         datum,
+		ReferenceScriptHash: match.ScriptHash,
+	}
+}
+
 func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.AddressUTXO {
 	ctx := context.Background()
 	addressUtxos := make([]Base.AddressUTXO, 0)
@@ -328,23 +448,8 @@ func (occ *OgmiosChainContext) AddressUtxos(address string, gather bool) []Base.
 		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
 	}
 	for _, match := range matches {
-		datum := ""
-		if match.DatumType == "inline" {
-			datum, err = occ.kugo.Datum(ctx, match.DatumHash)
-			if err != nil {
-				log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo datum request failed")
-			}
-		}
-		am := statequeryValue_toAddressAmount(shared.Value(match.Value))
-		addressUtxos = append(addressUtxos, Base.AddressUTXO{
-			TxHash:      match.TransactionID,
-			OutputIndex: match.OutputIndex,
-			Amount:      am,
-			// We probably don't need this info and kupo doesn't provide it in this query
-			Block:       "",
-			DataHash:    match.DatumHash,
-			InlineDatum: datum,
-		})
+		_, addrUtxo := occ.kupoToAddressUtxo(ctx, match)
+		addressUtxos = append(addressUtxos, addrUtxo)
 	}
 	return addressUtxos
 
@@ -416,28 +521,66 @@ type ExUnits struct {
 	Memory uint64 `json:"memory"`
 }
 
+type ReferenceScriptsFees struct {
+	Base       float64 `json:"base"`
+	Range      uint64  `json:"range"`
+	Multiplier float64 `json:"multiplier"`
+}
+
+type OgmiosCostModels struct {
+	V1 []int
+	V2 []int
+	V3 []int
+}
+
+func (ocm *OgmiosCostModels) UnmarshalJSON(bytes []byte) error {
+	x := make(map[string][]int)
+	err := json.Unmarshal(bytes, &x)
+	if err != nil {
+		return err
+	}
+	v1, ok := x["plutus:v1"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v1': %v", string(bytes))
+	}
+	v2, ok := x["plutus:v2"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v2': %v", string(bytes))
+	}
+	v3, ok := x["plutus:v3"]
+	if !ok {
+		return fmt.Errorf("OgmiosCostModels: UnmarshalJSON: missing 'plutus:v3': %v", string(bytes))
+	}
+	ocm.V1 = v1
+	ocm.V2 = v2
+	ocm.V3 = v3
+	return nil
+}
+
 type OgmiosProtocolParameters struct {
-	MinFeeConstant                  AdaLovelace `json:"minFeeConstant"`
-	MinFeeCoefficient               uint64      `json:"minFeeCoefficient"`
-	MaxBlockSize                    Bytes       `json:"maxBlockBodySize"`
-	MaxTxSize                       Bytes       `json:"maxTransactionSize"`
-	MaxBlockHeaderSize              Bytes       `json:"maxBlockHeaderSize"`
-	KeyDeposits                     AdaLovelace `json:"stakeCredentialDeposit"`
-	PoolDeposits                    AdaLovelace `json:"stakePoolDeposit"`
-	PoolInfluence                   string      `json:"stakePoolPledgeInfluence"`
-	MonetaryExpansion               string      `json:"monetaryExpansion"`
-	TreasuryExpansion               string      `json:"treasuryExpansion"`
-	ExtraEntropy                    string      `json:"extraEntropy"`
-	MaxValSize                      Bytes       `json:"maxValueSize"`
-	ScriptExecutionPrices           Prices      `json:"scriptExecutionPrices"`
-	MinUtxoDepositCoefficient       uint64      `json:"minUtxoDepositCoefficient"`
-	MinUtxoDepositConstant          AdaLovelace `json:"minUtxoDepositConstant"`
-	MinStakePoolCost                AdaLovelace `json:"minStakePoolCost"`
-	MaxExecutionUnitsPerTransaction ExUnits     `json:"maxExecutionUnitsPerTransaction"`
-	MaxExecutionUnitsPerBlock       ExUnits     `json:"maxExecutionUnitsPerBlock"`
-	CollateralPercentage            uint64      `json:"collateralPercentage"`
-	MaxCollateralInputs             uint64      `json:"maxCollateralInputs"`
-	Version                         Version     `json:"version"`
+	MinFeeConstant                  AdaLovelace          `json:"minFeeConstant"`
+	MinFeeCoefficient               uint64               `json:"minFeeCoefficient"`
+	MaxBlockSize                    Bytes                `json:"maxBlockBodySize"`
+	MaxTxSize                       Bytes                `json:"maxTransactionSize"`
+	MaxBlockHeaderSize              Bytes                `json:"maxBlockHeaderSize"`
+	KeyDeposits                     AdaLovelace          `json:"stakeCredentialDeposit"`
+	PoolDeposits                    AdaLovelace          `json:"stakePoolDeposit"`
+	PoolInfluence                   string               `json:"stakePoolPledgeInfluence"`
+	MonetaryExpansion               string               `json:"monetaryExpansion"`
+	TreasuryExpansion               string               `json:"treasuryExpansion"`
+	ExtraEntropy                    string               `json:"extraEntropy"`
+	MaxValSize                      Bytes                `json:"maxValueSize"`
+	ScriptExecutionPrices           Prices               `json:"scriptExecutionPrices"`
+	MinUtxoDepositCoefficient       uint64               `json:"minUtxoDepositCoefficient"`
+	MinUtxoDepositConstant          AdaLovelace          `json:"minUtxoDepositConstant"`
+	MinStakePoolCost                AdaLovelace          `json:"minStakePoolCost"`
+	MaxExecutionUnitsPerTransaction ExUnits              `json:"maxExecutionUnitsPerTransaction"`
+	MaxExecutionUnitsPerBlock       ExUnits              `json:"maxExecutionUnitsPerBlock"`
+	CollateralPercentage            uint64               `json:"collateralPercentage"`
+	MaxCollateralInputs             uint64               `json:"maxCollateralInputs"`
+	MinFeeReferenceScripts          ReferenceScriptsFees `json:"minFeeReferenceScripts"`
+	CostModels                      OgmiosCostModels     `json:"plutusCostModels"`
+	Version                         Version              `json:"version"`
 }
 
 func ratio(s string) float32 {
@@ -466,6 +609,12 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 	var ogmiosParams OgmiosProtocolParameters
 	if err := json.Unmarshal(pparams, &ogmiosParams); err != nil {
 		log.Fatal(err, "OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters")
+	}
+
+	cm := map[Base.CostModelsPlutusVersion]PlutusData.CostModel{
+		Base.CostModelsPlutusV1: ogmiosParams.CostModels.V1,
+		Base.CostModelsPlutusV2: ogmiosParams.CostModels.V2,
+		Base.CostModelsPlutusV3: ogmiosParams.CostModels.V3,
 	}
 
 	return Base.ProtocolParameters{
@@ -498,7 +647,9 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 		MaxCollateralInuts:    int(ogmiosParams.MaxCollateralInputs),
 		CoinsPerUtxoByte:      strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
 		// PerUtxoWord is deprecated https://cips.cardano.org/cips/cip55/
-		CoinsPerUtxoWord: strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		CoinsPerUtxoWord:       strconv.FormatUint(ogmiosParams.MinUtxoDepositCoefficient, 10),
+		MinFeeReferenceScripts: int(ogmiosParams.MinFeeReferenceScripts.Base),
+		CostModels:             cm,
 	}
 }
 
@@ -557,76 +708,118 @@ func (occ *OgmiosChainContext) MaxTxFee() int {
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
+func (occ *OgmiosChainContext) addressUtxoToUtxo(ctx context.Context, address Address.Address, result Base.AddressUTXO) UTxO.UTxO {
+	decodedTxId, _ := hex.DecodeString(result.TxHash)
+	tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
+	amount := result.Amount
+	lovelace_amount := 0
+	multi_assets := MultiAsset.MultiAsset[int64]{}
+	for _, item := range amount {
+		if item.Unit == "lovelace" {
+			amount, err := strconv.Atoi(item.Quantity)
+			if err != nil {
+				log.Fatal(err)
+			}
+			lovelace_amount += amount
+		} else {
+			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
+			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+			_, ok := multi_assets[policy_id]
+			if !ok {
+				multi_assets[policy_id] = Asset.Asset[int64]{}
+			}
+			multi_assets[policy_id][asset_name] = int64(asset_quantity)
+		}
+	}
+	final_amount := Value.Value{}
+	if len(multi_assets) > 0 {
+		final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
+	} else {
+		final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
+	}
+	datum_hash := serialization.DatumHash{}
+	if result.DataHash != "" && result.InlineDatum == "" {
+
+		datum_hash = serialization.DatumHash{}
+		copy(datum_hash.Payload[:], result.DataHash[:])
+	}
+
+	// Get reference script
+	var refScript []byte
+	if result.ReferenceScriptHash != "" {
+		ref, err := occ.kugo.Script(ctx, result.ReferenceScriptHash)
+		if err != nil {
+			log.Fatal(fmt.Errorf("OgmiosChainContext: failed to query reference script hash: '%v': %w", result.ReferenceScriptHash, err))
+		}
+		raw, err := hex.DecodeString(ref.Script)
+		if err != nil {
+			log.Fatal(fmt.Errorf("OgmiosChainContext: failed to decode reference script bytes from hex: %w", err))
+		}
+		refScript = raw
+	}
+
+	// Get inline datum
+	var inlineDatum *PlutusData.DatumOption
+	if result.InlineDatum != "" {
+		decoded, err := hex.DecodeString(result.InlineDatum)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var x PlutusData.PlutusData
+		err = cbor.Unmarshal(decoded, &x)
+		if err != nil {
+			log.Fatal(err)
+		}
+		option := PlutusData.DatumOptionInline(&x)
+		inlineDatum = &option
+	}
+
+	has_alonzo_datum := inlineDatum != nil
+	has_ref_script := refScript != nil
+
+	var tx_out TransactionOutput.TransactionOutput
+	if has_alonzo_datum || has_ref_script {
+		tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
+			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+				Address: address,
+				Amount:  final_amount.ToAlonzoValue(),
+			},
+		}
+		if inlineDatum != nil {
+			tx_out.PostAlonzo.Datum = inlineDatum
+		}
+		if refScript != nil {
+			tx_out.PostAlonzo.ScriptRef = &PlutusData.ScriptRef{
+				Script: PlutusData.InnerScript{
+					Script: refScript,
+				},
+			}
+		}
+	} else {
+		tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
+			Address:   address,
+			Amount:    final_amount,
+			DatumHash: datum_hash,
+			HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
+	}
+	return UTxO.UTxO{
+		Input:  tx_in,
+		Output: tx_out,
+	}
+}
+
 // Copied from blockfrost context def since it just calls AddressUtxos and then
 // converts
 func (occ *OgmiosChainContext) Utxos(address Address.Address) []UTxO.UTxO {
+	ctx := context.Background()
 	results := occ.AddressUtxos(address.String(), true)
 	utxos := make([]UTxO.UTxO, 0)
 	for _, result := range results {
-		decodedTxId, _ := hex.DecodeString(result.TxHash)
-		tx_in := TransactionInput.TransactionInput{TransactionId: decodedTxId, Index: result.OutputIndex}
-		amount := result.Amount
-		lovelace_amount := 0
-		multi_assets := MultiAsset.MultiAsset[int64]{}
-		for _, item := range amount {
-			if item.Unit == "lovelace" {
-				amount, err := strconv.Atoi(item.Quantity)
-				if err != nil {
-					log.Fatal(err)
-				}
-				lovelace_amount += amount
-			} else {
-				asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
-				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
-				_, ok := multi_assets[policy_id]
-				if !ok {
-					multi_assets[policy_id] = Asset.Asset[int64]{}
-				}
-				multi_assets[policy_id][asset_name] = int64(asset_quantity)
-			}
-		}
-		final_amount := Value.Value{}
-		if len(multi_assets) > 0 {
-			final_amount = Value.Value{Am: Amount.Amount{Coin: int64(lovelace_amount), Value: multi_assets}, HasAssets: true}
-		} else {
-			final_amount = Value.Value{Coin: int64(lovelace_amount), HasAssets: false}
-		}
-		datum_hash := serialization.DatumHash{}
-		if result.DataHash != "" && result.InlineDatum == "" {
-
-			datum_hash = serialization.DatumHash{}
-			copy(datum_hash.Payload[:], result.DataHash[:])
-		}
-		var tx_out TransactionOutput.TransactionOutput
-		if result.InlineDatum != "" {
-			decoded, err := hex.DecodeString(result.InlineDatum)
-			if err != nil {
-				log.Fatal(err)
-			}
-			var x PlutusData.PlutusData
-			err = cbor.Unmarshal(decoded, &x)
-			if err != nil {
-				log.Fatal(err)
-			}
-			l := PlutusData.DatumOptionInline(&x)
-			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
-				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
-					Address: address,
-					Amount:  final_amount.ToAlonzoValue(),
-					Datum:   &l},
-			}
-		} else {
-			tx_out = TransactionOutput.TransactionOutput{PreAlonzo: TransactionOutput.TransactionOutputShelley{
-				Address:   address,
-				Amount:    final_amount,
-				DatumHash: datum_hash,
-				HasDatum:  len(datum_hash.Payload) > 0}, IsPostAlonzo: false}
-		}
-		utxos = append(utxos, UTxO.UTxO{Input: tx_in, Output: tx_out})
+		utxos = append(utxos, occ.addressUtxoToUtxo(ctx, address, result))
 	}
 	return utxos
 }
@@ -639,12 +832,11 @@ func (occ *OgmiosChainContext) SubmitTx(tx Transaction.Transaction) (serializati
 		return serialization.TransactionId{}, fmt.Errorf("OgmiosChainContext: SubmitTx: %v", err)
 	}
 	if result.Error != nil {
-		return serialization.TransactionId{}, fmt.Errorf(
-			"OgmiosChainContext: SubmitTx: %v %v %v",
-			result.Error.Code,
-			result.Error.Message,
-			string(result.Error.Data),
-		)
+		return serialization.TransactionId{}, OgmiosError{
+			Code:    result.Error.Code,
+			Message: result.Error.Message,
+			Data:    result.Error.Data,
+		}
 	}
 	return tx.TransactionBody.Id(), nil
 }
@@ -664,10 +856,24 @@ func convertOgmiosRedeemerTag(tag string) (string, error) {
 	}
 }
 
-func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
+type OgmiosError struct {
+	Code    int
+	Message string
+	Data    []byte
+}
+
+func (o OgmiosError) Error() string {
+	return fmt.Sprintf("%v %v %v", o.Code, o.Message, string(o.Data))
+}
+
+func (occ *OgmiosChainContext) evaluateTx(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
 	ctx := context.Background()
-	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
+	var additionalUtxosOgmigo []shared.Utxo
+	for _, u := range additionalUtxos {
+		additionalUtxosOgmigo = append(additionalUtxosOgmigo, Utxo_ApolloToOgmigo(u))
+	}
+	eval, err := occ.ogmigo.EvaluateTxWithAdditionalUtxos(ctx, hex.EncodeToString(tx), additionalUtxosOgmigo)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"OgmiosChainContext: EvaluateTx: Error evaluating tx: %v",
@@ -675,12 +881,11 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 		)
 	}
 	if eval.Error != nil {
-		return nil, fmt.Errorf(
-			"OgmiosChainContext: EvaluateTx: Ogmios returned an error: %v %v %v",
-			eval.Error.Code,
-			eval.Error.Message,
-			string(eval.Error.Data),
-		)
+		return nil, OgmiosError{
+			Code:    eval.Error.Code,
+			Message: eval.Error.Message,
+			Data:    eval.Error.Data,
+		}
 	}
 	for _, e := range eval.ExUnits {
 		purpose, err := convertOgmiosRedeemerTag(e.Validator.Purpose)
@@ -694,6 +899,29 @@ func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.Execut
 		}
 	}
 	return final_result, nil
+}
+
+func (occ *OgmiosChainContext) CostModelsV1() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV1]
+}
+
+func (occ *OgmiosChainContext) CostModelsV2() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV2]
+}
+
+func (occ *OgmiosChainContext) CostModelsV3() PlutusData.CostModel {
+	pparams := occ.GetProtocolParams()
+	return pparams.CostModels[Base.CostModelsPlutusV3]
+}
+
+func (occ *OgmiosChainContext) EvaluateTx(tx []byte) (map[string]Redeemer.ExecutionUnits, error) {
+	return occ.evaluateTx(tx, nil)
+}
+
+func (occ *OgmiosChainContext) EvaluateTxWithAdditionalUtxos(tx []byte, additionalUtxos []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	return occ.evaluateTx(tx, additionalUtxos)
 }
 
 // This is unused

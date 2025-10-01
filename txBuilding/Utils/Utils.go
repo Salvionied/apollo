@@ -2,9 +2,11 @@ package Utils
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
+	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
 	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
@@ -40,7 +42,8 @@ func MinLovelacePostAlonzo(output TransactionOutput.TransactionOutput, context B
 	if err != nil {
 		log.Fatal(err)
 	}
-	return int64((constantOverhead + len(encoded)) * context.GetProtocolParams().GetCoinsPerUtxoByte())
+	res := int64((constantOverhead + len(encoded)) * context.GetProtocolParams().GetCoinsPerUtxoByte())
+	return res
 }
 
 func ToCbor(x interface{}) string {
@@ -51,13 +54,25 @@ func ToCbor(x interface{}) string {
 	return hex.EncodeToString(bytes)
 }
 
-func Fee(context Base.ChainContext, txSize int, steps int64, mem int64) int64 {
+func Fee(context Base.ChainContext, txSize int, steps int64, mem int64, references []TransactionInput.TransactionInput) (int64, error) {
 	pm := context.GetProtocolParams()
+	refScriptsSize := 0
+	for _, input := range references {
+		utxo, err := context.GetUtxoFromRef(hex.EncodeToString(input.TransactionId), input.Index)
+		if err != nil {
+			return 0, fmt.Errorf("Apollo: Fee failed: %w", err)
+		}
+		script := utxo.Output.GetScriptRef()
+		if script != nil {
+			refScriptsSize += len(script.Script.Script)
+		}
+	}
 	fee := int64(txSize*pm.MinFeeCoefficient+
 		pm.MinFeeConstant+
 		int(float32(steps)*pm.PriceStep)+
-		int(float32(mem)*pm.PriceMem)) + 10_000
-	return fee
+		int(float32(mem)*pm.PriceMem)+
+		refScriptsSize*pm.MinFeeReferenceScripts) + 10_000
+	return fee, nil
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {

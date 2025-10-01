@@ -1,6 +1,7 @@
 package txBuilding_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -8,10 +9,14 @@ import (
 
 	"github.com/Salvionied/cbor/v2"
 	"github.com/SundaeSwap-finance/apollo"
+	"github.com/SundaeSwap-finance/apollo/serialization"
 	"github.com/SundaeSwap-finance/apollo/serialization/Address"
+	"github.com/SundaeSwap-finance/apollo/serialization/Amount"
 	"github.com/SundaeSwap-finance/apollo/serialization/MultiAsset"
 	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
+	"github.com/SundaeSwap-finance/apollo/serialization/TransactionInput"
+	"github.com/SundaeSwap-finance/apollo/serialization/TransactionOutput"
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
 	"github.com/SundaeSwap-finance/apollo/serialization/Value"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/FixedChainContext"
@@ -72,7 +77,7 @@ func TestEnsureTxIsBalanced(t *testing.T) {
 	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300)
-	apollob, err := apollob.Complete()
+	apollob, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -139,7 +144,7 @@ func TestComplexTxBuild(t *testing.T) {
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300).
 		SetValidityStart(0)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -213,7 +218,7 @@ func TestFakeBurnBalancing(t *testing.T) {
 		SetValidityStart(0).MintAssets(
 		apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
 	)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
 		t.Error(err)
@@ -247,6 +252,89 @@ func TestFakeBurnBalancing(t *testing.T) {
 		t.Error(err)
 	}
 
+}
+
+func makeFakeUtxo(address Address.Address, index int, lovelace int64) UTxO.UTxO {
+	u := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Index:         index,
+		},
+		Output: TransactionOutput.TransactionOutput{
+			PreAlonzo: TransactionOutput.TransactionOutputShelley{
+				Address: address,
+				Amount: Value.Value{
+					Am: Amount.Amount{
+						Coin: 0,
+					},
+					Coin:      lovelace,
+					HasAssets: false,
+				},
+				DatumHash: serialization.DatumHash(serialization.ConstrainedBytes{Payload: nil}),
+				HasDatum:  false,
+			},
+			IsPostAlonzo: false,
+		},
+	}
+	return u
+}
+
+func TestUseInputAsCollateral(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	userAddress := "addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w"
+	myAddress, _ := Address.DecodeAddress("addr1qymaeeefs9ff08cdplm3lvkscavm9x9vd7nmc44e9rlur08k3pj2xw9w3mvp7cg3fkzhed4zzhywdpd2t3pmc8u8nn8qm5ur5w")
+	// dummy script that always passes. we don't actually spend from this
+	// it's just here to encourage apollo to attach a collateral
+	script, err := hex.DecodeString("51010000322253330034a229309b2b2b9a01")
+	apollob := apollo.New(&cc)
+	utxos := make([]UTxO.UTxO, 0)
+	utxos = append(utxos, makeFakeUtxo(myAddress, 0, 100_000_000))
+	apollob = apollob.AddInputAddressFromBech32(userAddress).AddLoadedUTxOs(utxos...).
+		PayToAddressBech32(userAddress, int(2_000_000)).
+		SetTtl(0 + 300).
+		SetValidityStart(0)
+	apollob = apollob.AttachV2Script(script)
+	apollob, _, err = apollob.Complete()
+	if err != nil {
+		fmt.Println("HERE")
+		t.Error(err)
+	}
+	txBytes := apollob.GetTx().Bytes()
+	fmt.Println(hex.EncodeToString(txBytes))
+	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	inputs := apollob.GetTx().TransactionBody.Inputs
+	collaterals := apollob.GetTx().TransactionBody.Collateral
+	if len(inputs) != 1 {
+		t.Error("Tx does not have exactly 1 input")
+	}
+	if len(collaterals) != 1 {
+		t.Error("Tx does not have exactly 1 collateral")
+	}
+	if !bytes.Equal(inputs[0].TransactionId, collaterals[0].TransactionId) || inputs[0].Index != collaterals[0].Index {
+		t.Error("Tx does not have the same collateral as its input")
+	}
+	for _, input := range apollob.GetTx().TransactionBody.Inputs {
+		for _, utxo := range utxos {
+			if utxo.GetKey() == fmt.Sprintf("%s:%d", hex.EncodeToString(input.TransactionId), input.Index) {
+				//fmt.Println("INPUT", idx, utxo)
+				inputVal = inputVal.Add(utxo.Output.GetAmount())
+			}
+		}
+	}
+	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, output := range apollob.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(output.GetAmount())
+	}
+	outputVal.AddLovelace(apollob.Fee)
+	outputVal = outputVal.Add(apollob.GetBurns())
+	fmt.Println("INPUT VAL", inputVal)
+	fmt.Println("OUTPUT VAL", outputVal)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Tx is not balanced")
+	}
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 // func TestScriptAddress(t *testing.T) {

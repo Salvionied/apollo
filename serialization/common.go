@@ -2,6 +2,7 @@ package serialization
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -58,11 +59,18 @@ type CustomBytes struct {
 	tp    string
 }
 
+func CustomBytesInt(n uint64) CustomBytes {
+	return CustomBytes{
+		Value: fmt.Sprintf("%v", n),
+		tp: "uint64",
+	}
+}
+
 func (cb CustomBytes) String() string {
 	return cb.Value
 }
 
-func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
+func (cb CustomBytes) MarshalCBOR() ([]byte, error) {
 	// if cb.Value == "40" || cb.Value == "625b5d" {
 	// 	return cbor.Marshal(make([]byte, 0))
 	// }
