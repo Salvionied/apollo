@@ -55,6 +55,7 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 			Redeemer:           tws.Redeemer,
 		})
 	}
+
 	return cbor.Marshal(normaltws{
 		VkeyWitnesses:      tws.VkeyWitnesses,
 		NativeScripts:      tws.NativeScripts,
@@ -65,5 +66,4 @@ func (tws *TransactionWitnessSet) MarshalCBOR() ([]byte, error) {
 		PlutusData:         &tws.PlutusData,
 		Redeemer:           tws.Redeemer,
 	})
-
 }
