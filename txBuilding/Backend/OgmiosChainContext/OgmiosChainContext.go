@@ -26,10 +26,10 @@ import (
 	"github.com/SundaeSwap-finance/apollo/serialization/Value"
 	"github.com/SundaeSwap-finance/apollo/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
-	"github.com/SundaeSwap-finance/ogmigo"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
+	"github.com/SundaeSwap-finance/ogmigo/v6"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 
 	"github.com/Salvionied/cbor/v2"
 )
@@ -230,9 +230,9 @@ func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 		},
 		Output: TransactionOutput.TransactionOutput{
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
-				Address:            addr,
-				Amount:             v,
-				Datum:              datum,
+				Address:   addr,
+				Amount:    v,
+				Datum:     datum,
 				ScriptRef: scriptRef,
 			},
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
@@ -329,7 +329,7 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				DataHash:            u.DatumHash,
 				InlineDatum:         u.Datum,
 				Collateral:          false, // Can querying ogmios return collateral outputs?
-				ReferenceScriptHash: "", // TODO
+				ReferenceScriptHash: "",    // TODO
 			}
 			outs = append(outs, apolloUtxo)
 		}
