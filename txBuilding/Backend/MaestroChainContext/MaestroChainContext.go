@@ -6,6 +6,7 @@ import (
 
 	"github.com/SundaeSwap-finance/apollo/serialization"
 	"github.com/SundaeSwap-finance/apollo/serialization/Address"
+	"github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 	"github.com/SundaeSwap-finance/apollo/serialization/Redeemer"
 	"github.com/SundaeSwap-finance/apollo/serialization/Transaction"
 	"github.com/SundaeSwap-finance/apollo/serialization/UTxO"
@@ -28,9 +29,9 @@ func (mcc *MaestroChainContext) Init() {
 	//TODO
 }
 
-func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) *UTxO.UTxO {
-	var utxo *UTxO.UTxO
-	return utxo
+func (mcc *MaestroChainContext) GetUtxoFromRef(txHash string, index int) (UTxO.UTxO, error) {
+	var utxo UTxO.UTxO
+	return utxo, nil
 }
 
 func (mcc *MaestroChainContext) TxOuts(txHash string) []Base.Output {
@@ -150,4 +151,24 @@ type BlockfrostContractCbor struct {
 func (mcc *MaestroChainContext) GetContractCbor(scriptHash string) string {
 	//TODO
 	return ""
+}
+
+func (mcc *MaestroChainContext) CostModelsV1() PlutusData.CostModel {
+	// TODO
+	return PlutusData.CostModel{}
+}
+
+func (mcc *MaestroChainContext) CostModelsV2() PlutusData.CostModel {
+	// TODO
+	return PlutusData.CostModel{}
+}
+
+func (mcc *MaestroChainContext) CostModelsV3() PlutusData.CostModel {
+	// TODO
+	return PlutusData.CostModel{}
+}
+
+func (mcc *MaestroChainContext) EvaluateTxWithAdditionalUtxos([]uint8, []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error) {
+	//TODO
+	return nil, nil
 }

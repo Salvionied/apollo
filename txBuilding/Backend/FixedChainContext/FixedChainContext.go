@@ -107,8 +107,8 @@ func (f FixedChainContext) MaxTxFee() int {
 	return 100
 }
 
-func (f FixedChainContext) GetUtxoFromRef(txHash string, txIndex int) *UTxO.UTxO {
-	return &UTxO.UTxO{}
+func (f FixedChainContext) GetUtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error) {
+	return UTxO.UTxO{}, nil
 }
 
 func (f FixedChainContext) Utxos(address Address.Address) []UTxO.UTxO {
@@ -147,5 +147,9 @@ func (f FixedChainContext) CostModelsV1() PlutusData.CostModel {
 }
 
 func (f FixedChainContext) CostModelsV2() PlutusData.CostModel {
+	return PlutusData.CostModel{}
+}
+
+func (f FixedChainContext) CostModelsV3() PlutusData.CostModel {
 	return PlutusData.CostModel{}
 }

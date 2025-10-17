@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/chainsync/num"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/shared"
-	"github.com/SundaeSwap-finance/ogmigo/ouroboros/statequery"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
+	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 )
 
 func TestRoundtripUtxo(t *testing.T) {
-	ogmigoUtxo := statequery.TxOut{
+	ogmigoUtxo := shared.Utxo{
 		Transaction: shared.UtxoTxID{
 			ID: "1234",
 		},
