@@ -159,10 +159,7 @@ func ConvertBits(
 
 			// The number of bytes to next extract is the minimum of
 			// remFromBits and remToBits.
-			toExtract := remFromBits
-			if remToBits < toExtract {
-				toExtract = remToBits
-			}
+			toExtract := min(remToBits, remFromBits)
 
 			// Add the next bits to nextByte, shifting the already
 			// added bits to the left.
