@@ -1,9 +1,10 @@
 package Metadata
 
 import (
-	"github.com/Salvionied/apollo/serialization/NativeScript"
+	"maps"
 
 	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/serialization/NativeScript"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -80,9 +81,7 @@ func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
 		ad._ShelleyMeta = value
 	} else {
 		currentMetadata := ad._ShelleyMeta.Metadata
-		for key, val := range value.Metadata {
-			currentMetadata[key] = val
-		}
+		maps.Copy(currentMetadata, value.Metadata)
 
 	}
 

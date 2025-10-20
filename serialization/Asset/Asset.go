@@ -1,6 +1,7 @@
 package Asset
 
 import (
+	"maps"
 	"reflect"
 
 	"github.com/Salvionied/apollo/serialization/AssetName"
@@ -18,9 +19,7 @@ type Asset[V int64 | uint64] map[AssetName.AssetName]V
 */
 func (ma Asset[V]) Clone() Asset[V] {
 	result := make(Asset[V])
-	for asset, amount := range ma {
-		result[asset] = amount
-	}
+	maps.Copy(result, ma)
 	return result
 }
 
