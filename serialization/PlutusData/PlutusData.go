@@ -1129,7 +1129,7 @@ func (pd *PlutusData) String() string {
 		if ok {
 			for _, v := range value2 {
 				contentString := v.String()
-				for _, line := range strings.Split(contentString, "\n") {
+				for line := range strings.SplitSeq(contentString, "\n") {
 					res += "    " + line + "\n"
 				}
 				res += ",\n"
