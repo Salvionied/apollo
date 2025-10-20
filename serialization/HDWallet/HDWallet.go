@@ -159,7 +159,7 @@ func (hd *HDWallet) DerivePath(path string) (*HDWallet, error) {
 		return nil, errors.New("invalid path")
 	}
 	derived_wallet := hd.copy()
-	for _, index := range strings.Split(strings.TrimLeft(path, "m/"), "/") {
+	for index := range strings.SplitSeq(strings.TrimLeft(path, "m/"), "/") {
 		if strings.HasSuffix(index, "'") {
 			ind_val, err := strconv.ParseUint(
 				string(index[:len(index)-1]),
