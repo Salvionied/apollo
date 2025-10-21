@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/Salvionied/apollo/apollotypes"
@@ -33,7 +34,6 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Utils"
 	"github.com/fxamacker/cbor/v2"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -1653,10 +1653,8 @@ func (b *Apollo) CollectFrom(
 */
 func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
-	for _, scriptHash := range b.scriptHashes {
-		if scriptHash == hex.EncodeToString(hash.Bytes()) {
-			return b
-		}
+	if slices.Contains(b.scriptHashes, hex.EncodeToString(hash.Bytes())) {
+		return b
 	}
 	b.v1scripts = append(b.v1scripts, script)
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
@@ -1677,10 +1675,8 @@ func (b *Apollo) AttachV1Script(script PlutusData.PlutusV1Script) *Apollo {
 */
 func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
-	for _, scriptHash := range b.scriptHashes {
-		if scriptHash == hex.EncodeToString(hash.Bytes()) {
-			return b
-		}
+	if slices.Contains(b.scriptHashes, hex.EncodeToString(hash.Bytes())) {
+		return b
 	}
 	b.v2scripts = append(b.v2scripts, script)
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))
@@ -1689,10 +1685,8 @@ func (b *Apollo) AttachV2Script(script PlutusData.PlutusV2Script) *Apollo {
 
 func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
 	hash := PlutusData.PlutusScriptHash(script)
-	for _, scriptHash := range b.scriptHashes {
-		if scriptHash == hex.EncodeToString(hash.Bytes()) {
-			return b
-		}
+	if slices.Contains(b.scriptHashes, hex.EncodeToString(hash.Bytes())) {
+		return b
 	}
 	b.v3scripts = append(b.v3scripts, script)
 	b.scriptHashes = append(b.scriptHashes, hex.EncodeToString(hash.Bytes()))

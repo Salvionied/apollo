@@ -2,6 +2,7 @@ package apollotypes
 
 import (
 	"bytes"
+	"slices"
 
 	"github.com/Salvionied/apollo/serialization"
 	serAddress "github.com/Salvionied/apollo/serialization/Address"
@@ -9,7 +10,6 @@ import (
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
 	"github.com/Salvionied/apollo/serialization/UTxO"
-
 	"github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 )
@@ -216,10 +216,8 @@ func isKeyHashUsedFromTx(
 			}
 		}
 	}
-	for _, requiredSigner := range tx.TransactionBody.RequiredSigners {
-		if requiredSigner == keyHash {
-			return true
-		}
+	if slices.Contains(tx.TransactionBody.RequiredSigners, keyHash) {
+		return true
 	}
 	for _, nativeScript := range tx.TransactionWitnessSet.NativeScripts {
 		if bytes.Equal(nativeScript.KeyHash, keyHashBytes) {
