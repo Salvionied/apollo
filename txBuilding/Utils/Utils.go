@@ -53,7 +53,7 @@ func MinLovelacePostAlonzo(
 	), nil
 }
 
-func ToCbor(x interface{}) (string, error) {
+func ToCbor(x any) (string, error) {
 	bytes, err := cbor.Marshal(x)
 	if err != nil {
 		return "", err

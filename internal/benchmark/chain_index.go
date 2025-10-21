@@ -11,7 +11,7 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 )
 
-type ChainContext interface{}
+type ChainContext any
 
 func OgmiosCTXSetup() OgmiosChainContext.OgmiosChainContext {
 	return OgmiosChainContext.NewOgmiosChainContext(
