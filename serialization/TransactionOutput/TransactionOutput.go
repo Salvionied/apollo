@@ -127,7 +127,7 @@ type TxOWithoutDatum struct {
 		error: An error if deserialization fails.
 */
 func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
-	var x []interface{}
+	var x []any
 	_ = cbor.Unmarshal(value, &x)
 	if len(x) == 3 {
 		val := new(TxOWithDatum)

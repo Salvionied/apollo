@@ -1031,7 +1031,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 	ok, valid := x.(cbor.Tag)
 	if valid {
 		switch ok.Content.(type) {
-		case []interface{}:
+		case []any:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
 			res, err := cbor.Marshal(ok.Content)
@@ -1051,7 +1051,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 		}
 	} else {
 		switch x.(type) {
-		case []interface{}:
+		case []any:
 			y := new([]Datum)
 			err = cbor.Unmarshal(value, y)
 			if err != nil {
@@ -1070,7 +1070,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.Value = x
 			pd.TagNr = 0
 
-		case map[interface{}]interface{}:
+		case map[any]any:
 			y := map[serialization.CustomBytes]Datum{}
 			err = cbor.Unmarshal(value, y)
 			if err != nil {
@@ -1079,7 +1079,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.PlutusDataType = PlutusMap
 			pd.Value = y
 			pd.TagNr = 0
-		case map[uint64]interface{}:
+		case map[uint64]any:
 			y := map[serialization.CustomBytes]Datum{}
 			err = cbor.Unmarshal(value, y)
 			if err != nil {
@@ -1302,7 +1302,7 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 		return err
 	}
 	switch x.(type) {
-	case []interface{}:
+	case []any:
 		y := new([]PlutusData)
 		err = json.Unmarshal(value, y)
 		if err != nil {
@@ -1311,8 +1311,8 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 		pd.PlutusDataType = PlutusArray
 		pd.Value = PlutusIndefArray(*y)
 		pd.TagNr = 0
-	case map[string]interface{}:
-		val := x.(map[string]interface{})
+	case map[string]any:
+		val := x.(map[string]any)
 		_, ok := val["fields"]
 		if ok {
 			contents, _ := json.Marshal(val["fields"])
@@ -1372,11 +1372,11 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			isInt := false
 			normalMap := make(map[serialization.CustomBytes]PlutusData)
 			IntMap := make(map[uint64]PlutusData)
-			for _, element := range valu.([]interface{}) {
-				dictionary, ok := element.(map[string]interface{})
+			for _, element := range valu.([]any) {
+				dictionary, ok := element.(map[string]any)
 				if ok {
-					kval, okk := dictionary["k"].(map[string]interface{})
-					vval, okv := dictionary["v"].(map[string]interface{})
+					kval, okk := dictionary["k"].(map[string]any)
+					vval, okv := dictionary["v"].(map[string]any)
 					if okk && okv {
 						if kvalue, okk := kval["int"]; okk {
 							isInt = true
@@ -1502,7 +1502,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			tmpBigInt := x.(big.Int)
 			pd.Value = tmpBigInt
 			pd.TagNr = 0
-		case []interface{}:
+		case []any:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
 			lenTag := len([]byte(strconv.FormatUint(ok.Number, 10)))
@@ -1526,7 +1526,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusBytes
 			pd.Value = ok.Content
-		case map[interface{}]interface{}:
+		case map[any]any:
 			y := map[serialization.CustomBytes]PlutusData{}
 			err = cbor.Unmarshal(value, &y)
 			if err != nil {
@@ -1558,7 +1558,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			tmpBigInt := x
 			pd.Value = tmpBigInt
 			pd.TagNr = 0
-		case []interface{}:
+		case []any:
 			if value[0] == 0x9f {
 				y := PlutusIndefArray{}
 				err = cbor.Unmarshal(value, &y)
@@ -1588,7 +1588,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.Value = x
 			pd.TagNr = 0
 
-		case map[interface{}]interface{}:
+		case map[any]any:
 			y := map[serialization.CustomBytes]PlutusData{}
 			err = cbor.Unmarshal(value, &y)
 			if err != nil {
@@ -1642,7 +1642,7 @@ type RawPlutusData struct {
 		string: The hexadecimal-encoded CBOR representation of the input value.
 		error: An error if the conversion fails.
 */
-func ToCbor(x interface{}) (string, error) {
+func ToCbor(x any) (string, error) {
 	bytes, err := cbor.Marshal(x)
 	if err != nil {
 		return "", err

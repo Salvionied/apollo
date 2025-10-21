@@ -14,8 +14,8 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
-	var overallContainer interface{}
+func MarshalPlutus(v any) (*PlutusData.PlutusData, error) {
+	var overallContainer any
 	var containerConstr = uint64(0)
 	var isMap = false
 	var isIndef = true
@@ -465,7 +465,7 @@ func MarshalPlutus(v interface{}) (*PlutusData.PlutusData, error) {
 	return &pd, nil
 }
 
-func CborUnmarshal(data string, v interface{}, network byte) error {
+func CborUnmarshal(data string, v any, network byte) error {
 	decoded, err := hex.DecodeString(data)
 	if err != nil {
 		return fmt.Errorf("error decoding hex: %w", err)
@@ -484,7 +484,7 @@ func CborUnmarshal(data string, v interface{}, network byte) error {
 
 func UnmarshalPlutus(
 	data *PlutusData.PlutusData,
-	v interface{},
+	v any,
 	network byte,
 ) (ret error) {
 	defer func() {
@@ -499,7 +499,7 @@ func UnmarshalPlutus(
 
 func unmarshalPlutus(
 	data *PlutusData.PlutusData,
-	v interface{},
+	v any,
 	network byte,
 ) error {
 	types := reflect.TypeOf(v)

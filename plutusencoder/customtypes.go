@@ -14,7 +14,7 @@ import (
 
 type PlutusMarshaler interface {
 	ToPlutusData() (PlutusData.PlutusData, error)
-	FromPlutusData(pd PlutusData.PlutusData, res interface{}) error
+	FromPlutusData(pd PlutusData.PlutusData, res any) error
 }
 
 type Asset map[serialization.CustomBytes]map[serialization.CustomBytes]int64

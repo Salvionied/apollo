@@ -1072,7 +1072,7 @@ func (m IntMapOfAssetCustom) ToPlutusData() (PlutusData.PlutusData, error) {
 
 func (m IntMapOfAssetCustom) FromPlutusData(
 	pd PlutusData.PlutusData,
-	res interface{},
+	res any,
 ) error {
 	if pd.PlutusDataType != PlutusData.PlutusIntMap {
 		return fmt.Errorf("expected map but got %v", pd.PlutusDataType)

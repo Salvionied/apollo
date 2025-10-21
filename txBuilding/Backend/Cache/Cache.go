@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func Get[T any](key string, val interface{}) bool {
+func Get[T any](key string, val any) bool {
 	dat, err := os.ReadFile(fmt.Sprintf("./tmp/%s.txt", key))
 	if err != nil {
 		return false
