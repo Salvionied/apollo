@@ -15,7 +15,6 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/utxorpc/go-sdk v0.0.0-20250603130048-8c2c6c6648ea
 	golang.org/x/crypto v0.43.0
-	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/text v0.30.0
 )
 
