@@ -1103,84 +1103,90 @@ type PlutusData struct {
 }
 
 func (pd *PlutusData) String() string {
-	res := ""
+	var sb strings.Builder
 	if pd.TagNr != 0 {
-		res += fmt.Sprintf("Constr: %d\n", pd.TagNr)
+		sb.WriteString("Constr: ")
+		sb.WriteString(strconv.FormatUint(pd.TagNr, 10))
+		sb.WriteByte('\n')
 	}
 	switch pd.PlutusDataType {
 	case PlutusArray:
-		res += "Array[\n"
+		sb.WriteString("Array[\n")
 		value, ok := pd.Value.(PlutusIndefArray)
 		if ok {
 			for _, v := range value {
 				contentString := v.String()
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == len(strings.Split(contentString, "\n"))-1 {
-						res += "    " + line
+						sb.WriteString("    " + line)
 					} else {
-						res += "    " + line + "\n"
+						sb.WriteString("    " + line + "\n")
 					}
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "]"
+			sb.WriteByte(']')
 		}
 		value2, ok := pd.Value.(PlutusDefArray)
 		if ok {
 			for _, v := range value2 {
 				contentString := v.String()
 				for line := range strings.SplitSeq(contentString, "\n") {
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "]"
+			sb.WriteByte(']')
 		}
 	case PlutusMap:
 		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
 		if ok {
-			res += "Map{\n"
+			sb.WriteString("Map{\n")
 			for k, v := range value {
 				contentString := v.String()
-				res += k.String() + ": "
+				sb.WriteString(k.String() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
-						res += line + "\n"
+						sb.WriteString(line + "\n")
 						continue
 					}
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "}"
+			sb.WriteByte('}')
 		}
 
 	case PlutusIntMap:
 		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
 		if ok {
-			res += "IntMap{\n"
+			sb.WriteString("IntMap{\n")
 			for k, v := range value {
 				contentString := v.String()
-				res += fmt.Sprint(k) + ": "
+				sb.WriteString(k.String() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
-						res += line + "\n"
+						sb.WriteString(line + "\n")
 						continue
 					}
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "}"
+			sb.WriteByte('}')
 		}
 	case PlutusInt:
-		res += fmt.Sprintf("Int(%d)", pd.Value.(uint64))
+		sb.WriteString("Int(")
+		sb.WriteString(strconv.FormatUint(pd.Value.(uint64), 10))
+		sb.WriteByte(')')
 	case PlutusBytes:
-		res += fmt.Sprintf("Bytes(%s)", hex.EncodeToString(pd.Value.([]uint8)))
+		sb.WriteString("Bytes(")
+		sb.WriteString(hex.EncodeToString(pd.Value.([]uint8)))
+		sb.WriteByte(')')
 	default:
-		res += fmt.Sprintf("%v", pd.Value)
+		sb.WriteString(fmt.Sprintf("%v", pd.Value))
 	}
-	return res
+	return sb.String()
 }
 
 /*
