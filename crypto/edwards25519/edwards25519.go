@@ -984,7 +984,7 @@ func selectPoint(t *PreComputedGroupElement, pos int32, b int32) {
 	bAbs := b - (((-bNegative) & b) << 1)
 
 	t.Zero()
-	for i := int32(0); i < 8; i++ {
+	for i := range int32(8) {
 		PreComputedGroupElementCMove(t, &base[pos][i], equal(bAbs, i+1))
 	}
 	FeCopy(&minusT.yPlusX, &t.yMinusX)
