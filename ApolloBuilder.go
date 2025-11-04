@@ -1016,41 +1016,6 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 			}
 		}
 	}
-	for _, utxo := range availableUtxos {
-		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
-			return_amount := utxo.Output.GetValue().
-				GetCoin() -
-				int64(
-					collateral_amount,
-				)
-			min_lovelace, err := Utils.MinLovelacePostAlonzo(
-				TransactionOutput.SimpleTransactionOutput(
-					b.inputAddresses[0],
-					Value.SimpleValue(
-						return_amount,
-						utxo.Output.GetAmount().GetAssets(),
-					),
-				),
-				b.Context,
-			)
-			if err != nil {
-				return b, err
-			}
-			if min_lovelace > return_amount && return_amount != 0 {
-				continue
-			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-				b.collaterals = append(b.collaterals, utxo)
-				b.totalCollateral = collateral_amount
-				return b, nil
-			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
-				b.collaterals = append(b.collaterals, utxo)
-				b.collateralReturn = &returnOutput
-				b.totalCollateral = collateral_amount
-				return b, nil
-			}
-		}
-	}
 	return b, errors.New("NoCollateral")
 }
 
