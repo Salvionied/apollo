@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Salvionied/apollo/serialization"
+	RelayPkg "github.com/Salvionied/apollo/serialization/Relay"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -36,6 +37,10 @@ type UnitInterval struct {
 	Den int64
 }
 
+type Relay interface {
+	Kind() int
+}
+
 type PoolParams struct {
 	_             struct{} `cbor:",toarray"`
 	Operator      serialization.PubKeyHash
@@ -45,7 +50,7 @@ type PoolParams struct {
 	Margin        UnitInterval
 	RewardAccount []byte
 	PoolOwners    []serialization.PubKeyHash
-	Relays        []any
+	Relays        RelayPkg.Relays
 	PoolMetadata  *struct {
 		_    struct{} `cbor:",toarray"`
 		Url  string
@@ -267,9 +272,9 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		return nil, errors.New("empty or invalid certificate")
 	}
 
-	kind, ok := rec[0].(int64)
-	if !ok {
-		return nil, errors.New("invalid certificate kind")
+	kind, err := RelayPkg.ReadKind(rec[0])
+	if err != nil {
+		return nil, err
 	}
 
 	re := func(v any, out any) error {
