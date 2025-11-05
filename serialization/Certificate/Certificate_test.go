@@ -83,12 +83,12 @@ func TestPoolRegistrationWithRelaysRoundTrip(t *testing.T) {
 func TestRegDRepCertAnchorsRoundTrip(t *testing.T) {
 	// With nil anchor
 	cred := Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{0xDE, 0xAD}}}
-	certNil := RegDRepCert{DrepCredential: cred, Coin: 42, Anchor: nil}
+	certNil := RegDRepCert{Cred: cred, Coin: 42, Anchor: nil}
 	_ = roundTrip(t, certNil)
 
 	// With anchor present
 	anch := &Anchor{Url: "https://anchor", DataHash: []byte{0x01, 0x02}}
-	certWith := RegDRepCert{DrepCredential: cred, Coin: 42, Anchor: anch}
+	certWith := RegDRepCert{Cred: cred, Coin: 42, Anchor: anch}
 	_ = roundTrip(t, certWith)
 }
 
@@ -444,17 +444,17 @@ func TestResignCommitteeColdCertAnchorsRoundTrip(t *testing.T) {
 
 func TestUnregDRepCertRoundTrip(t *testing.T) {
 	drepCred := Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{0xDD}}}
-	cert := UnregDRepCert{DrepCredential: drepCred, Coin: 5}
+	cert := UnregDRepCert{Cred: drepCred, Coin: 5}
 	_ = roundTrip(t, cert)
 }
 
 func TestUpdateDRepCertAnchorsRoundTrip(t *testing.T) {
 	drepCred := Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{0xEE}}}
 	// nil anchor
-	_ = roundTrip(t, UpdateDRepCert{DrepCredential: drepCred, Anchor: nil})
+	_ = roundTrip(t, UpdateDRepCert{Cred: drepCred, Anchor: nil})
 	// with anchor
 	anch := &Anchor{Url: "https://update", DataHash: []byte{0x01}}
-	_ = roundTrip(t, UpdateDRepCert{DrepCredential: drepCred, Anchor: anch})
+	_ = roundTrip(t, UpdateDRepCert{Cred: drepCred, Anchor: anch})
 }
 
 // Helpers
@@ -510,9 +510,9 @@ func TestCertificatesCollection_RoundTrip_AllKinds(t *testing.T) {
 		StakeVoteRegDelegCert{Stake: stake, PoolKeyHash: pool, Drep: drep, Coin: 3}, // 13
 		AuthCommitteeHotCert{Cold: credA, Hot: credB},                               // 14
 		ResignCommitteeColdCert{Cold: credA, Anchor: anch},                          // 15
-		RegDRepCert{DrepCredential: credA, Coin: 5, Anchor: anch},                   // 16
-		UnregDRepCert{DrepCredential: credB, Coin: 6},                               // 17
-		UpdateDRepCert{DrepCredential: credA, Anchor: nil},                          // 18
+		RegDRepCert{Cred: credA, Coin: 5, Anchor: anch},                             // 16
+		UnregDRepCert{Cred: credB, Coin: 6},                                         // 17
+		UpdateDRepCert{Cred: credA, Anchor: nil},                                    // 18
 	}
 
 	// round trip collection
@@ -558,7 +558,7 @@ func TestCertificatesCollection_EmptyAndMixed(t *testing.T) {
 	pool := serialization.PubKeyHash{}
 	pool[0] = 7
 	mixed := Certificates{
-		UnregDRepCert{DrepCredential: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{1}}}, Coin: 0},
+		UnregDRepCert{Cred: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{1}}}, Coin: 0},
 		StakeRegistration{Stake: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{2}}}},
 		PoolRetirement{PoolKeyHash: pool, EpochNo: 1},
 	}
@@ -579,7 +579,7 @@ func FuzzUnmarshalCert(f *testing.F) {
 	seed := []CertificateInterface{
 		StakeRegistration{Stake: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{1}}}},
 		PoolRegistration{Params: PoolParams{Operator: serialization.PubKeyHash{}, Relays: RelayPkg.Relays{}}},
-		RegDRepCert{DrepCredential: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{2}}}, Coin: 1, Anchor: nil},
+		RegDRepCert{Cred: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{2}}}, Coin: 1, Anchor: nil},
 	}
 	for _, s := range seed {
 		if bz, err := s.MarshalCBOR(); err == nil {
@@ -634,7 +634,7 @@ func FuzzCertificatesUnmarshal(f *testing.F) {
 	}
 	multi := Certificates{
 		StakeRegistration{Stake: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{1}}}},
-		UnregDRepCert{DrepCredential: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{2}}}, Coin: 0},
+		UnregDRepCert{Cred: Credential{Code: 0, Hash: serialization.ConstrainedBytes{Payload: []byte{2}}}, Coin: 0},
 	}
 	if bz, err := multi.MarshalCBOR(); err == nil {
 		f.Add(bz)

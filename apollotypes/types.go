@@ -6,6 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization"
 	serAddress "github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Certificate"
 	"github.com/Salvionied/apollo/serialization/Key"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
@@ -196,6 +197,13 @@ func isKeyHashUsedFromUtxos(
 	return false
 }
 
+func checkCredentialKeyHash(cred *Certificate.Credential, keyHash serialization.PubKeyHash) bool {
+	if cred != nil && cred.Kind() == 0 && cred.KeyHash() == keyHash {
+		return true
+	}
+	return false
+}
+
 func isKeyHashUsedFromTx(
 	tx Transaction.Transaction,
 	keyHash serialization.PubKeyHash,
@@ -203,8 +211,59 @@ func isKeyHashUsedFromTx(
 	keyHashBytes := keyHash[:]
 	if tx.TransactionBody.Certificates != nil {
 		for _, certificate := range *tx.TransactionBody.Certificates {
-			if certificate.StakeCredential.KeyHash() == keyHash {
+			// Check all credential types
+			if checkCredentialKeyHash(certificate.StakeCredential(), keyHash) {
 				return true
+			}
+			if checkCredentialKeyHash(certificate.DrepCredential(), keyHash) {
+				return true
+			}
+			if checkCredentialKeyHash(certificate.AuthCommitteeHotCredential(), keyHash) {
+				return true
+			}
+			if checkCredentialKeyHash(certificate.AuthCommitteeColdCredential(), keyHash) {
+				return true
+			}
+			// Check PoolRegistration Operator and PoolOwners
+			if poolReg, ok := certificate.(Certificate.PoolRegistration); ok {
+				if poolReg.Params.Operator == keyHash {
+					return true
+				}
+				for _, owner := range poolReg.Params.PoolOwners {
+					if owner == keyHash {
+						return true
+					}
+				}
+			}
+			// Check PoolRetirement PoolKeyHash
+			if poolRet, ok := certificate.(Certificate.PoolRetirement); ok {
+				if poolRet.PoolKeyHash == keyHash {
+					return true
+				}
+			}
+			// Check StakeDelegation PoolKeyHash
+			if stakeDel, ok := certificate.(Certificate.StakeDelegation); ok {
+				if stakeDel.PoolKeyHash == keyHash {
+					return true
+				}
+			}
+			// Check StakeVoteDelegCert PoolKeyHash
+			if stakeVoteDel, ok := certificate.(Certificate.StakeVoteDelegCert); ok {
+				if stakeVoteDel.PoolKeyHash == keyHash {
+					return true
+				}
+			}
+			// Check StakeRegDelegCert PoolKeyHash
+			if stakeRegDel, ok := certificate.(Certificate.StakeRegDelegCert); ok {
+				if stakeRegDel.PoolKeyHash == keyHash {
+					return true
+				}
+			}
+			// Check StakeVoteRegDelegCert PoolKeyHash
+			if stakeVoteRegDel, ok := certificate.(Certificate.StakeVoteRegDelegCert); ok {
+				if stakeVoteRegDel.PoolKeyHash == keyHash {
+					return true
+				}
 			}
 		}
 	}
