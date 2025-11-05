@@ -265,7 +265,7 @@ func (v Relays) MarshalCBOR() ([]byte, error) {
 		}
 		arr = append(arr, bz)
 	}
-	var out []any
+	out := make([]any, 0, len(arr))
 	for _, e := range arr {
 		var v any
 		if err := cbor.Unmarshal(e, &v); err != nil {
