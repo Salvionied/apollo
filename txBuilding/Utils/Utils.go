@@ -4,13 +4,13 @@ import (
 	"encoding/hex"
 	"math"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func Contains[T UTxO.Container[any]](container []T, contained T) bool {
@@ -40,7 +40,7 @@ func MinLovelacePostAlonzo(
 			ScriptRef: output.GetScriptRef(),
 		},
 	}
-	encoded, err := cbor.Marshal(tmp_out)
+	encoded, err := cbor.Encode(tmp_out)
 	if err != nil {
 		return 0, err
 	}
@@ -54,7 +54,7 @@ func MinLovelacePostAlonzo(
 }
 
 func ToCbor(x any) (string, error) {
-	bytes, err := cbor.Marshal(x)
+	bytes, err := cbor.Encode(x)
 	if err != nil {
 		return "", err
 	}
@@ -64,8 +64,8 @@ func ToCbor(x any) (string, error) {
 func Fee(
 	context Base.ChainContext,
 	txSize int,
-	steps int64,
-	mem int64,
+	steps uint64,
+	mem uint64,
 	refInputs []TransactionInput.TransactionInput,
 ) (int64, error) {
 	pps, err := context.GetProtocolParams()
@@ -113,7 +113,7 @@ func Fee(
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {
-	res := make([]T, 0)
+	res := make([]T, 0, len(input))
 	for _, value := range input {
 		res = append(res, value.Clone())
 	}

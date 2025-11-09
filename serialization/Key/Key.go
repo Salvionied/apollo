@@ -5,10 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/Salvionied/apollo/crypto/bip32"
-	"github.com/Salvionied/apollo/serialization"
+	"github.com/Salvionied/apollo/v2/crypto/bip32"
+	"github.com/Salvionied/apollo/v2/serialization"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -87,8 +87,9 @@ type VerificationKey struct {
 		error: An error if unmarshaling fails, nil otherwise.
 */
 func (vk *VerificationKey) UnmarshalCBOR(data []byte) error {
+	var err error
 	final_data := make([]byte, 0)
-	err := cbor.Unmarshal(data, &final_data)
+	_, err = cbor.Decode(data, &final_data)
 	if err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func (vk *VerificationKey) UnmarshalCBOR(data []byte) error {
 	([]byte, error): The CBOR-encoded data and error if marshaling fails, nil otherwise.
 */
 func (vk *VerificationKey) MarshalCBOR() ([]byte, error) {
-	return cbor.Marshal(vk.Payload)
+	return cbor.Encode(vk.Payload)
 }
 
 /*
@@ -131,7 +132,7 @@ func VerificationKeyFromCbor(cbor_string string) (*VerificationKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = cbor.Unmarshal(value, vkey)
+	_, err = cbor.Decode(value, vkey)
 	if err != nil {
 		return nil, err
 	}
@@ -241,12 +242,13 @@ func (vk VerificationKey) ToHexString() string {
 }
 
 func (sk *SigningKey) MarshalCBOR() ([]byte, error) {
-	return cbor.Marshal(sk.Payload)
+	return cbor.Encode(sk.Payload)
 }
 
 func (sk *SigningKey) UnmarshalCBOR(data []byte) error {
+	var err error
 	final_data := make([]byte, 0)
-	err := cbor.Unmarshal(data, &final_data)
+	_, err = cbor.Decode(data, &final_data)
 	if err != nil {
 		return err
 	}

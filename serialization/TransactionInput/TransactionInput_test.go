@@ -3,8 +3,8 @@ package TransactionInput_test
 import (
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 var SAMPLE_TX_IN = TransactionInput.TransactionInput{
@@ -14,16 +14,18 @@ var SAMPLE_TX_IN = TransactionInput.TransactionInput{
 
 func TestMarshalAndUnmarshal(t *testing.T) {
 	txIn := SAMPLE_TX_IN
-	marshaled, _ := cbor.Marshal(txIn)
+	marshaled, _ := cbor.Encode(txIn)
 	txIn2 := TransactionInput.TransactionInput{}
-	err := cbor.Unmarshal(marshaled, &txIn2)
+	_, err := cbor.Decode(marshaled, &txIn2)
 	if err != nil {
 		t.Error("Unmarshal failed", err)
 	}
 	if txIn2.Index != 0 {
 		t.Error("Invalid unmarshaling", txIn2.Index, "Expected", 0)
 	}
-	if txIn2.TransactionId[0] != 0x01 {
+	if len(txIn2.TransactionId) == 0 {
+		t.Error("TransactionId is empty")
+	} else if txIn2.TransactionId[0] != 0x01 {
 		t.Error(
 			"Invalid unmarshaling",
 			txIn2.TransactionId[0],

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Salvionied/apollo/constants"
-	"github.com/Salvionied/apollo/crypto/bech32"
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/constants"
+	"github.com/Salvionied/apollo/v2/crypto/bech32"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const (
@@ -75,6 +75,9 @@ Returns:
 */
 
 func (addr *Address) Equal(other *Address) bool {
+	if other == nil {
+		return false
+	}
 	return addr.String() == other.String()
 }
 
@@ -117,7 +120,7 @@ func (addr *Address) Debug() string {
 	error: An error if the conversion fails.
 */
 func (addr *Address) ToCbor() (string, error) {
-	b, err := cbor.Marshal(addr.Bytes())
+	b, err := cbor.Encode(addr.Bytes())
 	if err != nil {
 		return "", fmt.Errorf("error marshalling address to cbor, %w", err)
 	}
@@ -134,7 +137,7 @@ func (addr *Address) ToCbor() (string, error) {
 	  		error: An error, if any, encountered during the encoding process.
 */
 func (addr *Address) MarshalCBOR() ([]byte, error) {
-	return cbor.Marshal(addr.Bytes())
+	return cbor.Encode(addr.Bytes())
 }
 
 /*
@@ -150,7 +153,13 @@ func (addr *Address) MarshalCBOR() ([]byte, error) {
 */
 func (addr *Address) UnmarshalCBOR(value []byte) error {
 	res := make([]byte, 0)
-	err := cbor.Unmarshal(value, &res)
+	_, err := cbor.Decode(value, &res)
+	if err != nil {
+		return err
+	}
+	if len(res) == 0 {
+		return errors.New("empty address")
+	}
 	header := res[0]
 	payload := res[1:]
 	addr.PaymentPart = payload[:serialization.VERIFICATION_KEY_HASH_SIZE]
@@ -181,7 +190,7 @@ func (addr Address) Bytes() []byte {
 	} else {
 		staking = make([]byte, 0)
 	}
-	result := make([]byte, 0)
+	result := make([]byte, 0, 1+len(payment)+len(staking))
 	result = append(result, addr.HeaderByte)
 	result = append(result, payment...)
 	return append(result, staking...)
@@ -253,7 +262,13 @@ func DecodeAddress(value string) (Address, error) {
 		return Address{}, err
 	}
 
-	decoded_value, _ := bech32.ConvertBits(data, 5, 8, false)
+	decoded_value, err := bech32.ConvertBits(data, 5, 8, false)
+	if err != nil {
+		return Address{}, err
+	}
+	if decoded_value == nil {
+		return Address{}, errors.New("ConvertBits returned nil")
+	}
 
 	header := decoded_value[0]
 	payload := decoded_value[1:]

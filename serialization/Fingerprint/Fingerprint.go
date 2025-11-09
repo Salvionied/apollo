@@ -3,10 +3,10 @@ package Fingerprint
 import (
 	"encoding/hex"
 
-	"github.com/Salvionied/apollo/crypto/bech32"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/crypto/bech32"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -35,7 +35,11 @@ func (f *Fingerprint) AssetName() *AssetName.AssetName {
 
 func (f *Fingerprint) String() string {
 	bs, _ := hex.DecodeString(f.policyId.Value + f.assetName.HexString())
-	hasher, _ := blake2b.New(20, nil)
+	hasher, err := blake2b.New(20, nil)
+	if err != nil {
+		// This should never happen with valid size parameter
+		return ""
+	}
 	hasher.Write(bs)
 	hashBytes := hasher.Sum(nil)
 

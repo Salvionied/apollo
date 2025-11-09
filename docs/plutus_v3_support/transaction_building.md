@@ -25,8 +25,8 @@ func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo
 
 ```go
 import (
- "github.com/Salvionied/apollo/ApolloBuilder"
- "github.com/Salvionied/apollo/serialization/PlutusData"
+ "github.com/Salvionied/apollo/v2/ApolloBuilder"
+ "github.com/Salvionied/apollo/v2/serialization/PlutusData"
  "encoding/hex"
 )
 
@@ -59,7 +59,7 @@ func (b *Apollo) AddReferenceInputV3(txHash string, index int) *Apollo
 
 ```go
 import (
- "github.com/Salvionied/apollo/ApolloBuilder"
+ "github.com/Salvionied/apollo/v2/ApolloBuilder"
 )
 
 func main() {

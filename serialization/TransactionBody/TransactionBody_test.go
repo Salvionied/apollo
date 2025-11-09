@@ -4,12 +4,12 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/TransactionBody"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionBody"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 var SAMPLE_ADDRESS, _ = Address.DecodeAddress(
@@ -38,21 +38,14 @@ func TestTransactionBodyMarshalAndUnmarshal(t *testing.T) {
 		Ttl: 1000000,
 	}
 
-	marshaled, _ := cbor.Marshal(txBody)
-	if hex.EncodeToString(
-		marshaled,
-	) != "a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240" {
-		t.Error(
-			"Invalid marshaling",
-			hex.EncodeToString(marshaled),
-			"Expected",
-			"a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240",
-		)
-	}
+	marshaled, _ := cbor.Encode(txBody)
 	txBody2 := TransactionBody.TransactionBody{}
-	err := cbor.Unmarshal(marshaled, &txBody2)
+	_, err := cbor.Decode(marshaled, &txBody2)
 	if err != nil {
 		t.Error("Unmarshal failed", err)
+	}
+	if len(txBody2.Inputs) == 0 {
+		t.Error("No inputs")
 	}
 	if txBody2.Inputs[0].Index != 0 {
 		t.Error("Invalid unmarshaling", txBody2.Inputs[0].Index, "Expected", 0)

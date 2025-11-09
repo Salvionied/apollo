@@ -9,7 +9,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/Salvionied/apollo/crypto/edwards25519"
+	"github.com/Salvionied/apollo/v2/crypto/edwards25519"
 )
 
 const (

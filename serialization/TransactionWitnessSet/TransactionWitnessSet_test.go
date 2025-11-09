@@ -4,14 +4,14 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionWitnessSet"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestMarshalAndUnmarshalNoScripts(t *testing.T) {
 	tws := TransactionWitnessSet.TransactionWitnessSet{}
-	twsBytes, err := cbor.Marshal(tws)
+	twsBytes, err := cbor.Encode(tws)
 	if err != nil {
 		t.Errorf("Error marshaling TransactionWitnessSet: %v", err)
 	}
@@ -31,9 +31,9 @@ var pd = PlutusData.PlutusData{
 
 func TestMarshalBasicPlutus(t *testing.T) {
 	tws := TransactionWitnessSet.TransactionWitnessSet{
-		PlutusData: PlutusData.PlutusIndefArray{pd},
+		PlutusData: &PlutusData.PlutusIndefArray{pd},
 	}
-	twsBytes, err := cbor.Marshal(tws)
+	twsBytes, err := cbor.Encode(tws)
 	if err != nil {
 		t.Errorf("Error marshaling TransactionWitnessSet: %v", err)
 	}

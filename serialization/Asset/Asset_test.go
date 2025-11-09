@@ -3,8 +3,8 @@ package Asset_test
 import (
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
 )
 
 var assetNamet1 = AssetName.NewAssetNameFromString("test")

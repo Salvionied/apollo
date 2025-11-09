@@ -1,14 +1,14 @@
 package TransactionBody
 
 import (
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Certificate"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/Withdrawal"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Certificate"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/Withdrawal"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -53,7 +53,7 @@ type CborBody struct {
 }
 
 func (tx *TransactionBody) Hash() ([]byte, error) {
-	bytes, err := cbor.Marshal(tx)
+	bytes, err := cbor.Encode(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +97,14 @@ func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 		TotalCollateral:   tx.TotalCollateral,
 		ReferenceInputs:   tx.ReferenceInputs,
 	}
-	em, _ := cbor.CanonicalEncOptions().EncMode()
-	return em.Marshal(cborBody)
+	return cbor.Encode(cborBody)
+}
+
+func (tb *TransactionBody) UnmarshalCBOR(data []byte) error {
+	var cb CborBody
+	if _, err := cbor.Decode(data, &cb); err != nil {
+		return err
+	}
+	*tb = TransactionBody(cb)
+	return nil
 }

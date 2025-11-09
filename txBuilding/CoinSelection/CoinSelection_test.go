@@ -1,4 +1,4 @@
-package txBuilding_test
+package CoinSelection_test
 
 var TESTADDRESS = "addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg52x"
 
