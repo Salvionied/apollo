@@ -6,7 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestExecutionUnitsFunctions(t *testing.T) {
@@ -58,8 +58,8 @@ func TestMarshalUnmarshalRedeemer(t *testing.T) {
 			Steps: 2,
 		},
 	}
-	marshaled, _ := cbor.Marshal(red)
-	if hex.EncodeToString(marshaled) != "840001f6820102" {
+	marshaled, _ := cbor.Encode(red)
+	if hex.EncodeToString(marshaled) != "a4635461670064446174619fff65496e64657801674578556e697473a2634d656d0165537465707302" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
@@ -68,7 +68,7 @@ func TestMarshalUnmarshalRedeemer(t *testing.T) {
 		)
 	}
 	var red2 Redeemer.Redeemer
-	err := cbor.Unmarshal(marshaled, &red2)
+	_, err := cbor.Decode(marshaled, &red2)
 	if err != nil {
 		t.Error("Failed unmarshaling", err)
 	}

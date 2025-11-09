@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Key"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 var VkeyHex = "694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
@@ -30,11 +30,11 @@ func TestGenerateKeyPair(t *testing.T) {
 	if len(pp.SigningKey.Payload) != 64 {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}
-	_, err = cbor.Marshal(pp.VerificationKey.Payload)
+	_, err = cbor.Encode(pp.VerificationKey.Payload)
 	if err != nil {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}
-	_, err = cbor.Marshal(pp.SigningKey.Payload)
+	_, err = cbor.Encode(pp.SigningKey.Payload)
 	if err != nil {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}

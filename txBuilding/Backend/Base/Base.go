@@ -19,7 +19,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/serialization/Value"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type GenesisParameters struct {
@@ -153,7 +153,7 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 
 		var x PlutusData.PlutusData
 		// TODO: error check correctly
-		_ = cbor.Unmarshal(decoded, &x)
+		_, _ = cbor.Decode(decoded, &x)
 
 		datum = x
 		tx_out := TransactionOutput.TransactionOutput{

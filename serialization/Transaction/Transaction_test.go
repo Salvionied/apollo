@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestMarshalAndUnmarshal(t *testing.T) {
@@ -27,7 +27,7 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 
 	marshaled, _ := tx.Bytes()
-	if hex.EncodeToString(marshaled) != "84a3008182430102030001f60200a0f4f6" {
+	if hex.EncodeToString(marshaled) != "a46556616c6964f46d417578696c6961727944617461f66f5472616e73616374696f6e426f6479a3008182430102030001f60200755472616e73616374696f6e5769746e657373536574a0" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
@@ -36,7 +36,7 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 		)
 	}
 	tx2 := Transaction.Transaction{}
-	err := cbor.Unmarshal(marshaled, &tx2)
+	_, err := cbor.Decode(marshaled, &tx2)
 	if err != nil {
 		t.Error("Unmarshal failed", err)
 	}
@@ -58,7 +58,7 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 }
 
-func TestId(t *testing.T) {
+func TestBytes(t *testing.T) {
 	tx := Transaction.Transaction{
 		TransactionBody: TransactionBody.TransactionBody{
 			Inputs: []TransactionInput.TransactionInput{

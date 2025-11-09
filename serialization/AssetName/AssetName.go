@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type AssetName struct {
@@ -40,7 +40,7 @@ func (an AssetName) HexString() string {
 
 func (an *AssetName) MarshalCBOR() ([]byte, error) {
 	if an.value == "[]" || an.value == "" {
-		return cbor.Marshal(make([]byte, 0))
+		return cbor.Encode(make([]byte, 0))
 	}
 
 	if len(an.value) > 64 {
@@ -49,12 +49,12 @@ func (an *AssetName) MarshalCBOR() ([]byte, error) {
 
 	byteSlice, _ := hex.DecodeString(an.value)
 
-	return cbor.Marshal(byteSlice)
+	return cbor.Encode(byteSlice)
 }
 
 func (an *AssetName) UnmarshalCBOR(value []byte) error {
 	var res []byte
-	err := cbor.Unmarshal(value, &res)
+	_, err := cbor.Decode(value, &res)
 	if err != nil {
 		return err
 	}

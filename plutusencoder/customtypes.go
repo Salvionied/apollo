@@ -286,8 +286,7 @@ func DecodePlutusAddress(
 	data PlutusData.PlutusData,
 	network byte,
 ) (Address.Address, error) {
-	if data.PlutusDataType != PlutusData.PlutusArray && data.TagNr != 121 &&
-		len(data.Value.(PlutusData.PlutusIndefArray)) != 2 {
+	if data.PlutusDataType != PlutusData.PlutusArray || data.TagNr != 121 {
 		return Address.Address{}, errors.New("error: Invalid Address Data")
 	}
 	var isIndef bool
@@ -300,14 +299,22 @@ func DecodePlutusAddress(
 		return Address.Address{}, errors.New("error: Invalid Address Data")
 	}
 	if isIndef {
-		pkh := data.Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
-		is_script := data.Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+		arr := data.Value.(PlutusData.PlutusIndefArray)
+		if len(arr) < 1 || len(arr) > 2 {
+			return Address.Address{}, errors.New("error: Invalid Address Data")
+		}
+		pkh := arr[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+		is_script := arr[0].TagNr == 122
 		skh := []byte{}
-		skh_exists := data.Value.(PlutusData.PlutusIndefArray)[1].TagNr == 121
+		skh_exists := len(arr) == 2
 		is_skh_script := false
 		if skh_exists {
-			is_skh_script = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
-			skh = data.Value.(PlutusData.PlutusIndefArray)[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+			if len(arr[1].Value.(PlutusData.PlutusIndefArray)) == 0 {
+				skh_exists = false
+			} else {
+				is_skh_script = arr[1].Value.(PlutusData.PlutusIndefArray)[0].TagNr == 122
+				skh = arr[1].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.(PlutusData.PlutusIndefArray)[0].Value.([]byte)
+			}
 		}
 		var addrType byte
 		if is_script {
@@ -342,14 +349,22 @@ func DecodePlutusAddress(
 			Hrp:         hrp}
 		return addr, nil
 	} else {
-		pkh := data.Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
-		is_script := data.Value.(PlutusData.PlutusDefArray)[0].TagNr == 122
+		arr := data.Value.(PlutusData.PlutusDefArray)
+		if len(arr) < 1 || len(arr) > 2 {
+			return Address.Address{}, errors.New("error: Invalid Address Data")
+		}
+		pkh := arr[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
+		is_script := arr[0].TagNr == 122
 		skh := []byte{}
-		skh_exists := data.Value.(PlutusData.PlutusDefArray)[1].TagNr == 121
+		skh_exists := len(arr) == 2
 		is_skh_script := false
 		if skh_exists {
-			is_skh_script = data.Value.(PlutusData.PlutusDefArray)[1].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].TagNr == 122
-			skh = data.Value.(PlutusData.PlutusDefArray)[1].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
+			if len(arr[1].Value.(PlutusData.PlutusDefArray)) == 0 {
+				skh_exists = false
+			} else {
+				is_skh_script = arr[1].Value.(PlutusData.PlutusDefArray)[0].TagNr == 122
+				skh = arr[1].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.(PlutusData.PlutusDefArray)[0].Value.([]byte)
+			}
 		}
 		var addrType byte
 		if is_script {
