@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo"
-	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Asset"
@@ -22,7 +21,18 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )
 
-var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
+type Network int
+
+const (
+	MAINNET Network = iota
+	TESTNET
+	PREVIEW
+	PREPROD
+)
+
+const BLOCKFROST_BASE_URL_MAINNET = "https://cardano-mainnet.blockfrost.io/api"
+
+const BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
 
 var decoded_addr, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -49,7 +59,8 @@ var collateralUtxo = UTxO.UTxO{
 	},
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
-		Value.SimpleValue(5_000_000, nil))}
+		Value.SimpleValue(15_000_000, nil)),
+}
 
 var collateralUtxo2 = UTxO.UTxO{
 	Input: TransactionInput.TransactionInput{
@@ -60,20 +71,12 @@ var collateralUtxo2 = UTxO.UTxO{
 	},
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
-		Value.SimpleValue(10_000_000, nil))}
-
-type Network int
-
-const (
-	MAINNET Network = iota
-	TESTNET
-	PREVIEW
-	PREPROD
-)
+		Value.SimpleValue(5_000_000, nil)),
+}
 
 func TestFailedSubmissionThrows(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -97,7 +100,7 @@ func TestFailedSubmissionThrows(t *testing.T) {
 
 func TestBurnPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -149,14 +152,14 @@ func TestBurnPlutus(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00e1eefb021a0002f2c509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354200b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "a400a6008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00e1dcc3021a000304fd075820d36a2619a672494604e11bb447cbcf5231e9f2ba25c2169177edc941bd50ad6c09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354200b582024c21075223c4647c0bbec49914c88140e5b8cbe238f4f26b3eab170fdc4a73301a1058185000080000002f503a0" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
 
 func TestMintPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -203,14 +206,14 @@ func TestMintPlutus(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00e1e193a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401021a0003002d09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "a400a6008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00e1cf5ba1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401021a00031265075820d36a2619a672494604e11bb447cbcf5231e9f2ba25c2169177edc941bd50ad6c09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b582024c21075223c4647c0bbec49914c88140e5b8cbe238f4f26b3eab170fdc4a73301a1058185000080000002f503a0" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
 
 func TestMintPlutusWithPayment(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -264,14 +267,14 @@ func TestMintPlutusWithPayment(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a001484d0a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cd466b021a0003168509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "a400a6008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00154ed8a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cc6a2b021a000328bd075820d36a2619a672494604e11bb447cbcf5231e9f2ba25c2169177edc941bd50ad6c09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b582024c21075223c4647c0bbec49914c88140e5b8cbe238f4f26b3eab170fdc4a73301a1058185000080000002f503a0" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
 
 func TestGetWallet(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -296,7 +299,7 @@ func TestGetWallet(t *testing.T) {
 
 func TestAddInputs(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -331,7 +334,7 @@ func TestAddInputs(t *testing.T) {
 
 func TestConsumeUtxo(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -365,12 +368,15 @@ func TestConsumeUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeUTxO(testUtxo,
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -395,7 +401,7 @@ func TestConsumeUtxo(t *testing.T) {
 func TestConsumeAssetsFromUtxo(t *testing.T) {
 
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -433,11 +439,14 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeAssetsFromUtxo(testUtxo,
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, []apollo.Unit{apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "TEST", 1)}),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -466,7 +475,7 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 
 func TestPayToContract(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -536,7 +545,7 @@ func TestPayToContract(t *testing.T) {
 
 func TestRequiredSigner(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -616,7 +625,7 @@ func TestRequiredSigner(t *testing.T) {
 
 func TestFeePadding(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -635,7 +644,7 @@ func TestFeePadding(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if built.GetTx().TransactionBody.Fee != 691637 {
+	if built.GetTx().TransactionBody.Fee != 685865 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {
@@ -660,7 +669,7 @@ func TestFeePadding(t *testing.T) {
 func TestSetCollateral(t *testing.T) {
 	// full 5 ada collateral
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -690,7 +699,7 @@ func TestSetCollateral(t *testing.T) {
 func TestCollateralwithReturn(t *testing.T) {
 	// full 5 ada collateral
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		constants.BLOCKFROST_BASE_URL_MAINNET,
+		BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)

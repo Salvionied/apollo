@@ -31,7 +31,7 @@ import (
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type OgmiosChainContext struct {
@@ -118,7 +118,7 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 			)
 		}
 		var pd PlutusData.PlutusData
-		err = cbor.Unmarshal(datumBytes, &pd)
+		_, err = cbor.Decode(datumBytes, &pd)
 		if err != nil {
 			log.Fatal(
 				err,
@@ -693,7 +693,7 @@ func (occ *OgmiosChainContext) Utxos(
 				log.Fatal(err)
 			}
 			var x PlutusData.PlutusData
-			err = cbor.Unmarshal(decoded, &x)
+			_, err = cbor.Decode(decoded, &x)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -744,8 +744,8 @@ func (occ *OgmiosChainContext) EvaluateTx(
 	}
 	for _, e := range eval.ExUnits {
 		final_result[e.Validator.Purpose] = Redeemer.ExecutionUnits{
-			Mem:   int64(e.Budget.Memory),
-			Steps: int64(e.Budget.Cpu),
+			int64(e.Budget.Memory),
+			int64(e.Budget.Cpu),
 		}
 	}
 	return final_result, nil

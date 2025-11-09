@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,7 +15,7 @@ import (
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 
 	"golang.org/x/crypto/blake2b"
 )
@@ -35,7 +34,6 @@ const (
 )
 
 type DatumOption struct {
-	_         struct{} `cbor:",toarray"`
 	DatumType DatumType
 	Hash      []byte
 	Inline    *PlutusData
@@ -43,11 +41,11 @@ type DatumOption struct {
 
 func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	var cborDatumOption struct {
-		_         struct{} `cbor:",toarray"`
+		cbor.StructAsArray
 		DatumType DatumType
 		Content   cbor.RawMessage
 	}
-	err := cbor.Unmarshal(b, &cborDatumOption)
+	_, err := cbor.Decode(b, &cborDatumOption)
 	if err != nil {
 		return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", err)
 
@@ -55,33 +53,32 @@ func (d *DatumOption) UnmarshalCBOR(b []byte) error {
 	switch cborDatumOption.DatumType {
 	case DatumTypeInline:
 		var cborDatumInline PlutusData
-		errInline := cbor.Unmarshal(cborDatumOption.Content, &cborDatumInline)
+		_, errInline := cbor.Decode(cborDatumOption.Content, &cborDatumInline)
 		if errInline != nil {
 			return fmt.Errorf("DatumOption: UnmarshalCBOR: %v", errInline)
 		}
-		if cborDatumInline.TagNr != 24 {
-			return fmt.Errorf(
-				"found DatumTypeInline but Tag was not 24: %v",
-				cborDatumInline.TagNr,
-			)
+		if cborDatumInline.TagNr == 24 {
+			taggedBytes, valid := cborDatumInline.Value.([]byte)
+			if !valid {
+				return errors.New(
+					"DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array",
+				)
+			}
+			var inline PlutusData
+			_, err := cbor.Decode(taggedBytes, &inline)
+			if err != nil {
+				return err
+			}
+			d.DatumType = DatumTypeInline
+			d.Inline = &inline
+		} else {
+			d.DatumType = DatumTypeInline
+			d.Inline = &cborDatumInline
 		}
-		taggedBytes, valid := cborDatumInline.Value.([]byte)
-		if !valid {
-			return errors.New(
-				"DatumOption: UnmarshalCBOR: found tag 24 but there wasn't a byte array",
-			)
-		}
-		var inline PlutusData
-		err = cbor.Unmarshal(taggedBytes, &inline)
-		if err != nil {
-			return err
-		}
-		d.DatumType = DatumTypeInline
-		d.Inline = &inline
 		return nil
 	case DatumTypeHash:
 		var cborDatumHash []byte
-		errHash := cbor.Unmarshal(cborDatumOption.Content, &cborDatumHash)
+		_, errHash := cbor.Decode(cborDatumOption.Content, &cborDatumHash)
 		if errHash != nil {
 			return errHash
 		}
@@ -110,7 +107,6 @@ func DatumOptionInline(pd *PlutusData) DatumOption {
 
 func (d DatumOption) MarshalCBOR() ([]byte, error) {
 	var format struct {
-		_       struct{} `cbor:",toarray"`
 		Tag     DatumType
 		Content *PlutusData
 	}
@@ -124,7 +120,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 		}
 	case DatumTypeInline:
 		format.Tag = DatumTypeInline
-		bytes, err := cbor.Marshal(d.Inline)
+		bytes, err := cbor.Encode(d.Inline)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal inline datum: %w", err)
 		}
@@ -136,7 +132,7 @@ func (d DatumOption) MarshalCBOR() ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("invalid DatumOption: %v", d)
 	}
-	return cbor.Marshal(format)
+	return cbor.Encode(format)
 }
 
 type ScriptRef []byte
@@ -169,10 +165,10 @@ func (cm CM) MarshalCBOR() ([]byte, error) {
 	for _, v := range mk {
 		res = append(res, cm[v])
 	}
-	partial, _ := cbor.Marshal(res)
+	partial, _ := cbor.Encode(res)
 	partial[1] = 0x9f
 	partial = append(partial, 0xff)
-	return cbor.Marshal(partial[1:])
+	return cbor.Encode(partial[1:])
 }
 
 var PLUTUSV1COSTMODEL = CM{
@@ -350,7 +346,7 @@ type CostModelArray []int32
 
 func (cma CostModelArray) MarshalCBOR() ([]byte, error) {
 	res := []int32(cma)
-	return cbor.Marshal(res)
+	return cbor.Encode(res)
 }
 
 var PLUTUSV3COSTMODEL = CostModelArray(
@@ -675,7 +671,7 @@ func (cv CostView) MarshalCBOR() ([]byte, error) {
 	for _, v := range mk {
 		res = append(res, cv[v])
 	}
-	return cbor.Marshal(res)
+	return cbor.Encode(res)
 
 }
 
@@ -857,9 +853,9 @@ var PLUTUSV2COSTMODEL = CostView{
 	"verifySchnorrSecp256k1Signature-memory-arguments":         10,
 }
 
-var COST_MODELSV2 = map[int]cbor.Marshaler{1: PLUTUSV2COSTMODEL}
+var COST_MODELSV2 = map[int]interface{}{1: PLUTUSV2COSTMODEL}
 
-var COST_MODELSV1 = map[serialization.CustomBytes]cbor.Marshaler{
+var COST_MODELSV1 = map[serialization.CustomBytes]interface{}{
 	{Value: "00"}: PLUTUSV1COSTMODEL,
 }
 
@@ -938,7 +934,7 @@ func (pia PlutusIndefArray) MarshalCBOR() ([]uint8, error) {
 	res := make([]byte, 0)
 	res = append(res, 0x9f)
 	for _, el := range pia {
-		bytes, err := cbor.Marshal(el)
+		bytes, err := cbor.Encode(el)
 		if err != nil {
 			return nil, err
 		}
@@ -966,8 +962,8 @@ type Datum struct {
 */
 func (pd *Datum) ToPlutusData() PlutusData {
 	var res PlutusData
-	enc, _ := cbor.Marshal(pd)
-	err := cbor.Unmarshal(enc, &res)
+	enc, _ := cbor.Encode(pd)
+	_, err := cbor.Decode(enc, &res)
 	if err != nil {
 		// TODO: return errors
 		return res
@@ -1005,9 +1001,9 @@ func (pd *Datum) Clone() Datum {
 */
 func (pd Datum) MarshalCBOR() ([]uint8, error) {
 	if pd.TagNr == 0 {
-		return cbor.Marshal(pd.Value)
+		return cbor.Encode(pd.Value)
 	} else {
-		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+		return cbor.Encode(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 	}
 }
 
@@ -1024,7 +1020,7 @@ func (pd Datum) MarshalCBOR() ([]uint8, error) {
 */
 func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 	var x any
-	err := cbor.Unmarshal(value, &x)
+	_, err := cbor.Decode(value, &x)
 	if err != nil {
 		return err
 	}
@@ -1034,16 +1030,26 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 		case []any:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
-			res, err := cbor.Marshal(ok.Content)
-			if err != nil {
-				return err
+			// Avoid recursive decoding - manually parse the array
+			content := ok.Content.([]any)
+			datumArray := make([]Datum, len(content))
+			for i, item := range content {
+				// Create a simple datum for each item
+				switch v := item.(type) {
+				case uint64:
+					datumArray[i] = Datum{PlutusDataType: PlutusInt, Value: v}
+				case []byte:
+					datumArray[i] = Datum{PlutusDataType: PlutusBytes, Value: v}
+				default:
+					// For complex types, encode and decode individually
+					itemBytes, _ := cbor.Encode(v)
+					err = datumArray[i].UnmarshalCBOR(itemBytes)
+					if err != nil {
+						return err
+					}
+				}
 			}
-			y := new([]Datum)
-			err = cbor.Unmarshal(res, y)
-			if err != nil {
-				return err
-			}
-			pd.Value = y
+			pd.Value = &datumArray
 
 		default:
 			//TODO SKIP
@@ -1053,7 +1059,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 		switch x.(type) {
 		case []any:
 			y := new([]Datum)
-			err = cbor.Unmarshal(value, y)
+			_, err := cbor.Decode(value, y)
 			if err != nil {
 				return err
 			}
@@ -1072,7 +1078,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 
 		case map[any]any:
 			y := map[serialization.CustomBytes]Datum{}
-			err = cbor.Unmarshal(value, y)
+			_, err := cbor.Decode(value, &y)
 			if err != nil {
 				return err
 			}
@@ -1081,7 +1087,7 @@ func (pd *Datum) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 		case map[uint64]any:
 			y := map[serialization.CustomBytes]Datum{}
-			err = cbor.Unmarshal(value, y)
+			_, err := cbor.Decode(value, &y)
 			if err != nil {
 				return err
 			}
@@ -1144,7 +1150,7 @@ func (pd *PlutusData) String() string {
 			sb.WriteString("Map{\n")
 			for k, v := range value {
 				contentString := v.String()
-				sb.WriteString(k.String() + ": ")
+				sb.WriteString(k.HexString() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
 						sb.WriteString(line + "\n")
@@ -1163,7 +1169,7 @@ func (pd *PlutusData) String() string {
 			sb.WriteString("IntMap{\n")
 			for k, v := range value {
 				contentString := v.String()
-				sb.WriteString(k.String() + ": ")
+				sb.WriteString(k.HexString() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
 						sb.WriteString(line + "\n")
@@ -1189,6 +1195,106 @@ func (pd *PlutusData) String() string {
 	return sb.String()
 }
 
+func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
+	var x any
+	_, err := cbor.Decode(value, &x)
+	if err != nil {
+		return err
+	}
+	*pd = anyToPlutusDataLocal(x)
+	return nil
+}
+
+func anyToPlutusDataLocal(v any) PlutusData {
+	switch val := v.(type) {
+	case cbor.Tag:
+		switch val.Number {
+		case 121:
+			// PlutusBool false
+			return PlutusData{PlutusDataType: PlutusInt, Value: int64(0), TagNr: 121}
+		case 122:
+			// PlutusBool true or PlutusList indef
+			if val.Content == nil {
+				return PlutusData{PlutusDataType: PlutusInt, Value: int64(1), TagNr: 122}
+			} else {
+				contentPd := anyToPlutusDataLocal(val.Content)
+				return PlutusData{PlutusDataType: PlutusArray, Value: contentPd.Value, TagNr: 122}
+			}
+		case 123:
+			// PlutusList def
+			contentPd := anyToPlutusDataLocal(val.Content)
+			if arr, ok := contentPd.Value.(PlutusIndefArray); ok {
+				return PlutusData{PlutusDataType: PlutusArray, Value: PlutusDefArray(arr), TagNr: 123}
+			}
+			return PlutusData{PlutusDataType: PlutusArray, Value: contentPd.Value, TagNr: 123}
+		case 124:
+			// PlutusBigInt positive
+			contentPd := anyToPlutusDataLocal(val.Content)
+			if bigInt, ok := contentPd.Value.(big.Int); ok {
+				return PlutusData{PlutusDataType: PlutusBigInt, Value: bigInt, TagNr: 124}
+			}
+			return PlutusData{PlutusDataType: PlutusBigInt, Value: big.Int{}, TagNr: 124}
+		case 125:
+			// PlutusBigInt negative
+			contentPd := anyToPlutusDataLocal(val.Content)
+			if bigInt, ok := contentPd.Value.(big.Int); ok {
+				bigInt.Neg(&bigInt)
+				return PlutusData{PlutusDataType: PlutusBigInt, Value: bigInt, TagNr: 125}
+			}
+			return PlutusData{PlutusDataType: PlutusBigInt, Value: big.Int{}, TagNr: 125}
+		case 126:
+			// PlutusBytes indef
+			contentPd := anyToPlutusDataLocal(val.Content)
+			if bytes, ok := contentPd.Value.([]byte); ok {
+				return PlutusData{PlutusDataType: PlutusBytes, Value: bytes, TagNr: 126}
+			}
+			return PlutusData{PlutusDataType: PlutusBytes, Value: []byte{}, TagNr: 126}
+		case 127:
+			// PlutusBytes def
+			contentPd := anyToPlutusDataLocal(val.Content)
+			if bytes, ok := contentPd.Value.([]byte); ok {
+				return PlutusData{PlutusDataType: PlutusBytes, Value: bytes, TagNr: 127}
+			}
+			return PlutusData{PlutusDataType: PlutusBytes, Value: []byte{}, TagNr: 127}
+		default:
+			panic(fmt.Sprintf("unknown tag %d", val.Number))
+		}
+	case []interface{}:
+		arr := make(PlutusIndefArray, len(val))
+		for i, item := range val {
+			arr[i] = anyToPlutusDataLocal(item)
+		}
+		return PlutusData{PlutusDataType: PlutusArray, Value: arr}
+	case map[interface{}]interface{}:
+		m := make(map[string]PlutusData)
+		for k, v := range val {
+			keyBytes, _ := cbor.Encode(k)
+			keyHex := hex.EncodeToString(keyBytes)
+			m[keyHex] = anyToPlutusDataLocal(v)
+		}
+		return PlutusData{PlutusDataType: PlutusMap, Value: m}
+	case int64:
+		return PlutusData{PlutusDataType: PlutusInt, Value: val}
+	case uint64:
+		return PlutusData{PlutusDataType: PlutusInt, Value: int64(val)}
+	case big.Int:
+		return PlutusData{PlutusDataType: PlutusBigInt, Value: val}
+	case []byte:
+		return PlutusData{PlutusDataType: PlutusBytes, Value: val}
+	case string:
+		return PlutusData{PlutusDataType: PlutusBytes, Value: []byte(val)}
+	case interface{ Bytes() []byte }:
+		return PlutusData{PlutusDataType: PlutusBytes, Value: val.Bytes()}
+	case nil:
+		return PlutusData{PlutusDataType: PlutusArray, Value: PlutusIndefArray{}}
+	default:
+		if v == nil {
+			return PlutusData{PlutusDataType: PlutusArray, Value: PlutusIndefArray{}}
+		}
+		panic(fmt.Sprintf("unknown type %T", v))
+	}
+}
+
 /*
 *
 
@@ -1202,8 +1308,8 @@ func (pd *PlutusData) String() string {
 		bool: True if the PlutusData are equal, false otherwise.
 */
 func (pd *PlutusData) Equal(other PlutusData) bool {
-	marshaledThis, _ := cbor.Marshal(pd)
-	marshaledOther, _ := cbor.Marshal(other)
+	marshaledThis, _ := cbor.Encode(pd)
+	marshaledOther, _ := cbor.Encode(other)
 	return bytes.Equal(marshaledThis, marshaledOther)
 }
 
@@ -1220,8 +1326,8 @@ func (pd *PlutusData) Equal(other PlutusData) bool {
 func (pd *PlutusData) ToDatum() Datum {
 
 	var res Datum
-	enc, _ := cbor.Marshal(pd)
-	err := cbor.Unmarshal(enc, &res)
+	enc, _ := cbor.Encode(pd)
+	_, err := cbor.Decode(enc, &res)
 	if err != nil {
 		// TODO: return errors
 		return res
@@ -1258,33 +1364,227 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 	//enc, _ := cbor.CanonicalEncOptions().EncMode()
 	switch pd.PlutusDataType {
 	case PlutusMap:
-		customEnc, _ := cbor.EncOptions{
-			Sort: cbor.SortBytewiseLexical,
-		}.EncMode()
 		if pd.TagNr != 0 {
-			return customEnc.Marshal(
-				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
-			)
+			m := pd.Value.(map[serialization.CustomBytes]PlutusData)
+			keys := make([]serialization.CustomBytes, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].HexString() < keys[j].HexString()
+			})
+			lenM := len(m)
+			res := make([]byte, 0, 1024)
+			if lenM <= 23 {
+				res = append(res, 0xa0+byte(lenM))
+			} else if lenM <= 255 {
+				res = append(res, 0xb8, byte(lenM))
+			} else {
+				res = append(res, 0xb9, byte(lenM>>8), byte(lenM&0xff))
+			}
+			for _, k := range keys {
+				keyBytes, err := cbor.Encode(k)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, keyBytes...)
+				valBytes, err := cbor.Encode(m[k])
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+			tagBytes := []byte{0xd8, byte(pd.TagNr)}
+			res = append(tagBytes, res...)
+			return res, nil
 		} else {
-			return customEnc.Marshal(pd.Value)
+			m := pd.Value.(map[serialization.CustomBytes]PlutusData)
+			keys := make([]serialization.CustomBytes, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].HexString() < keys[j].HexString()
+			})
+			lenM := len(m)
+			res := make([]byte, 0, 1024)
+			if lenM <= 23 {
+				res = append(res, 0xa0+byte(lenM))
+			} else if lenM <= 255 {
+				res = append(res, 0xb8, byte(lenM))
+			} else {
+				res = append(res, 0xb9, byte(lenM>>8), byte(lenM&0xff))
+			}
+			for _, k := range keys {
+				keyBytes, err := cbor.Encode(k)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, keyBytes...)
+				valBytes, err := cbor.Encode(m[k])
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+			return res, nil
 		}
 	case PlutusIntMap:
-		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
 		if pd.TagNr != 0 {
-			return canonicalenc.Marshal(
-				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
-			)
+			m := pd.Value.(map[serialization.CustomBytes]PlutusData)
+			keys := make([]serialization.CustomBytes, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].HexString() < keys[j].HexString()
+			})
+			lenM := len(m)
+			res := make([]byte, 0, 1024)
+			if lenM <= 23 {
+				res = append(res, 0xa0+byte(lenM))
+			} else if lenM <= 255 {
+				res = append(res, 0xb8, byte(lenM))
+			} else {
+				res = append(res, 0xb9, byte(lenM>>8), byte(lenM&0xff))
+			}
+			for _, k := range keys {
+				keyBytes, err := cbor.Encode(k)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, keyBytes...)
+				valBytes, err := cbor.Encode(m[k])
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+			// Prepend tag bytes
+			tagBytes := []byte{0xd8, byte(pd.TagNr)}
+			res = append(tagBytes, res...)
+			return res, nil
 		} else {
-			return canonicalenc.Marshal(pd.Value)
+			m := pd.Value.(map[serialization.CustomBytes]PlutusData)
+			keys := make([]serialization.CustomBytes, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].HexString() < keys[j].HexString()
+			})
+			lenM := len(m)
+			res := make([]byte, 0, 1024)
+			if lenM <= 23 {
+				res = append(res, 0xa0+byte(lenM))
+			} else if lenM <= 255 {
+				res = append(res, 0xb8, byte(lenM))
+			} else {
+				res = append(res, 0xb9, byte(lenM>>8), byte(lenM&0xff))
+			}
+			for _, k := range keys {
+				keyBytes, err := cbor.Encode(k)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, keyBytes...)
+				valBytes, err := cbor.Encode(m[k])
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+			return res, nil
 		}
+	case PlutusArray:
+		arr := make([]PlutusData, 0)
+		if pd.Value != nil {
+			switch v := pd.Value.(type) {
+			case PlutusDefArray:
+				arr = []PlutusData(v)
+			case PlutusIndefArray:
+				arr = []PlutusData(v)
+			default:
+				return nil, fmt.Errorf("unexpected type %T", pd.Value)
+			}
+		}
+		var res []byte
+		isIndef := false
+		if pd.Value != nil {
+			_, isIndef = pd.Value.(PlutusIndefArray)
+		}
+		if isIndef {
+			res = append(res, 0x9f)
+			for _, v := range arr {
+				valBytes, err := v.MarshalCBOR()
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+			res = append(res, 0xff)
+		} else {
+			length := len(arr)
+			if length <= 23 {
+				res = append(res, 0x80+byte(length))
+			} else if length <= 255 {
+				res = append(res, 0x98, byte(length))
+			} else {
+				res = append(res, 0x99, byte(length>>8), byte(length&0xff))
+			}
+			for _, v := range arr {
+				valBytes, err := v.MarshalCBOR()
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, valBytes...)
+			}
+		}
+		if pd.TagNr != 0 {
+			tagBytes := []byte{0xd8, byte(pd.TagNr)}
+			res = append(tagBytes, res...)
+		}
+		return res, nil
 	case PlutusBigInt:
-		return cbor.Marshal(pd.Value)
+		if pd.TagNr == 0 {
+			return cbor.Encode(pd.Value)
+		} else {
+			var tagBytes []byte
+			if pd.TagNr < 24 {
+				tagBytes = []byte{0xc0 + byte(pd.TagNr)}
+			} else if pd.TagNr < 256 {
+				tagBytes = []byte{0xd8, byte(pd.TagNr)}
+			} else if pd.TagNr < 65536 {
+				tagBytes = []byte{0xd9, byte(pd.TagNr >> 8), byte(pd.TagNr & 0xff)}
+			} else {
+				tagBytes = []byte{0xda, byte(pd.TagNr >> 24), byte(pd.TagNr >> 16), byte(pd.TagNr >> 8), byte(pd.TagNr & 0xff)}
+			}
+			valBytes, err := cbor.Encode(pd.Value)
+			if err != nil {
+				return nil, err
+			}
+			return append(tagBytes, valBytes...), nil
+		}
 	default:
 		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
 		if pd.TagNr == 0 {
-			return cbor.Marshal(pd.Value)
+			return cbor.Encode(pd.Value)
 		} else {
-			return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+			var tagBytes []byte
+			if pd.TagNr < 24 {
+				tagBytes = []byte{0xc0 + byte(pd.TagNr)}
+			} else if pd.TagNr < 256 {
+				tagBytes = []byte{0xd8, byte(pd.TagNr)}
+			} else if pd.TagNr < 65536 {
+				tagBytes = []byte{0xd9, byte(pd.TagNr >> 8), byte(pd.TagNr & 0xff)}
+			} else {
+				tagBytes = []byte{0xda, byte(pd.TagNr >> 24), byte(pd.TagNr >> 16), byte(pd.TagNr >> 8), byte(pd.TagNr & 0xff)}
+			}
+			valBytes, err := cbor.Encode(pd.Value)
+			if err != nil {
+				return nil, err
+			}
+			return append(tagBytes, valBytes...), nil
 		}
 	}
 
@@ -1377,7 +1677,7 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 			}
 			isInt := false
 			normalMap := make(map[serialization.CustomBytes]PlutusData)
-			IntMap := make(map[uint64]PlutusData)
+			IntMap := make(map[serialization.CustomBytes]PlutusData)
 			for _, element := range valu.([]any) {
 				dictionary, ok := element.(map[string]any)
 				if ok {
@@ -1398,7 +1698,8 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 								return err
 							}
 							parsedInt := kvalue.(float64)
-							IntMap[uint64(parsedInt)] = pd
+							cb := serialization.NewCustomBytes(strconv.FormatUint(uint64(parsedInt), 10))
+							IntMap[cb] = pd
 						} else {
 							pd := PlutusData{}
 							var marshaled []byte
@@ -1493,143 +1794,6 @@ func (pdk *PlutusDataKey) MarshalCBOR() ([]uint8, error) {
 	 	Returns:
 	   		error: An error, if any, during unmarshaling.
 */
-func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
-	var x any
-	err := cbor.Unmarshal(value, &x)
-	if err != nil {
-		return err
-	}
-	//fmt.Println(hex.EncodeToString(value))
-	ok, valid := x.(cbor.Tag)
-	if valid {
-		switch ok.Content.(type) {
-		case big.Int:
-			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x.(big.Int)
-			pd.Value = tmpBigInt
-			pd.TagNr = 0
-		case []any:
-			pd.TagNr = ok.Number
-			pd.PlutusDataType = PlutusArray
-			lenTag := len([]byte(strconv.FormatUint(ok.Number, 10)))
-			if value[lenTag-1] == 0x9f {
-				y := PlutusIndefArray{}
-				err = cbor.Unmarshal(value[lenTag-1:], &y)
-				if err != nil {
-					return err
-				}
-				pd.Value = y
-			} else {
-				y := PlutusDefArray{}
-				err = cbor.Unmarshal(value[lenTag-1:], &y)
-				if err != nil {
-
-					return err
-				}
-				pd.Value = y
-			}
-		case []uint8:
-			pd.TagNr = ok.Number
-			pd.PlutusDataType = PlutusBytes
-			pd.Value = ok.Content
-		case map[any]any:
-			y := map[serialization.CustomBytes]PlutusData{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				return err
-			}
-			isInt := false
-			for k := range y {
-				if k.IsInt() {
-					isInt = true
-					break
-				}
-			}
-			if isInt {
-				pd.PlutusDataType = PlutusIntMap
-			} else {
-				pd.PlutusDataType = PlutusMap
-			}
-			pd.Value = y
-			pd.TagNr = 0
-
-		default:
-			//TODO SKIP
-			return nil
-		}
-	} else {
-		switch x := x.(type) {
-		case big.Int:
-			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x
-			pd.Value = tmpBigInt
-			pd.TagNr = 0
-		case []any:
-			if value[0] == 0x9f {
-				y := PlutusIndefArray{}
-				err = cbor.Unmarshal(value, &y)
-				if err != nil {
-					return err
-				}
-				pd.PlutusDataType = PlutusArray
-				pd.Value = y
-				pd.TagNr = 0
-			} else {
-				y := PlutusDefArray{}
-				err = cbor.Unmarshal(value, &y)
-				if err != nil {
-					return err
-				}
-				pd.PlutusDataType = PlutusArray
-				pd.Value = y
-				pd.TagNr = 0
-			}
-		case uint64:
-			pd.PlutusDataType = PlutusInt
-			pd.Value = x
-			pd.TagNr = 0
-
-		case []uint8:
-			pd.PlutusDataType = PlutusBytes
-			pd.Value = x
-			pd.TagNr = 0
-
-		case map[any]any:
-			y := map[serialization.CustomBytes]PlutusData{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				y := map[PlutusDataKey]PlutusData{}
-				err := cbor.Unmarshal(value, &y)
-				if err != nil {
-					return err
-				}
-				pd.PlutusDataType = PlutusMap
-				pd.Value = &y
-				pd.TagNr = 0
-				return err
-			}
-			isInt := false
-			for k := range y {
-				if k.IsInt() {
-					isInt = true
-					break
-				}
-			}
-			if isInt {
-				pd.PlutusDataType = PlutusIntMap
-			} else {
-				pd.PlutusDataType = PlutusMap
-			}
-			pd.Value = y
-			pd.TagNr = 0
-		default:
-			_ = fmt.Errorf("invalid nested struct in plutus data %s", reflect.TypeOf(x))
-		}
-
-	}
-
-	return nil
-}
 
 type RawPlutusData struct {
 	//TODO
@@ -1649,7 +1813,7 @@ type RawPlutusData struct {
 		error: An error if the conversion fails.
 */
 func ToCbor(x any) (string, error) {
-	bytes, err := cbor.Marshal(x)
+	bytes, err := cbor.Encode(x)
 	if err != nil {
 		return "", err
 	}
@@ -1672,7 +1836,7 @@ func ToCbor(x any) (string, error) {
 */
 func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	finalbytes := []byte{}
-	bytes, err := cbor.Marshal(pd)
+	bytes, err := cbor.Encode(pd)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
@@ -1695,15 +1859,15 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 	HashDatum computes the hash of a CBOR marshaler using the Blake2b algorithm.
 
 	Params:
-		d (cbor.Marshaler): The CBOR marshaler to be hashed
+		d (interface{}): The value to be hashed
 
 	Returns:
-		serialization.DatumHash: The hash of the CBOR marshaler.
+		serialization.DatumHash: The hash of the value.
 		error: An error if the hash Datum fails.
 */
-func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
+func HashDatum(d interface{}) (serialization.DatumHash, error) {
 	finalbytes := []byte{}
-	bytes, err := cbor.Marshal(d)
+	bytes, err := cbor.Encode(d)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}

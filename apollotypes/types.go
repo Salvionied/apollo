@@ -198,7 +198,7 @@ func isKeyHashUsedFromUtxos(
 }
 
 func checkCredentialKeyHash(
-	cred *Certificate.Credential,
+	cred *Certificate.StakeCredential,
 	keyHash serialization.PubKeyHash,
 ) bool {
 	if cred != nil && cred.Kind() == 0 && cred.KeyHash() == keyHash {

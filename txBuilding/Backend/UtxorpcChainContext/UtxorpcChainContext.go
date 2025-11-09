@@ -319,8 +319,8 @@ func (u *UtxorpcChainContext) EvaluateTx(
 				tagStr := tagStrings[r.Purpose]
 				key := fmt.Sprintf("%s:%d", tagStr, r.Index)
 				result[key] = Redeemer.ExecutionUnits{
-					Steps: int64(r.ExUnits.Steps),
-					Mem:   int64(r.ExUnits.Memory),
+					int64(r.ExUnits.Memory),
+					int64(r.ExUnits.Steps),
 				}
 			}
 		}

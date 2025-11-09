@@ -17,21 +17,18 @@ import (
 	"github.com/Salvionied/apollo/serialization/Value"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const TEST_ADDR = "addr_test1vr2p8st5t5cxqglyjky7vk98k7jtfhdpvhl4e97cezuhn0cqcexl7"
 
-type CborSerializable interface {
-	cbor.Marshaler
-	cbor.Unmarshaler
-}
+type CborSerializable interface{}
 
 func CheckTwoWayCbor[T CborSerializable](serializable T) {
 	restored := new(T)
-	serialized, _ := cbor.Marshal(serializable)
+	serialized, _ := cbor.Encode(serializable)
 	// TODO: properly error check
-	_ = cbor.Unmarshal(serialized, restored)
+	_, _ = cbor.Decode(serialized, restored)
 	if !reflect.DeepEqual(serializable, restored) {
 		panic("Invalid serialization")
 	}
@@ -224,7 +221,7 @@ func (f FixedChainContext) EvaluateTx(
 	tx []uint8,
 ) (map[string]Redeemer.ExecutionUnits, error) {
 	return map[string]Redeemer.ExecutionUnits{
-		"spend:0": {Mem: 399882, Steps: 175940720},
+		"spend:0": {399882, 175940720},
 	}, nil
 }
 
