@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestAssetNameCreators(t *testing.T) {
@@ -96,7 +96,7 @@ func TestInvalidUnMarshal(t *testing.T) {
 	decoded, _ := hex.DecodeString(
 		"fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
 	)
-	marshaled, _ := cbor.Marshal(decoded)
+	marshaled, _ := cbor.Encode(decoded)
 	assetName := AssetName.AssetName{}
 	err := assetName.UnmarshalCBOR(marshaled)
 	if err == nil {

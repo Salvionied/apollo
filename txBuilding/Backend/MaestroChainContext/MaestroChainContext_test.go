@@ -22,7 +22,7 @@ package MaestroChainContext_test
 // 	// res := mcc.EvaluateTx(decodedCbor)
 // 	//fmt.Println(res)
 // 	// tx := Transaction.Transaction{}
-// 	// err := cbor.Unmarshal(decodedCbor, &tx)
+// 	// _, err := cbor.Decode(decodedCbor, &tx)
 // 	// if err != nil {
 // 	// 	t.Error(err)
 // 	// }
@@ -62,7 +62,7 @@ package MaestroChainContext_test
 // 	if err != nil {
 // 		t.Error(err)
 // 	}
-// 	marshaled, _ := cbor.Marshal(plutus)
+// 	marshaled, _ := cbor.Encode(plutus)
 // 	t.Log(hex.EncodeToString(marshaled))
 // 	newBt := BoolTest{}
 // 	err = plutusencoder.UnmarshalPlutus(plutus, &newBt, 1)
@@ -90,7 +90,7 @@ package MaestroChainContext_test
 // 	if err != nil {
 // 		t.Error(err)
 // 	}
-// 	marshaled, _ := cbor.Marshal(plutus)
+// 	marshaled, _ := cbor.Encode(plutus)
 // 	t.Log(hex.EncodeToString(marshaled))
 // 	newDt := DatumTest{}
 // 	err = plutusencoder.UnmarshalPlutus(plutus, &newDt, 1)

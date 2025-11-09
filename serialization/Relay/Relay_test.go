@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Relay"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func u16ptr(v uint16) *uint16 { return &v }
@@ -61,7 +61,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_wrong_len", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, nil})
+		bad, _ := cbor.Encode([]any{0, nil})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for wrong array length")
@@ -69,7 +69,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_kind_mismatch", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, nil, nil, nil})
+		bad, _ := cbor.Encode([]any{1, nil, nil, nil})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for unexpected kind")
@@ -77,7 +77,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_port_out_of_range", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, uint64(70000), nil, nil})
+		bad, _ := cbor.Encode([]any{0, uint64(70000), nil, nil})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for port out of range")
@@ -85,7 +85,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_port_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, "not-a-number", nil, nil})
+		bad, _ := cbor.Encode([]any{0, "not-a-number", nil, nil})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for port wrong type")
@@ -93,7 +93,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_ipv4_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, nil, "not-bytes", nil})
+		bad, _ := cbor.Encode([]any{0, nil, "not-bytes", nil})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for ipv4 wrong type")
@@ -101,7 +101,7 @@ func TestSingleHostAddr_RoundTripAndErrors(t *testing.T) {
 	})
 
 	t.Run("unmarshal_error_ipv6_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, nil, nil, "not-bytes"})
+		bad, _ := cbor.Encode([]any{0, nil, nil, "not-bytes"})
 		var v Relay.SingleHostAddr
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for ipv6 wrong type")
@@ -145,42 +145,42 @@ func TestSingleHostName_RoundTripAndErrors(t *testing.T) {
 		}
 	})
 	t.Run("unmarshal_error_wrong_len", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, nil})
+		bad, _ := cbor.Encode([]any{1, nil})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for wrong array length")
 		}
 	})
 	t.Run("unmarshal_error_kind_mismatch", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{0, nil, "example.com"})
+		bad, _ := cbor.Encode([]any{0, nil, "example.com"})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for unexpected kind")
 		}
 	})
 	t.Run("unmarshal_error_port_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, "bad-port", "example.com"})
+		bad, _ := cbor.Encode([]any{1, "bad-port", "example.com"})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for port wrong type")
 		}
 	})
 	t.Run("unmarshal_error_port_out_of_range", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, uint64(70000), "example.com"})
+		bad, _ := cbor.Encode([]any{1, uint64(70000), "example.com"})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for port out of range")
 		}
 	})
 	t.Run("unmarshal_error_dns_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, nil, []byte{1}})
+		bad, _ := cbor.Encode([]any{1, nil, []byte{1}})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for dns wrong type")
 		}
 	})
 	t.Run("unmarshal_error_dns_too_long", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, nil, string(make([]byte, 129))})
+		bad, _ := cbor.Encode([]any{1, nil, string(make([]byte, 129))})
 		var v Relay.SingleHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for dns too long")
@@ -216,21 +216,21 @@ func TestMultiHostName_RoundTripAndErrors(t *testing.T) {
 		}
 	})
 	t.Run("unmarshal_error_wrong_len", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{2})
+		bad, _ := cbor.Encode([]any{2})
 		var v Relay.MultiHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for wrong array length")
 		}
 	})
 	t.Run("unmarshal_error_kind_mismatch", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{1, "example.com"})
+		bad, _ := cbor.Encode([]any{1, "example.com"})
 		var v Relay.MultiHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for unexpected kind")
 		}
 	})
 	t.Run("unmarshal_error_dns_wrong_type", func(t *testing.T) {
-		bad, _ := cbor.Marshal([]any{2, []byte{1}})
+		bad, _ := cbor.Encode([]any{2, []byte{1}})
 		var v Relay.MultiHostName
 		if err := v.UnmarshalCBOR(bad); err == nil {
 			t.Fatal("expected error for dns wrong type")
@@ -240,7 +240,7 @@ func TestMultiHostName_RoundTripAndErrors(t *testing.T) {
 
 func TestUnmarshalRelay_Dispatch(t *testing.T) {
 	// single_host_addr
-	aData, _ := cbor.Marshal([]any{0, nil, []byte{1, 2, 3, 4}, nil})
+	aData, _ := cbor.Encode([]any{0, nil, []byte{1, 2, 3, 4}, nil})
 	a, err := Relay.UnmarshalRelay(aData)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,7 +250,7 @@ func TestUnmarshalRelay_Dispatch(t *testing.T) {
 	}
 
 	// single_host_name
-	sData, _ := cbor.Marshal([]any{1, nil, "example.com"})
+	sData, _ := cbor.Encode([]any{1, nil, "example.com"})
 	s, err := Relay.UnmarshalRelay(sData)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -260,7 +260,7 @@ func TestUnmarshalRelay_Dispatch(t *testing.T) {
 	}
 
 	// multi_host_name
-	mData, _ := cbor.Marshal([]any{2, "example.com"})
+	mData, _ := cbor.Encode([]any{2, "example.com"})
 	m, err := Relay.UnmarshalRelay(mData)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -270,19 +270,19 @@ func TestUnmarshalRelay_Dispatch(t *testing.T) {
 	}
 
 	// invalid kind
-	badKind, _ := cbor.Marshal([]any{3, nil})
+	badKind, _ := cbor.Encode([]any{3, nil})
 	if _, err := Relay.UnmarshalRelay(badKind); err == nil {
 		t.Fatal("expected error for unknown relay kind")
 	}
 
 	// invalid array (empty)
-	empty, _ := cbor.Marshal([]any{})
+	empty, _ := cbor.Encode([]any{})
 	if _, err := Relay.UnmarshalRelay(empty); err == nil {
 		t.Fatal("expected error for empty array")
 	}
 
 	// invalid kind type
-	wrongKindType, _ := cbor.Marshal([]any{"not-int", nil})
+	wrongKindType, _ := cbor.Encode([]any{"not-int", nil})
 	if _, err := Relay.UnmarshalRelay(wrongKindType); err == nil {
 		t.Fatal("expected error for invalid relay kind type")
 	}

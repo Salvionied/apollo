@@ -31,7 +31,7 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Cache"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type BlockFrostChainContext struct {
@@ -492,7 +492,7 @@ func (bfc *BlockFrostChainContext) Utxos(
 		if result.InlineDatum != "" {
 			decoded, _ := hex.DecodeString(result.InlineDatum)
 			var x PlutusData.PlutusData
-			err := cbor.Unmarshal(decoded, &x)
+			_, err := cbor.Decode(decoded, &x)
 			if err != nil {
 				continue
 			}
@@ -521,7 +521,7 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 	logger chan string,
 ) (serialization.TransactionId, error) {
 	resId := serialization.TransactionId{}
-	txBytes, _ := cbor.Marshal(tx)
+	txBytes, _ := cbor.Encode(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		logger <- ("Custom Submission Endpoints Found, submitting...")
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
@@ -585,7 +585,7 @@ func (bfc *BlockFrostChainContext) SubmitTx(
 	tx Transaction.Transaction,
 ) (serialization.TransactionId, error) {
 	resId := serialization.TransactionId{}
-	txBytes, _ := cbor.Marshal(tx)
+	txBytes, _ := cbor.Encode(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
 			req, _ := http.NewRequestWithContext(

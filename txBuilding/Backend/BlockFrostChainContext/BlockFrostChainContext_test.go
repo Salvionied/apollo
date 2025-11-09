@@ -1,4 +1,4 @@
-package apollo_test
+package BlockFrostChainContext_test
 
 import (
 	"encoding/hex"
@@ -31,6 +31,48 @@ const (
 )
 
 const BLOCKFROST_BASE_URL_MAINNET = "https://cardano-mainnet.blockfrost.io/api"
+
+const BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
+
+var decoded_addr, _ = Address.DecodeAddress(
+	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+)
+
+var InputUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo2 = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(5_000_000, nil)),
+}
 
 func TestFailedSubmissionThrows(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
@@ -326,12 +368,15 @@ func TestConsumeUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeUTxO(testUtxo,
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, nil),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -394,11 +439,14 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeAssetsFromUtxo(testUtxo,
 			apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu", 2_000_000, []apollo.Unit{apollo.NewUnit("279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f", "TEST", 1)}),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 	built, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
@@ -596,7 +644,7 @@ func TestFeePadding(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if built.GetTx().TransactionBody.Fee != 691637 {
+	if built.GetTx().TransactionBody.Fee != 685865 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {

@@ -1,4 +1,4 @@
-package apollo_test
+package UtxorpcChainContext_test
 
 import (
 	"encoding/hex"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo"
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Asset"
@@ -28,10 +29,46 @@ var decoded_addr_for_fixtures, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 )
 
+var InputUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr_for_fixtures,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr_for_fixtures,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo2 = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr_for_fixtures,
+		Value.SimpleValue(5_000_000, nil)),
+}
+
 func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -53,7 +90,7 @@ func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 func TestUTXORPC_BurnPlutus(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -108,7 +145,7 @@ func TestUTXORPC_BurnPlutus(t *testing.T) {
 func TestUTXORPC_MintPlutus(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -167,7 +204,7 @@ func TestUTXORPC_MintPlutus(t *testing.T) {
 func TestUTXORPCMintPlutusWithPayment(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -232,7 +269,7 @@ func TestUTXORPCMintPlutusWithPayment(t *testing.T) {
 func TestUTXORPC_GetWallet(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -252,7 +289,7 @@ func TestUTXORPC_GetWallet(t *testing.T) {
 func TestUTXORPC_AddInputs(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -288,7 +325,7 @@ func TestUTXORPC_AddInputs(t *testing.T) {
 func TestUTXORPC_ConsumeUtxo(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -321,12 +358,15 @@ func TestUTXORPC_ConsumeUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeUTxO(testUtxo,
 			apollo.NewPayment(decoded_addr_for_fixtures.String(), 2_000_000, nil),
 			apollo.NewPayment(decoded_addr_for_fixtures.String(), 2_000_000, nil),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 
 	built, err := apollob.Complete()
 	if err != nil {
@@ -352,7 +392,7 @@ func TestUTXORPC_ConsumeUtxo(t *testing.T) {
 func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -389,7 +429,7 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 	}
 
 	apollob := apollo.New(&cc)
-	apollob = apollob.SetChangeAddress(decoded_addr).
+	apollob, err = apollob.SetChangeAddress(decoded_addr).
 		ConsumeAssetsFromUtxo(testUtxo,
 			apollo.NewPayment(
 				decoded_addr_for_fixtures.String(),
@@ -402,8 +442,11 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 					),
 				},
 			),
-		).
-		AddLoadedUTxOs(biAdaUtxo)
+		)
+	if err != nil {
+		t.Error(err)
+	}
+	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
 
 	built, err := apollob.Complete()
 	if err != nil {
@@ -432,7 +475,7 @@ func TestUTXORPC_ConsumeAssetsFromUtxo(t *testing.T) {
 func TestUTXORPC_PayToContract(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -500,7 +543,7 @@ func TestUTXORPC_PayToContract(t *testing.T) {
 func TestUTXORPC_RequiredSigner(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -579,7 +622,7 @@ func TestUTXORPC_RequiredSigner(t *testing.T) {
 func TestUTXORPC_FeePadding(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -598,13 +641,13 @@ func TestUTXORPC_FeePadding(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if built.GetTx().TransactionBody.Fee != 691637 {
+	if built.GetTx().TransactionBody.Fee != 701141 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Outputs[0].Lovelace() != 1_000_000 {
 		t.Error("Tx is not correct")
 	}
-	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13308363 {
+	if built.GetTx().TransactionBody.Outputs[1].Lovelace() != 13298859 {
 		t.Error(
 			"Tx is not correct",
 			built.GetTx().TransactionBody.Outputs[1].Lovelace(),
@@ -623,7 +666,7 @@ func TestUTXORPC_FeePadding(t *testing.T) {
 func TestUTXORPC_SetCollateral(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)
@@ -653,7 +696,7 @@ func TestUTXORPC_SetCollateral(t *testing.T) {
 func TestUTXORPC_CollateralWithReturn(t *testing.T) {
 	cc, err := UtxorpcChainContext.NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
-		int(MAINNET),
+		int(constants.MAINNET),
 	)
 	if err != nil {
 		t.Error(err)

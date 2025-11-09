@@ -16,7 +16,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/maestro-org/go-sdk/client"
 	"github.com/maestro-org/go-sdk/utils"
 )
@@ -320,7 +320,7 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(
 	}
 	decodedCbor, _ := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
 	output := TransactionOutput.TransactionOutput{}
-	err = cbor.Unmarshal(decodedCbor, &output)
+	_, err = cbor.Decode(decodedCbor, &output)
 	if err != nil {
 
 		return nil, err
@@ -422,7 +422,7 @@ func (mcc *MaestroChainContext) Utxos(
 		}
 		output := TransactionOutput.TransactionOutput{}
 		decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-		err = cbor.Unmarshal(decodedCbor, &output)
+		_, err := cbor.Decode(decodedCbor, &output)
 		if err != nil {
 			return nil, err
 		}
@@ -448,7 +448,7 @@ func (mcc *MaestroChainContext) Utxos(
 			}
 			output := TransactionOutput.TransactionOutput{}
 			decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-			err = cbor.Unmarshal(decodedCbor, &output)
+			_, err := cbor.Decode(decodedCbor, &output)
 			if err != nil {
 				return nil, err
 			}
@@ -515,7 +515,7 @@ func (mcc *MaestroChainContext) GetContractCbor(
 	scCborBytes := res.Data.Bytes
 	bytes := []byte{}
 	decodedBytes, _ := hex.DecodeString(scCborBytes)
-	_ = cbor.Unmarshal(decodedBytes, &bytes)
+	_, _ = cbor.Decode(decodedBytes, &bytes)
 	return hex.EncodeToString(bytes), nil
 
 }

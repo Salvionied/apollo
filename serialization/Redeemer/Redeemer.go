@@ -1,6 +1,8 @@
 package Redeemer
 
-import "github.com/Salvionied/apollo/serialization/PlutusData"
+import (
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+)
 
 type RedeemerTag int
 
@@ -20,7 +22,6 @@ var RedeemerTagNames = map[RedeemerTag]string{
 }
 
 type ExecutionUnits struct {
-	_     struct{} `cbor:",toarray"`
 	Mem   int64
 	Steps int64
 }
@@ -56,7 +57,6 @@ func (eu *ExecutionUnits) Sum(other ExecutionUnits) {
 
 // TODO
 type Redeemer struct {
-	_       struct{} `cbor:",toarray"`
 	Tag     RedeemerTag
 	Index   int
 	Data    PlutusData.PlutusData
