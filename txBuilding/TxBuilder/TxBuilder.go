@@ -5,9 +5,10 @@ import (
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 // import (
@@ -435,10 +436,19 @@ func ScriptDataHash(
 	chainContext Base.ChainContext,
 	witnessSet TransactionWitnessSet.TransactionWitnessSet,
 ) (*serialization.ScriptDataHash, error) {
-	cost_models := map[int]cbor.Marshaler{}
+	cost_models := map[int]interface{}{}
 	redeemers := witnessSet.Redeemer
+	if redeemers == nil {
+		redeemers = []Redeemer.Redeemer{}
+	}
 	PV1Scripts := witnessSet.PlutusV1Script
+	if PV1Scripts == nil {
+		PV1Scripts = []PlutusData.PlutusV1Script{}
+	}
 	PV2Scripts := witnessSet.PlutusV2Script
+	if PV2Scripts == nil {
+		PV2Scripts = []PlutusData.PlutusV2Script{}
+	}
 	datums := witnessSet.PlutusData
 	var err error
 	isV1 := len(PV1Scripts) > 0
@@ -454,12 +464,14 @@ func ScriptDataHash(
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
-		redeemer_bytes, _ = cbor.Marshal(redeemers)
+		redeemer_bytes, _ = cbor.Encode(redeemers)
 	}
 	var datum_bytes []byte
-	if datums.Len() > 0 {
+	if datums == nil {
+		datum_bytes = []byte{}
+	} else if datums.Len() > 0 {
 
-		datum_bytes, err = cbor.Marshal(datums)
+		datum_bytes, err = cbor.Encode(datums)
 		if err != nil {
 			return nil, err
 		}
@@ -468,13 +480,13 @@ func ScriptDataHash(
 	}
 	var cost_model_bytes []byte
 	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
+		cost_model_bytes, err = cbor.Encode(PlutusData.COST_MODELSV1)
 		if err != nil {
 			return nil, err
 		}
 
 	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
+		cost_model_bytes, err = cbor.Encode(cost_models)
 		if err != nil {
 			return nil, err
 		}

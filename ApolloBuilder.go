@@ -33,7 +33,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Utils"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const (
@@ -168,20 +168,20 @@ func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	Returns:
 		*Apollo: A pointer to the modified Apollo instance.
 */
-func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
+func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
 		selectedValue = selectedValue.Sub(payment.ToValue())
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
@@ -201,7 +201,7 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 func (b *Apollo) ConsumeAssetsFromUtxo(
 	utxo UTxO.UTxO,
 	payments ...PaymentI,
-) *Apollo {
+) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
@@ -210,13 +210,13 @@ func (b *Apollo) ConsumeAssetsFromUtxo(
 		)
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
@@ -538,14 +538,14 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	TransactionWitnessSet.TransactionWitnessSet: The transaction's witness set.
 */
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make(PlutusData.PlutusIndefArray, 0)
 	plutusdata = append(plutusdata, b.datums...)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
 		PlutusV3Script: b.v3scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &plutusdata,
 		Redeemer:       b.redeemers,
 	}
 }
@@ -559,7 +559,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		TransactionWitnessSet.TransactionWitnessSet: A fake witness set for testing.
 */
 func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make(PlutusData.PlutusIndefArray, 0)
 	plutusdata = append(plutusdata, b.datums...)
 	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
 	fakeVkWitnesses = append(
@@ -581,7 +581,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
 		PlutusV3Script: b.v3scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &plutusdata,
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
 	}
@@ -604,7 +604,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	PV2Scripts := b.v2scripts
 	PV3Scripts := b.v3scripts
 	datums := b.datums
-	usedCms := map[any]cbor.Marshaler{}
+	usedCms := map[any]any{}
 	if len(redeemers) > 0 {
 		if len(PV1Scripts) > 0 {
 			usedCms[serialization.CustomBytes{Value: "00"}] = PlutusData.PLUTUSV1COSTMODEL
@@ -622,13 +622,13 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
-		redeemer_bytes, _ = cbor.Marshal(redeemers)
+		redeemer_bytes, _ = cbor.Encode(redeemers)
 	}
 	var err error
 	var datum_bytes []byte
 	if len(datums) > 0 {
 
-		datum_bytes, err = cbor.Marshal(PlutusData.PlutusIndefArray(datums))
+		datum_bytes, err = cbor.Encode(PlutusData.PlutusIndefArray(datums))
 		if err != nil {
 			return nil, err
 		}
@@ -636,7 +636,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		datum_bytes = []byte{}
 	}
 	var cost_model_bytes []byte
-	cost_model_bytes, _ = cbor.Marshal(usedCms)
+	cost_model_bytes, _ = cbor.Encode(usedCms)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	// //total_bytes := redeemer_bytes
 	// // Compute all versions of the hash
@@ -966,6 +966,16 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 					),
 				)
 				b.collateralReturn = &returnOutput
+			} else if int(utxo.Output.GetValue().GetCoin()) == collateral_amount && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+				b.totalCollateral = collateral_amount
+				returnOutput := TransactionOutput.SimpleTransactionOutput(
+					b.inputAddresses[0],
+					Value.SimpleValue(
+						utxo.Output.GetValue().GetCoin(),
+						utxo.Output.GetValue().GetAssets(),
+					),
+				)
+				b.collateralReturn = &returnOutput
 			}
 		}
 		return b, nil
@@ -1083,7 +1093,7 @@ func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 		return make(map[string]Redeemer.ExecutionUnits, 0), err
 	}
 	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
+	tx_cbor, _ := cbor.Encode(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
 
@@ -1368,7 +1378,7 @@ func isOverUtxoLimit(
 		address,
 		Value.SimpleValue(0, change.GetAssets()),
 	)
-	encoded, _ := cbor.Marshal(txOutput)
+	encoded, _ := cbor.Encode(txOutput)
 	pps, err := b.GetProtocolParams()
 	if err != nil {
 		return false, err
@@ -1936,11 +1946,12 @@ func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = cbor.Unmarshal(cborBytes, &tx)
+	err = tx.UnmarshalCBOR(cborBytes)
 	if err != nil {
 		return b, err
 	}
 	b.tx = &tx
+	b.Fee = tx.TransactionBody.Fee
 	return b, nil
 }
 
@@ -2298,7 +2309,7 @@ func (b *Apollo) estimateExunitsExact(
 	cloned_b.isEstimateRequired = false
 	updated_b, _ := cloned_b.CompleteExact(fee)
 	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
+	tx_cbor, _ := cbor.Encode(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
 

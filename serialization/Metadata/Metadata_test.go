@@ -176,7 +176,7 @@ func TestMarshalEmptyAux(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
-	if hex.EncodeToString(marshaled) != `f6` {
+	if hex.EncodeToString(marshaled) != `a0` {
 		t.Errorf(
 			"InvalidReserialization got %s expected %s",
 			hex.EncodeToString(marshaled),

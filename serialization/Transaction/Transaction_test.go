@@ -58,7 +58,7 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 }
 
-func TestId(t *testing.T) {
+func TestBytes(t *testing.T) {
 	tx := Transaction.Transaction{
 		TransactionBody: TransactionBody.TransactionBody{
 			Inputs: []TransactionInput.TransactionInput{

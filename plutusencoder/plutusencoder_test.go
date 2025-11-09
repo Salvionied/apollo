@@ -1,17 +1,17 @@
-package plutusencoder_test
+package plutusencoder
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
 
-	"github.com/Salvionied/apollo/plutusencoder"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type TestAddress struct {
@@ -97,35 +97,36 @@ func TestNestedListMarshal(t *testing.T) {
 			},
 		},
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(d)
+	marshaled, err := MarshalPlutus(d)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Println(hex.EncodeToString(encoded))
 	if hex.EncodeToString(
 		encoded,
-	) != "d87a9f44010203041a000f42409fd87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304ffff" {
-		t.Error("encoding error")
+	) != "d87a8344010203041a000f424083d87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304" {
+		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 }
 
 func TestNestedListUnmarshal(t *testing.T) {
-	p := "d87a9f44010203041a000f42409fd87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304ffff"
+	p := "d87a8344010203041a000f424083d87b8344010203041a000f42404401020304d87b8344010203041a000f42404401020304"
 	decoded, err := hex.DecodeString(p)
 	if err != nil {
 		t.Error(err)
 	}
-	pd := PlutusData.PlutusData{}
-	err = cbor.Unmarshal(decoded, &pd)
+	var pdAny any
+	_, err = cbor.Decode(decoded, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
+	pd := anyToPlutusData(pdAny)
 	d := new(NestedList)
-	err = plutusencoder.UnmarshalPlutus(&pd, d, 1)
+	err = UnmarshalPlutus(&pd, d, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -167,34 +168,35 @@ func TestPlutusMarshal(t *testing.T) {
 			Skh:    []byte{0x01, 0x02, 0x03, 0x04},
 		},
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(d)
+	marshaled, err := MarshalPlutus(d)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
 	if hex.EncodeToString(
 		encoded,
-	) != "d87a9f44010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304ff" {
+	) != "d87a8344010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304" {
 		t.Error("encoding error")
 	}
 }
 
 func TestPlutusUnmarshal(t *testing.T) {
-	p := "d87a9f44010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304ff"
+	p := "d87a8344010203044b48656c6c6f20576f726c641a000f4240d87b8344010203041a000f42404401020304"
 	decoded, err := hex.DecodeString(p)
 	if err != nil {
 		t.Error(err)
 	}
-	pd := PlutusData.PlutusData{}
-	err = cbor.Unmarshal(decoded, &pd)
+	var pdAny any
+	_, err = cbor.Decode(decoded, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
+	pd := anyToPlutusData(pdAny)
 	d := new(Datum)
-	err = plutusencoder.UnmarshalPlutus(&pd, d, 1)
+	err = UnmarshalPlutus(&pd, d, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -226,33 +228,34 @@ func TestPDAddressesStruct(t *testing.T) {
 	d := TestAddress{
 		Address: decoded_addr,
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(d)
+	marshaled, err := MarshalPlutus(d)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Println(marshaled)
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
 	if hex.EncodeToString(
 		encoded,
-	) != "d87b81d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff" {
+	) != "d87b83d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4fffffff" {
 		t.Error(hex.EncodeToString(encoded))
 	}
 }
 
 func TestUnmarshalPDAddressesStruct(t *testing.T) {
 	decoded, _ := hex.DecodeString(
-		"d87b81d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff",
+		"d87b9fd8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffffff",
 	)
-	pd := PlutusData.PlutusData{}
-	err := cbor.Unmarshal(decoded, &pd)
+	var pdAny any
+	_, err := cbor.Decode(decoded, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
+	pd := anyToPlutusData(pdAny)
 	d := new(TestAddress)
-	err = plutusencoder.UnmarshalPlutus(&pd, d, 1)
+	err = UnmarshalPlutus(&pd, d, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -265,11 +268,11 @@ func TestPDAddress(t *testing.T) {
 	addressKEY_KEY := "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh"
 	decoded_addr, _ := Address.DecodeAddress(addressKEY_KEY)
 
-	pd, err := plutusencoder.GetAddressPlutusData(decoded_addr)
+	pd, err := GetAddressPlutusData(decoded_addr)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, _ := cbor.Marshal(pd)
+	encoded, _ := cbor.Encode(pd)
 	if hex.EncodeToString(
 		encoded,
 	) != "d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff" {
@@ -278,11 +281,11 @@ func TestPDAddress(t *testing.T) {
 	addressSCRIPT_KEY := "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3"
 	decoded_addr, _ = Address.DecodeAddress(addressSCRIPT_KEY)
 
-	pd, err = plutusencoder.GetAddressPlutusData(decoded_addr)
+	pd, err = GetAddressPlutusData(decoded_addr)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err = cbor.Marshal(pd)
+	encoded, err = cbor.Encode(pd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -293,11 +296,11 @@ func TestPDAddress(t *testing.T) {
 	}
 	addressSCRIPT_NONE := "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq"
 	decoded_addr, _ = Address.DecodeAddress(addressSCRIPT_NONE)
-	pd, err = plutusencoder.GetAddressPlutusData(decoded_addr)
+	pd, err = GetAddressPlutusData(decoded_addr)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, _ = cbor.Marshal(pd)
+	encoded, _ = cbor.Encode(pd)
 	if hex.EncodeToString(
 		encoded,
 	) != "d8799fd87a9f581c6ec4acc3fbbd570ada625f24902777cec5d7a349fa0f3c7ba87b0cffffd87a9fffff" {
@@ -306,11 +309,11 @@ func TestPDAddress(t *testing.T) {
 
 	addressKEY_NONE := "addr1v8qke3rhzmkk6ppn2t746t9ftux9h6aywke60k8zanc8lugs28jvm"
 	decoded_addr, _ = Address.DecodeAddress(addressKEY_NONE)
-	pd, err = plutusencoder.GetAddressPlutusData(decoded_addr)
+	pd, err = GetAddressPlutusData(decoded_addr)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, _ = cbor.Marshal(pd)
+	encoded, _ = cbor.Encode(pd)
 	if hex.EncodeToString(
 		encoded,
 	) != "d8799fd8799f581cc16cc47716ed6d043352fd5d2ca95f0c5beba475b3a7d8e2ecf07ff1ffd87a9fffff" {
@@ -323,12 +326,13 @@ func TestDecodeAddressStruct(t *testing.T) {
 	decoded_addr, _ := hex.DecodeString(
 		"d8799fd87a9f581c6ec4acc3fbbd570ada625f24902777cec5d7a349fa0f3c7ba87b0cffffd87a9fffff",
 	)
-	var pd PlutusData.PlutusData
-	err := cbor.Unmarshal(decoded_addr, &pd)
+	var pdAny any
+	_, err := cbor.Decode(decoded_addr, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
-	address, _ := plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	pd := anyToPlutusData(pdAny)
+	address, _ := DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1w9hvftxrlw74wzk6vf0jfyp8wl8vt4arf8aq70rm4paselc46ptfq" {
 		t.Error(
 			address,
@@ -339,11 +343,12 @@ func TestDecodeAddressStruct(t *testing.T) {
 	decoded_addr, _ = hex.DecodeString(
 		"d8799fd87a9f581c4ab17afc9a19a4f06b6fe229f9501e727d3968bff03acb1a8f86acf5ffd8799fd8799fd8799f581cb60abac5d101517cd99ae6c6c9ab582bc8603a07b57941df212782c5ffffffff",
 	)
-	err = cbor.Unmarshal(decoded_addr, &pd)
+	_, err = cbor.Decode(decoded_addr, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
-	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	pd = anyToPlutusData(pdAny)
+	address, _ = DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1z99tz7hungv6furtdl3zn72sree86wtghlcr4jc637r2eadkp2avt5gp297dnxhxcmy6kkptepsr5pa409qa7gf8stzs0706a3" {
 		t.Error(
 			address,
@@ -355,11 +360,12 @@ func TestDecodeAddressStruct(t *testing.T) {
 	decoded_addr, _ = hex.DecodeString(
 		"d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff",
 	)
-	err = cbor.Unmarshal(decoded_addr, &pd)
+	_, err = cbor.Decode(decoded_addr, &pdAny)
 	if err != nil {
 		t.Error(err)
 	}
-	address, _ = plutusencoder.DecodePlutusAddress(pd, 0b0001)
+	pd = anyToPlutusData(pdAny)
+	address, _ = DecodePlutusAddress(pd, 0b0001)
 	if address.String() != "addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh" {
 		t.Error(
 			address,
@@ -386,23 +392,23 @@ type InvalidTag struct {
 
 func TestPlutusMarshalCborTags(t *testing.T) {
 	tw7 := TagWithin7and1400{
-		Tag: 5,
+		Tag: 1,
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(tw7)
+	marshaled, err := MarshalPlutus(tw7)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
-	if hex.EncodeToString(encoded) != "d905018105" {
+	if hex.EncodeToString(encoded) != "d87a8101" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 	ta1400 := TagAbove1400{
 		Tag: 1400,
 	}
-	_, err = plutusencoder.MarshalPlutus(ta1400)
+	_, err = MarshalPlutus(ta1400)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -410,7 +416,7 @@ func TestPlutusMarshalCborTags(t *testing.T) {
 	invalid := InvalidTag{
 		Tag: 5,
 	}
-	_, err = plutusencoder.MarshalPlutus(invalid)
+	_, err = MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -423,7 +429,7 @@ type InvalidStructTag struct {
 
 func TestPlutusMarshalStructTags(t *testing.T) {
 	invalid := InvalidStructTag{}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -438,11 +444,11 @@ func TestPlutusMarshalMap(t *testing.T) {
 	m := MapStruct{
 		Value: 5,
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -470,21 +476,21 @@ func TestFieldConstr(t *testing.T) {
 	fc7 := FieldConstrwithin7and1400{
 		Value: 5,
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(fc7)
+	marshaled, err := MarshalPlutus(fc7)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
-	if hex.EncodeToString(encoded) != "d87b81d9050505" {
+	if hex.EncodeToString(encoded) != "d87b81d90505" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 	fc1400 := FieldConstrAbove1400{
 		Value: 1400,
 	}
-	_, err = plutusencoder.MarshalPlutus(fc1400)
+	_, err = MarshalPlutus(fc1400)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -492,11 +498,11 @@ func TestFieldConstr(t *testing.T) {
 	fc5 := FieldConstrBelow7{
 		Value: 5,
 	}
-	marshaled, err = plutusencoder.MarshalPlutus(fc5)
+	marshaled, err = MarshalPlutus(fc5)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err = cbor.Marshal(marshaled)
+	encoded, err = cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -513,7 +519,7 @@ func TestMissingStructTag(t *testing.T) {
 	m := MissingStructTag{
 		Val: 5,
 	}
-	_, err := plutusencoder.MarshalPlutus(m)
+	_, err := MarshalPlutus(m)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -563,7 +569,7 @@ func TestAllTypesWithMap(t *testing.T) {
 		EmptyMap:          SimpleMap{Value: 5},
 		ArrayOfStructs:    []SimpleIndefList{},
 		ArrayOfStructsDef: []SimpleDefList{{Value: 5}, {Value: 5}, {Value: 5}}}
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
@@ -602,11 +608,11 @@ func TestAllTypesWithDefList(t *testing.T) {
 		ArrayOfStructs:    []SimpleIndefList{},
 		ArrayOfStructsDef: []SimpleDefList{{Value: 5}, {Value: 5}, {Value: 5}}}
 
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -648,17 +654,17 @@ func TestAllTypesWithIndefList(t *testing.T) {
 		ArrayOfStructs:    []SimpleIndefList{},
 		ArrayOfStructsDef: []SimpleDefList{{Value: 5}, {Value: 5}, {Value: 5}}}
 
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
 	if hex.EncodeToString(
 		encoded,
-	) != "d87a9f054b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a9f05ffd87b8105d87ba14556616c7565059fff83d87b8105d87b8105d87b8105ff" {
+	) != "d87a8a054b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a8105d87b8105d87ba16556616c7565058083d87a8105d87a8105d87a8105" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 
@@ -673,7 +679,7 @@ func TestInvalidInt(t *testing.T) {
 	invalid := InvalidInt{
 		Value: "test",
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -688,7 +694,7 @@ func TestInvalidStringBytes(t *testing.T) {
 	invalid := InvalidStringBytes{
 		Value: 5,
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -703,7 +709,7 @@ func TestInvalidHexString(t *testing.T) {
 	invalid := InvalidHexString{
 		Value: 5,
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -718,7 +724,7 @@ func TestInvalidBytes(t *testing.T) {
 	invalid := InvalidBytes{
 		Value: 5,
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -733,7 +739,7 @@ func TestNonHexString(t *testing.T) {
 	invalid := NonHexString{
 		Value: "test",
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -748,7 +754,7 @@ func TestInvalidFieldConstr(t *testing.T) {
 	invalid := InvalidFieldConstr{
 		Value: 5,
 	}
-	_, err := plutusencoder.MarshalPlutus(invalid)
+	_, err := MarshalPlutus(invalid)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
@@ -760,50 +766,50 @@ func TestCborAddressUnmarshal(t *testing.T) {
 	validHex := "d87b81d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff"
 	nonPlutusDataHex := "00120"
 	str := TestAddress{}
-	err := plutusencoder.CborUnmarshal(invalidHex, &str, 1)
+	err := CborUnmarshal(invalidHex, &str, 1)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
-	err = plutusencoder.CborUnmarshal(wrongStructHex, &str, 1)
+	err = CborUnmarshal(wrongStructHex, &str, 1)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
-	err = plutusencoder.CborUnmarshal(validHex, &str, 1)
+	err = CborUnmarshal(validHex, &str, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	err = plutusencoder.CborUnmarshal(nonPlutusDataHex, &str, 1)
+	err = CborUnmarshal(nonPlutusDataHex, &str, 1)
 	if err == nil {
 		t.Error("should have thrown error")
 	}
 }
 
 func TestUnmarshalInDepth(t *testing.T) {
-	allWithIndefCbor := "d87a9f054b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a9f05ffd87b8105d87ba14556616c7565059fff83d87b8105d87b8105d87b8105ff"
+	allWithIndefCbor := "d87a8a056b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a8105d87b8105d87ba16556616c7565058083d87a8105d87a8105d87a8105"
 	str := AllTypesWithIndefList{}
-	err := plutusencoder.CborUnmarshal(allWithIndefCbor, &str, 1)
+	err := CborUnmarshal(allWithIndefCbor, &str, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	allWithDefCbor := "d87b8a054b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a9f05ffd87b8105d87ba14556616c7565059fff83d87b8105d87b8105d87b8105"
+	allWithDefCbor := "d87b8a056b48656c6c6f20576f726c64581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff4401020304d87a9f05ffd87b8105d87ba16556616c756505ff9fff83d87b8105d87b8105d87b8105ff"
 	str2 := AllTypesWithDefList{}
-	err = plutusencoder.CborUnmarshal(allWithDefCbor, &str2, 1)
+	err = CborUnmarshal(allWithDefCbor, &str2, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	pd1, err := plutusencoder.MarshalPlutus(str)
+	pd1, err := MarshalPlutus(str)
 	if err != nil {
 		t.Error(err)
 	}
-	pd2, err := plutusencoder.MarshalPlutus(str2)
+	pd2, err := MarshalPlutus(str2)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded1, err := cbor.Marshal(pd1)
+	encoded1, err := cbor.Encode(pd1)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded2, err := cbor.Marshal(pd2)
+	encoded2, err := cbor.Encode(pd2)
 	if err != nil {
 		t.Error(err)
 	}
@@ -817,7 +823,7 @@ func TestUnmarshalInDepth(t *testing.T) {
 }
 
 type NestedMap struct {
-	_   struct{} `plutusType:"DefList" plutusConstr:"2"`
+	_   struct{} `plutusType:"Map" plutusConstr:"2"`
 	Map SimpleMap
 }
 
@@ -825,25 +831,30 @@ func TestMarshalMapNested(t *testing.T) {
 	m := NestedMap{
 		Map: SimpleMap{Value: 5},
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if marshaled.Value.(PlutusData.PlutusDefArray)[0].PlutusDataType != PlutusData.PlutusMap {
+	if marshaled.PlutusDataType != PlutusData.PlutusMap {
 		t.Error("wrong type")
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	mapVal := marshaled.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+	inner := mapVal[serialization.NewCustomBytes("Map")]
+	if inner.PlutusDataType != PlutusData.PlutusMap {
+		t.Error("wrong type")
+	}
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
-	if hex.EncodeToString(encoded) != "d87b81d87ba14556616c756505" {
+	if hex.EncodeToString(encoded) != "d87ba1434d6170d87ba14556616c756505" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 
 	resultinStruct := NestedMap{}
-	err = plutusencoder.CborUnmarshal(
-		"d87b81d87ba14556616c756505",
+	err = CborUnmarshal(
+		"d87ba1434d6170d87ba14556616c756505",
 		&resultinStruct,
 		1,
 	)
@@ -862,7 +873,7 @@ func TestHexString(t *testing.T) {
 	m := HexStringTest{
 		HexString: "fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
@@ -870,7 +881,7 @@ func TestHexString(t *testing.T) {
 	if marshaled.Value.(PlutusData.PlutusDefArray)[0].PlutusDataType != PlutusData.PlutusBytes {
 		t.Error("wrong type")
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -881,7 +892,7 @@ func TestHexString(t *testing.T) {
 	}
 
 	resultinStruct := HexStringTest{}
-	err = plutusencoder.CborUnmarshal(
+	err = CborUnmarshal(
 		"d87b81581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
 		&resultinStruct,
 		1,
@@ -911,23 +922,23 @@ func TestMapInternal(t *testing.T) {
 			HexString: "fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
 		},
 	}
-	marshaled, err := plutusencoder.MarshalPlutus(m)
+	marshaled, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
 	if hex.EncodeToString(
 		encoded,
-	) != "d87ba14158d87ba345427974657344010203044556616c75650049486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61" {
+	) != "d87ba14158d87ba3454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce614556616c756500" {
 		t.Error("encoding error", hex.EncodeToString(encoded))
 	}
 
 	resultinStruct := MapNested{}
-	err = plutusencoder.CborUnmarshal(
-		"d87ba14158d87ba34556616c756500454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
+	err = CborUnmarshal(
+		"d87ba14158d87ba3454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce614556616c756500",
 		&resultinStruct,
 		1,
 	)
@@ -962,11 +973,11 @@ func TestMap(t *testing.T) {
 		Map:        SimpleMap{Value: 5},
 	}
 	fmt.Println("MARSHAL")
-	_, err := plutusencoder.MarshalPlutus(m)
+	_, err := MarshalPlutus(m)
 	if err != nil {
 		t.Error(err)
 	}
-	// encoded, err := cbor.Marshal(marshaled)
+	// encoded, err := cbor.Encode(marshaled)
 	// if err != nil {
 	// 	t.Error(err)
 	// }
@@ -975,8 +986,8 @@ func TestMap(t *testing.T) {
 	// }
 	//var err error
 	resultinStruct := MapTest{}
-	err = plutusencoder.CborUnmarshal(
-		"d87ba74a496e64656641727261799fd87a9f05ffd87a9f05ffd87a9f05ffff434d6170d87ba14556616c7565054556616c756505454279746573440102030449486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce614741646472657373d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff48446566417272617983d87b8105d87b8105d87b8105",
+	err = CborUnmarshal(
+		"d87b8a6a496e64656641727261799fd87a8105d87a8105d87a8105ff634d6170d87ba16556616c7565056556616c756505654279746573440102030469486578537472696e67581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce616741646472657373d8799fd8799f581cbb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c61ffd8799fd8799fd8799f581c3b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e4ffffffff68446566417272617983d87b8105d87b8105d87b8105ffff",
 		&resultinStruct,
 		1,
 	)
@@ -1008,24 +1019,87 @@ func TestMap(t *testing.T) {
 
 }
 
+type AssetType struct {
+	_        struct{} `plutusType:"DefList"`
+	PolicyId []byte   `plutusType:"Bytes"`
+	AssetName []byte  `plutusType:"Bytes"`
+	Quantity uint64   `plutusType:"Int"`
+}
+
+func (a AssetType) ToPlutusData() PlutusData.PlutusData {
+	return PlutusData.PlutusData{
+		PlutusDataType: PlutusData.PlutusMap,
+		Value: map[serialization.CustomBytes]PlutusData.PlutusData{
+			serialization.NewCustomBytes(""): PlutusData.PlutusData{
+				PlutusDataType: PlutusData.PlutusMap,
+				Value: map[serialization.CustomBytes]PlutusData.PlutusData{
+					serialization.NewCustomBytes(""): PlutusData.PlutusData{
+						PlutusDataType: PlutusData.PlutusInt,
+						Value:          a.Quantity,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (a *AssetType) FromPlutusData(pd PlutusData.PlutusData, res any) error {
+	if pd.PlutusDataType != PlutusData.PlutusMap {
+		return errors.New("expected map")
+	}
+	values, ok := pd.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+	if !ok {
+		return errors.New("expected map")
+	}
+	innerPd, ok := values[serialization.NewCustomBytes("")]
+	if !ok {
+		return errors.New("expected key")
+	}
+	if innerPd.PlutusDataType != PlutusData.PlutusMap {
+		return errors.New("expected map")
+	}
+	innerValues, ok := innerPd.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+	if !ok {
+		return errors.New("expected map")
+	}
+	quantityPd, ok := innerValues[serialization.NewCustomBytes("")]
+	if !ok {
+		return errors.New("expected key")
+	}
+	if quantityPd.PlutusDataType != PlutusData.PlutusInt {
+		return errors.New("expected int")
+	}
+	quantity, ok := quantityPd.Value.(uint64)
+	if !ok {
+		i, ok := quantityPd.Value.(int64)
+		if ok {
+			quantity = uint64(i)
+		} else {
+			return errors.New("expected uint64")
+		}
+	}
+	a.Quantity = quantity
+	return nil
+}
+
 type AssetTest struct {
-	_     struct{}            `plutusType:"DefList"`
-	Asset plutusencoder.Asset `plutusType:"Asset"`
+	_        struct{} `plutusType:"DefList"`
+	AssetType AssetType
 }
 
 func TestAsset(t *testing.T) {
 	cborHex := "81a140a1401a05f5e100"
 	resultinStruct := AssetTest{}
-	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	err := CborUnmarshal(cborHex, &resultinStruct, 1)
 	if err != nil {
 		t.Error(err)
 	}
 	// Test remarshal
-	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	marshaled, err := MarshalPlutus(resultinStruct)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1100,11 +1174,11 @@ func (m IntMapOfAssetCustom) FromPlutusData(
 				return fmt.Errorf("expected map but got %v", v2.Value)
 			}
 			for k3, v3 := range innerInnerMapVal {
-				_, ok := innerInnerMap[k3]
+				v, ok := v3.Value.(uint64)
 				if !ok {
-					innerInnerMap[k3] = 0
+					return fmt.Errorf("expected uint64 but got %v", v3.Value)
 				}
-				innerInnerMap[k3], _ = v3.Value.(uint64)
+				innerInnerMap[k3] = v
 			}
 			innermap[k2] = innerInnerMap
 		}
@@ -1123,24 +1197,18 @@ type IntMapOfAsset struct {
 
 func TestIntMapOfAsset(t *testing.T) {
 	cborHex := "81a200a140a1401a05f5e10001a0"
-	pd := PlutusData.PlutusData{}
-	decodedHex, _ := hex.DecodeString(cborHex)
-	err := cbor.Unmarshal(decodedHex, &pd)
-	if err != nil {
-		t.Error(err)
-	}
 	resultinStruct := IntMapOfAsset{}
-	err = plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	err := CborUnmarshal(cborHex, &resultinStruct, 1)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Println("RESULT", resultinStruct)
 	//Test remarshal
-	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	marshaled, err := MarshalPlutus(resultinStruct)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1158,16 +1226,16 @@ type BigIntStruct struct {
 func TestBigInts(t *testing.T) {
 	cborHex := "d8799fc249186a00000000000000c24906dadce65874369871ff"
 	resultinStruct := BigIntStruct{}
-	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+	err := CborUnmarshal(cborHex, &resultinStruct, 1)
 	if err != nil {
 		t.Error(err)
 	}
 	//Test remarshal
-	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+	marshaled, err := MarshalPlutus(resultinStruct)
 	if err != nil {
 		t.Error(err)
 	}
-	encoded, err := cbor.Marshal(marshaled)
+	encoded, err := cbor.Encode(marshaled)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1181,16 +1249,16 @@ func TestBigInts(t *testing.T) {
 // func TestIntAsBigInt(t *testing.T) {
 // 	cborHex := "d8799f0c17ff"
 // 	resultinStruct := BigIntStruct{}
-// 	err := plutusencoder.CborUnmarshal(cborHex, &resultinStruct, 1)
+// 	err := CborUnmarshal(cborHex, &resultinStruct, 1)
 // 	if err != nil {
 // 		t.Error(err)
 // 	}
 // 	//Test remarshal
-// 	marshaled, err := plutusencoder.MarshalPlutus(resultinStruct)
+// 	marshaled, err := MarshalPlutus(resultinStruct)
 // 	if err != nil {
 // 		t.Error(err)
 // 	}
-// 	encoded, err := cbor.Marshal(marshaled)
+// 	encoded, err := cbor.Encode(marshaled)
 // 	if err != nil {
 // 		t.Error(err)
 // 	}

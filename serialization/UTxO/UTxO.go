@@ -6,6 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type Container[T any] interface {
@@ -13,7 +14,7 @@ type Container[T any] interface {
 }
 
 type UTxO struct {
-	_      struct{} `cbor:",toarray"`
+	cbor.StructAsArray
 	Input  TransactionInput.TransactionInput
 	Output TransactionOutput.TransactionOutput
 }

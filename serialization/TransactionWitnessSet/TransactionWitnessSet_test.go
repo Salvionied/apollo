@@ -31,7 +31,7 @@ var pd = PlutusData.PlutusData{
 
 func TestMarshalBasicPlutus(t *testing.T) {
 	tws := TransactionWitnessSet.TransactionWitnessSet{
-		PlutusData: PlutusData.PlutusIndefArray{pd},
+		PlutusData: &PlutusData.PlutusIndefArray{pd},
 	}
 	twsBytes, err := cbor.Marshal(tws)
 	if err != nil {

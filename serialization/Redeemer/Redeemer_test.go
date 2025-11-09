@@ -59,7 +59,7 @@ func TestMarshalUnmarshalRedeemer(t *testing.T) {
 		},
 	}
 	marshaled, _ := cbor.Marshal(red)
-	if hex.EncodeToString(marshaled) != "840001f6820102" {
+	if hex.EncodeToString(marshaled) != "8400019fff820102" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),

@@ -2,6 +2,7 @@ package TransactionOutput
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Value"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type TransactionOutputAlonzo struct {
@@ -105,9 +106,36 @@ type TxOWithDatum struct {
 	DatumHash []byte
 }
 type TxOWithoutDatum struct {
-	_       struct{} `cbor:",toarray"`
-	Address Address.Address
-	Amount  Value.Value
+	_       struct{}        `cbor:",toarray"`
+	Address Address.Address `cbor:"0,keyasint"`
+	Amount  Value.Value     `cbor:"1,keyasint"`
+	_       struct{}        `cbor:",toarray"`
+}
+
+func (t *TxOWithoutDatum) UnmarshalCBOR(data []byte) error {
+	var temp interface{}
+	_, err := cbor.Decode(data, &temp)
+	if err != nil {
+		return err
+	}
+	arr, ok := temp.([]interface{})
+	if !ok {
+		return errors.New("output is not an array")
+	}
+	if len(arr) < 2 {
+		return errors.New("output array too short")
+	}
+	addressData, _ := cbor.Encode(arr[0])
+	err = t.Address.UnmarshalCBOR(addressData)
+	if err != nil {
+		return err
+	}
+	amountData, _ := cbor.Encode(arr[1])
+	err = t.Amount.UnmarshalCBOR(amountData)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 /*
@@ -128,10 +156,10 @@ type TxOWithoutDatum struct {
 */
 func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 	var x []any
-	_ = cbor.Unmarshal(value, &x)
+	_, _ = cbor.Decode(value, &x)
 	if len(x) == 3 {
 		val := new(TxOWithDatum)
-		err := cbor.Unmarshal(value, &val)
+		_, err := cbor.Decode(value, &val)
 		if err != nil {
 			return err
 		}
@@ -146,7 +174,7 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		}
 	} else {
 		val := new(TxOWithoutDatum)
-		err := cbor.Unmarshal(value, &val)
+		_, err := cbor.Decode(value, &val)
 		if err != nil {
 			return err
 		}
@@ -175,12 +203,12 @@ func (txo *TransactionOutputShelley) MarshalCBOR() ([]byte, error) {
 		val.DatumHash = txo.DatumHash.Payload[:]
 		val.Address = txo.Address
 		val.Amount = txo.Amount
-		return cbor.Marshal(val)
+		return cbor.Encode(val)
 	} else {
 		val := new(TxOWithoutDatum)
 		val.Address = txo.Address
 		val.Amount = txo.Amount
-		return cbor.Marshal(val)
+		return cbor.Encode(val)
 	}
 }
 
@@ -483,17 +511,17 @@ func (txo TransactionOutput) String() string {
 */
 func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 	var x any
-	_ = cbor.Unmarshal(value, &x)
+	_, _ = cbor.Decode(value, &x)
 	if reflect.TypeOf(x).String() == "[]interface {}" {
 		txo.IsPostAlonzo = false
-		err := cbor.Unmarshal(value, &txo.PreAlonzo)
+		_, err := cbor.Decode(value, &txo.PreAlonzo)
 		if err != nil {
 			return err
 		}
 
 	} else {
 		txo.IsPostAlonzo = true
-		err := cbor.Unmarshal(value, &txo.PostAlonzo)
+		_, err := cbor.Decode(value, &txo.PostAlonzo)
 		if err != nil {
 			return err
 		}
@@ -515,9 +543,9 @@ func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 */
 func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 	if txo.IsPostAlonzo {
-		return cbor.Marshal(txo.PostAlonzo)
+		return cbor.Encode(txo.PostAlonzo)
 	} else {
-		return cbor.Marshal(txo.PreAlonzo)
+		return cbor.Encode(txo.PreAlonzo)
 	}
 }
 
