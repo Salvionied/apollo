@@ -34,7 +34,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 	"github.com/Salvionied/apollo/txBuilding/Utils"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const (
@@ -169,20 +169,23 @@ func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 	Returns:
 		*Apollo: A pointer to the modified Apollo instance.
 */
-func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
+func (b *Apollo) ConsumeUTxO(
+	utxo UTxO.UTxO,
+	payments ...PaymentI,
+) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
 		selectedValue = selectedValue.Sub(payment.ToValue())
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
@@ -202,7 +205,7 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 func (b *Apollo) ConsumeAssetsFromUtxo(
 	utxo UTxO.UTxO,
 	payments ...PaymentI,
-) *Apollo {
+) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
@@ -211,13 +214,13 @@ func (b *Apollo) ConsumeAssetsFromUtxo(
 		)
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("selected value is negative")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
@@ -539,14 +542,14 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	TransactionWitnessSet.TransactionWitnessSet: The transaction's witness set.
 */
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make(PlutusData.PlutusIndefArray, 0)
 	plutusdata = append(plutusdata, b.datums...)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
 		PlutusV3Script: b.v3scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &plutusdata,
 		Redeemer:       b.redeemers,
 	}
 }
@@ -560,7 +563,7 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		TransactionWitnessSet.TransactionWitnessSet: A fake witness set for testing.
 */
 func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make(PlutusData.PlutusIndefArray, 0)
 	plutusdata = append(plutusdata, b.datums...)
 	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
 	fakeVkWitnesses = append(
@@ -582,7 +585,7 @@ func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessS
 		PlutusV1Script: b.v1scripts,
 		PlutusV2Script: b.v2scripts,
 		PlutusV3Script: b.v3scripts,
-		PlutusData:     PlutusData.PlutusIndefArray(plutusdata),
+		PlutusData:     &plutusdata,
 		Redeemer:       b.redeemers,
 		VkeyWitnesses:  fakeVkWitnesses,
 	}
@@ -605,7 +608,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	PV2Scripts := b.v2scripts
 	PV3Scripts := b.v3scripts
 	datums := b.datums
-	usedCms := map[any]cbor.Marshaler{}
+	usedCms := map[any]any{}
 	if len(redeemers) > 0 {
 		if len(PV1Scripts) > 0 {
 			usedCms[serialization.CustomBytes{Value: "00"}] = PlutusData.PLUTUSV1COSTMODEL
@@ -623,13 +626,13 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
-		redeemer_bytes, _ = cbor.Marshal(redeemers)
+		redeemer_bytes, _ = cbor.Encode(redeemers)
 	}
 	var err error
 	var datum_bytes []byte
 	if len(datums) > 0 {
 
-		datum_bytes, err = cbor.Marshal(PlutusData.PlutusIndefArray(datums))
+		datum_bytes, err = cbor.Encode(PlutusData.PlutusIndefArray(datums))
 		if err != nil {
 			return nil, err
 		}
@@ -637,12 +640,12 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		datum_bytes = []byte{}
 	}
 	var cost_model_bytes []byte
-	cost_model_bytes, _ = cbor.Marshal(usedCms)
+	cost_model_bytes, _ = cbor.Encode(usedCms)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
 	// //total_bytes := redeemer_bytes
 	// // Compute all versions of the hash
 	// // with pv1
-	// clmsBytsV1, _ := cbor.Marshal(PlutusData.COST_MODELSV1)
+	// clmsBytsV1, _ := cbor.Encode(PlutusData.COST_MODELSV1)
 	// tbytesP1 := append(total_bytes, clmsBytsV1...)
 	// fmt.Println("TOTAL_BYTES", hex.EncodeToString(tbytesP1))
 	// hashP1, err := serialization.Blake2bHash(tbytesP1)
@@ -652,7 +655,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	// //fmt.Println("PRE_HASH_PV1", hex.EncodeToString(tbytesP1))
 	// fmt.Println("HASH_PV1", hex.EncodeToString(hashP1))
 	// // with pv2
-	// clmsBytsV2, _ := cbor.Marshal(map[int]cbor.Marshaler{1: PlutusData.PLUTUSV2COSTMODEL})
+	// clmsBytsV2, _ := cbor.Encode(map[int]cbor.Encodeer{1: PlutusData.PLUTUSV2COSTMODEL})
 	// tbytesP2 := append(total_bytes, clmsBytsV2...)
 	// hashP2, err := serialization.Blake2bHash(tbytesP2)
 	// if err != nil {
@@ -803,12 +806,12 @@ func (b *Apollo) SetCertificates(c *Certificate.Certificates) *Apollo {
 	Returns:
 
 
-	*Certificate.Credential: The stake credential, or nil if the address has no staking part.
+	*Certificate.StakeCredential: The stake credential, or nil if the address has no staking part.
 	error: An error if the staking part is invalid.
 */
 func GetStakeCredentialFromAddress(
 	address Address.Address,
-) (*Certificate.Credential, error) {
+) (*Certificate.StakeCredential, error) {
 	if len(address.StakingPart) == 0 {
 		return nil, errors.New("address has no staking part")
 	}
@@ -817,9 +820,9 @@ func GetStakeCredentialFromAddress(
 	}
 	// Code 0 = key hash, Code 1 = script hash
 	// For standard addresses, we use key hash (0)
-	return &Certificate.Credential{
+	return &Certificate.StakeCredential{
 		Code: 0,
-		Hash: serialization.ConstrainedBytes{
+		StakeCredential: serialization.ConstrainedBytes{
 			Payload: address.StakingPart,
 		},
 	}, nil
@@ -831,10 +834,10 @@ func GetStakeCredentialFromAddress(
 	GetStakeCredentialFromWallet extracts a stake credential from the wallet's stake verification key.
 
 	Returns:
-		*Certificate.Credential: The stake credential.
+		*Certificate.StakeCredential: The stake credential.
 		error: An error if the wallet doesn't have a stake key or extraction fails.
 */
-func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.Credential, error) {
+func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.StakeCredential, error) {
 	if b.wallet == nil {
 		return nil, errors.New("wallet not set")
 	}
@@ -849,9 +852,9 @@ func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.Credential, error)
 	if err != nil {
 		return nil, err
 	}
-	return &Certificate.Credential{
+	return &Certificate.StakeCredential{
 		Code: 0, // key hash
-		Hash: serialization.ConstrainedBytes{
+		StakeCredential: serialization.ConstrainedBytes{
 			Payload: stakeKeyHash[:],
 		},
 	}, nil
@@ -865,7 +868,7 @@ func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.Credential, error)
 	Params:
 
 
-		stakeCredential (*Certificate.Credential): The stake credential to register.
+		stakeCredential (*Certificate.StakeCredential): The stake credential to register.
 		If nil, it will attempt to extract from the wallet.
 
 	Returns:
@@ -875,9 +878,9 @@ func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.Credential, error)
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) RegisterStake(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -959,7 +962,7 @@ func (b *Apollo) RegisterStakeFromBech32(address string) (*Apollo, error) {
 	Params:
 
 
-		stakeCredential (*Certificate.Credential): The stake credential to deregister.
+		stakeCredential (*Certificate.StakeCredential): The stake credential to deregister.
 		If nil, it will attempt to extract from the wallet.
 
 	Returns:
@@ -969,9 +972,9 @@ func (b *Apollo) RegisterStakeFromBech32(address string) (*Apollo, error) {
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) DeregisterStake(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1053,7 +1056,7 @@ func (b *Apollo) DeregisterStakeFromBech32(address string) (*Apollo, error) {
 	Params:
 
 
-	stakeCredential (*Certificate.Credential): The stake credential to delegate.
+	stakeCredential (*Certificate.StakeCredential): The stake credential to delegate.
 	If nil, it will attempt to extract from the wallet.
 
 
@@ -1066,10 +1069,10 @@ func (b *Apollo) DeregisterStakeFromBech32(address string) (*Apollo, error) {
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) DelegateStake(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	poolKeyHash serialization.PubKeyHash,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1164,7 +1167,7 @@ func (b *Apollo) DelegateStakeFromBech32(
 	Params:
 
 
-	stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+	stakeCredential (*Certificate.StakeCredential): The stake credential to register and delegate.
 	If nil, it will attempt to extract from the wallet.
 
 
@@ -1178,11 +1181,11 @@ func (b *Apollo) DelegateStakeFromBech32(
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) RegisterAndDelegateStake(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	poolKeyHash serialization.PubKeyHash,
 	coin int64,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1278,7 +1281,7 @@ func (b *Apollo) RegisterAndDelegateStakeFromBech32(
 	Params:
 
 
-		stakeCredential (*Certificate.Credential): The stake credential to delegate.
+		stakeCredential (*Certificate.StakeCredential): The stake credential to delegate.
 		If nil, it will attempt to extract from the wallet.
 		drep (*Certificate.Drep): The DRep to delegate votes to.
 
@@ -1289,10 +1292,10 @@ func (b *Apollo) RegisterAndDelegateStakeFromBech32(
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) DelegateVote(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	drep *Certificate.Drep,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1383,7 +1386,7 @@ func (b *Apollo) DelegateVoteFromBech32(
 	Params:
 
 
-	stakeCredential (*Certificate.Credential): The stake credential to delegate.
+	stakeCredential (*Certificate.StakeCredential): The stake credential to delegate.
 	If nil, it will attempt to extract from the wallet.
 
 
@@ -1397,11 +1400,11 @@ func (b *Apollo) DelegateVoteFromBech32(
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) DelegateStakeAndVote(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	poolKeyHash serialization.PubKeyHash,
 	drep *Certificate.Drep,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1501,7 +1504,7 @@ func (b *Apollo) DelegateStakeAndVoteFromBech32(
 	Params:
 
 
-		stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+		stakeCredential (*Certificate.StakeCredential): The stake credential to register and delegate.
 		If nil, it will attempt to extract from the wallet.
 		drep (*Certificate.Drep): The DRep to delegate votes to.
 		coin (int64): The coin to register and delegate.
@@ -1512,11 +1515,11 @@ func (b *Apollo) DelegateStakeAndVoteFromBech32(
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) RegisterAndDelegateVote(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	drep *Certificate.Drep,
 	coin int64,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1606,7 +1609,7 @@ func (b *Apollo) RegisterAndDelegateVoteFromBech32(
 	Params:
 
 
-	stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+	stakeCredential (*Certificate.StakeCredential): The stake credential to register and delegate.
 	If nil, it will attempt to extract from the wallet.
 
 
@@ -1620,12 +1623,12 @@ func (b *Apollo) RegisterAndDelegateVoteFromBech32(
 	error: An error if the stake credential cannot be determined.
 */
 func (b *Apollo) RegisterAndDelegateStakeAndVote(
-	stakeCredential *Certificate.Credential,
+	stakeCredential *Certificate.StakeCredential,
 	poolKeyHash serialization.PubKeyHash,
 	drep *Certificate.Drep,
 	coin int64,
 ) (*Apollo, error) {
-	var cred *Certificate.Credential
+	var cred *Certificate.StakeCredential
 	var err error
 
 	if stakeCredential != nil {
@@ -1881,7 +1884,7 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 		int64: The estimated transaction fee.
 */
 func (b *Apollo) estimateFee() (int64, error) {
-	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
+	pExU := Redeemer.ExecutionUnits{0, 0}
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
 	}
@@ -1900,8 +1903,8 @@ func (b *Apollo) estimateFee() (int64, error) {
 	estimatedFee, err := Utils.Fee(
 		b.Context,
 		fakeTxLength,
-		pExU.Steps,
-		pExU.Mem,
+		pExU.Steps(),
+		pExU.Mem(),
 		fftx.TransactionBody.ReferenceInputs,
 	)
 	if err != nil {
@@ -2007,6 +2010,16 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 					b.inputAddresses[0],
 					Value.SimpleValue(
 						return_amount,
+						utxo.Output.GetValue().GetAssets(),
+					),
+				)
+				b.collateralReturn = &returnOutput
+			} else if int(utxo.Output.GetValue().GetCoin()) == collateral_amount && len(utxo.Output.GetValue().GetAssets()) <= 5 {
+				b.totalCollateral = collateral_amount
+				returnOutput := TransactionOutput.SimpleTransactionOutput(
+					b.inputAddresses[0],
+					Value.SimpleValue(
+						utxo.Output.GetValue().GetCoin(),
 						utxo.Output.GetValue().GetAssets(),
 					),
 				)
@@ -2127,7 +2140,7 @@ func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 		return make(map[string]Redeemer.ExecutionUnits, 0), err
 	}
 	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
+	tx_cbor, _ := cbor.Encode(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
 
@@ -2153,12 +2166,12 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
-				redeemer.ExUnits.Mem = int64(
-					float32(redeemer.ExUnits.Mem) * 1.2,
-				)
-				redeemer.ExUnits.Steps = int64(
-					float32(redeemer.ExUnits.Steps) * 1.2,
-				)
+				redeemer.ExUnits.SetMem(int64(
+					float32(redeemer.ExUnits.Mem()) * 1.2,
+				))
+				redeemer.ExUnits.SetSteps(int64(
+					float32(redeemer.ExUnits.Steps()) * 1.2,
+				))
 				b.redeemersToUTxO[k] = redeemer
 			}
 		}
@@ -2170,12 +2183,12 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
-				redeemer.ExUnits.Mem = int64(
-					float32(redeemer.ExUnits.Mem) * 1.2,
-				)
-				redeemer.ExUnits.Steps = int64(
-					float32(redeemer.ExUnits.Steps) * 1.2,
-				)
+				redeemer.ExUnits.SetMem(int64(
+					float32(redeemer.ExUnits.Mem()) * 1.2,
+				))
+				redeemer.ExUnits.SetSteps(int64(
+					float32(redeemer.ExUnits.Steps()) * 1.2,
+				))
 				b.stakeRedeemers[k] = redeemer
 			}
 		}
@@ -2187,12 +2200,12 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 			)
 			if _, ok := estimated_execution_units[key]; ok {
 				redeemer.ExUnits = estimated_execution_units[key]
-				redeemer.ExUnits.Mem = int64(
-					float32(redeemer.ExUnits.Mem) * 1.2,
-				)
-				redeemer.ExUnits.Steps = int64(
-					float32(redeemer.ExUnits.Steps) * 1.2,
-				)
+				redeemer.ExUnits.SetMem(int64(
+					float32(redeemer.ExUnits.Mem()) * 1.2,
+				))
+				redeemer.ExUnits.SetSteps(int64(
+					float32(redeemer.ExUnits.Steps()) * 1.2,
+				))
 				b.mintRedeemers[k] = redeemer
 			}
 		}
@@ -2440,7 +2453,7 @@ func isOverUtxoLimit(
 		address,
 		Value.SimpleValue(0, change.GetAssets()),
 	)
-	encoded, _ := cbor.Marshal(txOutput)
+	encoded, _ := cbor.Encode(txOutput)
 	pps, err := b.GetProtocolParams()
 	if err != nil {
 		return false, err
@@ -3036,11 +3049,12 @@ func (b *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = cbor.Unmarshal(cborBytes, &tx)
+	err = tx.UnmarshalCBOR(cborBytes)
 	if err != nil {
 		return b, err
 	}
 	b.tx = &tx
+	b.Fee = tx.TransactionBody.Fee
 	return b, nil
 }
 
@@ -3398,7 +3412,7 @@ func (b *Apollo) estimateExunitsExact(
 	cloned_b.isEstimateRequired = false
 	updated_b, _ := cloned_b.CompleteExact(fee)
 	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
+	tx_cbor, _ := cbor.Encode(updated_b.tx)
 	return b.Context.EvaluateTx(tx_cbor)
 }
 

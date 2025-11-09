@@ -10,7 +10,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestMarshalCBOR(t *testing.T) {
@@ -189,7 +189,7 @@ var testValueWithAssets = Value.SimpleValue(10_000_000, testMultiAsset)
 
 func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 	noTokenAlValue := testValue.ToAlonzoValue()
-	marshaled, err := cbor.Marshal(noTokenAlValue)
+	marshaled, err := cbor.Encode(noTokenAlValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		)
 	}
 	unmarshaled := Value.AlonzoValue{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		t.Errorf("unmarshaled value should be equal to the marshaled one")
 	}
 	withTokenAlValue := testValueWithAssets.ToAlonzoValue()
-	marshaled, err = cbor.Marshal(withTokenAlValue)
+	marshaled, err = cbor.Encode(withTokenAlValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		)
 	}
 	unmarshaled = Value.AlonzoValue{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestSub(t *testing.T) {
 }
 
 func TestMarshalAndUmnarshalNormalValue(t *testing.T) {
-	marshaled, err := cbor.Marshal(testValue)
+	marshaled, err := cbor.Encode(testValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestMarshalAndUmnarshalNormalValue(t *testing.T) {
 		)
 	}
 	unmarshaled := Value.Value{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}

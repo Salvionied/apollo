@@ -10,7 +10,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func Contains[T UTxO.Container[any]](container []T, contained T) bool {
@@ -40,7 +40,7 @@ func MinLovelacePostAlonzo(
 			ScriptRef: output.GetScriptRef(),
 		},
 	}
-	encoded, err := cbor.Marshal(tmp_out)
+	encoded, err := cbor.Encode(tmp_out)
 	if err != nil {
 		return 0, err
 	}
@@ -54,7 +54,7 @@ func MinLovelacePostAlonzo(
 }
 
 func ToCbor(x any) (string, error) {
-	bytes, err := cbor.Marshal(x)
+	bytes, err := cbor.Encode(x)
 	if err != nil {
 		return "", err
 	}

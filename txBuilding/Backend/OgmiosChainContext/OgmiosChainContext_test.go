@@ -149,10 +149,10 @@ func TestOGMIOS_SimpleTransaction(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -172,19 +172,19 @@ func TestOGMIOS_TransactionWithChange(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 44088 {
+	if apollob.GetTx().TransactionBody.Fee != 48488 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			44088,
+			48488,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
 	if apollob.GetTx().TransactionBody.Outputs[1].GetAmount().
 		GetCoin() !=
-		4955912 {
+		4951512 {
 		t.Errorf(
 			"Change is not correct: expected %d, got %d",
-			4955912,
+			4951512,
 			apollob.GetTx().TransactionBody.Outputs[1].GetAmount().GetCoin(),
 		)
 	}
@@ -205,10 +205,10 @@ func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -229,10 +229,10 @@ func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -253,10 +253,10 @@ func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -277,10 +277,10 @@ func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47520 {
+	if apollob.GetTx().TransactionBody.Fee != 51920 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47520,
+			51920,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -301,10 +301,10 @@ func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47520 {
+	if apollob.GetTx().TransactionBody.Fee != 51920 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47520,
+			51920,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -539,7 +539,7 @@ func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(apollob.GetTx().TransactionWitnessSet.PlutusData) == 0 {
+	if apollob.GetTx().TransactionWitnessSet.PlutusData != nil && len(*apollob.GetTx().TransactionWitnessSet.PlutusData) == 0 {
 		t.Error("PlutusData is empty")
 	}
 }

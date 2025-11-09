@@ -8,7 +8,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/Withdrawal"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -53,7 +53,7 @@ type CborBody struct {
 }
 
 func (tx *TransactionBody) Hash() ([]byte, error) {
-	bytes, err := cbor.Marshal(tx)
+	bytes, err := cbor.Encode(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +97,32 @@ func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 		TotalCollateral:   tx.TotalCollateral,
 		ReferenceInputs:   tx.ReferenceInputs,
 	}
-	em, _ := cbor.CanonicalEncOptions().EncMode()
-	return em.Marshal(cborBody)
+	return cbor.Encode(cborBody)
+}
+
+func (tb *TransactionBody) UnmarshalCBOR(data []byte) error {
+	var cb CborBody
+	if _, err := cbor.Decode(data, &cb); err != nil {
+		return err
+	}
+	*tb = TransactionBody{
+		Inputs:            cb.Inputs,
+		Outputs:           cb.Outputs,
+		Fee:               cb.Fee,
+		Ttl:               cb.Ttl,
+		Certificates:      cb.Certificates,
+		Withdrawals:       cb.Withdrawals,
+		UpdateProposals:   cb.UpdateProposals,
+		AuxiliaryDataHash: cb.AuxiliaryDataHash,
+		ValidityStart:     cb.ValidityStart,
+		Mint:              cb.Mint,
+		ScriptDataHash:    cb.ScriptDataHash,
+		Collateral:        cb.Collateral,
+		RequiredSigners:   cb.RequiredSigners,
+		NetworkId:         cb.NetworkId,
+		CollateralReturn:  cb.CollateralReturn,
+		TotalCollateral:   cb.TotalCollateral,
+		ReferenceInputs:   cb.ReferenceInputs,
+	}
+	return nil
 }

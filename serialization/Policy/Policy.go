@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type PolicyId struct {
@@ -82,9 +82,9 @@ func (policyId *PolicyId) MarshalCBOR() ([]byte, error) {
 	}
 
 	if len(res) == 0 {
-		return cbor.Marshal(make([]byte, 0))
+		return cbor.Encode(make([]byte, 0))
 	}
-	return cbor.Marshal(res)
+	return cbor.Encode(res)
 
 }
 
@@ -101,7 +101,7 @@ func (policyId *PolicyId) MarshalCBOR() ([]byte, error) {
 */
 func (policyId *PolicyId) UnmarshalCBOR(value []byte) error {
 	var res any
-	err := cbor.Unmarshal(value, &res)
+	_, err := cbor.Decode(value, &res)
 	if err != nil {
 		return err
 	}
