@@ -1120,7 +1120,7 @@ func (pd *PlutusData) String() string {
 					if idx == len(strings.Split(contentString, "\n"))-1 {
 						sb.WriteString("    " + line)
 					} else {
-						sb.WriteString("    " + line + "\n")
+						sb.WriteString("    ")
 					}
 				}
 				sb.WriteString(",\n")
