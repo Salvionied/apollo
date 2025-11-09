@@ -224,44 +224,35 @@ func isKeyHashUsedFromTx(
 			if checkCredentialKeyHash(certificate.AuthCommitteeColdCredential(), keyHash) {
 				return true
 			}
-			// Check PoolRegistration Operator and PoolOwners
-			if poolReg, ok := certificate.(Certificate.PoolRegistration); ok {
-				if poolReg.Params.Operator == keyHash {
+			// Check certificate-specific fields using type switch
+			switch cert := certificate.(type) {
+			case Certificate.PoolRegistration:
+				if cert.Params.Operator == keyHash {
 					return true
 				}
-				for _, owner := range poolReg.Params.PoolOwners {
+				for _, owner := range cert.Params.PoolOwners {
 					if owner == keyHash {
 						return true
 					}
 				}
-			}
-			// Check PoolRetirement PoolKeyHash
-			if poolRet, ok := certificate.(Certificate.PoolRetirement); ok {
-				if poolRet.PoolKeyHash == keyHash {
+			case Certificate.PoolRetirement:
+				if cert.PoolKeyHash == keyHash {
 					return true
 				}
-			}
-			// Check StakeDelegation PoolKeyHash
-			if stakeDel, ok := certificate.(Certificate.StakeDelegation); ok {
-				if stakeDel.PoolKeyHash == keyHash {
+			case Certificate.StakeDelegation:
+				if cert.PoolKeyHash == keyHash {
 					return true
 				}
-			}
-			// Check StakeVoteDelegCert PoolKeyHash
-			if stakeVoteDel, ok := certificate.(Certificate.StakeVoteDelegCert); ok {
-				if stakeVoteDel.PoolKeyHash == keyHash {
+			case Certificate.StakeVoteDelegCert:
+				if cert.PoolKeyHash == keyHash {
 					return true
 				}
-			}
-			// Check StakeRegDelegCert PoolKeyHash
-			if stakeRegDel, ok := certificate.(Certificate.StakeRegDelegCert); ok {
-				if stakeRegDel.PoolKeyHash == keyHash {
+			case Certificate.StakeRegDelegCert:
+				if cert.PoolKeyHash == keyHash {
 					return true
 				}
-			}
-			// Check StakeVoteRegDelegCert PoolKeyHash
-			if stakeVoteRegDel, ok := certificate.(Certificate.StakeVoteRegDelegCert); ok {
-				if stakeVoteRegDel.PoolKeyHash == keyHash {
+			case Certificate.StakeVoteRegDelegCert:
+				if cert.PoolKeyHash == keyHash {
 					return true
 				}
 			}
