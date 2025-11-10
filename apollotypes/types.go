@@ -6,6 +6,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization"
 	serAddress "github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Certificate"
 	"github.com/Salvionied/apollo/serialization/Key"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
@@ -196,6 +197,13 @@ func isKeyHashUsedFromUtxos(
 	return false
 }
 
+func checkCredentialKeyHash(cred *Certificate.Credential, keyHash serialization.PubKeyHash) bool {
+	if cred != nil && cred.Kind() == 0 && cred.KeyHash() == keyHash {
+		return true
+	}
+	return false
+}
+
 func isKeyHashUsedFromTx(
 	tx Transaction.Transaction,
 	keyHash serialization.PubKeyHash,
@@ -203,8 +211,50 @@ func isKeyHashUsedFromTx(
 	keyHashBytes := keyHash[:]
 	if tx.TransactionBody.Certificates != nil {
 		for _, certificate := range *tx.TransactionBody.Certificates {
-			if certificate.StakeCredential.KeyHash() == keyHash {
+			// Check all credential types
+			if checkCredentialKeyHash(certificate.StakeCredential(), keyHash) {
 				return true
+			}
+			if checkCredentialKeyHash(certificate.DrepCredential(), keyHash) {
+				return true
+			}
+			if checkCredentialKeyHash(certificate.AuthCommitteeHotCredential(), keyHash) {
+				return true
+			}
+			if checkCredentialKeyHash(certificate.AuthCommitteeColdCredential(), keyHash) {
+				return true
+			}
+			// Check certificate-specific fields using type switch
+			switch cert := certificate.(type) {
+			case Certificate.PoolRegistration:
+				if cert.Params.Operator == keyHash {
+					return true
+				}
+				for _, owner := range cert.Params.PoolOwners {
+					if owner == keyHash {
+						return true
+					}
+				}
+			case Certificate.PoolRetirement:
+				if cert.PoolKeyHash == keyHash {
+					return true
+				}
+			case Certificate.StakeDelegation:
+				if cert.PoolKeyHash == keyHash {
+					return true
+				}
+			case Certificate.StakeVoteDelegCert:
+				if cert.PoolKeyHash == keyHash {
+					return true
+				}
+			case Certificate.StakeRegDelegCert:
+				if cert.PoolKeyHash == keyHash {
+					return true
+				}
+			case Certificate.StakeVoteRegDelegCert:
+				if cert.PoolKeyHash == keyHash {
+					return true
+				}
 			}
 		}
 	}
