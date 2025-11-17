@@ -40,13 +40,13 @@ type OgmiosChainContext struct {
 	_Network        int
 	_genesis_param  Base.GenesisParameters
 	_protocol_param Base.ProtocolParameters
-	ogmigo          ogmigo.Client
-	kugo            kugo.Client
+	ogmigo          *ogmigo.Client
+	kugo            *kugo.Client
 }
 
 func NewOgmiosChainContext(
-	ogmigoClient ogmigo.Client,
-	kugoClient kugo.Client,
+	ogmigoClient *ogmigo.Client,
+	kugoClient *kugo.Client,
 ) OgmiosChainContext {
 	occ := OgmiosChainContext{
 		ogmigo: ogmigoClient,
