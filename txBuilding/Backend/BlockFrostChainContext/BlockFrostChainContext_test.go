@@ -1,10 +1,11 @@
-package apollo_test
+package BlockFrostChainContext_test
 
 import (
 	"encoding/hex"
 	"testing"
 
 	"github.com/Salvionied/apollo"
+	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Asset"
@@ -21,6 +22,46 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
 )
 
+var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
+
+var decoded_addr, _ = Address.DecodeAddress(
+	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+)
+
+var InputUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(15_000_000, nil)),
+}
+
+var collateralUtxo = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(5_000_000, nil))}
+
+var collateralUtxo2 = UTxO.UTxO{
+	Input: TransactionInput.TransactionInput{
+		TransactionId: []byte(
+			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
+		),
+		Index: 1,
+	},
+	Output: TransactionOutput.SimpleTransactionOutput(
+		decoded_addr,
+		Value.SimpleValue(10_000_000, nil))}
+
 type Network int
 
 const (
@@ -30,11 +71,9 @@ const (
 	PREPROD
 )
 
-const BLOCKFROST_BASE_URL_MAINNET = "https://cardano-mainnet.blockfrost.io/api"
-
 func TestFailedSubmissionThrows(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -58,7 +97,7 @@ func TestFailedSubmissionThrows(t *testing.T) {
 
 func TestBurnPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -117,7 +156,7 @@ func TestBurnPlutus(t *testing.T) {
 
 func TestMintPlutus(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -171,7 +210,7 @@ func TestMintPlutus(t *testing.T) {
 
 func TestMintPlutusWithPayment(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -232,7 +271,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 
 func TestGetWallet(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -257,7 +296,7 @@ func TestGetWallet(t *testing.T) {
 
 func TestAddInputs(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -292,7 +331,7 @@ func TestAddInputs(t *testing.T) {
 
 func TestConsumeUtxo(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -356,7 +395,7 @@ func TestConsumeUtxo(t *testing.T) {
 func TestConsumeAssetsFromUtxo(t *testing.T) {
 
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -427,7 +466,7 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 
 func TestPayToContract(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -497,7 +536,7 @@ func TestPayToContract(t *testing.T) {
 
 func TestRequiredSigner(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -577,7 +616,7 @@ func TestRequiredSigner(t *testing.T) {
 
 func TestFeePadding(t *testing.T) {
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -621,7 +660,7 @@ func TestFeePadding(t *testing.T) {
 func TestSetCollateral(t *testing.T) {
 	// full 5 ada collateral
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)
@@ -651,7 +690,7 @@ func TestSetCollateral(t *testing.T) {
 func TestCollateralwithReturn(t *testing.T) {
 	// full 5 ada collateral
 	cc, err := BlockFrostChainContext.NewBlockfrostChainContext(
-		BLOCKFROST_BASE_URL_MAINNET,
+		constants.BLOCKFROST_BASE_URL_MAINNET,
 		int(MAINNET),
 		BLOCKFROST_API_KEY,
 	)

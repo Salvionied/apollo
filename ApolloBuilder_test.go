@@ -25,12 +25,6 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-const BLOCKFROST_BASE_URL_TESTNET = "https://cardano-testnet.blockfrost.io/api"
-const BLOCKFROST_BASE_URL_PREVIEW = "https://cardano-preview.blockfrost.io/api"
-const BLOCKFROST_BASE_URL_PREPROD = "https://cardano-preprod.blockfrost.io/api"
-
-var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
-
 var decoded_addr, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 )
@@ -57,17 +51,6 @@ var collateralUtxo = UTxO.UTxO{
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
 		Value.SimpleValue(5_000_000, nil))}
-
-var collateralUtxo2 = UTxO.UTxO{
-	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte(
-			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-		),
-		Index: 1,
-	},
-	Output: TransactionOutput.SimpleTransactionOutput(
-		decoded_addr,
-		Value.SimpleValue(10_000_000, nil))}
 
 func TestUnmarshal(t *testing.T) {
 	tx := Transaction.Transaction{}
