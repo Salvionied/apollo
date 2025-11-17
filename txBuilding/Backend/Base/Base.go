@@ -36,8 +36,8 @@ type GenesisParameters struct {
 }
 
 type ProtocolParameters struct {
-	MinFeeConstant                   int                `json:"min_fee_b"`
-	MinFeeCoefficient                int                `json:"min_fee_a"`
+	MinFeeConstant                   int64              `json:"min_fee_b"`
+	MinFeeCoefficient                int64              `json:"min_fee_a"`
 	MaxBlockSize                     int                `json:"max_block_size"`
 	MaxTxSize                        int                `json:"max_tx_size"`
 	MaxBlockHeaderSize               int                `json:"max_block_header_size"`
@@ -310,10 +310,10 @@ func Fee(
 	if err != nil {
 		return 0, nil
 	}
-	return int(length*protocol_param.MinFeeCoefficient) +
-		int(protocol_param.MinFeeConstant) +
-		int(exec_steps*int(protocol_param.PriceStep)) +
-		int(max_mem_unit*int(protocol_param.PriceMem)), nil
+	return int(int64(length)*protocol_param.MinFeeCoefficient +
+		protocol_param.MinFeeConstant +
+		int64(exec_steps)*int64(protocol_param.PriceStep) +
+		int64(max_mem_unit)*int64(protocol_param.PriceMem)), nil
 
 }
 
@@ -354,8 +354,8 @@ type BlockfrostProtocolParams struct {
 
 func (p BlockfrostProtocolParams) ToBaseParams() ProtocolParameters {
 	return ProtocolParameters{
-		MinFeeConstant:                   p.MinFeeConstant,
-		MinFeeCoefficient:                p.MinFeeCoefficient,
+		MinFeeConstant:                   int64(p.MinFeeConstant),
+		MinFeeCoefficient:                int64(p.MinFeeCoefficient),
 		MaxBlockSize:                     p.MaxBlockSize,
 		MaxTxSize:                        p.MaxTxSize,
 		MaxBlockHeaderSize:               p.MaxBlockHeaderSize,
