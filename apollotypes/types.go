@@ -197,7 +197,10 @@ func isKeyHashUsedFromUtxos(
 	return false
 }
 
-func checkCredentialKeyHash(cred *Certificate.Credential, keyHash serialization.PubKeyHash) bool {
+func checkCredentialKeyHash(
+	cred *Certificate.Credential,
+	keyHash serialization.PubKeyHash,
+) bool {
 	if cred != nil && cred.Kind() == 0 && cred.KeyHash() == keyHash {
 		return true
 	}
@@ -218,10 +221,16 @@ func isKeyHashUsedFromTx(
 			if checkCredentialKeyHash(certificate.DrepCredential(), keyHash) {
 				return true
 			}
-			if checkCredentialKeyHash(certificate.AuthCommitteeHotCredential(), keyHash) {
+			if checkCredentialKeyHash(
+				certificate.AuthCommitteeHotCredential(),
+				keyHash,
+			) {
 				return true
 			}
-			if checkCredentialKeyHash(certificate.AuthCommitteeColdCredential(), keyHash) {
+			if checkCredentialKeyHash(
+				certificate.AuthCommitteeColdCredential(),
+				keyHash,
+			) {
 				return true
 			}
 			// Check certificate-specific fields using type switch

@@ -77,10 +77,14 @@ type Anchor struct {
 // Variant types
 type StakeRegistration struct{ Stake Credential }
 
-func (v StakeRegistration) Kind() int                                { return 0 }
-func (v StakeRegistration) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeRegistration) DrepCredential() *Credential              { return nil }
-func (v StakeRegistration) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeRegistration) Kind() int { return 0 }
+
+func (v StakeRegistration) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeRegistration) DrepCredential() *Credential { return nil }
+
+func (v StakeRegistration) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeRegistration) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeRegistration) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake})
@@ -88,10 +92,14 @@ func (v StakeRegistration) MarshalCBOR() ([]byte, error) {
 
 type StakeDeregistration struct{ Stake Credential }
 
-func (v StakeDeregistration) Kind() int                                { return 1 }
-func (v StakeDeregistration) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeDeregistration) DrepCredential() *Credential              { return nil }
-func (v StakeDeregistration) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeDeregistration) Kind() int { return 1 }
+
+func (v StakeDeregistration) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeDeregistration) DrepCredential() *Credential { return nil }
+
+func (v StakeDeregistration) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeDeregistration) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeDeregistration) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake})
@@ -102,10 +110,14 @@ type StakeDelegation struct {
 	PoolKeyHash serialization.PubKeyHash
 }
 
-func (v StakeDelegation) Kind() int                                { return 2 }
-func (v StakeDelegation) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeDelegation) DrepCredential() *Credential              { return nil }
-func (v StakeDelegation) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeDelegation) Kind() int { return 2 }
+
+func (v StakeDelegation) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeDelegation) DrepCredential() *Credential { return nil }
+
+func (v StakeDelegation) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeDelegation) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeDelegation) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake, v.PoolKeyHash})
@@ -113,10 +125,14 @@ func (v StakeDelegation) MarshalCBOR() ([]byte, error) {
 
 type PoolRegistration struct{ Params PoolParams }
 
-func (v PoolRegistration) Kind() int                                { return 3 }
-func (v PoolRegistration) StakeCredential() *Credential             { return nil }
-func (v PoolRegistration) DrepCredential() *Credential              { return nil }
-func (v PoolRegistration) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v PoolRegistration) Kind() int { return 3 }
+
+func (v PoolRegistration) StakeCredential() *Credential { return nil }
+
+func (v PoolRegistration) DrepCredential() *Credential { return nil }
+
+func (v PoolRegistration) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v PoolRegistration) AuthCommitteeColdCredential() *Credential { return nil }
 func (v PoolRegistration) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Params})
@@ -169,7 +185,8 @@ type VoteDelegCert struct {
 	Drep  Drep
 }
 
-func (v VoteDelegCert) Kind() int                                { return 9 }
+func (v VoteDelegCert) Kind() int { return 9 }
+
 func (v VoteDelegCert) StakeCredential() *Credential             { return &v.Stake }
 func (v VoteDelegCert) DrepCredential() *Credential              { return nil }
 func (v VoteDelegCert) AuthCommitteeHotCredential() *Credential  { return nil }
@@ -184,10 +201,14 @@ type StakeVoteDelegCert struct {
 	Drep        Drep
 }
 
-func (v StakeVoteDelegCert) Kind() int                                { return 10 }
-func (v StakeVoteDelegCert) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeVoteDelegCert) DrepCredential() *Credential              { return nil }
-func (v StakeVoteDelegCert) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeVoteDelegCert) Kind() int { return 10 }
+
+func (v StakeVoteDelegCert) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeVoteDelegCert) DrepCredential() *Credential { return nil }
+
+func (v StakeVoteDelegCert) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeVoteDelegCert) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeVoteDelegCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake, v.PoolKeyHash, v.Drep})
@@ -199,10 +220,14 @@ type StakeRegDelegCert struct {
 	Coin        int64
 }
 
-func (v StakeRegDelegCert) Kind() int                                { return 11 }
-func (v StakeRegDelegCert) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeRegDelegCert) DrepCredential() *Credential              { return nil }
-func (v StakeRegDelegCert) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeRegDelegCert) Kind() int { return 11 }
+
+func (v StakeRegDelegCert) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeRegDelegCert) DrepCredential() *Credential { return nil }
+
+func (v StakeRegDelegCert) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeRegDelegCert) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeRegDelegCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake, v.PoolKeyHash, v.Coin})
@@ -214,10 +239,14 @@ type VoteRegDelegCert struct {
 	Coin  int64
 }
 
-func (v VoteRegDelegCert) Kind() int                                { return 12 }
-func (v VoteRegDelegCert) StakeCredential() *Credential             { return &v.Stake }
-func (v VoteRegDelegCert) DrepCredential() *Credential              { return nil }
-func (v VoteRegDelegCert) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v VoteRegDelegCert) Kind() int { return 12 }
+
+func (v VoteRegDelegCert) StakeCredential() *Credential { return &v.Stake }
+
+func (v VoteRegDelegCert) DrepCredential() *Credential { return nil }
+
+func (v VoteRegDelegCert) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v VoteRegDelegCert) AuthCommitteeColdCredential() *Credential { return nil }
 func (v VoteRegDelegCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake, v.Drep, v.Coin})
@@ -230,10 +259,14 @@ type StakeVoteRegDelegCert struct {
 	Coin        int64
 }
 
-func (v StakeVoteRegDelegCert) Kind() int                                { return 13 }
-func (v StakeVoteRegDelegCert) StakeCredential() *Credential             { return &v.Stake }
-func (v StakeVoteRegDelegCert) DrepCredential() *Credential              { return nil }
-func (v StakeVoteRegDelegCert) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v StakeVoteRegDelegCert) Kind() int { return 13 }
+
+func (v StakeVoteRegDelegCert) StakeCredential() *Credential { return &v.Stake }
+
+func (v StakeVoteRegDelegCert) DrepCredential() *Credential { return nil }
+
+func (v StakeVoteRegDelegCert) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v StakeVoteRegDelegCert) AuthCommitteeColdCredential() *Credential { return nil }
 func (v StakeVoteRegDelegCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Stake, v.PoolKeyHash, v.Drep, v.Coin})
@@ -244,10 +277,14 @@ type AuthCommitteeHotCert struct {
 	Hot  Credential
 }
 
-func (v AuthCommitteeHotCert) Kind() int                                { return 14 }
-func (v AuthCommitteeHotCert) StakeCredential() *Credential             { return nil }
-func (v AuthCommitteeHotCert) DrepCredential() *Credential              { return nil }
-func (v AuthCommitteeHotCert) AuthCommitteeHotCredential() *Credential  { return &v.Hot }
+func (v AuthCommitteeHotCert) Kind() int { return 14 }
+
+func (v AuthCommitteeHotCert) StakeCredential() *Credential { return nil }
+
+func (v AuthCommitteeHotCert) DrepCredential() *Credential { return nil }
+
+func (v AuthCommitteeHotCert) AuthCommitteeHotCredential() *Credential { return &v.Hot }
+
 func (v AuthCommitteeHotCert) AuthCommitteeColdCredential() *Credential { return &v.Cold }
 func (v AuthCommitteeHotCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Cold, v.Hot})
@@ -258,10 +295,14 @@ type ResignCommitteeColdCert struct {
 	Anchor *Anchor
 }
 
-func (v ResignCommitteeColdCert) Kind() int                                { return 15 }
-func (v ResignCommitteeColdCert) StakeCredential() *Credential             { return nil }
-func (v ResignCommitteeColdCert) DrepCredential() *Credential              { return nil }
-func (v ResignCommitteeColdCert) AuthCommitteeHotCredential() *Credential  { return nil }
+func (v ResignCommitteeColdCert) Kind() int { return 15 }
+
+func (v ResignCommitteeColdCert) StakeCredential() *Credential { return nil }
+
+func (v ResignCommitteeColdCert) DrepCredential() *Credential { return nil }
+
+func (v ResignCommitteeColdCert) AuthCommitteeHotCredential() *Credential { return nil }
+
 func (v ResignCommitteeColdCert) AuthCommitteeColdCredential() *Credential { return &v.Cold }
 func (v ResignCommitteeColdCert) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal([]any{v.Kind(), v.Cold, v.Anchor})
@@ -273,8 +314,9 @@ type RegDRepCert struct {
 	Anchor *Anchor
 }
 
-func (v RegDRepCert) Kind() int                                { return 16 }
-func (v RegDRepCert) StakeCredential() *Credential             { return nil }
+func (v RegDRepCert) Kind() int                    { return 16 }
+func (v RegDRepCert) StakeCredential() *Credential { return nil }
+
 func (v RegDRepCert) DrepCredential() *Credential              { return &v.Cred }
 func (v RegDRepCert) AuthCommitteeHotCredential() *Credential  { return nil }
 func (v RegDRepCert) AuthCommitteeColdCredential() *Credential { return nil }
@@ -287,8 +329,9 @@ type UnregDRepCert struct {
 	Coin int64
 }
 
-func (v UnregDRepCert) Kind() int                                { return 17 }
-func (v UnregDRepCert) StakeCredential() *Credential             { return nil }
+func (v UnregDRepCert) Kind() int                    { return 17 }
+func (v UnregDRepCert) StakeCredential() *Credential { return nil }
+
 func (v UnregDRepCert) DrepCredential() *Credential              { return &v.Cred }
 func (v UnregDRepCert) AuthCommitteeHotCredential() *Credential  { return nil }
 func (v UnregDRepCert) AuthCommitteeColdCredential() *Credential { return nil }
@@ -301,8 +344,9 @@ type UpdateDRepCert struct {
 	Anchor *Anchor
 }
 
-func (v UpdateDRepCert) Kind() int                                { return 18 }
-func (v UpdateDRepCert) StakeCredential() *Credential             { return nil }
+func (v UpdateDRepCert) Kind() int                    { return 18 }
+func (v UpdateDRepCert) StakeCredential() *Credential { return nil }
+
 func (v UpdateDRepCert) DrepCredential() *Credential              { return &v.Cred }
 func (v UpdateDRepCert) AuthCommitteeHotCredential() *Credential  { return nil }
 func (v UpdateDRepCert) AuthCommitteeColdCredential() *Credential { return nil }
@@ -314,7 +358,11 @@ func (v UpdateDRepCert) MarshalCBOR() ([]byte, error) {
 
 type Certificates []CertificateInterface
 
-func NewCertificates(certs ...CertificateInterface) Certificates { return certs }
+func NewCertificates(
+	certs ...CertificateInterface,
+) Certificates {
+	return certs
+}
 
 func UnmarshalCert(data []byte) (CertificateInterface, error) {
 	var rec []any
@@ -448,10 +496,16 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		if err := re(rec[3], &drep); err != nil {
 			return nil, err
 		}
-		return StakeVoteDelegCert{Stake: stake, PoolKeyHash: poolKeyHash, Drep: drep}, nil
+		return StakeVoteDelegCert{
+			Stake:       stake,
+			PoolKeyHash: poolKeyHash,
+			Drep:        drep,
+		}, nil
 	case 11: // stake_reg_deleg_cert = (11, stake_credential, pool_keyhash, coin)
 		if len(rec) != 4 {
-			return nil, errors.New("invalid stake registration delegation certificate")
+			return nil, errors.New(
+				"invalid stake registration delegation certificate",
+			)
 		}
 		var stake Credential
 		var poolKeyHash serialization.PubKeyHash
@@ -465,10 +519,16 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		if err := re(rec[3], &coin); err != nil {
 			return nil, err
 		}
-		return StakeRegDelegCert{Stake: stake, PoolKeyHash: poolKeyHash, Coin: coin}, nil
+		return StakeRegDelegCert{
+			Stake:       stake,
+			PoolKeyHash: poolKeyHash,
+			Coin:        coin,
+		}, nil
 	case 12: // vote_reg_deleg_cert = (12, stake_credential, drep, coin)
 		if len(rec) != 4 {
-			return nil, errors.New("invalid vote registration delegation certificate")
+			return nil, errors.New(
+				"invalid vote registration delegation certificate",
+			)
 		}
 		var stake Credential
 		var drep Drep
@@ -485,7 +545,9 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		return VoteRegDelegCert{Stake: stake, Drep: drep, Coin: coin}, nil
 	case 13: // stake_vote_reg_deleg_cert = (13, stake_credential, pool_keyhash, drep, coin)
 		if len(rec) != 5 {
-			return nil, errors.New("invalid stake vote registration delegation certificate")
+			return nil, errors.New(
+				"invalid stake vote registration delegation certificate",
+			)
 		}
 		var stake Credential
 		var poolKeyHash serialization.PubKeyHash
@@ -503,10 +565,17 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		if err := re(rec[4], &coin); err != nil {
 			return nil, err
 		}
-		return StakeVoteRegDelegCert{Stake: stake, PoolKeyHash: poolKeyHash, Drep: drep, Coin: coin}, nil
+		return StakeVoteRegDelegCert{
+			Stake:       stake,
+			PoolKeyHash: poolKeyHash,
+			Drep:        drep,
+			Coin:        coin,
+		}, nil
 	case 14: // auth_committee_hot_cert = (14, cold_credential, hot_credential)
 		if len(rec) != 3 {
-			return nil, errors.New("invalid authentication committee hot certificate")
+			return nil, errors.New(
+				"invalid authentication committee hot certificate",
+			)
 		}
 		var cold Credential
 		var hot Credential
@@ -519,7 +588,9 @@ func UnmarshalCert(data []byte) (CertificateInterface, error) {
 		return AuthCommitteeHotCert{Cold: cold, Hot: hot}, nil
 	case 15: // resign_committee_cold_cert = (15, cold_credential, anchor/ nil)
 		if len(rec) < 2 {
-			return nil, errors.New("invalid resignation committee cold certificate")
+			return nil, errors.New(
+				"invalid resignation committee cold certificate",
+			)
 		}
 		var cold Credential
 		var anchor *Anchor

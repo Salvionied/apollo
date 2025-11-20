@@ -44,10 +44,16 @@ type SingleHostAddr struct {
 func (v SingleHostAddr) Kind() int { return 0 }
 func (v SingleHostAddr) MarshalCBOR() ([]byte, error) {
 	if v.Ipv4 != nil && len(v.Ipv4) != 4 {
-		return nil, fmt.Errorf("ipv4 must be 4 bytes when set, got %d", len(v.Ipv4))
+		return nil, fmt.Errorf(
+			"ipv4 must be 4 bytes when set, got %d",
+			len(v.Ipv4),
+		)
 	}
 	if v.Ipv6 != nil && len(v.Ipv6) != 16 {
-		return nil, fmt.Errorf("ipv6 must be 16 bytes when set, got %d", len(v.Ipv6))
+		return nil, fmt.Errorf(
+			"ipv6 must be 16 bytes when set, got %d",
+			len(v.Ipv6),
+		)
 	}
 	return cbor.Marshal([]any{v.Kind(), v.Port, v.Ipv4, v.Ipv6})
 }
