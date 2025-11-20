@@ -47,7 +47,9 @@ type AikenPlutusJSON struct {
 		name (string): the name of the script to retrieve.
 
 	Returns:
-		(*PlutusData.PlutusV2Script, error): A pointer to a Plutus V2 script and an error (if any).
+
+
+	(*PlutusData.PlutusV2Script, error): A pointer to a Plutus V2 script and an error (if any).
 */
 func (apj *AikenPlutusJSON) GetScript(
 	name string,
