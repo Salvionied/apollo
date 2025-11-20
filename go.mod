@@ -12,7 +12,7 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/utxorpc/go-codegen v0.18.1
 	github.com/utxorpc/go-sdk v0.0.0-20251112230534-8a3fa022952d
-	golang.org/x/crypto v0.44.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/text v0.31.0
 )
 
