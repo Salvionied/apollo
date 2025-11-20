@@ -68,6 +68,57 @@ type Drep struct {
 	Credential *serialization.ConstrainedBytes
 }
 
+func (d Drep) MarshalCBOR() ([]byte, error) {
+	if d.Credential == nil {
+		return cbor.Marshal(d.Code)
+	}
+	return cbor.Marshal([]any{d.Code, d.Credential})
+}
+
+func (d *Drep) UnmarshalCBOR(data []byte) error {
+	// First, try to unmarshal as a simple int (for always_abstain or always_no_confidence)
+	var code int
+	if err := cbor.Unmarshal(data, &code); err == nil {
+		d.Code = code
+		d.Credential = nil
+		return nil
+	}
+	// Otherwise, unmarshal as array [code, credential]
+	var arr []any
+	if err := cbor.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+	if len(arr) != 2 {
+		return errors.New("invalid drep format")
+	}
+	var drepCode int
+	switch c := arr[0].(type) {
+	case int:
+		drepCode = c
+	case uint64:
+		if c > 1<<31-1 {
+			return errors.New("drep code too large")
+		}
+		drepCode = int(c)
+	case int64:
+		if c < 0 || c > 1<<31-1 {
+			return errors.New("invalid drep code")
+		}
+		drepCode = int(c)
+	default:
+		return errors.New("invalid drep code type")
+	}
+	d.Code = drepCode
+	if arr[1] == nil {
+		d.Credential = nil
+	} else if b, ok := arr[1].([]byte); ok {
+		d.Credential = &serialization.ConstrainedBytes{Payload: b}
+	} else {
+		return errors.New("invalid drep credential type")
+	}
+	return nil
+}
+
 type Anchor struct {
 	_        struct{} `cbor:",toarray"`
 	Url      string
