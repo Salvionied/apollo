@@ -22,6 +22,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/NativeScript"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
+	RelayPkg "github.com/Salvionied/apollo/serialization/Relay"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -792,6 +793,887 @@ func (b *Apollo) SetCertificates(c *Certificate.Certificates) *Apollo {
 /*
 *
 
+	GetStakeCredentialFromAddress extracts a stake credential from an address's staking part.
+
+	Params:
+		address (Address.Address): The address from which to extract the stake credential.
+
+	Returns:
+		*Certificate.Credential: The stake credential, or nil if the address has no staking part.
+		error: An error if the staking part is invalid.
+*/
+func GetStakeCredentialFromAddress(address Address.Address) (*Certificate.Credential, error) {
+	if len(address.StakingPart) == 0 {
+		return nil, errors.New("address has no staking part")
+	}
+	if len(address.StakingPart) != 28 {
+		return nil, errors.New("invalid staking part length, expected 28 bytes")
+	}
+	// Code 0 = key hash, Code 1 = script hash
+	// For standard addresses, we use key hash (0)
+	return &Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: address.StakingPart,
+		},
+	}, nil
+}
+
+/*
+*
+
+	GetStakeCredentialFromWallet extracts a stake credential from the wallet's stake verification key.
+
+	Returns:
+		*Certificate.Credential: The stake credential.
+		error: An error if the wallet doesn't have a stake key or extraction fails.
+*/
+func (b *Apollo) GetStakeCredentialFromWallet() (*Certificate.Credential, error) {
+	if b.wallet == nil {
+		return nil, errors.New("wallet not set")
+	}
+	genericWallet, ok := b.wallet.(*apollotypes.GenericWallet)
+	if !ok {
+		return nil, errors.New("wallet does not have stake keys")
+	}
+	if len(genericWallet.StakeVerificationKey.Payload) == 0 {
+		return nil, errors.New("wallet does not have a stake verification key")
+	}
+	stakeKeyHash, err := genericWallet.StakeVerificationKey.Hash()
+	if err != nil {
+		return nil, err
+	}
+	return &Certificate.Credential{
+		Code: 0, // key hash
+		Hash: serialization.ConstrainedBytes{
+			Payload: stakeKeyHash[:],
+		},
+	}, nil
+}
+
+/*
+*
+
+	RegisterStake registers a stake key for staking.
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to register.
+		If nil, it will attempt to extract from the wallet.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake registration certificate added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) RegisterStake(stakeCredential *Certificate.Credential) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	regCert := Certificate.StakeRegistration{Stake: *cred}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, regCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	RegisterStakeFromAddress registers a stake key from an address.
+
+	Params:
+		address (Address.Address): The address containing the stake key to register.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake registration certificate added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) RegisterStakeFromAddress(address Address.Address) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterStake(cred)
+}
+
+/*
+*
+
+	RegisterStakeFromBech32 registers a stake key from a Bech32 address.
+
+	Params:
+		address (string): The Bech32 address containing the stake key to register.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake registration certificate added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) RegisterStakeFromBech32(address string) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterStakeFromAddress(decodedAddr)
+}
+
+/*
+*
+
+	DeregisterStake deregisters a stake key, allowing the stake deposit to be returned.
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to deregister.
+		If nil, it will attempt to extract from the wallet.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake deregistration certificate added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) DeregisterStake(stakeCredential *Certificate.Credential) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	deregCert := Certificate.StakeDeregistration{Stake: *cred}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, deregCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	DeregisterStakeFromAddress deregisters a stake key from an address.
+
+	Params:
+		address (Address.Address): The address containing the stake key to deregister.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake deregistration certificate added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) DeregisterStakeFromAddress(address Address.Address) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DeregisterStake(cred)
+}
+
+/*
+*
+
+	DeregisterStakeFromBech32 deregisters a stake key from a Bech32 address.
+
+	Params:
+		address (string): The Bech32 address containing the stake key to deregister.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake deregistration certificate added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) DeregisterStakeFromBech32(address string) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DeregisterStakeFromAddress(decodedAddr)
+}
+
+/*
+*
+
+	DelegateStake delegates a stake key to a stake pool.
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to delegate.
+		If nil, it will attempt to extract from the wallet.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake delegation certificate added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) DelegateStake(
+	stakeCredential *Certificate.Credential,
+	poolKeyHash serialization.PubKeyHash,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	delegCert := Certificate.StakeDelegation{
+		Stake:       *cred,
+		PoolKeyHash: poolKeyHash,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, delegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	DelegateStakeFromAddress delegates a stake key from an address to a stake pool.
+
+	Params:
+		address (Address.Address): The address containing the stake key to delegate.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake delegation certificate added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) DelegateStakeFromAddress(
+	address Address.Address,
+	poolKeyHash serialization.PubKeyHash,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateStake(cred, poolKeyHash)
+}
+
+/*
+*
+
+	DelegateStakeFromBech32 delegates a stake key from a Bech32 address to a stake pool.
+
+	Params:
+		address (string): The Bech32 address containing the stake key to delegate.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake delegation certificate added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) DelegateStakeFromBech32(
+	address string,
+	poolKeyHash serialization.PubKeyHash,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateStakeFromAddress(decodedAddr, poolKeyHash)
+}
+
+/*
+*
+
+	RegisterAndDelegateStake registers a stake key and delegates it to a stake pool in one transaction.
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+		If nil, it will attempt to extract from the wallet.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		coin (int64): The coin to register and delegate.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) RegisterAndDelegateStake(
+	stakeCredential *Certificate.Credential,
+	poolKeyHash serialization.PubKeyHash,
+	coin int64,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	stakeRegDelegCert := Certificate.StakeRegDelegCert{
+		Stake:       *cred,
+		PoolKeyHash: poolKeyHash,
+		Coin:        coin,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, stakeRegDelegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	RegisterAndDelegateStakeFromAddress registers and delegates a stake key from an address to a stake pool.
+
+	Params:
+		address (Address.Address): The address containing the stake key.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		coin (int64): The coin to register and delegate.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) RegisterAndDelegateStakeFromAddress(
+	address Address.Address,
+	poolKeyHash serialization.PubKeyHash,
+	coin int64,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateStake(cred, poolKeyHash, coin)
+}
+
+/*
+*
+
+	RegisterAndDelegateStakeFromBech32 registers and delegates a stake key from a Bech32 address to a stake pool.
+
+	Params:
+		address (string): The Bech32 address containing the stake key.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		coin (int64): The coin to register and delegate.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) RegisterAndDelegateStakeFromBech32(
+	address string,
+	poolKeyHash serialization.PubKeyHash,
+	coin int64,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateStakeFromAddress(decodedAddr, poolKeyHash, coin)
+}
+
+/*
+*
+
+	DelegateVote delegates a stake key to vote for a DRep (vote-delegation-certificate).
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to delegate.
+		If nil, it will attempt to extract from the wallet.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with vote delegation certificate added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) DelegateVote(
+	stakeCredential *Certificate.Credential,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	voteDelegCert := Certificate.VoteDelegCert{
+		Stake: *cred,
+		Drep:  *drep,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, voteDelegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	DelegateVoteFromAddress delegates a stake key from an address to vote for a DRep.
+
+	Params:
+		address (Address.Address): The address containing the stake key to delegate.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with vote delegation certificate added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) DelegateVoteFromAddress(
+	address Address.Address,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateVote(cred, drep)
+}
+
+/*
+*
+
+	DelegateVoteFromBech32 delegates a stake key from a Bech32 address to vote for a DRep.
+
+	Params:
+		address (string): The Bech32 address containing the stake key to delegate.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with vote delegation certificate added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) DelegateVoteFromBech32(
+	address string,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateVoteFromAddress(decodedAddr, drep)
+}
+
+/*
+*
+
+	DelegateStakeAndVote delegates a stake key to both a stake pool and a DRep (stake-and-vote-delegation-certificate).
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to delegate.
+		If nil, it will attempt to extract from the wallet.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake and vote delegation certificate added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) DelegateStakeAndVote(
+	stakeCredential *Certificate.Credential,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	stakeVoteDelegCert := Certificate.StakeVoteDelegCert{
+		Stake:       *cred,
+		PoolKeyHash: poolKeyHash,
+		Drep:        *drep,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, stakeVoteDelegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	DelegateStakeAndVoteFromAddress delegates a stake key from an address to both a stake pool and a DRep.
+
+	Params:
+		address (Address.Address): The address containing the stake key to delegate.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake and vote delegation certificate added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) DelegateStakeAndVoteFromAddress(
+	address Address.Address,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateStakeAndVote(cred, poolKeyHash, drep)
+}
+
+/*
+*
+
+	DelegateStakeAndVoteFromBech32 delegates a stake key from a Bech32 address to both a stake pool and a DRep.
+
+	Params:
+		address (string): The Bech32 address containing the stake key to delegate.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with stake and vote delegation certificate added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) DelegateStakeAndVoteFromBech32(
+	address string,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.DelegateStakeAndVoteFromAddress(decodedAddr, poolKeyHash, drep)
+}
+
+/*
+*
+
+	RegisterAndDelegateVote registers a stake key and delegates it to vote for a DRep in one transaction (registration-and-vote-delegation-certificate).
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+		If nil, it will attempt to extract from the wallet.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) RegisterAndDelegateVote(
+	stakeCredential *Certificate.Credential,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	voteRegDelegCert := Certificate.VoteRegDelegCert{
+		Stake: *cred,
+		Drep:  *drep,
+		Coin:  coin,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, voteRegDelegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	RegisterAndDelegateVoteFromAddress registers and delegates a stake key from an address to vote for a DRep.
+
+	Params:
+		address (Address.Address): The address containing the stake key.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) RegisterAndDelegateVoteFromAddress(
+	address Address.Address,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateVote(cred, drep, coin)
+}
+
+/*
+*
+
+	RegisterAndDelegateVoteFromBech32 registers and delegates a stake key from a Bech32 address to vote for a DRep.
+
+	Params:
+		address (string): The Bech32 address containing the stake key.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with both certificates added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) RegisterAndDelegateVoteFromBech32(
+	address string,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateVoteFromAddress(decodedAddr, drep, coin)
+}
+
+/*
+*
+
+	RegisterAndDelegateStakeAndVote registers a stake key and delegates it to both a stake pool and a DRep in one transaction (registration-stake-and-vote-delegation-certificate).
+
+	Params:
+		stakeCredential (*Certificate.Credential): The stake credential to register and delegate.
+		If nil, it will attempt to extract from the wallet.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with all certificates added.
+		error: An error if the stake credential cannot be determined.
+*/
+func (b *Apollo) RegisterAndDelegateStakeAndVote(
+	stakeCredential *Certificate.Credential,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	var cred *Certificate.Credential
+	var err error
+
+	if stakeCredential != nil {
+		cred = stakeCredential
+	} else {
+		cred, err = b.GetStakeCredentialFromWallet()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	stakeVoteRegDelegCert := Certificate.StakeVoteRegDelegCert{
+		Stake:       *cred,
+		PoolKeyHash: poolKeyHash,
+		Drep:        *drep,
+		Coin:        coin,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, stakeVoteRegDelegCert)
+	b.certificates = &certs
+	return b, nil
+}
+
+/*
+*
+
+	RegisterAndDelegateStakeAndVoteFromAddress registers and delegates a stake key from an address to both a stake pool and a DRep.
+
+	Params:
+		address (Address.Address): The address containing the stake key.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with all certificates added.
+		error: An error if the stake credential cannot be extracted from the address.
+*/
+func (b *Apollo) RegisterAndDelegateStakeAndVoteFromAddress(
+	address Address.Address,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	cred, err := GetStakeCredentialFromAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateStakeAndVote(cred, poolKeyHash, drep, coin)
+}
+
+/*
+*
+
+	RegisterAndDelegateStakeAndVoteFromBech32 registers and delegates a stake key from a Bech32 address to both a stake pool and a DRep.
+
+	Params:
+		address (string): The Bech32 address containing the stake key.
+		poolKeyHash (serialization.PubKeyHash): The pool key hash to delegate to.
+		drep (*Certificate.Drep): The DRep to delegate votes to.
+		coin (int64): The coin to register and delegate.
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with all certificates added.
+		error: An error if the address cannot be decoded.
+*/
+func (b *Apollo) RegisterAndDelegateStakeAndVoteFromBech32(
+	address string,
+	poolKeyHash serialization.PubKeyHash,
+	drep *Certificate.Drep,
+	coin int64,
+) (*Apollo, error) {
+	decodedAddr, err := Address.DecodeAddress(address)
+	if err != nil {
+		return b, err
+	}
+	return b.RegisterAndDelegateStakeAndVoteFromAddress(decodedAddr, poolKeyHash, drep, coin)
+}
+
+/*
+*
+
+	CreatePoolParams creates a PoolParams structure for pool registration.
+	Note: PoolMetadata must be set manually after creation if needed, as it uses an anonymous struct type.
+
+	Params:
+		operator (serialization.PubKeyHash): The pool operator's public key hash.
+		vrfKeyHash ([]byte): The VRF key hash (32 bytes).
+		pledge (int64): The pool pledge amount in lovelace.
+		cost (int64): The pool cost in lovelace.
+		margin (Certificate.UnitInterval): The pool margin (fraction between 0 and 1).
+		rewardAccount ([]byte): The reward account (29 bytes: 1 byte header + 28 bytes stake credential).
+		poolOwners ([]serialization.PubKeyHash): List of pool owner public key hashes.
+		relays (RelayPkg.Relays): List of relay entries.
+
+	Returns:
+		*Certificate.PoolParams: A pointer to the created pool parameters with PoolMetadata set to nil.
+*/
+func CreatePoolParams(
+	operator serialization.PubKeyHash,
+	vrfKeyHash []byte,
+	pledge int64,
+	cost int64,
+	margin Certificate.UnitInterval,
+	rewardAccount []byte,
+	poolOwners []serialization.PubKeyHash,
+	relays RelayPkg.Relays,
+) *Certificate.PoolParams {
+	return &Certificate.PoolParams{
+		Operator:      operator,
+		VrfKeyHash:    vrfKeyHash,
+		Pledge:        pledge,
+		Cost:          cost,
+		Margin:        margin,
+		RewardAccount: rewardAccount,
+		PoolOwners:    poolOwners,
+		Relays:        relays,
+		PoolMetadata:  nil,
+	}
+}
+
+/*
+*
+
+	RegisterPool registers a stake pool (pool-registration-certificate).
+
+	Params:
+		poolParams (*Certificate.PoolParams): The pool parameters including operator, VRF key hash, pledge, cost, margin, reward account, pool owners, relays, and optional metadata.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with pool registration certificate added.
+*/
+func (b *Apollo) RegisterPool(poolParams *Certificate.PoolParams) *Apollo {
+	poolRegCert := Certificate.PoolRegistration{Params: *poolParams}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, poolRegCert)
+	b.certificates = &certs
+	return b
+}
+
+/*
+*
+
+	DeregisterPool deregisters a stake pool (pool-retirement-certificate).
+
+	Params:
+		poolKeyHash (serialization.PubKeyHash): The pool key hash of the pool to retire.
+		epochNo (uint64): The epoch number when the pool should be retired.
+
+	Returns:
+		*Apollo: A pointer to the modified Apollo instance with pool retirement certificate added.
+*/
+func (b *Apollo) DeregisterPool(
+	poolKeyHash serialization.PubKeyHash,
+	epochNo uint64,
+) *Apollo {
+	poolRetCert := Certificate.PoolRetirement{
+		PoolKeyHash: poolKeyHash,
+		EpochNo:     epochNo,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, poolRetCert)
+	b.certificates = &certs
+	return b
+}
+
+/*
+*
+
 	buildFullFakeTx constructs and returns a full fake transaction for testing.
 
 	Returns:
@@ -1229,11 +2111,39 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	if b.certificates != nil {
-		requestedAmount = requestedAmount.Add(
-			Value.PureLovelaceValue(
-				int64(STAKE_DEPOSIT * len(*b.certificates)),
-			),
-		)
+		// Add STAKE_DEPOSIT for registration certificates:
+		// Kind 0 = StakeRegistration
+		// Kind 7 = RegCert
+		// Kind 11 = StakeRegDelegCert
+		// Kind 12 = VoteRegDelegCert
+		// Kind 13 = StakeVoteRegDelegCert
+		// Deregistration (kind 1, 8) refunds the deposit, delegation (kind 2) doesn't require it
+		registrationCount := 0
+		deregistrationCount := 0
+		for _, cert := range *b.certificates {
+			kind := cert.Kind()
+			switch kind {
+			case 0, 7, 11, 12, 13:
+				registrationCount++
+			case 1, 8:
+				deregistrationCount++
+			}
+		}
+		if registrationCount > 0 {
+			requestedAmount = requestedAmount.Add(
+				Value.PureLovelaceValue(
+					int64(STAKE_DEPOSIT * registrationCount),
+				),
+			)
+		}
+		if deregistrationCount > 0 {
+			// Refund deposit for deregistrations
+			requestedAmount = requestedAmount.Sub(
+				Value.PureLovelaceValue(
+					int64(STAKE_DEPOSIT * deregistrationCount),
+				),
+			)
+		}
 	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
@@ -1511,11 +2421,39 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
 	}
 	if b.certificates != nil {
-		requestedAmount = requestedAmount.Add(
-			Value.PureLovelaceValue(
-				int64(STAKE_DEPOSIT * len(*b.certificates)),
-			),
-		)
+		// Add STAKE_DEPOSIT for registration certificates:
+		// Kind 0 = StakeRegistration
+		// Kind 7 = RegCert
+		// Kind 11 = StakeRegDelegCert
+		// Kind 12 = VoteRegDelegCert
+		// Kind 13 = StakeVoteRegDelegCert
+		// Deregistration (kind 1, 8) refunds the deposit, delegation (kind 2) doesn't require it
+		registrationCount := 0
+		deregistrationCount := 0
+		for _, cert := range *b.certificates {
+			kind := cert.Kind()
+			switch kind {
+			case 0, 7, 11, 12, 13:
+				registrationCount++
+			case 1, 8:
+				deregistrationCount++	
+			}
+		}
+		if registrationCount > 0 {
+			requestedAmount = requestedAmount.Add(
+				Value.PureLovelaceValue(
+					int64(STAKE_DEPOSIT * registrationCount),
+				),
+			)
+		}
+		if deregistrationCount > 0 {
+			// Refund deposit for deregistrations
+			requestedAmount = requestedAmount.Sub(
+				Value.PureLovelaceValue(
+					int64(STAKE_DEPOSIT * deregistrationCount),
+				),
+			)
+		}
 	}
 	requestedAmount = requestedAmount.Add(burns)
 	var err error
