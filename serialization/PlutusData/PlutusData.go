@@ -1803,6 +1803,7 @@ func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error) {
 
 func (ps3 *PlutusV3Script) ToAddress(
 	stakingCredential []byte,
+	isStakingScript bool,
 	network constants.Network,
 ) Address.Address {
 	hash := PlutusScriptHash(ps3)
@@ -1827,23 +1828,45 @@ func (ps3 *PlutusV3Script) ToAddress(
 			}
 		}
 	} else {
-		if network == constants.MAINNET {
-			return Address.Address{
-				PaymentPart: hash.Bytes(),
-				StakingPart: stakingCredential,
-				Network:     Address.MAINNET,
-				AddressType: Address.SCRIPT_KEY,
-				HeaderByte:  0b00010001,
-				Hrp:         "addr",
+		if isStakingScript {
+			if network == constants.MAINNET {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.MAINNET,
+					AddressType: Address.SCRIPT_SCRIPT,
+					HeaderByte:  0b00110001,
+					Hrp:         "addr",
+				}
+			} else {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.TESTNET,
+					AddressType: Address.SCRIPT_SCRIPT,
+					HeaderByte:  0b00110000,
+					Hrp:         "addr_test",
+				}
 			}
 		} else {
-			return Address.Address{
-				PaymentPart: hash.Bytes(),
-				StakingPart: stakingCredential,
-				Network:     Address.TESTNET,
-				AddressType: Address.SCRIPT_KEY,
-				HeaderByte:  0b00010000,
-				Hrp:         "addr_test",
+			if network == constants.MAINNET {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.MAINNET,
+					AddressType: Address.SCRIPT_KEY,
+					HeaderByte:  0b00010001,
+					Hrp:         "addr",
+				}
+			} else {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.TESTNET,
+					AddressType: Address.SCRIPT_KEY,
+					HeaderByte:  0b00010000,
+					Hrp:         "addr_test",
+				}
 			}
 		}
 	}
