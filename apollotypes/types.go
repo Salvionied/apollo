@@ -239,10 +239,8 @@ func isKeyHashUsedFromTx(
 				if cert.Params.Operator == keyHash {
 					return true
 				}
-				for _, owner := range cert.Params.PoolOwners {
-					if owner == keyHash {
-						return true
-					}
+				if slices.Contains(cert.Params.PoolOwners, keyHash) {
+					return true
 				}
 			case Certificate.PoolRetirement:
 				if cert.PoolKeyHash == keyHash {
