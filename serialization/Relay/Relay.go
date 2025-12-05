@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/fxamacker/cbor/v2"
+	"slices"
 )
 
 // ReadKind extracts the kind discriminator from a CBOR-decoded value.
@@ -100,7 +101,7 @@ func (v *SingleHostAddr) UnmarshalCBOR(data []byte) error {
 		if len(b) != 4 {
 			return fmt.Errorf("ipv4 must be 4 bytes, got %d", len(b))
 		}
-		v.Ipv4 = append([]byte(nil), b...)
+		v.Ipv4 = slices.Clone(b)
 	}
 
 	// ipv6
@@ -114,7 +115,7 @@ func (v *SingleHostAddr) UnmarshalCBOR(data []byte) error {
 		if len(b) != 16 {
 			return fmt.Errorf("ipv6 must be 16 bytes, got %d", len(b))
 		}
-		v.Ipv6 = append([]byte(nil), b...)
+		v.Ipv6 = slices.Clone(b)
 	}
 	return nil
 }
