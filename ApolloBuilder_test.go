@@ -1,6 +1,7 @@
 package apollo_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -903,6 +904,168 @@ func TestEmptyRedeemerHashConway(t *testing.T) {
 		t.Error("Tx is not correct", hex.EncodeToString(hash.Payload))
 	}
 
+}
+
+func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	utxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(utxo).
+		AddInput(utxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
+		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert UTxO in inputs once
+	count := 0
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) && inp.Index == utxo.Input.Index {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Error("UTxO not exactly once in inputs")
+	}
+	// Assert in collateral
+	found := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) && col.Index == utxo.Input.Index {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("UTxO not in collateral")
+	}
+	// Assert balance
+	inputVal := Value.SimpleValue(10_000_000, nil)
+	outputVal := Value.SimpleValue(0, nil)
+	for _, out := range built.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(out.GetAmount())
+	}
+	outputVal.AddLovelace(built.Fee)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Transaction not balanced")
+	}
+}
+
+func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	smallUtxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(2_000_000, nil), // Insufficient for collateral (5M min)
+		),
+	}
+	largeUtxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x04},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(smallUtxo, largeUtxo).
+		AddInput(smallUtxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
+		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert small UTxO in inputs
+	foundSmallInInputs := false
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, smallUtxo.Input.TransactionId) && inp.Index == smallUtxo.Input.Index {
+			foundSmallInInputs = true
+			break
+		}
+	}
+	if !foundSmallInInputs {
+		t.Error("Small UTxO not in inputs")
+	}
+	// Assert large UTxO in collateral
+	foundLargeInCollateral := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, largeUtxo.Input.TransactionId) && col.Index == largeUtxo.Input.Index {
+			foundLargeInCollateral = true
+			break
+		}
+	}
+	if !foundLargeInCollateral {
+		t.Error("Large UTxO not in collateral")
+	}
+}
+
+func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	utxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(utxo).
+		AddInput(utxo).
+		AddCollateral(utxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert UTxO in inputs once
+	count := 0
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) && inp.Index == utxo.Input.Index {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Error("UTxO not exactly once in inputs")
+	}
+	// Assert in collateral
+	found := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) && col.Index == utxo.Input.Index {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("UTxO not in collateral")
+	}
 }
 
 // func TestEmptyRedeemerWithDatum(t *testing.T) {
