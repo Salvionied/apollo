@@ -2023,9 +2023,8 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 		) == 0 && len(witnesses.PlutusV3Script) == 0 && len(b.referenceInputsV3) == 0 {
 		return b, nil
 	}
-	availableUtxos := b.getAvailableUtxos()
 
-	for _, utxo := range availableUtxos {
+	for _, utxo := range b.utxos {
 		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount &&
 			len(utxo.Output.GetValue().GetAssets()) <= 5 {
 			return_amount := utxo.Output.GetValue().
@@ -2061,7 +2060,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 			}
 		}
 	}
-	for _, utxo := range availableUtxos {
+	for _, utxo := range b.utxos {
 		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
 			return_amount := utxo.Output.GetValue().
 				GetCoin() -
