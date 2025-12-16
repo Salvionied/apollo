@@ -933,7 +933,8 @@ func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
 	// Assert UTxO in inputs once
 	count := 0
 	for _, inp := range inputs {
-		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) && inp.Index == utxo.Input.Index {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) &&
+			inp.Index == utxo.Input.Index {
 			count++
 		}
 	}
@@ -943,7 +944,8 @@ func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
 	// Assert in collateral
 	found := false
 	for _, col := range collateral {
-		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) && col.Index == utxo.Input.Index {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) &&
+			col.Index == utxo.Input.Index {
 			found = true
 			break
 		}
@@ -963,7 +965,9 @@ func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
 	}
 }
 
-func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(t *testing.T) {
+func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(
+	t *testing.T,
+) {
 	cc := FixedChainContext.InitFixedChainContext()
 	smallUtxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -972,7 +976,10 @@ func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(t *testing.T) 
 		},
 		Output: TransactionOutput.SimpleTransactionOutput(
 			decoded_addr,
-			Value.SimpleValue(2_000_000, nil), // Insufficient for collateral (5M min)
+			Value.SimpleValue(
+				2_000_000,
+				nil,
+			), // Insufficient for collateral (5M min)
 		),
 	}
 	largeUtxo := UTxO.UTxO{
@@ -1000,7 +1007,8 @@ func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(t *testing.T) 
 	// Assert small UTxO in inputs
 	foundSmallInInputs := false
 	for _, inp := range inputs {
-		if bytes.Equal(inp.TransactionId, smallUtxo.Input.TransactionId) && inp.Index == smallUtxo.Input.Index {
+		if bytes.Equal(inp.TransactionId, smallUtxo.Input.TransactionId) &&
+			inp.Index == smallUtxo.Input.Index {
 			foundSmallInInputs = true
 			break
 		}
@@ -1011,7 +1019,8 @@ func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(t *testing.T) 
 	// Assert large UTxO in collateral
 	foundLargeInCollateral := false
 	for _, col := range collateral {
-		if bytes.Equal(col.TransactionId, largeUtxo.Input.TransactionId) && col.Index == largeUtxo.Input.Index {
+		if bytes.Equal(col.TransactionId, largeUtxo.Input.TransactionId) &&
+			col.Index == largeUtxo.Input.Index {
 			foundLargeInCollateral = true
 			break
 		}
@@ -1048,7 +1057,8 @@ func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
 	// Assert UTxO in inputs once
 	count := 0
 	for _, inp := range inputs {
-		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) && inp.Index == utxo.Input.Index {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) &&
+			inp.Index == utxo.Input.Index {
 			count++
 		}
 	}
@@ -1058,7 +1068,8 @@ func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
 	// Assert in collateral
 	found := false
 	for _, col := range collateral {
-		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) && col.Index == utxo.Input.Index {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) &&
+			col.Index == utxo.Input.Index {
 			found = true
 			break
 		}
