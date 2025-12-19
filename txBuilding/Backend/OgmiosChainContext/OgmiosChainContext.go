@@ -42,6 +42,10 @@ type OgmiosChainContext struct {
 	_protocol_param Base.ProtocolParameters
 	ogmigo          *ogmigo.Client
 	kugo            *kugo.Client
+	// Optional base context used for requests. If nil, context.Background() is used.
+	BaseContext context.Context
+	// Optional per-request timeout. If zero, no timeout is applied.
+	RequestTimeout time.Duration
 }
 
 func NewOgmiosChainContext(
@@ -202,13 +206,29 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(
 	txHash string,
 	index int,
 ) (*UTxO.UTxO, error) {
-	ctx := context.Background()
-	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
+	// Use per-request timeout if configured
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	utxos, err := occ.ogmigo.UtxosByTxIn(reqCtx, chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{
 			ID: txHash,
 		},
 		Index: uint32(index),
 	})
+	cancel()
 	if err != nil {
 		log.Fatal(err, "REQUEST PROTOCOL")
 	}
@@ -256,7 +276,12 @@ func chainsyncValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 }
 
 func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
-	ctx := context.Background()
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
 	outs := make([]Base.Output, 1)
 	more_utxos := true
 	chunk_size := 10
@@ -270,7 +295,18 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				Index: uint32(ix),
 			}
 		}
-		us, err := occ.ogmigo.UtxosByTxIn(ctx, queries...)
+		// If RequestTimeout is set, derive a context with timeout for this request
+		reqCtx := ctx
+		var cancel func()
+		if occ.RequestTimeout > 0 {
+			var c context.CancelFunc
+			reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+			cancel = func() { c() }
+		} else {
+			cancel = func() {}
+		}
+		us, err := occ.ogmigo.UtxosByTxIn(reqCtx, queries...)
+		cancel()
 		if len(us) < chunk_size || err != nil {
 			more_utxos = false
 		}
@@ -293,8 +329,24 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 
 // Seems unused
 func (occ *OgmiosChainContext) LatestBlock() Base.Block {
-	ctx := context.Background()
-	point, err := occ.ogmigo.ChainTip(ctx)
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
+	// Use timeout if configured
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	point, err := occ.ogmigo.ChainTip(reqCtx)
+	cancel()
 	if err != nil {
 		log.Fatal(
 			"OgmiosChainContext: LatestBlock: failed to request chain tip",
@@ -312,8 +364,23 @@ func (occ *OgmiosChainContext) LatestBlock() Base.Block {
 }
 
 func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
-	ctx := context.Background()
-	current, err := occ.ogmigo.CurrentEpoch(ctx)
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	current, err := occ.ogmigo.CurrentEpoch(reqCtx)
+	cancel()
 	if err != nil {
 		log.Fatal(
 			err,
@@ -329,13 +396,29 @@ func (occ *OgmiosChainContext) AddressUtxos(
 	address string,
 	gather bool,
 ) []Base.AddressUTXO {
-	ctx := context.Background()
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
 	addressUtxos := make([]Base.AddressUTXO, 0)
+	// Use per-request timeout if configured
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
 	matches, err := occ.kugo.Matches(
-		ctx,
+		reqCtx,
 		kugo.OnlyUnspent(),
 		kugo.Address(address),
 	)
+	cancel()
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
 	}
@@ -478,8 +561,23 @@ func ratio(s string) float32 {
 }
 
 func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
-	ctx := context.Background()
-	pparams, err := occ.ogmigo.CurrentProtocolParameters(ctx)
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	pparams, err := occ.ogmigo.CurrentProtocolParameters(reqCtx)
+	cancel()
 	if err != nil {
 		log.Fatal(
 			err,
@@ -719,12 +817,28 @@ func (occ *OgmiosChainContext) Utxos(
 func (occ *OgmiosChainContext) SubmitTx(
 	tx Transaction.Transaction,
 ) (serialization.TransactionId, error) {
-	ctx := context.Background()
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
 	bytes, err := tx.Bytes()
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error getting tx bytes")
 	}
-	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+	// Use per-request timeout if configured
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	_, err = occ.ogmigo.SubmitTx(reqCtx, hex.EncodeToString(bytes))
+	cancel()
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
 	}
@@ -737,8 +851,23 @@ func (occ *OgmiosChainContext) EvaluateTx(
 	tx []uint8,
 ) (map[string]Redeemer.ExecutionUnits, error) {
 	final_result := make(map[string]Redeemer.ExecutionUnits)
-	ctx := context.Background()
-	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
+	var ctx context.Context
+	if occ.BaseContext != nil {
+		ctx = occ.BaseContext
+	} else {
+		ctx = context.Background()
+	}
+	reqCtx := ctx
+	var cancel func()
+	if occ.RequestTimeout > 0 {
+		var c context.CancelFunc
+		reqCtx, c = context.WithTimeout(ctx, occ.RequestTimeout)
+		cancel = func() { c() }
+	} else {
+		cancel = func() {}
+	}
+	eval, err := occ.ogmigo.EvaluateTx(reqCtx, hex.EncodeToString(tx))
+	cancel()
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
 	}
