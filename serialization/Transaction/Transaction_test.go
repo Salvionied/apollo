@@ -4,11 +4,11 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionBody"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionBody"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionWitnessSet"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestMarshalAndUnmarshal(t *testing.T) {
@@ -27,7 +27,9 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 
 	marshaled, _ := tx.Bytes()
-	if hex.EncodeToString(marshaled) != "84a3008182430102030001f60200a0f4f6" {
+	if hex.EncodeToString(
+		marshaled,
+	) != "84a3008182430102030001f60200a0f4f6" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
@@ -36,9 +38,12 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 		)
 	}
 	tx2 := Transaction.Transaction{}
-	err := cbor.Unmarshal(marshaled, &tx2)
+	_, err := cbor.Decode(marshaled, &tx2)
 	if err != nil {
 		t.Error("Unmarshal failed", err)
+	}
+	if len(tx2.TransactionBody.Inputs) == 0 {
+		t.Fatal("Invalid unmarshaling: no inputs decoded")
 	}
 	if tx2.TransactionBody.Inputs[0].Index != 0 {
 		t.Error(
@@ -48,17 +53,18 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 			0,
 		)
 	}
-	if tx2.TransactionBody.Inputs[0].TransactionId[0] != 0x01 {
+	if len(tx2.TransactionBody.Inputs[0].TransactionId) == 0 ||
+		tx2.TransactionBody.Inputs[0].TransactionId[0] != 0x01 {
 		t.Error(
 			"Invalid unmarshaling",
-			tx2.TransactionBody.Inputs[0].TransactionId[0],
-			"Expected",
+			tx2.TransactionBody.Inputs[0].TransactionId,
+			"Expected first byte",
 			0x01,
 		)
 	}
 }
 
-func TestId(t *testing.T) {
+func TestBytes(t *testing.T) {
 	tx := Transaction.Transaction{
 		TransactionBody: TransactionBody.TransactionBody{
 			Inputs: []TransactionInput.TransactionInput{

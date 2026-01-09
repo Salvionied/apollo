@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Key"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Key"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 var VkeyHex = "694c01268746fccf4a8b94213649a7041b7e20aa4e83b0df2397cadf7c85c5ac"
@@ -22,7 +22,7 @@ var SkeyCBOR = "584048fe4baedf13260eb3e2138542bc843e4d272942d405edd3ce4e8eae3ef9
 func TestGenerateKeyPair(t *testing.T) {
 	pp, err := Key.PaymentKeyPairGenerate()
 	if err != nil {
-		t.Errorf("PaymentKeyPairGenerate() failed")
+		t.Fatal(err)
 	}
 	if len(pp.VerificationKey.Payload) != 32 {
 		t.Errorf("PaymentKeyPairGenerate() failed")
@@ -30,11 +30,11 @@ func TestGenerateKeyPair(t *testing.T) {
 	if len(pp.SigningKey.Payload) != 64 {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}
-	_, err = cbor.Marshal(pp.VerificationKey.Payload)
+	_, err = cbor.Encode(pp.VerificationKey.Payload)
 	if err != nil {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}
-	_, err = cbor.Marshal(pp.SigningKey.Payload)
+	_, err = cbor.Encode(pp.SigningKey.Payload)
 	if err != nil {
 		t.Errorf("PaymentKeyPairGenerate() failed")
 	}
@@ -58,11 +58,11 @@ func TestSign(t *testing.T) {
 func TestFromHexToHex(t *testing.T) {
 	sk, err := Key.SigningKeyFromHexString(SkeyHex)
 	if err != nil {
-		t.Errorf("SigningKeyFromHexString() failed")
+		t.Fatal(err)
 	}
 	vk, err := Key.VerificationKeyFromHexString(VkeyHex)
 	if err != nil {
-		t.Errorf("VerificationKeyFromHexString() failed")
+		t.Fatal(err)
 	}
 	if sk.ToHexString() != SkeyHex {
 		t.Errorf("SigningKeyFromHexString() failed")
@@ -77,9 +77,15 @@ func TestCborMarshalRound(t *testing.T) {
 	if err != nil {
 		t.Errorf("SigningKeyFromHexString() failed")
 	}
+	if sk == nil {
+		t.Fatal("SigningKeyFromHexString returned nil")
+	}
 	vk, err := Key.VerificationKeyFromHexString(VkeyHex)
 	if err != nil {
 		t.Errorf("VerificationKeyFromHexString() failed")
+	}
+	if vk == nil {
+		t.Fatal("VerificationKeyFromHexString returned nil")
 	}
 	sk_cbor, err := sk.MarshalCBOR()
 	if err != nil {
@@ -116,11 +122,11 @@ func TestCborMarshalRound(t *testing.T) {
 func TestVerificationKeyFromCbor(t *testing.T) {
 	vk, err := Key.VerificationKeyFromHexString(VkeyHex)
 	if err != nil {
-		t.Errorf("VerificationKeyFromHexString() failed")
+		t.Fatal(err)
 	}
 	vk2, err := Key.VerificationKeyFromCbor(VkeyCBOR)
 	if err != nil {
-		t.Errorf("VerificationKeyFromHexString() failed")
+		t.Fatal(err)
 	}
 	if vk.ToHexString() != vk2.ToHexString() {
 		t.Errorf("VerificationKeyFromHexString() failed")

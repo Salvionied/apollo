@@ -14,24 +14,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Cache"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Cache"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type BlockFrostChainContext struct {
@@ -127,18 +127,24 @@ func (bfc *BlockFrostChainContext) GetUtxoFromRef(
 func (bfc *BlockFrostChainContext) TxOuts(
 	txHash string,
 ) ([]Base.Output, error) {
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"GET",
 		fmt.Sprintf("%s/txs/%s/utxos", bfc._baseUrl, txHash),
 		nil,
 	)
+	if err != nil {
+		return nil, err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
@@ -156,18 +162,24 @@ func (bfc *BlockFrostChainContext) TxOuts(
 
 func (bfc *BlockFrostChainContext) LatestBlock() (Base.Block, error) {
 	bb := Base.Block{}
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"GET",
 		bfc._baseUrl+"/blocks/latest",
 		nil,
 	)
+	if err != nil {
+		return bb, err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return bb, err
+	}
+	if res == nil {
+		return bb, errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
@@ -188,18 +200,24 @@ func (bfc *BlockFrostChainContext) LatestEpoch() (Base.Epoch, error) {
 	timest := time.Time{}
 	foundTime := Cache.Get[time.Time]("latest_epoch_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
-		req, _ := http.NewRequestWithContext(
+		req, err := http.NewRequestWithContext(
 			bfc.ctx,
 			"GET",
 			bfc._baseUrl+"/epochs/latest",
 			nil,
 		)
+		if err != nil {
+			return resultingEpoch, err
+		}
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
 			return resultingEpoch, err
+		}
+		if res == nil {
+			return resultingEpoch, errors.New("nil response from BlockFrost API")
 		}
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
@@ -228,7 +246,7 @@ func (bfc *BlockFrostChainContext) AddressUtxos(
 		var i = 1
 		result := make([]Base.AddressUTXO, 0)
 		for {
-			req, _ := http.NewRequestWithContext(
+			req, err := http.NewRequestWithContext(
 				bfc.ctx,
 				"GET",
 				fmt.Sprintf(
@@ -239,12 +257,18 @@ func (bfc *BlockFrostChainContext) AddressUtxos(
 				),
 				nil,
 			)
+			if err != nil {
+				return nil, err
+			}
 			if bfc._projectId != "" {
 				req.Header.Set("project_id", bfc._projectId)
 			}
 			res, err := bfc.client.Do(req)
 			if err != nil {
 				return nil, err
+			}
+			if res == nil {
+				return nil, errors.New("nil response from BlockFrost API")
 			}
 			defer res.Body.Close()
 			body, err := io.ReadAll(res.Body)
@@ -264,13 +288,19 @@ func (bfc *BlockFrostChainContext) AddressUtxos(
 		}
 		return result, nil
 	} else {
-		req, _ := http.NewRequestWithContext(bfc.ctx, "GET", fmt.Sprintf("%s/addresses/%s/utxos", bfc._baseUrl, address), nil)
+		req, err := http.NewRequestWithContext(bfc.ctx, "GET", fmt.Sprintf("%s/addresses/%s/utxos", bfc._baseUrl, address), nil)
+		if err != nil {
+			return nil, err
+		}
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
 			return nil, err
+		}
+		if res == nil {
+			return nil, errors.New("nil response from BlockFrost API")
 		}
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
@@ -292,18 +322,24 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters,
 	timest := time.Time{}
 	foundTime := Cache.Get[time.Time]("latest_epoch_params_time", &timest)
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
-		req, _ := http.NewRequestWithContext(
+		req, err := http.NewRequestWithContext(
 			bfc.ctx,
 			"GET",
 			bfc._baseUrl+"/epochs/latest/parameters",
 			nil,
 		)
+		if err != nil {
+			return pm, err
+		}
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
 			return pm, err
+		}
+		if res == nil {
+			return pm, errors.New("nil response from BlockFrost API")
 		}
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
@@ -334,18 +370,24 @@ func (bfc *BlockFrostChainContext) GenesisParams() (Base.GenesisParameters, erro
 		timest, _ = time.Parse(time.RFC3339, timestamp)
 	}
 	if !found || !foundTime || time.Since(timest) > 5*time.Minute {
-		req, _ := http.NewRequestWithContext(
+		req, err := http.NewRequestWithContext(
 			bfc.ctx,
 			"GET",
 			bfc._baseUrl+"/Genesis",
 			nil,
 		)
+		if err != nil {
+			return gp, err
+		}
 		if bfc._projectId != "" {
 			req.Header.Set("project_id", bfc._projectId)
 		}
 		res, err := bfc.client.Do(req)
 		if err != nil {
 			return gp, err
+		}
+		if res == nil {
+			return gp, errors.New("nil response from BlockFrost API")
 		}
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
@@ -462,7 +504,11 @@ func (bfc *BlockFrostChainContext) Utxos(
 			} else {
 				asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
 				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+				asset_name_ptr := AssetName.NewAssetNameFromHexString(item.Unit[56:])
+				if asset_name_ptr == nil {
+					continue
+				}
+				asset_name := *asset_name_ptr
 				_, ok := multi_assets[policy_id]
 				if !ok {
 					multi_assets[policy_id] = Asset.Asset[int64]{}
@@ -492,7 +538,7 @@ func (bfc *BlockFrostChainContext) Utxos(
 		if result.InlineDatum != "" {
 			decoded, _ := hex.DecodeString(result.InlineDatum)
 			var x PlutusData.PlutusData
-			err := cbor.Unmarshal(decoded, &x)
+			_, err := cbor.Decode(decoded, &x)
 			if err != nil {
 				continue
 			}
@@ -521,17 +567,20 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 	logger chan string,
 ) (serialization.TransactionId, error) {
 	resId := serialization.TransactionId{}
-	txBytes, _ := cbor.Marshal(tx)
+	txBytes, _ := cbor.Encode(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		logger <- ("Custom Submission Endpoints Found, submitting...")
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
 			logger <- fmt.Sprint("TRYING WITH:", endpoint)
-			req, _ := http.NewRequestWithContext(
+			req, err := http.NewRequestWithContext(
 				bfc.ctx,
 				"POST",
 				endpoint,
 				bytes.NewBuffer(txBytes),
 			)
+			if err != nil {
+				return resId, err
+			}
 			if bfc._projectId != "" {
 				req.Header.Set("project_id", bfc._projectId)
 			}
@@ -539,6 +588,9 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 			res, err := bfc.client.Do(req)
 			if err != nil {
 				return resId, err
+			}
+			if res == nil {
+				return resId, errors.New("nil response from BlockFrost API")
 			}
 			defer res.Body.Close()
 			body, err := io.ReadAll(res.Body)
@@ -553,12 +605,15 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 			logger <- fmt.Sprint("RESPONSE:", response)
 		}
 	}
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"POST",
 		bfc._baseUrl+"/tx/submit",
 		bytes.NewBuffer(txBytes),
 	)
+	if err != nil {
+		return resId, err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
@@ -566,6 +621,9 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return resId, err
+	}
+	if res == nil {
+		return resId, errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
@@ -585,15 +643,18 @@ func (bfc *BlockFrostChainContext) SubmitTx(
 	tx Transaction.Transaction,
 ) (serialization.TransactionId, error) {
 	resId := serialization.TransactionId{}
-	txBytes, _ := cbor.Marshal(tx)
+	txBytes, _ := cbor.Encode(tx)
 	if bfc.CustomSubmissionEndpoints != nil {
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {
-			req, _ := http.NewRequestWithContext(
+			req, err := http.NewRequestWithContext(
 				bfc.ctx,
 				"POST",
 				endpoint,
 				bytes.NewBuffer(txBytes),
 			)
+			if err != nil {
+				return resId, err
+			}
 			if bfc._projectId != "" {
 				req.Header.Set("project_id", bfc._projectId)
 			}
@@ -601,6 +662,9 @@ func (bfc *BlockFrostChainContext) SubmitTx(
 			res, err := bfc.client.Do(req)
 			if err != nil {
 				return resId, err
+			}
+			if res == nil {
+				return resId, errors.New("nil response from BlockFrost API")
 			}
 			defer res.Body.Close()
 			body, err := io.ReadAll(res.Body)
@@ -614,12 +678,15 @@ func (bfc *BlockFrostChainContext) SubmitTx(
 			}
 		}
 	}
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"POST",
 		bfc._baseUrl+"/tx/submit",
 		bytes.NewBuffer(txBytes),
 	)
+	if err != nil {
+		return serialization.TransactionId{}, err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
@@ -627,6 +694,9 @@ func (bfc *BlockFrostChainContext) SubmitTx(
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return serialization.TransactionId{}, err
+	}
+	if res == nil {
+		return serialization.TransactionId{}, errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
@@ -663,12 +733,15 @@ func (bfc *BlockFrostChainContext) EvaluateTx(
 	tx []byte,
 ) (map[string]Redeemer.ExecutionUnits, error) {
 	encoded := hex.EncodeToString(tx)
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"POST",
 		bfc._baseUrl+"/utils/txs/evaluate",
 		strings.NewReader(encoded),
 	)
+	if err != nil {
+		return nil, err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
@@ -676,6 +749,9 @@ func (bfc *BlockFrostChainContext) EvaluateTx(
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
@@ -695,8 +771,8 @@ func (bfc *BlockFrostChainContext) EvaluateTx(
 	final_result := make(map[string]Redeemer.ExecutionUnits, 0)
 	for k, v := range response.Result.Result {
 		final_result[k] = Redeemer.ExecutionUnits{
-			Steps: int64(v["steps"]),
-			Mem:   int64(v["memory"]),
+			Mem:   uint64(v["memory"]),
+			Steps: uint64(v["steps"]),
 		}
 	}
 	return final_result, nil
@@ -709,18 +785,24 @@ type BlockfrostContractCbor struct {
 func (bfc *BlockFrostChainContext) GetContractCbor(
 	scriptHash string,
 ) (string, error) {
-	req, _ := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		bfc.ctx,
 		"GET",
 		fmt.Sprintf("%s/scripts/%s/cbor", bfc._baseUrl, scriptHash),
 		nil,
 	)
+	if err != nil {
+		return "", err
+	}
 	if bfc._projectId != "" {
 		req.Header.Set("project_id", bfc._projectId)
 	}
 	res, err := bfc.client.Do(req)
 	if err != nil {
 		return "", err
+	}
+	if res == nil {
+		return "", errors.New("nil response from BlockFrost API")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)

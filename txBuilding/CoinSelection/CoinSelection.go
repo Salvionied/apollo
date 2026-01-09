@@ -6,14 +6,14 @@ package CoinSelection
 // 	"math/rand"
 // 	"sort"
 
-// 	"github.com/Salvionied/apollo/serialization/Address"
-// 	"github.com/Salvionied/apollo/serialization/Amount"
-// 	"github.com/Salvionied/apollo/serialization/MultiAsset"
-// 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-// 	"github.com/Salvionied/apollo/serialization/UTxO"
-// 	"github.com/Salvionied/apollo/serialization/Value"
-// 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-// 	"github.com/Salvionied/apollo/txBuilding/Utils"
+// 	"github.com/Salvionied/apollo/v2/serialization/Address"
+// 	"github.com/Salvionied/apollo/v2/serialization/Amount"
+// 	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+// 	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+// 	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+// 	"github.com/Salvionied/apollo/v2/serialization/Value"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/Utils"
 // )
 
 // func _reverse[S ~[]E, E any](s S) {

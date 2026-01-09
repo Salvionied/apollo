@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
 )
 
 type AikenPlutusJSON struct {

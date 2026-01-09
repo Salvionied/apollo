@@ -10,28 +10,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
 	"github.com/SundaeSwap-finance/kugo"
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type OgmiosChainContext struct {
@@ -80,8 +80,11 @@ func multiAsset_OgmigoToApollo(
 	for policy, tokens := range m {
 		tokensMap := make(map[AssetName.AssetName]int64)
 		for token, amt := range tokens {
-			tok := *AssetName.NewAssetNameFromHexString(token)
-			tokensMap[tok] = amt.Int64()
+			tokPtr := AssetName.NewAssetNameFromHexString(token)
+			if tokPtr == nil {
+				continue
+			}
+			tokensMap[*tokPtr] = amt.Int64()
 		}
 		pol := Policy.PolicyId{
 			Value: policy,
@@ -122,7 +125,7 @@ func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
 			)
 		}
 		var pd PlutusData.PlutusData
-		err = cbor.Unmarshal(datumBytes, &pd)
+		_, err = cbor.Decode(datumBytes, &pd)
 		if err != nil {
 			log.Fatal(
 				err,
@@ -241,7 +244,8 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(
 }
 
 func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 0)
+	// Start with capacity for lovelace + some assets
+	amts := make([]Base.AddressAmount, 0, 1+len(v.AssetsExceptAda()))
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
@@ -402,7 +406,7 @@ func (occ *OgmiosChainContext) AddressUtxos(
 	} else {
 		ctx = context.Background()
 	}
-	addressUtxos := make([]Base.AddressUTXO, 0)
+	addressUtxos := make([]Base.AddressUTXO, 0, 100)
 	// Use per-request timeout if configured
 	reqCtx := ctx
 	var cancel func()
@@ -735,7 +739,7 @@ func (occ *OgmiosChainContext) Utxos(
 	address Address.Address,
 ) ([]UTxO.UTxO, error) {
 	results := occ.AddressUtxos(address.String(), true)
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, len(results))
 	for _, result := range results {
 		decodedTxId, _ := hex.DecodeString(result.TxHash)
 		tx_in := TransactionInput.TransactionInput{
@@ -758,7 +762,11 @@ func (occ *OgmiosChainContext) Utxos(
 					log.Fatal(err)
 				}
 				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+				assetNamePtr := AssetName.NewAssetNameFromHexString(item.Unit[56:])
+				if assetNamePtr == nil {
+					continue
+				}
+				asset_name := *assetNamePtr
 				_, ok := multi_assets[policy_id]
 				if !ok {
 					multi_assets[policy_id] = Asset.Asset[int64]{}
@@ -791,7 +799,7 @@ func (occ *OgmiosChainContext) Utxos(
 				log.Fatal(err)
 			}
 			var x PlutusData.PlutusData
-			err = cbor.Unmarshal(decoded, &x)
+			_, err = cbor.Decode(decoded, &x)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -873,8 +881,8 @@ func (occ *OgmiosChainContext) EvaluateTx(
 	}
 	for _, e := range eval.ExUnits {
 		final_result[e.Validator.Purpose] = Redeemer.ExecutionUnits{
-			Mem:   int64(e.Budget.Memory),
-			Steps: int64(e.Budget.Cpu),
+			Mem:   uint64(e.Budget.Memory),
+			Steps: uint64(e.Budget.Cpu),
 		}
 	}
 	return final_result, nil

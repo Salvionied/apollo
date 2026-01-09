@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/maestro-org/go-sdk/client"
 	"github.com/maestro-org/go-sdk/utils"
 )
@@ -320,7 +320,7 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(
 	}
 	decodedCbor, _ := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
 	output := TransactionOutput.TransactionOutput{}
-	err = cbor.Unmarshal(decodedCbor, &output)
+	_, err = cbor.Decode(decodedCbor, &output)
 	if err != nil {
 
 		return nil, err
@@ -422,7 +422,7 @@ func (mcc *MaestroChainContext) Utxos(
 		}
 		output := TransactionOutput.TransactionOutput{}
 		decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-		err = cbor.Unmarshal(decodedCbor, &output)
+		_, err := cbor.Decode(decodedCbor, &output)
 		if err != nil {
 			return nil, err
 		}
@@ -448,7 +448,7 @@ func (mcc *MaestroChainContext) Utxos(
 			}
 			output := TransactionOutput.TransactionOutput{}
 			decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-			err = cbor.Unmarshal(decodedCbor, &output)
+			_, err := cbor.Decode(decodedCbor, &output)
 			if err != nil {
 				return nil, err
 			}
@@ -498,8 +498,8 @@ func (mcc *MaestroChainContext) EvaluateTx(
 	}
 	for _, eval := range evaluation {
 		final_result[eval.RedeemerTag+":"+strconv.Itoa(eval.RedeemerIndex)] = Redeemer.ExecutionUnits{
-			Mem:   eval.ExUnits.Mem,
-			Steps: eval.ExUnits.Steps,
+			Mem:   uint64(eval.ExUnits.Mem),
+			Steps: uint64(eval.ExUnits.Steps),
 		}
 	}
 	return final_result, nil
@@ -515,7 +515,7 @@ func (mcc *MaestroChainContext) GetContractCbor(
 	scCborBytes := res.Data.Bytes
 	bytes := []byte{}
 	decodedBytes, _ := hex.DecodeString(scCborBytes)
-	_ = cbor.Unmarshal(decodedBytes, &bytes)
+	_, _ = cbor.Decode(decodedBytes, &bytes)
 	return hex.EncodeToString(bytes), nil
 
 }

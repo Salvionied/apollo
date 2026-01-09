@@ -3,9 +3,9 @@ package Fingerprint_test
 import (
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/Fingerprint"
-	"github.com/Salvionied/apollo/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/Fingerprint"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
 )
 
 type data struct {

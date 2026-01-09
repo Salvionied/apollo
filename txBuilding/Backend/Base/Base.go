@@ -4,22 +4,22 @@ import (
 	"encoding/hex"
 	"strconv"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type GenesisParameters struct {
@@ -121,7 +121,12 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 			asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
 
 			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
+			asset_name_ptr := AssetName.NewAssetNameFromHexString(item.Unit[56:])
+			if asset_name_ptr == nil {
+				// Skip invalid asset name
+				continue
+			}
+			asset_name := *asset_name_ptr
 			_, ok := multi_assets[policy_id]
 			if !ok {
 				multi_assets[policy_id] = Asset.Asset[int64]{}
@@ -153,7 +158,7 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 
 		var x PlutusData.PlutusData
 		// TODO: error check correctly
-		_ = cbor.Unmarshal(decoded, &x)
+		_, _ = cbor.Decode(decoded, &x)
 
 		datum = x
 		tx_out := TransactionOutput.TransactionOutput{
