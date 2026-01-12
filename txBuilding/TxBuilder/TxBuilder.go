@@ -3,11 +3,12 @@ package TxBuilder
 import (
 	"encoding/hex"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionWitnessSet"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 // import (
@@ -18,33 +19,32 @@ import (
 // 	"sort"
 // 	"strconv"
 
-// 	"github.com/Salvionied/apollo/serialization"
-// 	"github.com/Salvionied/apollo/serialization/Address"
-// 	"github.com/Salvionied/apollo/serialization/Amount"
-// 	"github.com/Salvionied/apollo/serialization/Asset"
-// 	"github.com/Salvionied/apollo/serialization/AssetName"
-// 	"github.com/Salvionied/apollo/serialization/Certificate"
-// 	"github.com/Salvionied/apollo/serialization/Key"
-// 	"github.com/Salvionied/apollo/serialization/Metadata"
-// 	"github.com/Salvionied/apollo/serialization/MultiAsset"
-// 	"github.com/Salvionied/apollo/serialization/NativeScript"
-// 	"github.com/Salvionied/apollo/serialization/PlutusData"
-// 	"github.com/Salvionied/apollo/serialization/Policy"
-// 	"github.com/Salvionied/apollo/serialization/Redeemer"
-// 	"github.com/Salvionied/apollo/serialization/Transaction"
-// 	"github.com/Salvionied/apollo/serialization/TransactionBody"
-// 	"github.com/Salvionied/apollo/serialization/TransactionInput"
-// 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-// 	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-// 	"github.com/Salvionied/apollo/serialization/UTxO"
-// 	"github.com/Salvionied/apollo/serialization/Value"
-// 	"github.com/Salvionied/apollo/serialization/Withdrawal"
-// 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-// 	"github.com/Salvionied/apollo/txBuilding/CoinSelection"
-// 	"github.com/Salvionied/apollo/txBuilding/Errors"
-// 	"github.com/Salvionied/apollo/txBuilding/Utils"
+// 	"github.com/Salvionied/apollo/v2/serialization"
+// 	"github.com/Salvionied/apollo/v2/serialization/Address"
+// 	"github.com/Salvionied/apollo/v2/serialization/Amount"
+// 	"github.com/Salvionied/apollo/v2/serialization/Asset"
+// 	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+// 	"github.com/Salvionied/apollo/v2/serialization/Certificate"
+// 	"github.com/Salvionied/apollo/v2/serialization/Key"
+// 	"github.com/Salvionied/apollo/v2/serialization/Metadata"
+// 	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+// 	"github.com/Salvionied/apollo/v2/serialization/NativeScript"
+// 	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+// 	"github.com/Salvionied/apollo/v2/serialization/Policy"
+// 	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+// 	"github.com/Salvionied/apollo/v2/serialization/TransactionBody"
+// 	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+// 	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+// 	"github.com/Salvionied/apollo/v2/serialization/TransactionWitnessSet"
+// 	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+// 	"github.com/Salvionied/apollo/v2/serialization/Value"
+// 	"github.com/Salvionied/apollo/v2/serialization/Withdrawal"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/CoinSelection"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/Errors"
+// 	"github.com/Salvionied/apollo/v2/txBuilding/Utils"
 
-// 	"github.com/fxamacker/cbor/v2"
+// 	"github.com/blinklabs-io/gouroboros/cbor"
 // 	"golang.org/x/exp/slices"
 // )
 
@@ -243,7 +243,7 @@ import (
 // 	requiredLovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(output.GetAddress(), attemptAmount), tb.Context)
 
 // 	attemptAmount.SetLovelace(requiredLovelace)
-// 	bytes, _ := cbor.Marshal(attemptAmount)
+// 	bytes, _ := cbor.Encode(attemptAmount)
 // 	maxValSz, _ := strconv.Atoi(maxValSize)
 // 	return len(bytes) > maxValSz
 // }
@@ -284,7 +284,7 @@ import (
 // 		updatedAmount := output.GetValue().Clone()
 // 		required_lovelace := Utils.MinLovelacePostAlonzo(TransactionOutput.SimpleTransactionOutput(ChangeAddress, updatedAmount), tb.Context)
 // 		updatedAmount.SetLovelace(required_lovelace)
-// 		cbor, _ := cbor.Marshal(updatedAmount)
+// 		cbor, _ := cbor.Encode(updatedAmount)
 // 		maxValSz, _ := strconv.Atoi(maxValSize)
 // 		if len(cbor) > maxValSz {
 // 			output.SetAmount(oldAmount)
@@ -413,7 +413,7 @@ import (
 // 		plutusExecutionUnits.Sum(redeemer.ExUnits)
 // 	}
 // 	fullFakeTx, _ := tb._BuildFullFakeTx()
-// 	fakeTxBytes, _ := cbor.Marshal(fullFakeTx)
+// 	fakeTxBytes, _ := cbor.Encode(fullFakeTx)
 // 	estimatedFee := Utils.Fee(tb.Context, len(fakeTxBytes), plutusExecutionUnits.Steps, plutusExecutionUnits.Mem, tb.ReferenceInputs)
 // 	return estimatedFee
 // }
@@ -435,53 +435,64 @@ func ScriptDataHash(
 	chainContext Base.ChainContext,
 	witnessSet TransactionWitnessSet.TransactionWitnessSet,
 ) (*serialization.ScriptDataHash, error) {
-	cost_models := map[int]cbor.Marshaler{}
+	costModels := map[int]interface{}{}
 	redeemers := witnessSet.Redeemer
+	if redeemers == nil {
+		redeemers = []Redeemer.Redeemer{}
+	}
 	PV1Scripts := witnessSet.PlutusV1Script
+	if PV1Scripts == nil {
+		PV1Scripts = []PlutusData.PlutusV1Script{}
+	}
 	PV2Scripts := witnessSet.PlutusV2Script
+	if PV2Scripts == nil {
+		PV2Scripts = []PlutusData.PlutusV2Script{}
+	}
 	datums := witnessSet.PlutusData
 	var err error
 	isV1 := len(PV1Scripts) > 0
 	if len(redeemers) > 0 {
 		if len(PV2Scripts) > 0 {
-			cost_models = PlutusData.COST_MODELSV2
+			costModels = PlutusData.COST_MODELSV2
 		} else if !isV1 {
-			cost_models = PlutusData.COST_MODELSV2
+			costModels = PlutusData.COST_MODELSV2
 		}
 	}
-	var redeemer_bytes []byte
+	var redeemerBytes []byte
 
 	if len(redeemers) == 0 {
-		redeemer_bytes, _ = hex.DecodeString("a0")
+		redeemerBytes, _ = hex.DecodeString("a0")
 	} else {
-		redeemer_bytes, _ = cbor.Marshal(redeemers)
+		redeemerBytes, _ = cbor.Encode(redeemers)
 	}
-	var datum_bytes []byte
-	if datums.Len() > 0 {
+	var datumBytes []byte
+	if datums == nil {
+		datumBytes = []byte{}
+	} else if len(*datums) > 0 {
 
-		datum_bytes, err = cbor.Marshal(datums)
+		datumBytes, err = cbor.Encode(datums)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		datum_bytes = []byte{}
+		datumBytes = []byte{}
 	}
-	var cost_model_bytes []byte
+	var costModelBytes []byte
 	if isV1 {
-		cost_model_bytes, err = cbor.Marshal(PlutusData.COST_MODELSV1)
+		costModelBytes, err = cbor.Encode(PlutusData.COST_MODELSV1)
 		if err != nil {
 			return nil, err
 		}
 
 	} else {
-		cost_model_bytes, err = cbor.Marshal(cost_models)
+		costModelBytes, err = cbor.Encode(costModels)
 		if err != nil {
 			return nil, err
 		}
 	}
-	total_bytes := append(redeemer_bytes, datum_bytes...)
-	total_bytes = append(total_bytes, cost_model_bytes...)
-	hash, err := serialization.Blake2bHash(total_bytes)
+	totalBytes := append(redeemerBytes, datumBytes...)
+	totalBytes = append(totalBytes, costModelBytes...)
+	hash, err := serialization.Blake2bHash(totalBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +605,7 @@ func ScriptDataHash(
 // 		TransactionBody:       txBody,
 // 		TransactionWitnessSet: witness,
 // 	}
-// 	bytes, _ := cbor.Marshal(tx)
+// 	bytes, _ := cbor.Encode(tx)
 // 	if len(bytes) > tmp_builder.Context.GetProtocolParams().MaxTxSize {
 // 		return tx, &Errors.TransactionTooBigError{
 // 			fmt.Sprintf("Transaction is too big, %d bytes, max is %d", len(bytes), tmp_builder.Context.GetProtocolParams().MaxTxSize)}
@@ -846,7 +857,7 @@ func ScriptDataHash(
 // 	tx_body, _ := tmp_builder.Build(changeAddress, mergeChange, collateralChangeAddress)
 // 	witness_set := tb._BuildFakeWitnessSet()
 // 	tx := Transaction.Transaction{TransactionBody: tx_body, TransactionWitnessSet: witness_set, Valid: false}
-// 	tx_cbor, _ := cbor.Marshal(tx)
+// 	tx_cbor, _ := cbor.Encode(tx)
 // 	return tb.Context.EvaluateTx(tx_cbor)
 
 // }

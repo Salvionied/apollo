@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization"
-	RelayPkg "github.com/Salvionied/apollo/serialization/Relay"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+	RelayPkg "github.com/Salvionied/apollo/v2/serialization/Relay"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func mustMarshalCert(t *testing.T, cert CertificateInterface) []byte {
@@ -32,10 +32,10 @@ func roundTrip(t *testing.T, cert CertificateInterface) CertificateInterface {
 	}
 	// Compare via decoded canonical arrays (avoid differences in CBOR head encodings)
 	var v1, v2 any
-	if err := cbor.Unmarshal(bz, &v1); err != nil {
+	if _, err := cbor.Decode(bz, &v1); err != nil {
 		t.Fatalf("unmarshal compare v1: %v", err)
 	}
-	if err := cbor.Unmarshal(bz2, &v2); err != nil {
+	if _, err := cbor.Decode(bz2, &v2); err != nil {
 		t.Fatalf("unmarshal compare v2: %v", err)
 	}
 	if !reflect.DeepEqual(v1, v2) {
@@ -48,9 +48,11 @@ func roundTrip(t *testing.T, cert CertificateInterface) CertificateInterface {
 // but use central serialization if available; fallback minimal here.
 
 func TestStakeRegistrationRoundTrip(t *testing.T) {
-	cred := Credential{
+	cred := StakeCredential{
 		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{1, 2, 3}},
+		StakeCredential: serialization.ConstrainedBytes{
+			Payload: []byte{1, 2, 3},
+		},
 	}
 	cert := StakeRegistration{Stake: cred}
 	_ = roundTrip(t, cert)
@@ -81,7 +83,7 @@ func TestPoolRegistrationWithRelaysRoundTrip(t *testing.T) {
 			RelayPkg.MultiHostName{DnsName: "pool.example.net"},
 		},
 		PoolMetadata: &struct {
-			_    struct{} `cbor:",toarray"`
+			cbor.StructAsArray
 			Url  string
 			Hash []byte
 		}{Url: "https://meta.example", Hash: []byte{0x10, 0x20}},
@@ -92,9 +94,11 @@ func TestPoolRegistrationWithRelaysRoundTrip(t *testing.T) {
 
 func TestRegDRepCertAnchorsRoundTrip(t *testing.T) {
 	// With nil anchor
-	cred := Credential{
+	cred := StakeCredential{
 		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xDE, 0xAD}},
+		StakeCredential: serialization.ConstrainedBytes{
+			Payload: []byte{0xDE, 0xAD},
+		},
 	}
 	certNil := RegDRepCert{Cred: cred, Coin: 42, Anchor: nil}
 	_ = roundTrip(t, certNil)
@@ -106,15 +110,15 @@ func TestRegDRepCertAnchorsRoundTrip(t *testing.T) {
 }
 
 func TestStakeVoteDelegCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x01}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x01}},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x11
 	drep := Drep{
 		Code: 0,
-		Credential: &serialization.ConstrainedBytes{
+		StakeCredential: &serialization.ConstrainedBytes{
 			Payload: []byte{0xBE, 0xEF},
 		},
 	}
@@ -173,7 +177,7 @@ func TestPoolRegistrationVariants(t *testing.T) {
 				},
 			},
 			PoolMetadata: &struct {
-				_    struct{} `cbor:",toarray"`
+				cbor.StructAsArray
 				Url  string
 				Hash []byte
 			}{Url: "", Hash: []byte{}},
@@ -188,9 +192,11 @@ func TestPoolRegistrationVariants(t *testing.T) {
 }
 
 func TestCoinsAndEpochEdges(t *testing.T) {
-	cred := Credential{
+	cred := StakeCredential{
 		Code: 1,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xCA, 0xFE}},
+		StakeCredential: serialization.ConstrainedBytes{
+			Payload: []byte{0xCA, 0xFE},
+		},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x99
@@ -207,31 +213,31 @@ func TestCoinsAndEpochEdges(t *testing.T) {
 }
 
 func TestDrepVariants(t *testing.T) {
-	stake := Credential{
-		Code: 2,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xDE}},
+	stake := StakeCredential{
+		Code:            2,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xDE}},
 	}
 	// drep with bytes cred
 	drepBytes := Drep{
-		Code:       0,
-		Credential: &serialization.ConstrainedBytes{Payload: []byte{0x01}},
+		Code:            0,
+		StakeCredential: &serialization.ConstrainedBytes{Payload: []byte{0x01}},
 	}
 	_ = roundTrip(t, VoteDelegCert{Stake: stake, Drep: drepBytes})
 	// drep with nil cred (should still round-trip as structure allows nil pointer)
-	drepNil := Drep{Code: 3, Credential: nil}
+	drepNil := Drep{Code: 3, StakeCredential: nil}
 	_ = roundTrip(t, VoteDelegCert{Stake: stake, Drep: drepNil})
 }
 
 func TestStakeVoteRegDelegCombinations(t *testing.T) {
-	stake := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{}},
+	stake := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{}},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x01
 	drep := Drep{
 		Code: 2,
-		Credential: &serialization.ConstrainedBytes{
+		StakeCredential: &serialization.ConstrainedBytes{
 			Payload: []byte{0xAA, 0xBB},
 		},
 	}
@@ -260,7 +266,7 @@ func TestStakeVoteRegDelegCombinations(t *testing.T) {
 
 func TestUnmarshalCert_InvalidEmptyArray(t *testing.T) {
 	// CBOR for empty array []
-	bz, _ := cbor.Marshal([]any{})
+	bz, _ := cbor.Encode([]any{})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for empty array")
 	}
@@ -268,7 +274,7 @@ func TestUnmarshalCert_InvalidEmptyArray(t *testing.T) {
 
 func TestUnmarshalCert_InvalidKindType(t *testing.T) {
 	// kind is string -> invalid
-	bz, _ := cbor.Marshal([]any{"not-an-int"})
+	bz, _ := cbor.Encode([]any{"not-an-int"})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for invalid kind type")
 	}
@@ -276,7 +282,7 @@ func TestUnmarshalCert_InvalidKindType(t *testing.T) {
 
 func TestUnmarshalCert_NegativeKind(t *testing.T) {
 	// kind is negative int64 -> invalid per ReadKind
-	bz, _ := cbor.Marshal([]any{int64(-1)})
+	bz, _ := cbor.Encode([]any{int64(-1)})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for negative kind")
 	}
@@ -284,7 +290,7 @@ func TestUnmarshalCert_NegativeKind(t *testing.T) {
 
 func TestUnmarshalCert_KindOutOfRange(t *testing.T) {
 	// kind is very large uint64 -> out of int range
-	bz, _ := cbor.Marshal([]any{^uint64(0)})
+	bz, _ := cbor.Encode([]any{^uint64(0)})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for out-of-range kind")
 	}
@@ -292,88 +298,93 @@ func TestUnmarshalCert_KindOutOfRange(t *testing.T) {
 
 func TestUnmarshalCert_WrongLengths(t *testing.T) {
 	// StakeRegistration requires 2 elements
-	bz, _ := cbor.Marshal([]any{uint64(0)})
+	bz, _ := cbor.Encode([]any{uint64(0)})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for stake_registration wrong length")
 	}
 	// StakeDelegation requires 3 elements
-	wrong, _ := cbor.Marshal([]any{uint64(2), Credential{}})
+	wrong, _ := cbor.Encode([]any{uint64(2), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for stake_delegation wrong length")
 	}
 	// PoolRegistration requires 2
-	wrong, _ = cbor.Marshal([]any{uint64(3)})
+	wrong, _ = cbor.Encode([]any{uint64(3)})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for pool_registration wrong length")
 	}
 	// PoolRetirement requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(4), serialization.PubKeyHash{}})
+	wrong, _ = cbor.Encode([]any{uint64(4), serialization.PubKeyHash{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for pool_retirement wrong length")
 	}
 	// RegCert requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(7), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(7), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for reg_cert wrong length")
 	}
 	// UnregCert requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(8), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(8), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for unreg_cert wrong length")
 	}
 	// VoteDelegCert requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(9), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(9), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for vote_deleg_cert wrong length")
 	}
 	// StakeVoteDelegCert requires 4
-	wrong, _ = cbor.Marshal(
-		[]any{uint64(10), Credential{}, serialization.PubKeyHash{}},
+	wrong, _ = cbor.Encode(
+		[]any{uint64(10), StakeCredential{}, serialization.PubKeyHash{}},
 	)
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for stake_vote_deleg_cert wrong length")
 	}
 	// StakeRegDelegCert requires 4
-	wrong, _ = cbor.Marshal(
-		[]any{uint64(11), Credential{}, serialization.PubKeyHash{}},
+	wrong, _ = cbor.Encode(
+		[]any{uint64(11), StakeCredential{}, serialization.PubKeyHash{}},
 	)
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for stake_reg_deleg_cert wrong length")
 	}
 	// VoteRegDelegCert requires 4
-	wrong, _ = cbor.Marshal([]any{uint64(12), Credential{}, Drep{}})
+	wrong, _ = cbor.Encode([]any{uint64(12), StakeCredential{}, Drep{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for vote_reg_deleg_cert wrong length")
 	}
 	// StakeVoteRegDelegCert requires 5
-	wrong, _ = cbor.Marshal(
-		[]any{uint64(13), Credential{}, serialization.PubKeyHash{}, Drep{}},
+	wrong, _ = cbor.Encode(
+		[]any{
+			uint64(13),
+			StakeCredential{},
+			serialization.PubKeyHash{},
+			Drep{},
+		},
 	)
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for stake_vote_reg_deleg_cert wrong length")
 	}
 	// AuthCommitteeHotCert requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(14), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(14), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for auth_committee_hot_cert wrong length")
 	}
 	// ResignCommitteeColdCert requires >=2
-	wrong, _ = cbor.Marshal([]any{uint64(15)})
+	wrong, _ = cbor.Encode([]any{uint64(15)})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for resign_committee_cold_cert wrong length")
 	}
 	// RegDRepCert requires >=3
-	wrong, _ = cbor.Marshal([]any{uint64(16), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(16), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for reg_drep_cert wrong length")
 	}
 	// UnregDRepCert requires 3
-	wrong, _ = cbor.Marshal([]any{uint64(17), Credential{}})
+	wrong, _ = cbor.Encode([]any{uint64(17), StakeCredential{}})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for unreg_drep_cert wrong length")
 	}
 	// UpdateDRepCert requires >=2
-	wrong, _ = cbor.Marshal([]any{uint64(18)})
+	wrong, _ = cbor.Encode([]any{uint64(18)})
 	if _, err := UnmarshalCert(wrong); err == nil {
 		t.Fatalf("expected error for update_drep_cert wrong length")
 	}
@@ -382,15 +393,15 @@ func TestUnmarshalCert_WrongLengths(t *testing.T) {
 func TestUnmarshalCert_WrongTypes(t *testing.T) {
 	// pool_retirement expects (4, pool_keyhash(bytes[28]), epoch(uint))
 	// give wrong types
-	bz, _ := cbor.Marshal([]any{uint64(4), "not-bytes", "not-epoch"})
+	bz, _ := cbor.Encode([]any{uint64(4), "not-bytes", "not-epoch"})
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for pool_retirement wrong types")
 	}
 
 	// reg_drep_cert expects (16, drep_credential, coin, anchor?/nil)
 	// give anchor wrong type
-	bz2, _ := cbor.Marshal(
-		[]any{uint64(16), Credential{}, int64(1), "bad-anchor"},
+	bz2, _ := cbor.Encode(
+		[]any{uint64(16), StakeCredential{}, int64(1), "bad-anchor"},
 	)
 	if _, err := UnmarshalCert(bz2); err == nil {
 		t.Fatalf("expected error for reg_drep wrong anchor type")
@@ -398,7 +409,9 @@ func TestUnmarshalCert_WrongTypes(t *testing.T) {
 
 	// stake_vote_deleg_cert expects (10, stake_credential, pool_keyhash, drep)
 	// supply wrong pool key type (string)
-	bz3, _ := cbor.Marshal([]any{uint64(10), Credential{}, "bad-pool", Drep{}})
+	bz3, _ := cbor.Encode(
+		[]any{uint64(10), StakeCredential{}, "bad-pool", Drep{}},
+	)
 	if _, err := UnmarshalCert(bz3); err == nil {
 		t.Fatalf("expected error for stake_vote_deleg_cert wrong pool key type")
 	}
@@ -425,7 +438,7 @@ func TestUnmarshalCert_PoolRegistration_InvalidRelays(t *testing.T) {
 			[]any{"https://x", []byte{0x01}}, // PoolMetadata
 		},
 	}
-	bz, _ := cbor.Marshal(params)
+	bz, _ := cbor.Encode(params)
 	if _, err := UnmarshalCert(bz); err == nil {
 		t.Fatalf("expected error for pool_registration with invalid relay")
 	}
@@ -436,8 +449,8 @@ func TestCertificates_InvalidItem(t *testing.T) {
 	arr := []any{
 		[]any{"bad-kind"},
 	}
-	bz, _ := cbor.Marshal(arr)
-	var cs Certificates
+	bz, _ := cbor.Encode(arr)
+	cs := Certificates{}
 	if err := cs.UnmarshalCBOR(bz); err == nil {
 		t.Fatalf("expected error when certificates contain invalid item")
 	}
@@ -448,25 +461,25 @@ func TestCertificates_InvalidItem(t *testing.T) {
 			[]any{int64(0), []byte{}},
 		}, // malformed inner array (won't map to Credential properly)
 	}
-	bz, _ = cbor.Marshal(arr)
+	bz, _ = cbor.Encode(arr)
 	if err := cs.UnmarshalCBOR(bz); err == nil {
 		t.Fatalf("expected error for certificates item with wrong structure")
 	}
 }
 
 func TestStakeDeregistrationRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x04}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x04}},
 	}
 	cert := StakeDeregistration{Stake: cred}
 	_ = roundTrip(t, cert)
 }
 
 func TestStakeDelegationRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x05}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x05}},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x21
@@ -482,22 +495,22 @@ func TestPoolRetirementRoundTrip(t *testing.T) {
 }
 
 func TestRegAndUnregCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x06}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x06}},
 	}
 	_ = roundTrip(t, RegCert{Stake: cred, Coin: 100})
 	_ = roundTrip(t, UnregCert{Stake: cred, Coin: 50})
 }
 
 func TestVoteDelegCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x07}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x07}},
 	}
 	drep := Drep{
 		Code: 0,
-		Credential: &serialization.ConstrainedBytes{
+		StakeCredential: &serialization.ConstrainedBytes{
 			Payload: []byte{0x01, 0x02, 0x03},
 		},
 	}
@@ -506,9 +519,9 @@ func TestVoteDelegCertRoundTrip(t *testing.T) {
 }
 
 func TestStakeRegDelegCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x08}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x08}},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x44
@@ -517,28 +530,28 @@ func TestStakeRegDelegCertRoundTrip(t *testing.T) {
 }
 
 func TestVoteRegDelegCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x09}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x09}},
 	}
 	drep := Drep{
-		Code:       0,
-		Credential: &serialization.ConstrainedBytes{Payload: []byte{0x0A}},
+		Code:            0,
+		StakeCredential: &serialization.ConstrainedBytes{Payload: []byte{0x0A}},
 	}
 	cert := VoteRegDelegCert{Stake: cred, Drep: drep, Coin: 250}
 	_ = roundTrip(t, cert)
 }
 
 func TestStakeVoteRegDelegCertRoundTrip(t *testing.T) {
-	cred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0x0B}},
+	cred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0x0B}},
 	}
 	pool := serialization.PubKeyHash{}
 	pool[0] = 0x55
 	drep := Drep{
-		Code:       0,
-		Credential: &serialization.ConstrainedBytes{Payload: []byte{0x0C}},
+		Code:            0,
+		StakeCredential: &serialization.ConstrainedBytes{Payload: []byte{0x0C}},
 	}
 	cert := StakeVoteRegDelegCert{
 		Stake:       cred,
@@ -550,22 +563,22 @@ func TestStakeVoteRegDelegCertRoundTrip(t *testing.T) {
 }
 
 func TestAuthCommitteeHotCertRoundTrip(t *testing.T) {
-	cold := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xAA}},
+	cold := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xAA}},
 	}
-	hot := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xBB}},
+	hot := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xBB}},
 	}
 	cert := AuthCommitteeHotCert{Cold: cold, Hot: hot}
 	_ = roundTrip(t, cert)
 }
 
 func TestResignCommitteeColdCertAnchorsRoundTrip(t *testing.T) {
-	cold := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xCC}},
+	cold := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xCC}},
 	}
 	// nil anchor
 	_ = roundTrip(t, ResignCommitteeColdCert{Cold: cold, Anchor: nil})
@@ -575,18 +588,18 @@ func TestResignCommitteeColdCertAnchorsRoundTrip(t *testing.T) {
 }
 
 func TestUnregDRepCertRoundTrip(t *testing.T) {
-	drepCred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xDD}},
+	drepCred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xDD}},
 	}
 	cert := UnregDRepCert{Cred: drepCred, Coin: 5}
 	_ = roundTrip(t, cert)
 }
 
 func TestUpdateDRepCertAnchorsRoundTrip(t *testing.T) {
-	drepCred := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{0xEE}},
+	drepCred := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{0xEE}},
 	}
 	// nil anchor
 	_ = roundTrip(t, UpdateDRepCert{Cred: drepCred, Anchor: nil})
@@ -624,27 +637,27 @@ func TestCertificatesCollection_RoundTrip_AllKinds(t *testing.T) {
 		PoolOwners:    []serialization.PubKeyHash{owner},
 		Relays:        relays,
 		PoolMetadata: &struct {
-			_    struct{} `cbor:",toarray"`
+			cbor.StructAsArray
 			Url  string
 			Hash []byte
 		}{Url: "https://pool.meta", Hash: []byte{0xCA}},
 	}
 
-	stake := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{1}},
+	stake := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{1}},
 	}
-	credA := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{2}},
+	credA := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{2}},
 	}
-	credB := Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{Payload: []byte{3}},
+	credB := StakeCredential{
+		Code:            0,
+		StakeCredential: serialization.ConstrainedBytes{Payload: []byte{3}},
 	}
 	drep := Drep{
-		Code:       0,
-		Credential: &serialization.ConstrainedBytes{Payload: []byte{0xAA}},
+		Code:            0,
+		StakeCredential: &serialization.ConstrainedBytes{Payload: []byte{0xAA}},
 	}
 	anch := &Anchor{Url: "https://anch", DataHash: []byte{0x01}}
 
@@ -738,10 +751,10 @@ func TestCertificatesCollection_RoundTrip_AllKinds(t *testing.T) {
 		t.Fatalf("re-marshal certificates: %v", err)
 	}
 	var v1, v2 any
-	if err := cbor.Unmarshal(bz, &v1); err != nil {
+	if _, err := cbor.Decode(bz, &v1); err != nil {
 		t.Fatalf("unmarshal v1: %v", err)
 	}
-	if err := cbor.Unmarshal(bz2, &v2); err != nil {
+	if _, err := cbor.Decode(bz2, &v2); err != nil {
 		t.Fatalf("unmarshal v2: %v", err)
 	}
 	if !reflect.DeepEqual(v1, v2) {
@@ -766,16 +779,20 @@ func TestCertificatesCollection_EmptyAndMixed(t *testing.T) {
 	pool[0] = 7
 	mixed := Certificates{
 		UnregDRepCert{
-			Cred: Credential{
+			Cred: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{1}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{1},
+				},
 			},
 			Coin: 0,
 		},
 		StakeRegistration{
-			Stake: Credential{
+			Stake: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{2}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{2},
+				},
 			},
 		},
 		PoolRetirement{PoolKeyHash: pool, EpochNo: 1},
@@ -796,9 +813,11 @@ func FuzzUnmarshalCert(f *testing.F) {
 	// Seed with a few valid encodings
 	seed := []CertificateInterface{
 		StakeRegistration{
-			Stake: Credential{
+			Stake: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{1}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{1},
+				},
 			},
 		},
 		PoolRegistration{
@@ -808,9 +827,11 @@ func FuzzUnmarshalCert(f *testing.F) {
 			},
 		},
 		RegDRepCert{
-			Cred: Credential{
+			Cred: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{2}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{2},
+				},
 			},
 			Coin:   1,
 			Anchor: nil,
@@ -849,10 +870,10 @@ func FuzzUnmarshalCert(f *testing.F) {
 		}
 		// Compare canonical CBOR structures (may differ from input due to normalization)
 		var v2, v3 any
-		if err := cbor.Unmarshal(bz2, &v2); err != nil {
+		if _, err := cbor.Decode(bz2, &v2); err != nil {
 			t.Fatalf("unmarshal bz2: %v", err)
 		}
-		if err := cbor.Unmarshal(bz3, &v3); err != nil {
+		if _, err := cbor.Decode(bz3, &v3); err != nil {
 			t.Fatalf("unmarshal bz3: %v", err)
 		}
 		if !reflect.DeepEqual(v2, v3) {
@@ -869,9 +890,11 @@ func FuzzCertificatesUnmarshal(f *testing.F) {
 	}
 	one := Certificates{
 		StakeRegistration{
-			Stake: Credential{
+			Stake: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{3}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{3},
+				},
 			},
 		},
 	}
@@ -880,15 +903,19 @@ func FuzzCertificatesUnmarshal(f *testing.F) {
 	}
 	multi := Certificates{
 		StakeRegistration{
-			Stake: Credential{
+			Stake: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{1}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{1},
+				},
 			},
 		},
 		UnregDRepCert{
-			Cred: Credential{
+			Cred: StakeCredential{
 				Code: 0,
-				Hash: serialization.ConstrainedBytes{Payload: []byte{2}},
+				StakeCredential: serialization.ConstrainedBytes{
+					Payload: []byte{2},
+				},
 			},
 			Coin: 0,
 		},
@@ -935,10 +962,10 @@ func FuzzCertificatesUnmarshal(f *testing.F) {
 			t.Fatalf("marshal re-decoded: %v", err)
 		}
 		var v2, v3 any
-		if err := cbor.Unmarshal(bz2, &v2); err != nil {
+		if _, err := cbor.Decode(bz2, &v2); err != nil {
 			t.Fatalf("unmarshal bz2: %v", err)
 		}
-		if err := cbor.Unmarshal(bz3, &v3); err != nil {
+		if _, err := cbor.Decode(bz3, &v3); err != nil {
 			t.Fatalf("unmarshal bz3: %v", err)
 		}
 		if !reflect.DeepEqual(v2, v3) {

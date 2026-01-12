@@ -25,8 +25,8 @@ This function appends the specified transaction input to the `referenceInputsV3`
 import (
  "fmt"
  "encoding/hex"
- "github.com/Salvionied/apollo/ApolloBuilder"
- "github.com/Salvionied/apollo/serialization/TransactionInput"
+ "github.com/Salvionied/apollo/v2/ApolloBuilder"
+ "github.com/Salvionied/apollo/v2/serialization/TransactionInput"
 )
 
 func main() {

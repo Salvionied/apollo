@@ -3,35 +3,30 @@ package FixedChainContext
 import (
 	"reflect"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const TEST_ADDR = "addr_test1vr2p8st5t5cxqglyjky7vk98k7jtfhdpvhl4e97cezuhn0cqcexl7"
 
-type CborSerializable interface {
-	cbor.Marshaler
-	cbor.Unmarshaler
-}
-
-func CheckTwoWayCbor[T CborSerializable](serializable T) {
+func CheckTwoWayCbor[T any](serializable T) {
 	restored := new(T)
-	serialized, _ := cbor.Marshal(serializable)
+	serialized, _ := cbor.Encode(serializable)
 	// TODO: properly error check
-	_ = cbor.Unmarshal(serialized, restored)
+	_, _ = cbor.Decode(serialized, restored)
 	if !reflect.DeepEqual(serializable, restored) {
 		panic("Invalid serialization")
 	}
@@ -224,7 +219,10 @@ func (f FixedChainContext) EvaluateTx(
 	tx []uint8,
 ) (map[string]Redeemer.ExecutionUnits, error) {
 	return map[string]Redeemer.ExecutionUnits{
-		"spend:0": {Mem: 399882, Steps: 175940720},
+		"spend:0": {
+			Mem:   399882,
+			Steps: 175940720,
+		},
 	}, nil
 }
 

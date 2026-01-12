@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/NativeScript"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/NativeScript"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestNativeScriptsSerializationAndHash(t *testing.T) {
@@ -17,11 +17,11 @@ func TestNativeScriptsSerializationAndHash(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(decoded, &nativeScript)
+	_, err = cbor.Decode(decoded, &nativeScript)
 	if err != nil {
 		log.Fatal(err)
 	}
-	result, _ := cbor.Marshal(nativeScript)
+	result, _ := cbor.Encode(nativeScript)
 	if hex.EncodeToString(result) != cborHex {
 		t.Errorf("InvalidReserialization")
 	}
@@ -88,27 +88,27 @@ func TestSerializeAndDeserializeAnyType(t *testing.T) {
 	nokDeserialized := NativeScript.NativeScript{}
 	ibDeserialized := NativeScript.NativeScript{}
 	ihDeserialized := NativeScript.NativeScript{}
-	err := cbor.Unmarshal(pknsBytes, &pknsDeserialized)
+	_, err := cbor.Decode(pknsBytes, &pknsDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(anyBytes, &anyDeserialized)
+	_, err = cbor.Decode(anyBytes, &anyDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(allBytes, &allDeserialized)
+	_, err = cbor.Decode(allBytes, &allDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(nokBytes, &nokDeserialized)
+	_, err = cbor.Decode(nokBytes, &nokDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(ibBytes, &ibDeserialized)
+	_, err = cbor.Decode(ibBytes, &ibDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cbor.Unmarshal(ihBytes, &ihDeserialized)
+	_, err = cbor.Decode(ihBytes, &ihDeserialized)
 	if err != nil {
 		log.Fatal(err)
 	}

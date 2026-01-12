@@ -3,21 +3,21 @@ package testutils
 import (
 	"fmt"
 
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
 )
 
 var TESTADDRESS = "addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg52x"
 
 func InitUtxos() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 10)
 	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
@@ -43,7 +43,7 @@ func InitUtxos() []UTxO.UTxO {
 	return utxos
 }
 func InitUtxosDifferentiated() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 10)
 	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
@@ -73,7 +73,7 @@ func InitUtxosDifferentiated() []UTxO.UTxO {
 }
 
 func InitUtxosCongested() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 100)
 	for i := range 100 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),

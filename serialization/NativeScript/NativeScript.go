@@ -1,9 +1,11 @@
 package NativeScript
 
 import (
-	"github.com/Salvionied/apollo/serialization"
+	"errors"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -52,27 +54,148 @@ type NativeScript struct {
 }
 
 type SerialScripts struct {
-	_             struct{} `cbor:",toarray"`
+	cbor.StructAsArray
 	Tag           ScriptTag
 	NativeScripts []NativeScript
 }
 
 type SerialNok struct {
-	_             struct{} `cbor:",toarray"`
 	Tag           ScriptTag
 	NoK           int
 	NativeScripts []NativeScript
 }
 
+/*
+*
+
+	MarshalCBOR serializes the SerialNok into a CBOR-encoded byte slice.
+
+	Returns:
+		[]byte: The CBOR-encoded byte slice.
+		error: An error if serialization fails.
+*/
+func (s *SerialNok) MarshalCBOR() ([]byte, error) {
+	return cbor.Encode([]any{s.Tag, s.NoK, s.NativeScripts})
+}
+
+/*
+*
+
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a SerialNok.
+
+	Params:
+		value ([]byte): The CBOR-encoded data to be deserialized.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
+func (s *SerialNok) UnmarshalCBOR(value []byte) error {
+	var arr []any
+	_, err := cbor.Decode(value, &arr)
+	if err != nil {
+		return err
+	}
+	if arr == nil {
+		return errors.New("cbor.Decode returned nil arr")
+	}
+	s.Tag = ScriptTag(arr[0].(uint64))
+	s.NoK = int(arr[1].(uint64))
+	scriptsArr := arr[2].([]any)
+	s.NativeScripts = make([]NativeScript, len(scriptsArr))
+	for i, v := range scriptsArr {
+		scriptArr := v.([]any)
+		scriptBytes, _ := cbor.Encode(scriptArr)
+		if err := s.NativeScripts[i].UnmarshalCBOR(scriptBytes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type SerialInt struct {
-	_     struct{} `cbor:",toarray"`
 	Tag   ScriptTag
 	Value int64
 }
+
+/*
+*
+
+	MarshalCBOR serializes the SerialInt into a CBOR-encoded byte slice.
+
+	Returns:
+		[]byte: The CBOR-encoded byte slice.
+		error: An error if serialization fails.
+*/
+func (s *SerialInt) MarshalCBOR() ([]byte, error) {
+	return cbor.Encode([]any{s.Tag, s.Value})
+}
+
+/*
+*
+
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a SerialInt.
+
+	Params:
+		value ([]byte): The CBOR-encoded data to be deserialized.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
+func (s *SerialInt) UnmarshalCBOR(value []byte) error {
+	var arr []any
+	_, err := cbor.Decode(value, &arr)
+	if err != nil {
+		return err
+	}
+	if arr == nil {
+		return errors.New("cbor.Decode returned nil arr")
+	}
+	s.Tag = ScriptTag(arr[0].(uint64))
+	s.Value = int64(arr[1].(uint64))
+	return nil
+}
+
 type SerialHash struct {
-	_     struct{} `cbor:",toarray"`
 	Tag   ScriptTag
 	Value []byte
+}
+
+/*
+*
+
+	MarshalCBOR serializes the SerialHash into a CBOR-encoded byte slice.
+
+	Returns:
+		[]byte: The CBOR-encoded byte slice.
+		error: An error if serialization fails.
+*/
+func (s *SerialHash) MarshalCBOR() ([]byte, error) {
+	return cbor.Encode([]any{s.Tag, s.Value})
+}
+
+/*
+*
+
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a SerialHash.
+
+	Params:
+		value ([]byte): The CBOR-encoded data to be deserialized.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
+func (s *SerialHash) UnmarshalCBOR(value []byte) error {
+	var arr []any
+	_, err := cbor.Decode(value, &arr)
+	if err != nil {
+		return err
+	}
+	if arr == nil {
+		return errors.New("cbor.Decode returned nil arr")
+	}
+	s.Tag = ScriptTag(arr[0].(uint64))
+	s.Value = arr[1].([]byte)
+	return nil
 }
 
 /*
@@ -85,11 +208,12 @@ type SerialHash struct {
 		error: An error if the hashing fails.
 */
 func (ns NativeScript) Hash() (serialization.ScriptHash, error) {
-	finalbytes := []byte{0}
-	bytes, err := cbor.Marshal(ns)
+	bytes, err := cbor.Encode(ns)
 	if err != nil {
 		return serialization.ScriptHash{}, err
 	}
+	finalbytes := make([]byte, 0, 1+len(bytes))
+	finalbytes = append(finalbytes, 0)
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(28, nil)
 	if err != nil {
@@ -117,48 +241,52 @@ func (ns NativeScript) Hash() (serialization.ScriptHash, error) {
 		error: An error if decoding fails, nil otherwise.
 */
 func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
-	var tmp = make([]any, 0)
-	err := cbor.Unmarshal(value, &tmp)
+	var tmp any
+	_, err := cbor.Decode(value, &tmp)
 	if err != nil {
 		return err
 	}
-	ok, _ := tmp[0].(uint64)
-	switch int(ok) {
+	tmpSlice, ok := tmp.([]any)
+	if !ok {
+		return errors.New("invalid CBOR structure")
+	}
+	tag, _ := tmpSlice[0].(uint64)
+	switch int(tag) {
 	case 0:
 		tmp := new(SerialHash)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 		ns.KeyHash = tmp.Value
 		ns.Tag = tmp.Tag
 		return err
 	case 1:
 		tmp := new(SerialScripts)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 		ns.Tag = tmp.Tag
 		ns.NativeScripts = tmp.NativeScripts
 		return err
 	case 2:
 		tmp := new(SerialScripts)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 		ns.Tag = tmp.Tag
 		ns.NativeScripts = tmp.NativeScripts
 		return err
 	case 3:
 		tmp := new(SerialNok)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 		ns.NativeScripts = tmp.NativeScripts
 		ns.Tag = tmp.Tag
 		ns.NoK = tmp.NoK
 		return err
 	case 4:
 		tmp := new(SerialInt)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 
 		ns.Tag = tmp.Tag
 		ns.Before = tmp.Value
 		return err
 	case 5:
 		tmp := new(SerialInt)
-		err := cbor.Unmarshal(value, &tmp)
+		_, err := cbor.Decode(value, &tmp)
 		ns.Tag = tmp.Tag
 		ns.After = tmp.Value
 		return err
@@ -179,17 +307,17 @@ func (ns *NativeScript) UnmarshalCBOR(value []byte) error {
 func (ns *NativeScript) MarshalCBOR() ([]uint8, error) {
 	switch ns.Tag {
 	case 0:
-		return cbor.Marshal(SerialHash{Tag: ns.Tag, Value: ns.KeyHash})
+		return cbor.Encode(SerialHash{Tag: ns.Tag, Value: ns.KeyHash})
 	case 1:
-		return cbor.Marshal(
+		return cbor.Encode(
 			SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts},
 		)
 	case 2:
-		return cbor.Marshal(
+		return cbor.Encode(
 			SerialScripts{Tag: ns.Tag, NativeScripts: ns.NativeScripts},
 		)
 	case 3:
-		return cbor.Marshal(
+		return cbor.Encode(
 			SerialNok{
 				Tag:           ns.Tag,
 				NoK:           ns.NoK,
@@ -197,9 +325,9 @@ func (ns *NativeScript) MarshalCBOR() ([]uint8, error) {
 			},
 		)
 	case 4:
-		return cbor.Marshal(SerialInt{Tag: ns.Tag, Value: ns.Before})
+		return cbor.Encode(SerialInt{Tag: ns.Tag, Value: ns.Before})
 	case 5:
-		return cbor.Marshal(SerialInt{Tag: ns.Tag, Value: ns.After})
+		return cbor.Encode(SerialInt{Tag: ns.Tag, Value: ns.After})
 
 	default:
 		return make([]uint8, 0), nil

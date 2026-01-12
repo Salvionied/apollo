@@ -3,11 +3,11 @@ package MultiAsset_test
 import (
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
 )
 
 var policyT1 = Policy.PolicyId{
@@ -324,13 +324,20 @@ func TestClone(t *testing.T) {
 		policyT1: Asset.Asset[int64]{assetNameT1: 1, assetNameT2: 0},
 	}
 	ma2 := ma.Clone()
+	if ma2 == nil {
+		t.Fatal("Clone returned nil")
+	}
 	if !ma.Equal(ma2) {
 		t.Errorf("Expected true, got false")
 	}
 	if &ma == &ma2 {
 		t.Errorf("Expected false, got true")
 	}
-	ma2[policyT1][assetNameT1] = 2
+	innerAsset := ma2[policyT1]
+	if innerAsset == nil {
+		t.Fatal("inner asset is nil")
+	}
+	innerAsset[assetNameT1] = 2
 	if ma.Equal(ma2) {
 		t.Errorf("Expected false, got true")
 	}

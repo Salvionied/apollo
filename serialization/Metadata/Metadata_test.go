@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Metadata"
-	"github.com/Salvionied/apollo/serialization/NativeScript"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Metadata"
+	"github.com/Salvionied/apollo/v2/serialization/NativeScript"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestAuxiliaryData(t *testing.T) {
@@ -25,7 +25,7 @@ func TestAuxiliaryData(t *testing.T) {
 	}
 	alonzoMeta.Metadata = meta
 	aux.SetShelleyMetadata(alonzoMeta)
-	marshaled, err := cbor.Marshal(aux)
+	marshaled, err := cbor.Encode(aux)
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
@@ -68,7 +68,7 @@ func TestAuxiliaryDataExtended(t *testing.T) {
 	shelleyMeta.Metadata = meta
 
 	Aux.SetShelleyMetadata(shelleyMeta)
-	marshaled, err := cbor.Marshal(Aux)
+	marshaled, err := cbor.Encode(Aux)
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
@@ -100,7 +100,7 @@ func TestAuxiliaryDataExtended(t *testing.T) {
 		{Tag: NativeScript.ScriptAll},
 	}
 	AlonzoAux.SetAlonzoMetadata(alonzoMeta)
-	marshaled, err = cbor.Marshal(AlonzoAux)
+	marshaled, err = cbor.Encode(AlonzoAux)
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
@@ -127,7 +127,7 @@ func TestAuxiliaryDataExtended(t *testing.T) {
 	}
 	BasicAux := Metadata.AuxiliaryData{}
 	BasicAux.SetBasicMetadata(meta)
-	marshaled, err = cbor.Marshal(BasicAux)
+	marshaled, err = cbor.Encode(BasicAux)
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
@@ -172,15 +172,15 @@ func TestUnmarshal(t *testing.T) {
 
 func TestMarshalEmptyAux(t *testing.T) {
 	Aux := Metadata.AuxiliaryData{}
-	marshaled, err := cbor.Marshal(Aux)
+	marshaled, err := cbor.Encode(Aux)
 	if err != nil {
 		t.Errorf("Error while marshaling")
 	}
-	if hex.EncodeToString(marshaled) != `f6` {
+	if hex.EncodeToString(marshaled) != `a0` {
 		t.Errorf(
 			"InvalidReserialization got %s expected %s",
 			hex.EncodeToString(marshaled),
-			`f6`,
+			`a0`,
 		)
 	}
 }

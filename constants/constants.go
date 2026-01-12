@@ -1,6 +1,6 @@
 package constants
 
-import "github.com/Salvionied/apollo/serialization/Key"
+import "github.com/Salvionied/apollo/v2/serialization/Key"
 
 const MIN_LOVELACE = 1000000
 

@@ -4,11 +4,11 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 var policy = Policy.PolicyId{
@@ -61,13 +61,13 @@ func TestNoAssetPreAlonzoMarshaling(t *testing.T) {
 		Coin:  100,
 		Value: MultiAsset.MultiAsset[int64]{},
 	}
-	marshaled, _ := cbor.Marshal(val0)
+	marshaled, _ := cbor.Encode(val0)
 	if hex.EncodeToString(marshaled) != "821864a0" {
 		t.Errorf("Marshaling failed. Expected: 821864a0, Got: %x", marshaled)
 	}
 
 	var unmarshaled Amount.Amount
-	err := cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err := cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Error("Failed unmarshaling", err)
 	}
@@ -86,7 +86,7 @@ func TestPreAlonzoMarshalingWAssets(t *testing.T) {
 		Value: MultiAsset.MultiAsset[int64]{
 			policy: {assetNamet1: 100},
 		}}
-	marshaled, _ := cbor.Marshal(val0)
+	marshaled, _ := cbor.Encode(val0)
 	if hex.EncodeToString(
 		marshaled,
 	) != "821864a1581cfc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61a144746573741864" {
@@ -96,7 +96,7 @@ func TestPreAlonzoMarshalingWAssets(t *testing.T) {
 		)
 	}
 	var unmarshaled Amount.Amount
-	err := cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err := cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Error("Failed unmarshaling", err)
 	}

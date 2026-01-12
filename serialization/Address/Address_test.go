@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
 )
 
 func TestDecodeAddress(t *testing.T) {
@@ -2066,6 +2066,9 @@ func TestAddressFromBytes(t *testing.T) {
 		addr.StakingPart,
 		0,
 	)
+	if newAddr == nil {
+		t.Fatal("WalletAddressFromBytes returned nil")
+	}
 	if newAddr.String() != "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x" {
 		t.Errorf(
 			"\nexpected: %v\nresult: %v",
@@ -2078,6 +2081,9 @@ func TestAddressFromBytes(t *testing.T) {
 		addr.StakingPart,
 		1,
 	)
+	if newAddr == nil {
+		t.Fatal("WalletAddressFromBytes returned nil")
+	}
 	if newAddr.String() != "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae" {
 		t.Errorf(
 			"\nexpected: %v\nresult: %v",
@@ -2086,6 +2092,9 @@ func TestAddressFromBytes(t *testing.T) {
 		)
 	}
 	newAddr = Address.WalletAddressFromBytes(addr.PaymentPart, nil, 0)
+	if newAddr == nil {
+		t.Fatal("WalletAddressFromBytes returned nil")
+	}
 	if newAddr.String() != "addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8" {
 		t.Errorf(
 			"\nexpected: %v\nresult: %v",

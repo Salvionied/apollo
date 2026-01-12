@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"sort"
 
-	"github.com/Salvionied/apollo/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
 )
 
 /*
@@ -49,7 +49,7 @@ func SortUtxos(utxos []UTxO.UTxO) []UTxO.UTxO {
 		[]UTxO.UTxO: A new slice of UTxO objects sorted based on input strings.
 */
 func SortInputs(inputs []UTxO.UTxO) []UTxO.UTxO {
-	sortedInputs := make([]UTxO.UTxO, 0)
+	sortedInputs := make([]UTxO.UTxO, 0, len(inputs))
 	sortedInputs = append(sortedInputs, inputs...)
 	sort.Slice(sortedInputs, func(i, j int) bool {
 		iTxId := hex.EncodeToString(sortedInputs[i].Input.TransactionId)

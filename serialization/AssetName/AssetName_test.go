@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestAssetNameCreators(t *testing.T) {
@@ -17,13 +17,23 @@ func TestAssetNameCreators(t *testing.T) {
 		t.Errorf("AssetName should be '74657374'")
 	}
 
-	assetName = *AssetName.NewAssetNameFromHexString("74657374")
+	an2 := AssetName.NewAssetNameFromHexString("74657374")
+	if an2 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	assetName = *an2
 	if assetName.String() != "test" {
 		t.Errorf("AssetName should be 'test'")
 	}
 	if assetName.HexString() != "74657374" {
 		t.Errorf("AssetName should be '74657374'")
 	}
+
+	an := AssetName.NewAssetNameFromHexString("74657374")
+	if an == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	assetName = *an
 }
 
 func TestMarshal(t *testing.T) {
@@ -96,7 +106,7 @@ func TestInvalidUnMarshal(t *testing.T) {
 	decoded, _ := hex.DecodeString(
 		"fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61fc11a9ef431f81b837736be5f53e4da29b9469c983d07f321262ce61",
 	)
-	marshaled, _ := cbor.Marshal(decoded)
+	marshaled, _ := cbor.Encode(decoded)
 	assetName := AssetName.AssetName{}
 	err := assetName.UnmarshalCBOR(marshaled)
 	if err == nil {

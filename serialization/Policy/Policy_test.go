@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 const SAMPLE_POLICY = "95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0b55fb00"
@@ -14,7 +14,7 @@ const INV_LEN_SAMPLE_POLICY = "95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0
 
 func TestPolicyMarshalingUnmarshaling(t *testing.T) {
 	p := Policy.PolicyId{Value: SAMPLE_POLICY}
-	marshaled, _ := cbor.Marshal(p)
+	marshaled, _ := cbor.Encode(p)
 	if hex.EncodeToString(
 		marshaled,
 	) != "581c95a427e384527065f2f8946f5e86320d0117839a5e98ea2c0b55fb00" {
@@ -26,7 +26,7 @@ func TestPolicyMarshalingUnmarshaling(t *testing.T) {
 		)
 	}
 	var p2 Policy.PolicyId
-	err := cbor.Unmarshal(marshaled, &p2)
+	_, err := cbor.Decode(marshaled, &p2)
 	if err != nil {
 		t.Error("Failed unmarshaling", err)
 	}

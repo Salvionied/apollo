@@ -8,16 +8,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
+	apolloUtils "github.com/Salvionied/apollo/v2/txBuilding/Utils"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/maestro-org/go-sdk/client"
+	"github.com/maestro-org/go-sdk/models"
 	"github.com/maestro-org/go-sdk/utils"
 )
 
@@ -120,16 +122,25 @@ func (mcc *MaestroChainContext) LatestEpoch() (Base.Epoch, error) {
 
 }
 
-func parseMaestroFloat(floatString string) float32 {
+func parseMaestroFloat(floatString string) (float32, error) {
 	if floatString == "" {
-		return 0
+		return 0, nil
 	}
 	splitString := strings.Split(floatString, "/")
+	if len(splitString) != 2 {
+		return 0, fmt.Errorf("invalid fraction format: %s", floatString)
+	}
 	top := splitString[0]
 	bottom := splitString[1]
-	topFloat, _ := strconv.ParseFloat(top, 32)
-	bottomFloat, _ := strconv.ParseFloat(bottom, 32)
-	return float32(topFloat / bottomFloat)
+	topFloat, err := strconv.ParseFloat(top, 32)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse numerator: %w", err)
+	}
+	bottomFloat, err := strconv.ParseFloat(bottom, 32)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse denominator: %w", err)
+	}
+	return float32(topFloat / bottomFloat), nil
 }
 
 func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, error) {
@@ -156,14 +167,32 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 		ppFromApi.Data.StakePoolDeposit.LovelaceAmount.Lovelace,
 		10,
 	)
-	parsedPoolInfl, _ := strconv.ParseFloat(
+	parsedPoolInfl, err := strconv.ParseFloat(
 		ppFromApi.Data.StakePoolPledgeInfluence,
 		32,
 	)
+	if err != nil {
+		return protocolParams, fmt.Errorf(
+			"failed to parse StakePoolPledgeInfluence: %w",
+			err,
+		)
+	}
 	protocolParams.PooolInfluence = float32(parsedPoolInfl)
-	monExp, _ := strconv.ParseFloat(ppFromApi.Data.MonetaryExpansion, 32)
+	monExp, err := strconv.ParseFloat(ppFromApi.Data.MonetaryExpansion, 32)
+	if err != nil {
+		return protocolParams, fmt.Errorf(
+			"failed to parse MonetaryExpansion: %w",
+			err,
+		)
+	}
 	protocolParams.MonetaryExpansion = float32(monExp)
-	tresExp, _ := strconv.ParseFloat(ppFromApi.Data.TreasuryExpansion, 32)
+	tresExp, err := strconv.ParseFloat(ppFromApi.Data.TreasuryExpansion, 32)
+	if err != nil {
+		return protocolParams, fmt.Errorf(
+			"failed to parse TreasuryExpansion: %w",
+			err,
+		)
+	}
 	protocolParams.TreasuryExpansion = float32(tresExp)
 	protocolParams.DecentralizationParam = 0
 	protocolParams.ExtraEntropy = ""
@@ -179,12 +208,26 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 		ppFromApi.Data.MinStakePoolCost.LovelaceAmount.Lovelace,
 		10,
 	)
-	protocolParams.PriceMem = parseMaestroFloat(
+	priceMem, err := parseMaestroFloat(
 		ppFromApi.Data.ScriptExecutionPrices.Memory,
 	)
-	protocolParams.PriceStep = parseMaestroFloat(
+	if err != nil {
+		return protocolParams, fmt.Errorf(
+			"failed to parse ScriptExecutionPrices.Memory: %w",
+			err,
+		)
+	}
+	protocolParams.PriceMem = priceMem
+	priceStep, err := parseMaestroFloat(
 		ppFromApi.Data.ScriptExecutionPrices.Steps,
 	)
+	if err != nil {
+		return protocolParams, fmt.Errorf(
+			"failed to parse ScriptExecutionPrices.Steps: %w",
+			err,
+		)
+	}
+	protocolParams.PriceStep = priceStep
 	protocolParams.MaxTxExMem = strconv.FormatInt(
 		ppFromApi.Data.MaxExecutionUnitsPerTransaction.Memory,
 		10,
@@ -274,8 +317,14 @@ func (mcc *MaestroChainContext) MaxTxFee() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse MaxTxExSteps: %w", err)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse MaxTxExMem: %w", err)
+	}
 	return Base.Fee(mcc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
@@ -320,12 +369,14 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(
 	}
 	decodedCbor, _ := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
 	output := TransactionOutput.TransactionOutput{}
-	err = cbor.Unmarshal(decodedCbor, &output)
+	_, err = cbor.Decode(decodedCbor, &output)
 	if err != nil {
-
 		return nil, err
 	}
-	decodedHash, _ := hex.DecodeString(txHash)
+	decodedHash, err := apolloUtils.DecodeTxHash(txHash)
+	if err != nil {
+		return nil, err
+	}
 	utxo = &UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: decodedHash,
@@ -334,6 +385,23 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(
 		Output: output,
 	}
 	return utxo, nil
+}
+
+// convertMaestroUtxo converts a Maestro SDK Utxo to a Base.AddressUTXO.
+func convertMaestroUtxo(maestroUtxo models.Utxo) Base.AddressUTXO {
+	assets := make([]Base.AddressAmount, 0, len(maestroUtxo.Assets))
+	for _, asset := range maestroUtxo.Assets {
+		assets = append(assets, Base.AddressAmount{
+			Unit:     asset.Unit,
+			Quantity: strconv.FormatInt(asset.Amount, 10),
+		})
+	}
+	return Base.AddressUTXO{
+		Amount:      assets,
+		OutputIndex: int(maestroUtxo.Index),
+		TxHash:      maestroUtxo.TxHash,
+		InlineDatum: fmt.Sprint(maestroUtxo.Datum),
+	}
 }
 
 func (mcc *MaestroChainContext) AddressUtxos(
@@ -349,20 +417,7 @@ func (mcc *MaestroChainContext) AddressUtxos(
 	}
 
 	for _, maestroUtxo := range utxosAtAddressAtApi.Data {
-		assets := make([]Base.AddressAmount, 0)
-		for _, asset := range maestroUtxo.Assets {
-			assets = append(assets, Base.AddressAmount{
-				Unit:     asset.Unit,
-				Quantity: strconv.FormatInt(asset.Amount, 10),
-			})
-		}
-		utxo := Base.AddressUTXO{
-			Amount:      assets,
-			OutputIndex: int(maestroUtxo.Index),
-			TxHash:      maestroUtxo.TxHash,
-			InlineDatum: fmt.Sprint(maestroUtxo.Datum),
-		}
-		addressUtxos = append(addressUtxos, utxo)
+		addressUtxos = append(addressUtxos, convertMaestroUtxo(maestroUtxo))
 	}
 
 	if gather {
@@ -376,26 +431,37 @@ func (mcc *MaestroChainContext) AddressUtxos(
 				return addressUtxos, err
 			}
 			for _, maestroUtxo := range utxosAtAddressAtApi.Data {
-				assets := make([]Base.AddressAmount, 0)
-				for _, asset := range maestroUtxo.Assets {
-					assets = append(assets, Base.AddressAmount{
-						Unit:     asset.Unit,
-						Quantity: strconv.FormatInt(asset.Amount, 10),
-					})
-				}
-				utxo := Base.AddressUTXO{
-					Amount:      assets,
-					OutputIndex: int(maestroUtxo.Index),
-					TxHash:      maestroUtxo.TxHash,
-					InlineDatum: fmt.Sprint(maestroUtxo.Datum),
-				}
-				addressUtxos = append(addressUtxos, utxo)
+				addressUtxos = append(
+					addressUtxos,
+					convertMaestroUtxo(maestroUtxo),
+				)
 			}
 		}
 	}
 
 	return addressUtxos, nil
+}
 
+// convertMaestroUtxoWithCbor converts a Maestro SDK Utxo with CBOR data
+// to a UTxO.UTxO.
+func convertMaestroUtxoWithCbor(maestroUtxo models.Utxo) (UTxO.UTxO, error) {
+	decodedHash, err := apolloUtils.DecodeTxHash(maestroUtxo.TxHash)
+	if err != nil {
+		return UTxO.UTxO{}, err
+	}
+	output := TransactionOutput.TransactionOutput{}
+	decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
+	_, err = cbor.Decode(decodedCbor, &output)
+	if err != nil {
+		return UTxO.UTxO{}, err
+	}
+	return UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: decodedHash,
+			Index:         int(maestroUtxo.Index),
+		},
+		Output: output,
+	}, nil
 }
 
 func (mcc *MaestroChainContext) Utxos(
@@ -414,19 +480,10 @@ func (mcc *MaestroChainContext) Utxos(
 	}
 
 	for _, maestroUtxo := range utxosAtAddressAtApi.Data {
-		utxo := UTxO.UTxO{}
-		decodedHash, _ := hex.DecodeString(maestroUtxo.TxHash)
-		utxo.Input = TransactionInput.TransactionInput{
-			TransactionId: decodedHash,
-			Index:         int(maestroUtxo.Index),
-		}
-		output := TransactionOutput.TransactionOutput{}
-		decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-		err = cbor.Unmarshal(decodedCbor, &output)
+		utxo, err := convertMaestroUtxoWithCbor(maestroUtxo)
 		if err != nil {
 			return nil, err
 		}
-		utxo.Output = output
 		utxos = append(utxos, utxo)
 	}
 
@@ -440,19 +497,10 @@ func (mcc *MaestroChainContext) Utxos(
 			return utxos, err
 		}
 		for _, maestroUtxo := range utxosAtAddressAtApi.Data {
-			utxo := UTxO.UTxO{}
-			decodedHash, _ := hex.DecodeString(maestroUtxo.TxHash)
-			utxo.Input = TransactionInput.TransactionInput{
-				TransactionId: decodedHash,
-				Index:         int(maestroUtxo.Index),
-			}
-			output := TransactionOutput.TransactionOutput{}
-			decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
-			err = cbor.Unmarshal(decodedCbor, &output)
+			utxo, err := convertMaestroUtxoWithCbor(maestroUtxo)
 			if err != nil {
 				return nil, err
 			}
-			utxo.Output = output
 			utxos = append(utxos, utxo)
 		}
 	}
@@ -498,8 +546,8 @@ func (mcc *MaestroChainContext) EvaluateTx(
 	}
 	for _, eval := range evaluation {
 		final_result[eval.RedeemerTag+":"+strconv.Itoa(eval.RedeemerIndex)] = Redeemer.ExecutionUnits{
-			Mem:   eval.ExUnits.Mem,
-			Steps: eval.ExUnits.Steps,
+			Mem:   uint64(eval.ExUnits.Mem),
+			Steps: uint64(eval.ExUnits.Steps),
 		}
 	}
 	return final_result, nil
@@ -515,7 +563,7 @@ func (mcc *MaestroChainContext) GetContractCbor(
 	scCborBytes := res.Data.Bytes
 	bytes := []byte{}
 	decodedBytes, _ := hex.DecodeString(scCborBytes)
-	_ = cbor.Unmarshal(decodedBytes, &bytes)
+	_, _ = cbor.Decode(decodedBytes, &bytes)
 	return hex.EncodeToString(bytes), nil
 
 }

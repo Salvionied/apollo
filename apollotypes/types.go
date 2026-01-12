@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"slices"
 
-	"github.com/Salvionied/apollo/serialization"
-	serAddress "github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Certificate"
-	"github.com/Salvionied/apollo/serialization/Key"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionWitnessSet"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/VerificationKeyWitness"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/serialization"
+	serAddress "github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Certificate"
+	"github.com/Salvionied/apollo/v2/serialization/Key"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionWitnessSet"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/VerificationKeyWitness"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
 )
 
 type Wallet interface {
@@ -198,7 +198,7 @@ func isKeyHashUsedFromUtxos(
 }
 
 func checkCredentialKeyHash(
-	cred *Certificate.Credential,
+	cred *Certificate.StakeCredential,
 	keyHash serialization.PubKeyHash,
 ) bool {
 	if cred != nil && cred.Kind() == 0 && cred.KeyHash() == keyHash {

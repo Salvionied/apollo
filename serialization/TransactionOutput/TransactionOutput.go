@@ -2,22 +2,139 @@ package TransactionOutput
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Value"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type TransactionOutputAlonzo struct {
-	Address   Address.Address         `cbor:"0,keyasint"`
-	Amount    Value.AlonzoValue       `cbor:"1,keyasint"`
-	Datum     *PlutusData.DatumOption `cbor:"2,keyasint,omitempty"`
-	ScriptRef *PlutusData.ScriptRef   `cbor:"3,keyasint,omitempty"`
+	cbor.StructAsArray
+	Address       Address.Address         `cbor:"0"`
+	Amount        Value.AlonzoValue       `cbor:"1"`
+	Datum         *PlutusData.DatumOption `cbor:"2,omitempty"`
+	ScriptRef     *PlutusData.ScriptRef   `cbor:"3,omitempty"`
+	WasMapEncoded bool                    `cbor:"-"` // Tracks if output was originally map-encoded (vs array)
+}
+
+/*
+*
+
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into a TransactionOutputAlonzo,
+	handling both map and array encodings.
+
+	Params:
+
+
+		data ([]byte): A CBOR-encoded byte slice representing the TransactionOutputAlonzo.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
+func (txo *TransactionOutputAlonzo) UnmarshalCBOR(data []byte) error {
+	var x any
+	_, err := cbor.Decode(data, &x)
+	if err != nil {
+		return err
+	}
+
+	// Check if it's a map (map-encoded) or array (array-encoded)
+	if reflect.TypeOf(x).Kind() == reflect.Map {
+		// Map-encoded: decode manually and remember this
+		txo.WasMapEncoded = true
+		var mapData map[int]cbor.RawMessage
+		_, err = cbor.Decode(data, &mapData)
+		if err != nil {
+			return err
+		}
+
+		// Decode address (key 0)
+		if addrBytes, ok := mapData[0]; ok {
+			_, err = cbor.Decode(addrBytes, &txo.Address)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Decode amount (key 1)
+		if amtBytes, ok := mapData[1]; ok {
+			_, err = cbor.Decode(amtBytes, &txo.Amount)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Decode datum (key 2, optional)
+		if datumBytes, ok := mapData[2]; ok {
+			var datum PlutusData.DatumOption
+			_, err = cbor.Decode(datumBytes, &datum)
+			if err != nil {
+				return err
+			}
+			txo.Datum = &datum
+		}
+
+		// Decode script ref (key 3, optional)
+		if scriptBytes, ok := mapData[3]; ok {
+			var scriptRef PlutusData.ScriptRef
+			_, err = cbor.Decode(scriptBytes, &scriptRef)
+			if err != nil {
+				return err
+			}
+			txo.ScriptRef = &scriptRef
+		}
+
+		return nil
+	} else {
+		// Array-encoded: use default struct unmarshaling
+		txo.WasMapEncoded = false
+		type txoAlias TransactionOutputAlonzo
+		var temp txoAlias
+		_, err = cbor.Decode(data, &temp)
+		if err != nil {
+			return err
+		}
+		*txo = TransactionOutputAlonzo(temp)
+		return nil
+	}
+}
+
+/*
+*
+
+	MarshalCBOR serializes the TransactionOutputAlonzo into a CBOR-encoded byte slice,
+	preserving the original encoding format (map vs array).
+
+	Returns:
+
+
+	[]byte: A CBOR-encoded byte slice representing the TransactionOutputAlonzo.
+	error: An error if serialization fails.
+*/
+func (txo *TransactionOutputAlonzo) MarshalCBOR() ([]byte, error) {
+	if txo.WasMapEncoded {
+		// Encode as map to preserve original format
+		mapData := make(map[int]any)
+		mapData[0] = txo.Address
+		mapData[1] = txo.Amount
+		if txo.Datum != nil {
+			mapData[2] = txo.Datum
+		}
+		if txo.ScriptRef != nil {
+			mapData[3] = txo.ScriptRef
+		}
+		return cbor.Encode(mapData)
+	} else {
+		// Encode as array (default)
+		type txoAlias TransactionOutputAlonzo
+		return cbor.Encode(txoAlias(*txo))
+	}
 }
 
 /*
@@ -99,15 +216,41 @@ func (txo TransactionOutputShelley) String() string {
 }
 
 type TxOWithDatum struct {
-	_         struct{} `cbor:",toarray"`
+	cbor.StructAsArray
 	Address   Address.Address
 	Amount    Value.Value
 	DatumHash []byte
 }
 type TxOWithoutDatum struct {
-	_       struct{} `cbor:",toarray"`
-	Address Address.Address
-	Amount  Value.Value
+	cbor.StructAsArray
+	Address Address.Address `cbor:"0"`
+	Amount  Value.Value     `cbor:"1"`
+}
+
+func (t *TxOWithoutDatum) UnmarshalCBOR(data []byte) error {
+	var temp any
+	_, err := cbor.Decode(data, &temp)
+	if err != nil {
+		return err
+	}
+	arr, ok := temp.([]any)
+	if !ok {
+		return errors.New("output is not an array")
+	}
+	if len(arr) < 2 {
+		return errors.New("output array too short")
+	}
+	addressData, _ := cbor.Encode(arr[0])
+	err = t.Address.UnmarshalCBOR(addressData)
+	if err != nil {
+		return err
+	}
+	amountData, _ := cbor.Encode(arr[1])
+	err = t.Amount.UnmarshalCBOR(amountData)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 /*
@@ -128,10 +271,10 @@ type TxOWithoutDatum struct {
 */
 func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 	var x []any
-	_ = cbor.Unmarshal(value, &x)
+	_, _ = cbor.Decode(value, &x)
 	if len(x) == 3 {
 		val := new(TxOWithDatum)
-		err := cbor.Unmarshal(value, &val)
+		_, err := cbor.Decode(value, &val)
 		if err != nil {
 			return err
 		}
@@ -146,7 +289,7 @@ func (txo *TransactionOutputShelley) UnmarshalCBOR(value []byte) error {
 		}
 	} else {
 		val := new(TxOWithoutDatum)
-		err := cbor.Unmarshal(value, &val)
+		_, err := cbor.Decode(value, &val)
 		if err != nil {
 			return err
 		}
@@ -175,12 +318,12 @@ func (txo *TransactionOutputShelley) MarshalCBOR() ([]byte, error) {
 		val.DatumHash = txo.DatumHash.Payload[:]
 		val.Address = txo.Address
 		val.Amount = txo.Amount
-		return cbor.Marshal(val)
+		return cbor.Encode(val)
 	} else {
 		val := new(TxOWithoutDatum)
 		val.Address = txo.Address
 		val.Amount = txo.Amount
-		return cbor.Marshal(val)
+		return cbor.Encode(val)
 	}
 }
 
@@ -483,17 +626,19 @@ func (txo TransactionOutput) String() string {
 */
 func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 	var x any
-	_ = cbor.Unmarshal(value, &x)
-	if reflect.TypeOf(x).String() == "[]interface {}" {
+	_, _ = cbor.Decode(value, &x)
+	switch x.(type) {
+	case []any:
+		// Array format = pre-Alonzo (Shelley)
 		txo.IsPostAlonzo = false
-		err := cbor.Unmarshal(value, &txo.PreAlonzo)
+		_, err := cbor.Decode(value, &txo.PreAlonzo)
 		if err != nil {
 			return err
 		}
-
-	} else {
+	default:
+		// Map format = post-Alonzo
 		txo.IsPostAlonzo = true
-		err := cbor.Unmarshal(value, &txo.PostAlonzo)
+		_, err := cbor.Decode(value, &txo.PostAlonzo)
 		if err != nil {
 			return err
 		}
@@ -515,9 +660,9 @@ func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
 */
 func (txo *TransactionOutput) MarshalCBOR() ([]byte, error) {
 	if txo.IsPostAlonzo {
-		return cbor.Marshal(txo.PostAlonzo)
+		return cbor.Encode(txo.PostAlonzo)
 	} else {
-		return cbor.Marshal(txo.PreAlonzo)
+		return cbor.Encode(txo.PreAlonzo)
 	}
 }
 

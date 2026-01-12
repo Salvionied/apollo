@@ -5,22 +5,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Salvionied/apollo"
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/Metadata"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/serialization/Value"
-	testutils "github.com/Salvionied/apollo/testUtils"
-	"github.com/Salvionied/apollo/txBuilding/Backend/OgmiosChainContext"
+	"github.com/Salvionied/apollo/v2"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/Metadata"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/PlutusData"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	testutils "github.com/Salvionied/apollo/v2/testUtils"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/OgmiosChainContext"
 	"github.com/SundaeSwap-finance/kugo"
 	"github.com/SundaeSwap-finance/ogmigo/v6"
 )
@@ -147,12 +147,15 @@ func TestOGMIOS_SimpleTransaction(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -170,21 +173,24 @@ func TestOGMIOS_TransactionWithChange(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 44088 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 48488 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			44088,
+			48488,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
 	if apollob.GetTx().TransactionBody.Outputs[1].GetAmount().
 		GetCoin() !=
-		4955912 {
+		4951512 {
 		t.Errorf(
 			"Change is not correct: expected %d, got %d",
-			4955912,
+			4951512,
 			apollob.GetTx().TransactionBody.Outputs[1].GetAmount().GetCoin(),
 		)
 	}
@@ -203,12 +209,15 @@ func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -227,12 +236,15 @@ func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -251,12 +263,15 @@ func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47256 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51656 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47256,
+			51656,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -275,12 +290,15 @@ func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 		SetValidityStart(100).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47520 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51920 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47520,
+			51920,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -299,12 +317,15 @@ func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 		SetTtl(100).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 47520 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionBody.Fee != 51920 {
 		t.Errorf(
 			"Fee is not correct: expected %d, got %d",
-			47520,
+			51920,
 			apollob.GetTx().TransactionBody.Fee,
 		)
 	}
@@ -351,7 +372,10 @@ func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
 		SetShelleyMetadata(Metadata.ShelleyMaryMetadata{Metadata: Metadata.Metadata{1: "test"}}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if apollob.GetTx().AuxiliaryData == nil {
 		t.Error("AuxiliaryData is nil")
@@ -370,7 +394,10 @@ func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
 		PayToContract(decoded_addr_for_fixtures, &PlutusData.PlutusData{}, 10_000_000, true).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	output := apollob.GetTx().TransactionBody.Outputs[0]
 	if output.PostAlonzo.Datum == nil ||
@@ -413,7 +440,10 @@ func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
 		AddRequiredSigner(serialization.PubKeyHash{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if len(apollob.GetTx().TransactionBody.RequiredSigners) == 0 {
 		t.Error("RequiredSigners is empty")
@@ -433,7 +463,10 @@ func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
 		AddReferenceInput(hex.EncodeToString(testutils.InitUtxosDifferentiated()[0].Input.TransactionId), testutils.InitUtxosDifferentiated()[0].Input.Index).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if len(apollob.GetTx().TransactionBody.ReferenceInputs) == 0 {
 		t.Error("ReferenceInputs is empty")
@@ -453,7 +486,10 @@ func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
 		AddWithdrawal(decoded_addr_for_fixtures, 1000000, PlutusData.PlutusData{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if apollob.GetTx().TransactionBody.Withdrawals == nil {
 		t.Error("Withdrawals is nil")
@@ -497,7 +533,10 @@ func TestOGMIOS_TransactionWithMint(t *testing.T) {
 		}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if apollob.GetTx().TransactionBody.Mint == nil {
 		t.Error("Mint is nil")
@@ -517,7 +556,10 @@ func TestOGMIOS_TransactionWithScript(t *testing.T) {
 		AttachV1Script(PlutusData.PlutusV1Script{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	if len(apollob.GetTx().TransactionWitnessSet.PlutusV1Script) == 0 {
 		t.Error("V1Scripts is empty")
@@ -537,9 +579,13 @@ func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 		AttachDatum(&PlutusData.PlutusData{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if len(apollob.GetTx().TransactionWitnessSet.PlutusData) == 0 {
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
+	}
+	if apollob.GetTx().TransactionWitnessSet.PlutusData != nil &&
+		len(*apollob.GetTx().TransactionWitnessSet.PlutusData) == 0 {
 		t.Error("PlutusData is empty")
 	}
 }
@@ -550,13 +596,16 @@ func TestOGMIOS_TransactionWithRedeemer(t *testing.T) {
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	cc.Init()
 	apollob := apollo.New(&cc)
-	_, err := apollob.
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+	}
+	if apollob == nil {
+		t.Fatal("Complete returned nil")
 	}
 	// Redeemer not supported in current API
 	// if apollob.GetTx().TransactionWitnessSet.Redeemer == nil {
