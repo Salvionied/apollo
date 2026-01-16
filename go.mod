@@ -13,7 +13,7 @@ require (
 	github.com/utxorpc/go-codegen v0.18.1
 	github.com/utxorpc/go-sdk v0.0.1
 	golang.org/x/crypto v0.46.0
-	golang.org/x/text v0.32.0
+	golang.org/x/text v0.33.0
 )
 
 require (
