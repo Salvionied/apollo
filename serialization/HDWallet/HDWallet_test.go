@@ -3,9 +3,9 @@ package HDWallet_test
 import (
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/HDWallet"
-	"github.com/Salvionied/apollo/serialization/Key"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/HDWallet"
+	"github.com/Salvionied/apollo/v2/serialization/Key"
 )
 
 var MNEMONIC_12 = "test walk nut penalty hip pave soap entry language right filter choice"
@@ -52,8 +52,20 @@ func TestMnemonicGeneration(t *testing.T) {
 }
 
 func TestPaymentAddress12Reward(t *testing.T) {
-	hd, _ := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
-	hdWallet_stake, _ := hd.DerivePath("m/1852'/1815'/0'/2/0")
+	hd, err := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hd == nil {
+		t.Fatal("hd is nil")
+	}
+	hdWallet_stake, err := hd.DerivePath("m/1852'/1815'/0'/2/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hdWallet_stake == nil {
+		t.Fatal("hdWallet_stake is nil")
+	}
 	stake_public_key := hdWallet_stake.XPrivKey.PublicKey()
 	vkh, err := Key.VerificationKey{Payload: stake_public_key}.Hash()
 	if err != nil {
@@ -73,8 +85,14 @@ func TestPaymentAddress12Reward(t *testing.T) {
 }
 
 func TestInvalidDerivationPath(t *testing.T) {
-	hd, _ := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
-	_, err := hd.DerivePath("test")
+	hd, err := HDWallet.NewHDWalletFromMnemonic(MNEMONIC_12, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hd == nil {
+		t.Fatal("hd is nil")
+	}
+	_, err = hd.DerivePath("test")
 	if err == nil {
 		t.Errorf("DerivePath() failed")
 	}

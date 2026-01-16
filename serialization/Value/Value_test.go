@@ -4,16 +4,30 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/Asset"
-	"github.com/Salvionied/apollo/serialization/AssetName"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
-	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Value"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+	"github.com/Salvionied/apollo/v2/serialization/Value"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 func TestMarshalCBOR(t *testing.T) {
+	assetName1 := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	if assetName1 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	assetName2 := AssetName.NewAssetNameFromHexString("54657374746f6b656e")
+	if assetName2 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	emptyAssetName := AssetName.NewAssetNameFromHexString("")
+	if emptyAssetName == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil for empty string")
+	}
 
 	type expectedResult struct {
 		Error   string
@@ -41,8 +55,8 @@ func TestMarshalCBOR(t *testing.T) {
 				Am: Amount.Amount{
 					Value: MultiAsset.MultiAsset[int64]{
 						Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-							*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 10000000,
-							*AssetName.NewAssetNameFromHexString("54657374746f6b656e"):             10000000,
+							*assetName1: 10000000,
+							*assetName2: 10000000,
 						},
 					},
 				},
@@ -61,7 +75,7 @@ func TestMarshalCBOR(t *testing.T) {
 						Policy.PolicyId{
 							Value: "725BA16E744ABF2074C951C320FCC92EA0158ED7BB325B092A58245D",
 						}: Asset.Asset[int64]{
-							*AssetName.NewAssetNameFromHexString(""): 1,
+							*emptyAssetName: 1,
 						},
 					},
 				},
@@ -178,18 +192,31 @@ var testPolicy = Policy.PolicyId{
 var testAssetName = AssetName.NewAssetNameFromHexString(
 	"5365636f6e6454657374746f6b656e",
 )
-var testAsset = Asset.Asset[int64]{
-	*testAssetName: 10000000,
-	*AssetName.NewAssetNameFromHexString("54657374746f6b656e"): 10000000,
+var testAssetName2 = AssetName.NewAssetNameFromHexString("54657374746f6b656e")
+var testAsset Asset.Asset[int64]
+var testMultiAsset MultiAsset.MultiAsset[int64]
+var testValueWithAssets Value.Value
+
+func init() {
+	if testAssetName == nil {
+		panic("NewAssetNameFromHexString returned nil")
+	}
+	if testAssetName2 == nil {
+		panic("NewAssetNameFromHexString returned nil")
+	}
+	testAsset = Asset.Asset[int64]{
+		*testAssetName:  10000000,
+		*testAssetName2: 10000000,
+	}
+	testMultiAsset = MultiAsset.MultiAsset[int64]{
+		testPolicy: testAsset,
+	}
+	testValueWithAssets = Value.SimpleValue(10_000_000, testMultiAsset)
 }
-var testMultiAsset = MultiAsset.MultiAsset[int64]{
-	testPolicy: testAsset,
-}
-var testValueWithAssets = Value.SimpleValue(10_000_000, testMultiAsset)
 
 func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 	noTokenAlValue := testValue.ToAlonzoValue()
-	marshaled, err := cbor.Marshal(noTokenAlValue)
+	marshaled, err := cbor.Encode(noTokenAlValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -200,7 +227,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		)
 	}
 	unmarshaled := Value.AlonzoValue{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}
@@ -208,7 +235,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		t.Errorf("unmarshaled value should be equal to the marshaled one")
 	}
 	withTokenAlValue := testValueWithAssets.ToAlonzoValue()
-	marshaled, err = cbor.Marshal(withTokenAlValue)
+	marshaled, err = cbor.Encode(withTokenAlValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -221,7 +248,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 		)
 	}
 	unmarshaled = Value.AlonzoValue{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}
@@ -253,9 +280,15 @@ func TestToAlonzo(t *testing.T) {
 }
 
 func TestRemoveZeroAssets(t *testing.T) {
+	zeroAssetName := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	if zeroAssetName == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
 	original := Value.SimpleValue(1_000_000, MultiAsset.MultiAsset[int64]{
 		Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-			*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 0,
+			*zeroAssetName: 0,
 		},
 	})
 	removed := original.RemoveZeroAssets()
@@ -285,11 +318,20 @@ func TestAddAssets(t *testing.T) {
 	}
 
 	original.AddAssets(testMultiAsset)
+	expectedAssetName1 := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	expectedAssetName2 := AssetName.NewAssetNameFromHexString(
+		"54657374746f6b656e",
+	)
+	if expectedAssetName1 == nil || expectedAssetName2 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
 	if !original.Equal(
 		Value.SimpleValue(10_000_000, MultiAsset.MultiAsset[int64]{
 			Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-				*testAssetName: 20000000,
-				*AssetName.NewAssetNameFromHexString("54657374746f6b656e"): 20000000,
+				*expectedAssetName1: 20000000,
+				*expectedAssetName2: 20000000,
 			},
 		}),
 	) {
@@ -359,9 +401,15 @@ func TestSetLovelace(t *testing.T) {
 
 func TestSetMultiAsset(t *testing.T) {
 	original := testValueWithAssets
+	assetName := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	if assetName == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
 	ma := MultiAsset.MultiAsset[int64]{
 		Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-			*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 12,
+			*assetName: 12,
 		},
 	}
 	original.SetMultiAsset(ma)
@@ -416,11 +464,21 @@ func TestAdd(t *testing.T) {
 	// Test adding assets
 	original = testValueWithAssets
 	original = original.Add(testValueWithAssets)
+	assetNameAdd1 := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	if assetNameAdd1 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	assetNameAdd2 := AssetName.NewAssetNameFromHexString("54657374746f6b656e")
+	if assetNameAdd2 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
 	if !original.Equal(
 		Value.SimpleValue(20_000_000, MultiAsset.MultiAsset[int64]{
 			Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-				*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 20000000,
-				*AssetName.NewAssetNameFromHexString("54657374746f6b656e"):             20000000,
+				*assetNameAdd1: 20000000,
+				*assetNameAdd2: 20000000,
 			},
 		}),
 	) {
@@ -445,10 +503,20 @@ func TestSub(t *testing.T) {
 	// Test adding assets
 	original = testValueWithAssets
 	original = original.Sub(testValueWithAssets)
+	assetNameSub1 := AssetName.NewAssetNameFromHexString(
+		"5365636f6e6454657374746f6b656e",
+	)
+	if assetNameSub1 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
+	assetNameSub2 := AssetName.NewAssetNameFromHexString("54657374746f6b656e")
+	if assetNameSub2 == nil {
+		t.Fatal("NewAssetNameFromHexString returned nil")
+	}
 	if !original.Equal(Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{
 		Policy.PolicyId{Value: "ec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490e"}: Asset.Asset[int64]{
-			*AssetName.NewAssetNameFromHexString("5365636f6e6454657374746f6b656e"): 0,
-			*AssetName.NewAssetNameFromHexString("54657374746f6b656e"):             0,
+			*assetNameSub1: 0,
+			*assetNameSub2: 0,
 		},
 	})) {
 		t.Errorf("original value should be equal to the testValueWithAssets")
@@ -456,7 +524,7 @@ func TestSub(t *testing.T) {
 }
 
 func TestMarshalAndUmnarshalNormalValue(t *testing.T) {
-	marshaled, err := cbor.Marshal(testValue)
+	marshaled, err := cbor.Encode(testValue)
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
@@ -467,7 +535,7 @@ func TestMarshalAndUmnarshalNormalValue(t *testing.T) {
 		)
 	}
 	unmarshaled := Value.Value{}
-	err = cbor.Unmarshal(marshaled, &unmarshaled)
+	_, err = cbor.Decode(marshaled, &unmarshaled)
 	if err != nil {
 		t.Errorf("error while unmarshaling: %v", err)
 	}

@@ -24,7 +24,7 @@ func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error)
 import (
  "fmt"
  "encoding/hex"
- "github.com/Salvionied/apollo/serialization/PlutusData"
+ "github.com/Salvionied/apollo/v2/serialization/PlutusData"
 )
 
 func main() {
@@ -62,8 +62,8 @@ func (ps3 *PlutusV3Script) ToAddress(
 import (
  "fmt"
  "encoding/hex"
- "github.com/Salvionied/apollo/serialization/PlutusData"
- "github.com/Salvionied/apollo/serialization/Address"
+ "github.com/Salvionied/apollo/v2/serialization/PlutusData"
+ "github.com/Salvionied/apollo/v2/serialization/Address"
 )
 
 func main() {

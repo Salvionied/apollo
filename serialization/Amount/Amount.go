@@ -1,9 +1,19 @@
 package Amount
 
-import "github.com/Salvionied/apollo/serialization/MultiAsset"
+import (
+	"encoding/hex"
+	"errors"
+	"fmt"
+
+	"github.com/Salvionied/apollo/v2/serialization/Asset"
+	"github.com/Salvionied/apollo/v2/serialization/AssetName"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Policy"
+
+	"github.com/blinklabs-io/gouroboros/cbor"
+)
 
 type Amount struct {
-	_     struct{} `cbor:",toarray"`
 	Coin  int64
 	Value MultiAsset.MultiAsset[int64]
 }
@@ -47,7 +57,6 @@ func (amtAl AlonzoAmount) ToShelley() Amount {
 }
 
 type AlonzoAmount struct {
-	_     struct{} `cbor:",toarray"`
 	Coin  int64
 	Value MultiAsset.MultiAsset[int64]
 }
@@ -120,7 +129,9 @@ func (am Amount) Equal(other Amount) bool {
 		other (Amount): The other Amount to compare.
 
 	Returns:
-		bool: true if the current Amount is less than the other Amount, false otherwise.
+
+
+	bool: true if the current Amount is less than the other Amount, false otherwise.
 */
 func (am Amount) Less(other Amount) bool {
 	return am.Coin < other.Coin && am.Value.Less(other.Value)
@@ -135,7 +146,9 @@ func (am Amount) Less(other Amount) bool {
 		other (Amount): The other Amount to compare.
 
 	Returns:
-		bool: true if the current Amount is greater than the other Amount, false otherwise.
+
+
+	bool: true if the current Amount is greater than the other Amount, false otherwise.
 */
 func (am Amount) Greater(other Amount) bool {
 	return am.Coin > other.Coin && am.Value.Greater(other.Value)
@@ -173,4 +186,90 @@ func (am Amount) Sub(other Amount) Amount {
 	am.Coin -= other.Coin
 	am.Value = am.Value.Sub(other.Value)
 	return am
+}
+
+/*
+*
+
+	MarshalCBOR serializes the Amount into a CBOR-encoded byte slice.
+
+	Returns:
+		[]byte: The CBOR-encoded byte slice.
+		error: An error if serialization fails.
+*/
+func (am *Amount) MarshalCBOR() ([]byte, error) {
+	return cbor.Encode([]any{am.Coin, am.Value})
+}
+
+/*
+*
+
+	MarshalCBOR serializes the AlonzoAmount into a CBOR-encoded byte slice.
+
+	Returns:
+		[]byte: The CBOR-encoded byte slice.
+		error: An error if serialization fails.
+*/
+func (am *AlonzoAmount) MarshalCBOR() ([]byte, error) {
+	return cbor.Encode([]any{am.Coin, am.Value})
+}
+
+/*
+*
+
+	UnmarshalCBOR deserializes a CBOR-encoded byte slice into an Amount.
+
+	Params:
+		value ([]byte): The CBOR-encoded data to be deserialized.
+
+	Returns:
+		error: An error if deserialization fails.
+*/
+func (am *Amount) UnmarshalCBOR(value []byte) error {
+	var arr []any
+	_, err := cbor.Decode(value, &arr)
+	if err != nil {
+		return err
+	}
+	if arr == nil {
+		return errors.New("cbor.Decode returned nil arr")
+	}
+	am.Coin = int64(arr[0].(uint64))
+	m := arr[1].(map[any]any)
+	am.Value = make(MultiAsset.MultiAsset[int64])
+	for k, v := range m {
+		var pidBytes []byte
+		if bs, ok := k.(interface{ Bytes() []byte }); ok {
+			pidBytes = bs.Bytes()
+		} else {
+			return fmt.Errorf("invalid key type for policy: %T %v", k, k)
+		}
+		pidBytesBytes := pidBytes
+		pid, err := Policy.FromBytes(pidBytesBytes)
+		if err != nil {
+			return err
+		}
+		if pid == nil {
+			return errors.New("FromBytes returned nil")
+		}
+		assetMap := make(Asset.Asset[int64])
+		am.Value[*pid] = assetMap
+		vmap := v.(map[any]any)
+		for k2, v2 := range vmap {
+			var anBytes []byte
+			if bs, ok := k2.(interface{ Bytes() []byte }); ok {
+				anBytes = bs.Bytes()
+			} else {
+				return fmt.Errorf("invalid key type for asset name: %T", k2)
+			}
+			anBytesBytes := anBytes
+			anStr := hex.EncodeToString(anBytesBytes)
+			an := AssetName.NewAssetNameFromHexString(anStr)
+			if an == nil {
+				return errors.New("NewAssetNameFromHexString returned nil")
+			}
+			assetMap[*an] = int64(v2.(uint64))
+		}
+	}
+	return nil
 }

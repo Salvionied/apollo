@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -53,7 +53,7 @@ type ConstrainedBytes struct {
 		error: An error if deserialization fails.
 */
 func (cb *ConstrainedBytes) UnmarshalCBOR(data []byte) error {
-	err := cbor.Unmarshal(data, &cb.Payload)
+	_, err := cbor.Decode(data, &cb.Payload)
 	return err
 }
 
@@ -67,7 +67,7 @@ func (cb *ConstrainedBytes) UnmarshalCBOR(data []byte) error {
 		error: An error if serialization fails.
 */
 func (cb *ConstrainedBytes) MarshalCBOR() ([]byte, error) {
-	return cbor.Marshal(cb.Payload)
+	return cbor.Encode(cb.Payload)
 }
 
 const VERIFICATION_KEY_HASH_SIZE = 28
@@ -139,6 +139,10 @@ func NewCustomBytesInt(value int) CustomBytes {
 	return CustomBytes{Value: strconv.Itoa(value), tp: "uint64"}
 }
 
+func NewCustomBytesString(value string) CustomBytes {
+	return CustomBytes{Value: value, tp: "string"}
+}
+
 /*
 *
 
@@ -168,29 +172,29 @@ func (cb *CustomBytes) HexString() string {
 */
 func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
 	// if cb.Value == "40" || cb.Value == "625b5d" {
-	// 	return cbor.Marshal(make([]byte, 0))
+	// 	return cbor.Encode(make([]byte, 0))
 	// }
 	if cb.tp == "string" {
 		if cb.Value == "[]" {
-			return cbor.Marshal(make([]byte, 0))
+			return cbor.Encode(make([]byte, 0))
 		}
-		return cbor.Marshal(cb.Value)
+		return cbor.Encode([]byte(cb.Value))
 	}
 	if cb.tp == "uint64" {
 		value, err := strconv.ParseInt(cb.Value, 10, 64)
 		if err != nil {
 			return nil, err
 		}
-		return cbor.Marshal(value)
+		return cbor.Encode(value)
 	}
 	res, err := hex.DecodeString(cb.Value)
 	if err != nil {
 		return nil, err
 	}
 	// if len(res) == 0 {
-	// 	return cbor.Marshal(make([]byte, 0))
+	// 	return cbor.Encode(make([]byte, 0))
 	// }
-	return cbor.Marshal(res)
+	return cbor.Encode(res)
 
 }
 
@@ -207,7 +211,7 @@ func (cb *CustomBytes) MarshalCBOR() ([]byte, error) {
 */
 func (cb *CustomBytes) UnmarshalCBOR(value []byte) error {
 	var res any
-	err := cbor.Unmarshal(value, &res)
+	_, err := cbor.Decode(value, &res)
 	if err != nil {
 		return err
 	}

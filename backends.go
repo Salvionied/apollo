@@ -3,11 +3,11 @@ package apollo
 import (
 	"errors"
 
-	"github.com/Salvionied/apollo/constants"
+	"github.com/Salvionied/apollo/v2/constants"
 
-	"github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
-	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
-	"github.com/Salvionied/apollo/txBuilding/Backend/MaestroChainContext"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/BlockFrostChainContext"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/FixedChainContext"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/MaestroChainContext"
 )
 
 /*

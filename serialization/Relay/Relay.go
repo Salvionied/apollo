@@ -4,8 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
-	"slices"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 // ReadKind extracts the kind discriminator from a CBOR-decoded value.
@@ -56,11 +55,11 @@ func (v SingleHostAddr) MarshalCBOR() ([]byte, error) {
 			len(v.Ipv6),
 		)
 	}
-	return cbor.Marshal([]any{v.Kind(), v.Port, v.Ipv4, v.Ipv6})
+	return cbor.Encode([]any{v.Kind(), v.Port, v.Ipv4, v.Ipv6})
 }
 func (v *SingleHostAddr) UnmarshalCBOR(data []byte) error {
 	var arr []any
-	if err := cbor.Unmarshal(data, &arr); err != nil {
+	if _, err := cbor.Decode(data, &arr); err != nil {
 		return err
 	}
 	if len(arr) != 4 {
@@ -101,7 +100,7 @@ func (v *SingleHostAddr) UnmarshalCBOR(data []byte) error {
 		if len(b) != 4 {
 			return fmt.Errorf("ipv4 must be 4 bytes, got %d", len(b))
 		}
-		v.Ipv4 = slices.Clone(b)
+		v.Ipv4 = append([]byte(nil), b...)
 	}
 
 	// ipv6
@@ -115,7 +114,7 @@ func (v *SingleHostAddr) UnmarshalCBOR(data []byte) error {
 		if len(b) != 16 {
 			return fmt.Errorf("ipv6 must be 16 bytes, got %d", len(b))
 		}
-		v.Ipv6 = slices.Clone(b)
+		v.Ipv6 = append([]byte(nil), b...)
 	}
 	return nil
 }
@@ -130,11 +129,11 @@ func (v SingleHostName) MarshalCBOR() ([]byte, error) {
 	if len(v.DnsName) > 128 {
 		return nil, fmt.Errorf("dns name too long: %d", len(v.DnsName))
 	}
-	return cbor.Marshal([]any{v.Kind(), v.Port, v.DnsName})
+	return cbor.Encode([]any{v.Kind(), v.Port, v.DnsName})
 }
 func (v *SingleHostName) UnmarshalCBOR(data []byte) error {
 	var arr []any
-	if err := cbor.Unmarshal(data, &arr); err != nil {
+	if _, err := cbor.Decode(data, &arr); err != nil {
 		return err
 	}
 	if len(arr) != 3 {
@@ -186,11 +185,11 @@ func (v MultiHostName) MarshalCBOR() ([]byte, error) {
 	if len(v.DnsName) > 128 {
 		return nil, fmt.Errorf("dns name too long: %d", len(v.DnsName))
 	}
-	return cbor.Marshal([]any{v.Kind(), v.DnsName})
+	return cbor.Encode([]any{v.Kind(), v.DnsName})
 }
 func (v *MultiHostName) UnmarshalCBOR(data []byte) error {
 	var arr []any
-	if err := cbor.Unmarshal(data, &arr); err != nil {
+	if _, err := cbor.Decode(data, &arr); err != nil {
 		return err
 	}
 	if len(arr) != 2 {
@@ -223,7 +222,7 @@ func (v *MultiHostName) UnmarshalCBOR(data []byte) error {
 func UnmarshalRelay(data []byte) (RelayInterface, error) {
 	// First, unmarshal to get the kind discriminator
 	var arr []any
-	if err := cbor.Unmarshal(data, &arr); err != nil {
+	if _, err := cbor.Decode(data, &arr); err != nil {
 		return nil, err
 	}
 	if len(arr) == 0 {
@@ -275,22 +274,22 @@ func (v Relays) MarshalCBOR() ([]byte, error) {
 	out := make([]any, 0, len(arr))
 	for _, e := range arr {
 		var v any
-		if err := cbor.Unmarshal(e, &v); err != nil {
+		if _, err := cbor.Decode(e, &v); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
 	}
-	return cbor.Marshal(out)
+	return cbor.Encode(out)
 }
 
 func (v *Relays) UnmarshalCBOR(data []byte) error {
 	var arr []any
-	if err := cbor.Unmarshal(data, &arr); err != nil {
+	if _, err := cbor.Decode(data, &arr); err != nil {
 		return err
 	}
 	res := make(Relays, 0, len(arr))
 	for _, item := range arr {
-		marshaledRelay, err := cbor.Marshal(item)
+		marshaledRelay, err := cbor.Encode(item)
 		if err != nil {
 			return err
 		}

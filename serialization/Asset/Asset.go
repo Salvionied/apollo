@@ -4,10 +4,10 @@ import (
 	"maps"
 	"reflect"
 
-	"github.com/Salvionied/apollo/serialization/AssetName"
+	assetname "github.com/Salvionied/apollo/v2/serialization/AssetName"
 )
 
-type Asset[V int64 | uint64] map[AssetName.AssetName]V
+type Asset[V int64 | uint64] map[assetname.AssetName]V
 
 /*
 *

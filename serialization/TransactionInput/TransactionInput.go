@@ -3,11 +3,14 @@ package TransactionInput
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"strconv"
+
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type TransactionInput struct {
-	_             struct{} `cbor:",toarray"`
+	cbor.StructAsArray
 	TransactionId []byte
 	Index         int
 }
@@ -79,3 +82,44 @@ func (tx TransactionInput) String() string {
 // 	KeyHash := blake_2b.Sum(make([]byte, 0))
 // 	return string(KeyHash)
 // }
+
+func (ti *TransactionInput) UnmarshalCBOR(data []byte) error {
+	var temp any
+	_, err := cbor.Decode(data, &temp)
+	if err != nil {
+		return err
+	}
+	if m, ok := temp.(map[any]any); ok {
+		// map case
+		cleanM := make(map[any]any)
+		for k, v := range m {
+			if _, ok := k.([]any); !ok {
+				cleanM[k] = v
+			}
+		}
+		for k, v := range cleanM {
+			var key = k
+			if karr, ok := k.([]any); ok && len(karr) == 2 {
+				if tag, ok := karr[0].(uint64); ok && tag == 0 {
+					key = karr[1]
+				}
+			}
+			switch key {
+			case 0:
+				ti.TransactionId = v.([]byte)
+			case 1:
+				ti.Index = int(v.(uint64))
+			}
+		}
+	} else if arr, ok := temp.([]any); ok {
+		// array case
+		if len(arr) != 2 {
+			return errors.New("expected array of 2 elements")
+		}
+		ti.TransactionId = arr[0].([]byte)
+		ti.Index = int(arr[1].(uint64))
+	} else {
+		return errors.New("invalid ti CBOR")
+	}
+	return nil
+}

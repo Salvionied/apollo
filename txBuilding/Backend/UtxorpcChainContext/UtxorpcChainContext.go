@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	"github.com/Salvionied/apollo/serialization/Transaction"
-	"github.com/Salvionied/apollo/serialization/TransactionInput"
-	"github.com/Salvionied/apollo/serialization/TransactionOutput"
-	"github.com/Salvionied/apollo/serialization/UTxO"
-	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/Address"
+	"github.com/Salvionied/apollo/v2/serialization/Redeemer"
+	"github.com/Salvionied/apollo/v2/serialization/Transaction"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionInput"
+	"github.com/Salvionied/apollo/v2/serialization/TransactionOutput"
+	"github.com/Salvionied/apollo/v2/serialization/UTxO"
+	"github.com/Salvionied/apollo/v2/txBuilding/Backend/Base"
 	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
 	utxorpc "github.com/utxorpc/go-sdk"
 	"github.com/utxorpc/go-sdk/cardano"
@@ -319,8 +319,8 @@ func (u *UtxorpcChainContext) EvaluateTx(
 				tagStr := tagStrings[r.Purpose]
 				key := fmt.Sprintf("%s:%d", tagStr, r.Index)
 				result[key] = Redeemer.ExecutionUnits{
-					Steps: int64(r.ExUnits.Steps),
-					Mem:   int64(r.ExUnits.Memory),
+					Mem:   r.ExUnits.Memory,
+					Steps: r.ExUnits.Steps,
 				}
 			}
 		}

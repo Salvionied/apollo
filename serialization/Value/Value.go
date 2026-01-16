@@ -3,16 +3,16 @@ package Value
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 
-	"github.com/Salvionied/apollo/serialization/Amount"
-	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/v2/serialization/Amount"
+	"github.com/Salvionied/apollo/v2/serialization/MultiAsset"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type Value struct {
+	cbor.StructAsArray
 	Am        Amount.Amount
 	Coin      int64
 	HasAssets bool
@@ -37,13 +37,16 @@ type AlonzoValue struct {
 */
 func (val *AlonzoValue) UnmarshalCBOR(value []byte) error {
 	var rec any
-	_ = cbor.Unmarshal(value, &rec)
-	if reflect.ValueOf(rec).Type().String() == "uint64" {
-		ok, _ := rec.(uint64)
-		val.Coin = int64(ok)
-	} else {
+	_, err := cbor.Decode(value, &rec)
+	if err != nil {
+		return err
+	}
+	switch v := rec.(type) {
+	case uint64:
+		val.Coin = int64(v)
+	default:
 		am := Amount.Amount{}
-		err := cbor.Unmarshal(value, &am)
+		_, err := cbor.Decode(value, &am)
 		if err != nil {
 			return err
 		}
@@ -67,13 +70,12 @@ func (alVal *AlonzoValue) MarshalCBOR() ([]byte, error) {
 		if alVal.Am.Coin < 0 {
 			return nil, errors.New("invalid coin value")
 		}
-		em, _ := cbor.CanonicalEncOptions().EncMode()
-		return em.Marshal(alVal.Am)
+		return cbor.Encode(alVal.Am)
 	} else {
 		if alVal.Coin < 0 {
 			return nil, errors.New("invalid coin value")
 		}
-		return cbor.Marshal(alVal.Coin)
+		return cbor.Encode(alVal.Coin)
 	}
 }
 
@@ -507,13 +509,16 @@ func (val Value) String() string {
 */
 func (val *Value) UnmarshalCBOR(value []byte) error {
 	var rec any
-	_ = cbor.Unmarshal(value, &rec)
-	if reflect.ValueOf(rec).Type().String() == "uint64" {
-		ok, _ := rec.(uint64)
-		val.Coin = int64(ok)
-	} else {
+	_, err := cbor.Decode(value, &rec)
+	if err != nil {
+		return err
+	}
+	switch v := rec.(type) {
+	case uint64:
+		val.Coin = int64(v)
+	default:
 		am := Amount.Amount{}
-		err := cbor.Unmarshal(value, &am)
+		_, err := cbor.Decode(value, &am)
 		if err != nil {
 			return err
 		}
@@ -539,13 +544,12 @@ func (val *Value) MarshalCBOR() ([]byte, error) {
 		if val.Am.Coin < 0 {
 			return nil, errors.New("invalid coin value")
 		}
-		em, _ := cbor.CanonicalEncOptions().EncMode()
-		return em.Marshal(val.Am)
+		return cbor.Encode(val.Am)
 	} else {
 		if val.Coin < 0 {
 			return nil, errors.New("invalid coin value")
 		}
-		return cbor.Marshal(val.Coin)
+		return cbor.Encode(val.Coin)
 	}
 }
 

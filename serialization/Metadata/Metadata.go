@@ -3,10 +3,10 @@ package Metadata
 import (
 	"maps"
 
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/NativeScript"
+	"github.com/Salvionied/apollo/v2/serialization"
+	"github.com/Salvionied/apollo/v2/serialization/NativeScript"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/blinklabs-io/gouroboros/cbor"
 )
 
 type MinimalMetadata map[string]any
@@ -18,7 +18,6 @@ type TagMetadata map[string]any
 type Metadata map[int]any
 
 type ShelleyMaryMetadata struct {
-	_             struct{}                    `cbor:",toarray,omitempty"`
 	Metadata      Metadata                    `cbor:",omitempty"`
 	NativeScripts []NativeScript.NativeScript `cbor:",omitempty"`
 }
@@ -33,11 +32,10 @@ type ShelleyMaryMetadata struct {
 						 nil otherwise.
 */
 func (smm *ShelleyMaryMetadata) MarshalCBOR() ([]byte, error) {
-	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(smm.NativeScripts) > 0 {
-		return enc.Marshal(smm)
+		return cbor.Encode(smm)
 	} else {
-		return enc.Marshal(smm.Metadata)
+		return cbor.Encode(smm.Metadata)
 	}
 }
 
@@ -90,23 +88,37 @@ func (ad *AuxiliaryData) SetShelleyMetadata(value ShelleyMaryMetadata) {
 /*
 *
 
+	IsEmpty returns true if the AuxiliaryData contains no metadata.
+	Callers can use this to decide whether to include auxiliary data
+	in a transaction.
+
+	Returns:
+		bool: True if no metadata is present.
+*/
+func (ad *AuxiliaryData) IsEmpty() bool {
+	return len(ad._basicMeta) == 0 &&
+		len(ad._AlonzoMeta.Metadata) == 0 &&
+		len(ad._AlonzoMeta.NativeScripts) == 0 &&
+		len(ad._AlonzoMeta.PlutusScripts) == 0 &&
+		len(ad._ShelleyMeta.Metadata) == 0 &&
+		len(ad._ShelleyMeta.NativeScripts) == 0
+}
+
+/*
+*
+
 	Hash computes computes the has of the AuxiliaryData.
 
 	Returns:
 		[]byte: The computed hash or nil if all metadata fileds are empty.
 */
 func (ad *AuxiliaryData) Hash() []byte {
-	if len(ad._basicMeta) != 0 || len(ad._ShelleyMeta.Metadata) != 0 ||
-		len(ad._AlonzoMeta.Metadata) != 0 {
-		marshaled, _ := cbor.Marshal(ad)
-		hash, err := serialization.Blake2bHash(marshaled)
-		if err != nil {
-			return nil
-		}
-		return hash
-	} else {
+	marshaled, _ := cbor.Encode(ad)
+	hash, err := serialization.Blake2bHash(marshaled)
+	if err != nil {
 		return nil
 	}
+	return hash
 }
 
 /*
@@ -121,11 +133,14 @@ func (ad *AuxiliaryData) Hash() []byte {
 		error: An error if deserialization fails.
 */
 func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
-	err_shelley := cbor.Unmarshal(value, &ad._ShelleyMeta)
+	_, err_shelley := cbor.Decode(value, &ad._ShelleyMeta)
 	if err_shelley != nil {
-		err_basic_meta := cbor.Unmarshal(value, &ad._basicMeta)
-		if err_basic_meta != nil {
-			return err_basic_meta
+		_, err_alonzo := cbor.Decode(value, &ad._AlonzoMeta)
+		if err_alonzo != nil {
+			_, err_basic_meta := cbor.Decode(value, &ad._basicMeta)
+			if err_basic_meta != nil {
+				return err_basic_meta
+			}
 		}
 	}
 	return nil
@@ -141,18 +156,18 @@ func (ad *AuxiliaryData) UnmarshalCBOR(value []byte) error {
 		error: An error if serialization fails.
 */
 func (ad *AuxiliaryData) MarshalCBOR() ([]byte, error) {
-	enc, _ := cbor.EncOptions{Sort: cbor.SortLengthFirst}.EncMode()
 	if len(ad._basicMeta) != 0 {
-		return enc.Marshal(ad._basicMeta)
+		return cbor.Encode(ad._basicMeta)
 	}
 	if len(ad._AlonzoMeta.Metadata) != 0 ||
 		len(ad._AlonzoMeta.NativeScripts) != 0 ||
 		len(ad._AlonzoMeta.PlutusScripts) != 0 {
-		return enc.Marshal(ad._AlonzoMeta)
+		return cbor.Encode(ad._AlonzoMeta)
 	}
 	if len(ad._ShelleyMeta.Metadata) == 0 &&
 		len(ad._ShelleyMeta.NativeScripts) == 0 {
-		return enc.Marshal(nil)
+		// Return empty map - valid CBOR encoding for empty auxiliary data
+		return cbor.Encode(map[int]any{})
 	}
-	return enc.Marshal(ad._ShelleyMeta)
+	return cbor.Encode(ad._ShelleyMeta)
 }
