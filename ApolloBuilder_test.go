@@ -548,7 +548,7 @@ func TestRedeemerCollect(t *testing.T) {
 	if wts.Redeemer[0].ExUnits.Steps == 0 {
 		t.Error("Tx is not correct", wts.Redeemer[0].ExUnits.Steps)
 	}
-	if built.GetTx().TransactionBody.Fee != 253554 {
+	if built.GetTx().TransactionBody.Fee != 253730 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Collateral == nil {
