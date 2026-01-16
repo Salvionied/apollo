@@ -160,8 +160,8 @@ type CM map[string]int
 		error: An error if marshaling fails.
 */
 func (cm CM) MarshalCBOR() ([]byte, error) {
-	res := make([]int, 0)
-	mk := make([]string, 0)
+	res := make([]int, 0, len(cm))
+	mk := make([]string, 0, len(cm))
 	for k := range cm {
 		mk = append(mk, k)
 	}
@@ -666,8 +666,8 @@ var PLUTUSV3COSTMODEL = CostModelArray(
 		error: An error if marshaling fails.
 */
 func (cv CostView) MarshalCBOR() ([]byte, error) {
-	res := make([]int, 0)
-	mk := make([]string, 0)
+	res := make([]int, 0, len(cv))
+	mk := make([]string, 0, len(cv))
 	for k := range cv {
 		mk = append(mk, k)
 	}
@@ -915,7 +915,7 @@ func (pia PlutusDefArray) Len() int {
 		PlutusIndefArray: A deep copy of the PlutusIndefArray.
 */
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
-	ret := PlutusIndefArray{}
+	ret := make(PlutusIndefArray, 0, len(*pia))
 	for _, v := range *pia {
 		ret = append(ret, v.Clone())
 	}
@@ -1671,11 +1671,11 @@ func ToCbor(x any) (string, error) {
 			error: An error if the PlutusDataHash fails.
 */
 func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
-	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(pd)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
+	finalbytes := make([]byte, 0, len(bytes))
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
@@ -1702,11 +1702,11 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 		error: An error if the hash Datum fails.
 */
 func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
-	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(d)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
+	finalbytes := make([]byte, 0, len(bytes))
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {

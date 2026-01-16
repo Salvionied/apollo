@@ -113,7 +113,7 @@ func Fee(
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {
-	res := make([]T, 0)
+	res := make([]T, 0, len(input))
 	for _, value := range input {
 		res = append(res, value.Clone())
 	}

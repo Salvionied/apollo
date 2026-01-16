@@ -241,12 +241,13 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(
 }
 
 func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 0)
+	assets := v.AssetsExceptAda()
+	amts := make([]Base.AddressAmount, 0, 1+len(assets))
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
 	})
-	for policyId, tokenMap := range v.AssetsExceptAda() {
+	for policyId, tokenMap := range assets {
 		for tokenName, quantity := range tokenMap {
 			amts = append(amts, Base.AddressAmount{
 				Unit:     policyId + tokenName,
@@ -402,7 +403,6 @@ func (occ *OgmiosChainContext) AddressUtxos(
 	} else {
 		ctx = context.Background()
 	}
-	addressUtxos := make([]Base.AddressUTXO, 0)
 	// Use per-request timeout if configured
 	reqCtx := ctx
 	var cancel func()
@@ -422,6 +422,7 @@ func (occ *OgmiosChainContext) AddressUtxos(
 	if err != nil {
 		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
 	}
+	addressUtxos := make([]Base.AddressUTXO, 0, len(matches))
 	for _, match := range matches {
 		datum := ""
 		if match.DatumType == "inline" {
@@ -735,7 +736,7 @@ func (occ *OgmiosChainContext) Utxos(
 	address Address.Address,
 ) ([]UTxO.UTxO, error) {
 	results := occ.AddressUtxos(address.String(), true)
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, len(results))
 	for _, result := range results {
 		decodedTxId, _ := hex.DecodeString(result.TxHash)
 		tx_in := TransactionInput.TransactionInput{
