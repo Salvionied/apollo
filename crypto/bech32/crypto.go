@@ -208,7 +208,7 @@ func bech32Checksum(hrp string, data []byte) []byte {
 	values := append(bech32HrpExpand(hrp), integers...)
 	values = append(values, []int{0, 0, 0, 0, 0, 0}...)
 	polymod := bech32Polymod(values) ^ 1
-	res := []byte{}
+	res := make([]byte, 0, 6)
 	for i := range 6 {
 		res = append(res, byte((polymod>>uint(5*(5-i)))&31))
 	}

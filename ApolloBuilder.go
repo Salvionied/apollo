@@ -520,7 +520,7 @@ Returns:
 */
 
 func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
-	outputs := make([]TransactionOutput.TransactionOutput, 0)
+	outputs := make([]TransactionOutput.TransactionOutput, 0, len(b.payments))
 	for _, payment := range b.payments {
 		outputs = append(outputs, *payment.ToTxOut())
 	}
@@ -539,7 +539,7 @@ func (b *Apollo) buildOutputs() []TransactionOutput.TransactionOutput {
 	TransactionWitnessSet.TransactionWitnessSet: The transaction's witness set.
 */
 func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make([]PlutusData.PlutusData, 0, len(b.datums))
 	plutusdata = append(plutusdata, b.datums...)
 	return TransactionWitnessSet.TransactionWitnessSet{
 		NativeScripts:  b.nativescripts,
@@ -560,9 +560,9 @@ func (b *Apollo) buildWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
 		TransactionWitnessSet.TransactionWitnessSet: A fake witness set for testing.
 */
 func (b *Apollo) buildFakeWitnessSet() TransactionWitnessSet.TransactionWitnessSet {
-	plutusdata := make([]PlutusData.PlutusData, 0)
+	plutusdata := make([]PlutusData.PlutusData, 0, len(b.datums))
 	plutusdata = append(plutusdata, b.datums...)
-	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0)
+	fakeVkWitnesses := make([]VerificationKeyWitness.VerificationKeyWitness, 0, 1+len(b.requiredSigners))
 	fakeVkWitnesses = append(
 		fakeVkWitnesses,
 		VerificationKeyWitness.VerificationKeyWitness{
@@ -745,11 +745,11 @@ Returns:
 */
 
 func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
-	inputs := make([]TransactionInput.TransactionInput, 0)
+	inputs := make([]TransactionInput.TransactionInput, 0, len(b.preselectedUtxos))
 	for _, utxo := range b.preselectedUtxos {
 		inputs = append(inputs, utxo.Input)
 	}
-	collaterals := make([]TransactionInput.TransactionInput, 0)
+	collaterals := make([]TransactionInput.TransactionInput, 0, len(b.collaterals))
 	for _, utxo := range b.collaterals {
 		collaterals = append(collaterals, utxo.Input)
 	}
