@@ -49,6 +49,7 @@ func TestMarshalCBOR(t *testing.T) {
 				HasAssets: true,
 			},
 			expected: expectedResult{
+				// RFC 7049 canonical ordering: shorter keys first (Testtoken 9 bytes before SecondTesttoken 15 bytes)
 				Result:  "8200a1581cec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490ea24954657374746f6b656e1a009896804f5365636f6e6454657374746f6b656e1a00989680",
 				IsError: false,
 			},
@@ -212,6 +213,7 @@ func TestMarshalAndUnmarshalAlonzoValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("error while marshaling: %v", err)
 	}
+	// RFC 7049 canonical ordering: shorter keys first (Testtoken 9 bytes before SecondTesttoken 15 bytes)
 	if hex.EncodeToString(
 		marshaled,
 	) != "821a00989680a1581cec8b7d1dd0b124e8333d3fa8d818f6eac068231a287554e9ceae490ea24954657374746f6b656e1a009896804f5365636f6e6454657374746f6b656e1a00989680" {
