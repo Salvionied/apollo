@@ -423,3 +423,31 @@ func TestSetDatum(t *testing.T) {
 		t.Error("Error while getting datum hash")
 	}
 }
+
+func TestGetDatumNilDatum(t *testing.T) {
+	// Test that GetDatum returns nil when PostAlonzo.Datum is nil
+	// This tests the nil check added to prevent panic on nil dereference
+	txoWithNilDatum := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address: addr,
+			Amount:  amNoAssets.ToAlonzoValue(),
+			Datum:   nil, // explicitly nil
+		},
+	}
+	if txoWithNilDatum.GetDatum() != nil {
+		t.Error("GetDatum should return nil when Datum is nil")
+	}
+
+	// Test pre-Alonzo output also returns nil
+	txoPreAlonzo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: false,
+		PreAlonzo: TransactionOutput.TransactionOutputShelley{
+			Address: addr,
+			Amount:  amNoAssets,
+		},
+	}
+	if txoPreAlonzo.GetDatum() != nil {
+		t.Error("GetDatum should return nil for pre-Alonzo outputs")
+	}
+}

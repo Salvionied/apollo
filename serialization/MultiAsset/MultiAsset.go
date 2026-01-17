@@ -9,6 +9,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Asset"
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/Policy"
+	apolloCbor "github.com/Salvionied/apollo/serialization/cbor"
 )
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
@@ -34,20 +35,24 @@ func (ma MultiAsset[V]) MarshalCBOR() ([]byte, error) {
 	}
 
 	slices.SortFunc(policyIds, func(i, j Policy.PolicyId) int {
-		iBytes, _ := hex.DecodeString(i.Value)
-		jBytes, _ := hex.DecodeString(j.Value)
+		iBytes, iErr := hex.DecodeString(i.Value)
+		jBytes, jErr := hex.DecodeString(j.Value)
+		// If either decode fails, fall back to string comparison
+		if iErr != nil || jErr != nil {
+			return bytes.Compare([]byte(i.Value), []byte(j.Value))
+		}
 		return bytes.Compare(iBytes, jBytes)
 	})
 
 	var buf bytes.Buffer
 	mapLen := len(ma)
 	if mapLen < 24 {
-		buf.WriteByte(0xa0 | byte(mapLen))
+		buf.WriteByte(apolloCbor.CborMapBase | byte(mapLen))
 	} else if mapLen < 256 {
-		buf.WriteByte(0xb8)
+		buf.WriteByte(apolloCbor.CborMap1ByteLen)
 		buf.WriteByte(byte(mapLen))
 	} else {
-		buf.WriteByte(0xb9)
+		buf.WriteByte(apolloCbor.CborMap2ByteLen)
 		buf.WriteByte(byte(mapLen >> 8))
 		buf.WriteByte(byte(mapLen))
 	}
