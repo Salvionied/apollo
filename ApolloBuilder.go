@@ -164,25 +164,26 @@ func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
 
 	Params:
 		utxo (UTxO.UTxO): The UTxO to be consumed as an input.
-		payments (...PaymentI): A sett of payments to be deducted from the UTxO.
+		payments (...PaymentI): A set of payments to be deducted from the UTxO.
 
 	Returns:
 		*Apollo: A pointer to the modified Apollo instance.
+		error: An error if the payments exceed the UTxO value.
 */
-func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
+func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
 		selectedValue = selectedValue.Sub(payment.ToValue())
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("ConsumeUTxO: payments exceed UTxO value")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
@@ -198,11 +199,12 @@ func (b *Apollo) ConsumeUTxO(utxo UTxO.UTxO, payments ...PaymentI) *Apollo {
 
 	 	Returns:
 		   	*Apollo: A pointer to the modified Apollo instance.
+		   	error: An error if the payments exceed the UTxO value.
 */
 func (b *Apollo) ConsumeAssetsFromUtxo(
 	utxo UTxO.UTxO,
 	payments ...PaymentI,
-) *Apollo {
+) (*Apollo, error) {
 	b.preselectedUtxos = append(b.preselectedUtxos, utxo)
 	selectedValue := utxo.Output.GetAmount()
 	for _, payment := range payments {
@@ -211,13 +213,13 @@ func (b *Apollo) ConsumeAssetsFromUtxo(
 		)
 	}
 	if selectedValue.Less(Value.Value{}) {
-		panic("selected value is negative")
+		return nil, errors.New("ConsumeAssetsFromUtxo: payments exceed UTxO value")
 	}
 	b.payments = append(b.payments, payments...)
 	selectedValue = selectedValue.RemoveZeroAssets()
 	p := NewPaymentFromValue(utxo.Output.GetAddress(), selectedValue)
 	b.payments = append(b.payments, p)
-	return b
+	return b, nil
 }
 
 /*
