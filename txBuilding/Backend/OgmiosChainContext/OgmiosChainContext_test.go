@@ -2,7 +2,6 @@ package OgmiosChainContext_test
 
 import (
 	"encoding/hex"
-	"strings"
 	"testing"
 
 	"github.com/Salvionied/apollo"
@@ -38,7 +37,7 @@ func TestOGMIOS_FailedSubmissionThrows(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -61,7 +60,7 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -98,11 +97,7 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 		).
 		CompleteExact(0)
 	if err != nil {
-		// skip ExUnits-dependent tests for OGMIGOS
-		if strings.Contains(strings.ToLower(err.Error()), "estimate exunits") {
-			t.Skip("Skipping ExUnit-dependent test (OGMIOS): " + err.Error())
-		}
-		t.Error(err)
+		t.Fatal(err)
 	}
 }
 
@@ -111,7 +106,7 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -133,11 +128,7 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 		).
 		CompleteExact(0)
 	if err != nil {
-		// skip ExUnits-dependent tests for OGMIGOS
-		if strings.Contains(strings.ToLower(err.Error()), "estimate exunits") {
-			t.Skip("Skipping ExUnit-dependent test (OGMIOS): " + err.Error())
-		}
-		t.Error(err)
+		t.Fatal(err)
 	}
 }
 
@@ -146,7 +137,7 @@ func TestOGMIOS_SimpleTransaction(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -171,7 +162,7 @@ func TestOGMIOS_TransactionWithChange(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -205,7 +196,7 @@ func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -231,7 +222,7 @@ func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -257,7 +248,7 @@ func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -283,7 +274,7 @@ func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -309,7 +300,7 @@ func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -335,7 +326,7 @@ func TestOGMIOS_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err := apollob.
@@ -365,7 +356,7 @@ func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -387,7 +378,7 @@ func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -411,7 +402,7 @@ func TestOGMIOS_TransactionWithReferenceScript(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err := apollob.
@@ -433,7 +424,7 @@ func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -455,7 +446,7 @@ func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -477,7 +468,7 @@ func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -499,7 +490,7 @@ func TestOGMIOS_TransactionWithCertificates(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err := apollob.
@@ -521,7 +512,7 @@ func TestOGMIOS_TransactionWithMint(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -547,7 +538,7 @@ func TestOGMIOS_TransactionWithScript(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -569,7 +560,7 @@ func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err := apollob.
@@ -591,7 +582,7 @@ func TestOGMIOS_TransactionWithRedeemer(t *testing.T) {
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Skip("Skipping test (OGMIOS): could not initialize: " + err.Error())
+		t.Fatal("could not initialize: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err := apollob.
