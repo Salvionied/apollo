@@ -707,9 +707,18 @@ func (occ *OgmiosChainContext) GetProtocolParams() (Base.ProtocolParameters, err
 }
 
 func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
-	protocol_param, _ := occ.GetProtocolParams()
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	protocol_param, err := occ.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExSteps %q: %w", protocol_param.MaxTxExSteps, err)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExMem %q: %w", protocol_param.MaxTxExMem, err)
+	}
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
@@ -782,9 +791,15 @@ func (occ *OgmiosChainContext) Utxos(
 		}
 		datum_hash := serialization.DatumHash{}
 		if result.DataHash != "" && result.InlineDatum == "" {
-
-			datum_hash = serialization.DatumHash{}
-			copy(datum_hash.Payload[:], result.DataHash[:])
+			decoded_hash, err := hex.DecodeString(result.DataHash)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"OgmiosChainContext: Utxos: invalid data hash %q: %w",
+					result.DataHash,
+					err,
+				)
+			}
+			datum_hash = serialization.DatumHash{Payload: decoded_hash}
 		}
 		var tx_out TransactionOutput.TransactionOutput
 		if result.InlineDatum != "" {

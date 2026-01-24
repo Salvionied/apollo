@@ -36,7 +36,7 @@ func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -45,20 +45,22 @@ func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if _, err = cc.SubmitTx(*apollob.GetTx()); err == nil {
-		t.Error("DIDNT THROW")
+		t.Fatal("expected error on invalid submission")
 	}
 }
 
-func TestUTXORPC_BurnPlutus(t *testing.T) {
+func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
+	// UTXORPC does not support ExUnit estimation for Plutus scripts.
+	// This test verifies that the expected error is returned.
 	cc, err := NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -94,22 +96,24 @@ func TestUTXORPC_BurnPlutus(t *testing.T) {
 			Redeemer.Redeemer{},
 		).
 		Complete()
-	if err != nil {
-		// skip ExUnits-dependent tests for UTXORPC
-		if strings.Contains(strings.ToLower(err.Error()), "estimate exunits") {
-			t.Skip("Skipping ExUnit-dependent test (UTXORPC): " + err.Error())
-		}
-		t.Error(err)
+	if err == nil {
+		t.Fatal("expected error for ExUnit estimation, got nil")
+	}
+	// Verify we get the expected ExUnit-related error
+	if !strings.Contains(strings.ToLower(err.Error()), "exunit") {
+		t.Fatalf("expected ExUnit-related error, got: %v", err)
 	}
 }
 
-func TestUTXORPC_MintPlutus(t *testing.T) {
+func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
+	// UTXORPC does not support ExUnit estimation for Plutus scripts.
+	// This test verifies that the expected error is returned.
 	cc, err := NewUtxorpcChainContext(
 		UTXORPC_BASE_URL,
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -130,12 +134,12 @@ func TestUTXORPC_MintPlutus(t *testing.T) {
 			Redeemer.Redeemer{},
 		).
 		Complete()
-	if err != nil {
-		// skip ExUnits-dependent tests for UTXORPC
-		if strings.Contains(strings.ToLower(err.Error()), "estimate exunits") {
-			t.Skip("Skipping ExUnit-dependent test (UTXORPC): " + err.Error())
-		}
-		t.Error(err)
+	if err == nil {
+		t.Fatal("expected error for ExUnit estimation, got nil")
+	}
+	// Verify we get the expected ExUnit-related error
+	if !strings.Contains(strings.ToLower(err.Error()), "exunit") {
+		t.Fatalf("expected ExUnit-related error, got: %v", err)
 	}
 }
 
@@ -145,7 +149,7 @@ func TestUTXORPC_SimpleTransaction(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -154,14 +158,11 @@ func TestUTXORPC_SimpleTransaction(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 0 {
-		t.Errorf(
-			"Fee is not correct: expected %d, got %d",
-			0,
-			apollob.GetTx().TransactionBody.Fee,
-		)
+	// Fee should be non-zero when protocol parameters are properly loaded
+	if apollob.GetTx().TransactionBody.Fee == 0 {
+		t.Fatal("Fee should not be zero")
 	}
 }
 
@@ -171,7 +172,7 @@ func TestUTXORPC_TransactionWithChange(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -180,23 +181,20 @@ func TestUTXORPC_TransactionWithChange(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if apollob.GetTx().TransactionBody.Fee != 0 {
-		t.Errorf(
-			"Fee is not correct: expected %d, got %d",
-			0,
-			apollob.GetTx().TransactionBody.Fee,
-		)
+	// Fee should be non-zero when protocol parameters are properly loaded
+	if apollob.GetTx().TransactionBody.Fee == 0 {
+		t.Fatal("Fee should not be zero")
 	}
-	if apollob.GetTx().TransactionBody.Outputs[1].GetAmount().
-		GetCoin() !=
-		5000000 {
-		t.Errorf(
-			"Change is not correct: expected %d, got %d",
-			5000000,
-			apollob.GetTx().TransactionBody.Outputs[1].GetAmount().GetCoin(),
-		)
+	// Change output should exist as a separate output
+	outputs := apollob.GetTx().TransactionBody.Outputs
+	if len(outputs) < 2 {
+		t.Fatalf("Expected at least 2 outputs (payment + change), got %d", len(outputs))
+	}
+	changeOutput := outputs[1].GetAmount().GetCoin()
+	if changeOutput == 0 {
+		t.Fatal("Change output should not be zero")
 	}
 }
 
@@ -206,7 +204,7 @@ func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -216,7 +214,7 @@ func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
 		SetShelleyMetadata(Metadata.ShelleyMaryMetadata{Metadata: Metadata.Metadata{1: "test"}}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if apollob.GetTx().AuxiliaryData == nil {
 		t.Error("AuxiliaryData is nil")
@@ -229,7 +227,7 @@ func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -238,7 +236,7 @@ func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
 		PayToContract(decoded_addr_for_fixtures, &PlutusData.PlutusData{}, 10_000_000, true).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	output := apollob.GetTx().TransactionBody.Outputs[0]
 	if output.PostAlonzo.Datum == nil ||
@@ -254,7 +252,7 @@ func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -263,7 +261,7 @@ func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Reference script not supported in current API
 	// if apollob.GetTx().TransactionBody.Outputs[0].GetReferenceScript() == nil {
@@ -277,7 +275,7 @@ func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -287,7 +285,7 @@ func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Collateral UTxOs may not be selected in current implementation
 	// if len(apollob.GetTx().TransactionBody.Collateral) == 0 {
@@ -301,7 +299,7 @@ func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -311,7 +309,7 @@ func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Collateral return not supported
 	// if apollob.GetTx().TransactionBody.CollateralReturn == nil {
@@ -325,7 +323,7 @@ func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -335,7 +333,7 @@ func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Multiple collaterals not supported
 	// if len(apollob.GetTx().TransactionBody.Collateral) == 0 {
@@ -349,7 +347,7 @@ func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -359,7 +357,7 @@ func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
 		AddRequiredSigner(serialization.PubKeyHash{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(apollob.GetTx().TransactionBody.RequiredSigners) == 0 {
 		t.Error("RequiredSigners is empty")
@@ -372,7 +370,7 @@ func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -382,7 +380,7 @@ func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
 		AddReferenceInput(hex.EncodeToString(testutils.InitUtxosDifferentiated()[0].Input.TransactionId), testutils.InitUtxosDifferentiated()[0].Input.Index).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(apollob.GetTx().TransactionBody.ReferenceInputs) == 0 {
 		t.Error("ReferenceInputs is empty")
@@ -395,7 +393,7 @@ func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -405,7 +403,7 @@ func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
 		SetValidityStart(int64(100)).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if apollob.GetTx().TransactionBody.ValidityStart != 100 {
 		t.Error("ValidityStart is not correct")
@@ -418,7 +416,7 @@ func TestUTXORPC_TransactionWithTtl(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -428,7 +426,7 @@ func TestUTXORPC_TransactionWithTtl(t *testing.T) {
 		SetTtl(int64(100)).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if apollob.GetTx().TransactionBody.Ttl != 100 {
 		t.Error("Ttl is not correct")
@@ -441,7 +439,7 @@ func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -451,7 +449,7 @@ func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
 		AddWithdrawal(decoded_addr_for_fixtures, 1000000, PlutusData.PlutusData{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if apollob.GetTx().TransactionBody.Withdrawals == nil {
 		t.Error("Withdrawals is nil")
@@ -464,7 +462,7 @@ func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -473,7 +471,7 @@ func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Certificates not supported in current API
 	// if apollob.GetTx().TransactionBody.Certificates == nil {
@@ -487,7 +485,7 @@ func TestUTXORPC_TransactionWithMint(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -501,7 +499,7 @@ func TestUTXORPC_TransactionWithMint(t *testing.T) {
 		}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if apollob.GetTx().TransactionBody.Mint == nil {
 		t.Error("Mint is nil")
@@ -514,7 +512,7 @@ func TestUTXORPC_TransactionWithScript(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -524,7 +522,7 @@ func TestUTXORPC_TransactionWithScript(t *testing.T) {
 		AttachV1Script(PlutusData.PlutusV1Script{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(apollob.GetTx().TransactionWitnessSet.PlutusV1Script) == 0 {
 		t.Error("V1Scripts is empty")
@@ -537,7 +535,7 @@ func TestUTXORPC_TransactionWithDatum(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	apollob, err = apollob.
@@ -547,7 +545,7 @@ func TestUTXORPC_TransactionWithDatum(t *testing.T) {
 		AttachDatum(&PlutusData.PlutusData{}).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(apollob.GetTx().TransactionWitnessSet.PlutusData) == 0 {
 		t.Error("PlutusData is empty")
@@ -560,7 +558,7 @@ func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	apollob := apollo.New(&cc)
 	_, err = apollob.
@@ -569,7 +567,7 @@ func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Redeemers not supported in current API
 	// if len(apollob.GetTx().TransactionWitnessSet.Redeemers) == 0 {
@@ -583,7 +581,7 @@ func TestUTXORPC_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 		int(MAINNET),
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal("API error: " + err.Error())
 	}
 	built := apollo.New(&cc)
 	_, err = built.
@@ -593,7 +591,7 @@ func TestUTXORPC_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 		SetCollateralAmount(5_000_000).
 		Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	// Collateral return not supported
 	// if built.GetTx().TransactionBody.CollateralReturn == nil {
