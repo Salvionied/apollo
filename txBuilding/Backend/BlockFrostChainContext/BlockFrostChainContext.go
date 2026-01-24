@@ -211,9 +211,9 @@ func (bfc *BlockFrostChainContext) LatestEpoch() (Base.Epoch, error) {
 		if err != nil {
 			return resultingEpoch, err
 		}
-		Cache.Set("latest_epoch", response)
+		_ = Cache.Set("latest_epoch", response)
 		now := time.Now()
-		Cache.Set("latest_epoch_time", now)
+		_ = Cache.Set("latest_epoch_time", now)
 		return response, nil
 	} else {
 		return resultingEpoch, nil
@@ -315,9 +315,9 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters,
 		if err != nil {
 			return pm, err
 		}
-		Cache.Set("latest_epoch_params", response)
+		_ = Cache.Set("latest_epoch_params", response)
 		now := time.Now()
-		Cache.Set("latest_epoch_params_time", now)
+		_ = Cache.Set("latest_epoch_params_time", now)
 		return response.ToBaseParams(), nil
 	} else {
 		return pm, nil
@@ -357,9 +357,9 @@ func (bfc *BlockFrostChainContext) GenesisParams() (Base.GenesisParameters, erro
 		if err != nil {
 			return gp, err
 		}
-		Cache.Set("genesis_params", response)
+		_ = Cache.Set("genesis_params", response)
 		now := time.Now()
-		Cache.Set("genesis_params_time", now)
+		_ = Cache.Set("genesis_params_time", now)
 		return response, nil
 	} else {
 
