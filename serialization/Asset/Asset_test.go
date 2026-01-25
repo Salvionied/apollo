@@ -197,8 +197,8 @@ func TestDeterministicCBOREncodingSortOrder(t *testing.T) {
 
 // TestCanonicalCBOROrdering validates that asset names are sorted according to
 // RFC 7049 Section 3.9 canonical CBOR encoding rules, as required by CIP-0021:
-//   1. Shorter keys sort before longer keys
-//   2. Keys of equal length are sorted lexicographically
+//  1. Shorter keys sort before longer keys
+//  2. Keys of equal length are sorted lexicographically
 func TestCanonicalCBOROrdering(t *testing.T) {
 	// Helper to extract key order from encoded CBOR
 	extractKeyOrder := func(encoded []byte) []string {
@@ -255,12 +255,12 @@ func TestCanonicalCBOROrdering(t *testing.T) {
 		{
 			name: "mixed lengths with lexicographic tiebreaker",
 			assets: Asset.Asset[int64]{
-				AssetName.NewAssetNameFromString("ZZ"):   4,
-				AssetName.NewAssetNameFromString("A"):    1,
-				AssetName.NewAssetNameFromString("BB"):   3,
-				AssetName.NewAssetNameFromString("Z"):    2,
-				AssetName.NewAssetNameFromString("AAA"):  5,
-				AssetName.NewAssetNameFromString("ZZZ"):  6,
+				AssetName.NewAssetNameFromString("ZZ"):  4,
+				AssetName.NewAssetNameFromString("A"):   1,
+				AssetName.NewAssetNameFromString("BB"):  3,
+				AssetName.NewAssetNameFromString("Z"):   2,
+				AssetName.NewAssetNameFromString("AAA"): 5,
+				AssetName.NewAssetNameFromString("ZZZ"): 6,
 			},
 			// Length 1: A, Z (lex order)
 			// Length 2: BB, ZZ (lex order)

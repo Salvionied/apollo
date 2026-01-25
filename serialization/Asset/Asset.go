@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/Salvionied/apollo/serialization/AssetName"
+	apolloCbor "github.com/Salvionied/apollo/serialization/cbor"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -33,8 +34,12 @@ func (a Asset[V]) MarshalCBOR() ([]byte, error) {
 	}
 
 	slices.SortFunc(assetNames, func(i, j AssetName.AssetName) int {
-		iBytes, _ := hex.DecodeString(i.HexString())
-		jBytes, _ := hex.DecodeString(j.HexString())
+		iBytes, iErr := hex.DecodeString(i.HexString())
+		jBytes, jErr := hex.DecodeString(j.HexString())
+		// If either decode fails, fall back to string comparison
+		if iErr != nil || jErr != nil {
+			return bytes.Compare([]byte(i.HexString()), []byte(j.HexString()))
+		}
 		// RFC 7049 Section 3.9: shorter keys sort first
 		if len(iBytes) != len(jBytes) {
 			return len(iBytes) - len(jBytes)
@@ -46,12 +51,12 @@ func (a Asset[V]) MarshalCBOR() ([]byte, error) {
 	var buf bytes.Buffer
 	mapLen := len(a)
 	if mapLen < 24 {
-		buf.WriteByte(0xa0 | byte(mapLen))
+		buf.WriteByte(apolloCbor.CborMapBase | byte(mapLen))
 	} else if mapLen < 256 {
-		buf.WriteByte(0xb8)
+		buf.WriteByte(apolloCbor.CborMap1ByteLen)
 		buf.WriteByte(byte(mapLen))
 	} else {
-		buf.WriteByte(0xb9)
+		buf.WriteByte(apolloCbor.CborMap2ByteLen)
 		buf.WriteByte(byte(mapLen >> 8))
 		buf.WriteByte(byte(mapLen))
 	}

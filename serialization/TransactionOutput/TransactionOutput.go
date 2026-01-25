@@ -2,6 +2,7 @@ package TransactionOutput
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -372,7 +373,11 @@ func (to *TransactionOutput) GetDatumHash() *serialization.DatumHash {
 */
 func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 	if to.IsPostAlonzo {
-		switch d := to.PostAlonzo.Datum; d.DatumType {
+		d := to.PostAlonzo.Datum
+		if d == nil {
+			return nil
+		}
+		switch d.DatumType {
 		case PlutusData.DatumTypeHash:
 			return nil
 		case PlutusData.DatumTypeInline:
@@ -380,9 +385,8 @@ func (to *TransactionOutput) GetDatum() *PlutusData.PlutusData {
 		default:
 			return nil
 		}
-	} else {
-		return nil
 	}
+	return nil
 }
 
 func (to *TransactionOutput) GetDatumOption() *PlutusData.DatumOption {
@@ -482,23 +486,22 @@ func (txo TransactionOutput) String() string {
 		   	error: An error if deserialization fails.
 */
 func (txo *TransactionOutput) UnmarshalCBOR(value []byte) error {
-	var x any
-	_ = cbor.Unmarshal(value, &x)
-	if reflect.TypeOf(x).String() == "[]interface {}" {
-		txo.IsPostAlonzo = false
-		err := cbor.Unmarshal(value, &txo.PreAlonzo)
-		if err != nil {
-			return err
-		}
-
-	} else {
-		txo.IsPostAlonzo = true
-		err := cbor.Unmarshal(value, &txo.PostAlonzo)
-		if err != nil {
-			return err
-		}
+	// Determine format by checking CBOR major type instead of doing generic unmarshal.
+	// This avoids issues with PlutusData maps that have tag-based keys which fail
+	// when decoded into interface{} (cbor.Tag is not comparable for map keys).
+	// Pre-Alonzo: Array (major type 4) - [address, amount] or [address, amount, datumHash]
+	// Post-Alonzo: Map (major type 5) - {0: address, 1: amount, ...}
+	if len(value) == 0 {
+		return errors.New("empty CBOR data for TransactionOutput")
 	}
-	return nil
+
+	majorType := value[0] >> 5
+	if majorType == 4 { // Array (definite or indefinite)
+		txo.IsPostAlonzo = false
+		return cbor.Unmarshal(value, &txo.PreAlonzo)
+	}
+	txo.IsPostAlonzo = true
+	return cbor.Unmarshal(value, &txo.PostAlonzo)
 }
 
 /*

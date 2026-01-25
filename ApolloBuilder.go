@@ -68,7 +68,7 @@ type Apollo struct {
 	Ttl                int64
 	ValidityStart      int64
 	collateralAmount   int
-	totalCollateral    int
+	totalCollateral    int64
 	referenceInputs    []TransactionInput.TransactionInput
 	referenceInputsV3  []TransactionInput.TransactionInput
 	collateralReturn   *TransactionOutput.TransactionOutput
@@ -1999,7 +1999,7 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 				utxo.Output.GetValue().GetCoin(),
 			) >= collateral_amount+1_000_000 &&
 				len(utxo.Output.GetValue().GetAssets()) <= 5 {
-				b.totalCollateral = collateral_amount
+				b.totalCollateral = int64(collateral_amount)
 				return_amount := utxo.Output.GetValue().
 					GetCoin() -
 					int64(
@@ -2051,13 +2051,13 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 				continue
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
 				b.collaterals = append(b.collaterals, utxo)
-				b.totalCollateral = collateral_amount
+				b.totalCollateral = int64(collateral_amount)
 				return b, nil
 			} else {
 				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
 				b.collaterals = append(b.collaterals, utxo)
 				b.collateralReturn = &returnOutput
-				b.totalCollateral = collateral_amount
+				b.totalCollateral = int64(collateral_amount)
 				return b, nil
 			}
 		}
@@ -2086,13 +2086,13 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 				continue
 			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
 				b.collaterals = append(b.collaterals, utxo)
-				b.totalCollateral = collateral_amount
+				b.totalCollateral = int64(collateral_amount)
 				return b, nil
 			} else {
 				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
 				b.collaterals = append(b.collaterals, utxo)
 				b.collateralReturn = &returnOutput
-				b.totalCollateral = collateral_amount
+				b.totalCollateral = int64(collateral_amount)
 				return b, nil
 			}
 		}
