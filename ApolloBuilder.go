@@ -2220,6 +2220,15 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 		}
 
 	}
+	// Sort redeemers by (Tag, Index) to ensure deterministic ordering.
+	// Without sorting, Go's map iteration produces non-deterministic order,
+	// causing different script_data_hash values on each run.
+	slices.SortFunc(b.redeemers, func(a, b Redeemer.Redeemer) int {
+		if a.Tag != b.Tag {
+			return int(a.Tag) - int(b.Tag)
+		}
+		return a.Index - b.Index
+	})
 	return b, nil
 }
 
@@ -3465,6 +3474,15 @@ func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
 		}
 
 	}
+	// Sort redeemers by (Tag, Index) to ensure deterministic ordering.
+	// Without sorting, Go's map iteration produces non-deterministic order,
+	// causing different script_data_hash values on each run.
+	slices.SortFunc(b.redeemers, func(a, b Redeemer.Redeemer) int {
+		if a.Tag != b.Tag {
+			return int(a.Tag) - int(b.Tag)
+		}
+		return a.Index - b.Index
+	})
 	return b, nil
 }
 
