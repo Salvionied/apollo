@@ -1096,3 +1096,101 @@ func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
 // 	}
 
 // }
+
+// TestRedeemersAreSortedCanonically verifies that redeemers are sorted by (Tag, Index)
+// regardless of the order they are added. This ensures deterministic script_data_hash
+// calculation.
+func TestRedeemersAreSortedCanonically(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	apollob := apollo.New(&cc)
+
+	scriptUtxo1 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+	}
+	scriptUtxo2 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+	}
+	scriptUtxo3 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+	}
+
+	// Create redeemers - we'll add them in reverse order (2, 1, 0)
+	// to test that they get sorted correctly
+	redeemer := Redeemer.Redeemer{
+		Tag:   Redeemer.SPEND,
+		Index: 0, // Index will be updated by setRedeemerIndexes
+		Data: PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusBytes,
+			Value:          []byte("test"),
+		},
+	}
+
+	datum := PlutusData.PlutusData{
+		TagNr:          121,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte("test"),
+	}
+
+	utxos := testutils.InitUtxosDifferentiated()
+
+	// Add UTxOs in reverse order (c, b, a) - after sorting by txid,
+	// they should be (a=0, b=1, c=2)
+	apollob = apollob.SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...).
+		CollectFrom(scriptUtxo3, redeemer). // Will be index 2 after sorting
+		CollectFrom(scriptUtxo2, redeemer). // Will be index 1 after sorting
+		CollectFrom(scriptUtxo1, redeemer). // Will be index 0 after sorting
+		AttachDatum(&datum).
+		AttachV1Script([]byte("test script")).
+		SetEstimationExUnitsRequired()
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Failed to build transaction: %v", err)
+	}
+
+	wts := built.GetTx().TransactionWitnessSet
+	redeemers := wts.Redeemer
+
+	// Verify we have 3 redeemers
+	if len(redeemers) != 3 {
+		t.Fatalf("Expected 3 redeemers, got %d", len(redeemers))
+	}
+
+	// Verify redeemers are sorted by (Tag, Index)
+	for i := 1; i < len(redeemers); i++ {
+		prev := redeemers[i-1]
+		curr := redeemers[i]
+
+		// Check canonical ordering: first by Tag, then by Index
+		if prev.Tag > curr.Tag {
+			t.Errorf("Redeemers not sorted by Tag: redeemer[%d].Tag=%d > redeemer[%d].Tag=%d",
+				i-1, prev.Tag, i, curr.Tag)
+		}
+		if prev.Tag == curr.Tag && prev.Index >= curr.Index {
+			t.Errorf("Redeemers not sorted by Index within same Tag: redeemer[%d].Index=%d >= redeemer[%d].Index=%d",
+				i-1, prev.Index, i, curr.Index)
+		}
+	}
+
+	// Verify the indexes are 0, 1, 2 (corresponding to sorted input order)
+	expectedIndexes := []int{0, 1, 2}
+	for i, r := range redeemers {
+		if r.Index != expectedIndexes[i] {
+			t.Errorf("Redeemer[%d] has Index=%d, expected %d", i, r.Index, expectedIndexes[i])
+		}
+	}
+}
