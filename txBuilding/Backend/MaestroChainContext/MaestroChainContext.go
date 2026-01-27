@@ -274,8 +274,14 @@ func (mcc *MaestroChainContext) MaxTxFee() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExSteps %q: %w", protocol_param.MaxTxExSteps, err)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExMem %q: %w", protocol_param.MaxTxExMem, err)
+	}
 	return Base.Fee(mcc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
