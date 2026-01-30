@@ -41,11 +41,19 @@ func TestUnwrapSetTag(t *testing.T) {
 
 			_, gotTagged, gotErr := UnwrapSetTag(input)
 			if (gotErr != nil) != tt.wantErr {
-				t.Errorf("UnwrapSetTag() error = %v, wantErr %v", gotErr, tt.wantErr)
+				t.Errorf(
+					"UnwrapSetTag() error = %v, wantErr %v",
+					gotErr,
+					tt.wantErr,
+				)
 				return
 			}
 			if gotTagged != tt.wantTagged {
-				t.Errorf("UnwrapSetTag() tagged = %v, want %v", gotTagged, tt.wantTagged)
+				t.Errorf(
+					"UnwrapSetTag() tagged = %v, want %v",
+					gotTagged,
+					tt.wantTagged,
+				)
 			}
 		})
 	}
@@ -133,14 +141,22 @@ func TestDecodeMapPairs(t *testing.T) {
 
 			pairs, gotErr := DecodeMapPairs(input)
 			if (gotErr != nil) != tt.wantErr {
-				t.Errorf("DecodeMapPairs() error = %v, wantErr %v", gotErr, tt.wantErr)
+				t.Errorf(
+					"DecodeMapPairs() error = %v, wantErr %v",
+					gotErr,
+					tt.wantErr,
+				)
 				return
 			}
 			if gotErr != nil {
 				return
 			}
 			if len(pairs) != tt.wantLen {
-				t.Errorf("DecodeMapPairs() len = %d, want %d", len(pairs), tt.wantLen)
+				t.Errorf(
+					"DecodeMapPairs() len = %d, want %d",
+					len(pairs),
+					tt.wantLen,
+				)
 			}
 
 			// Verify keys can be decoded

@@ -32,7 +32,9 @@ func (s *TransactionInputSet) Items() []TransactionInput.TransactionInput {
 
 // SetItems sets the transaction inputs using a defensive copy.
 // This prevents the caller from mutating the internal slice after setting it.
-func (s *TransactionInputSet) SetItems(items []TransactionInput.TransactionInput) {
+func (s *TransactionInputSet) SetItems(
+	items []TransactionInput.TransactionInput,
+) {
 	if items == nil {
 		s.items = nil
 		return

@@ -531,7 +531,9 @@ func TestMultiAssetDeterministicSortOrder(t *testing.T) {
 	}
 
 	if !bytes.Equal(enc1, enc2) {
-		t.Errorf("Same MultiAssets with different map order produced different encodings")
+		t.Errorf(
+			"Same MultiAssets with different map order produced different encodings",
+		)
 		t.Errorf("ma1 encoding: %x", enc1)
 		t.Errorf("ma2 encoding: %x", enc2)
 	}

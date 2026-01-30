@@ -128,7 +128,15 @@ func DecodeMapPairs(data []byte) ([]MapPair, error) {
 		if _, err := reader.Read(buf); err != nil {
 			return nil, err
 		}
-		mapLen = uint64(buf[0])<<24 | uint64(buf[1])<<16 | uint64(buf[2])<<8 | uint64(buf[3])
+		mapLen = uint64(
+			buf[0],
+		)<<24 | uint64(
+			buf[1],
+		)<<16 | uint64(
+			buf[2],
+		)<<8 | uint64(
+			buf[3],
+		)
 	case additionalInfo == 27:
 		buf := make([]byte, 8)
 		if _, err := reader.Read(buf); err != nil {

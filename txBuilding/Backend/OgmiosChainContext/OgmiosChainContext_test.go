@@ -2,6 +2,8 @@ package OgmiosChainContext_test
 
 import (
 	"encoding/hex"
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/Salvionied/apollo"
@@ -32,14 +34,42 @@ var decoded_addr_for_fixtures, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 )
 
-func TestOGMIOS_FailedSubmissionThrows(t *testing.T) {
+// Shared chain context to avoid creating multiple connections to remote service
+var sharedCC *OgmiosChainContext.OgmiosChainContext
+var initErr error
+
+func TestMain(m *testing.M) {
 	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
 	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
 	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
 	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
+		// Store the error but don't fail - tests will skip if init failed
+		initErr = err
+		fmt.Fprintf(
+			os.Stderr,
+			"Warning: Failed to initialize Ogmios context: %v\n",
+			err,
+		)
 	}
-	apollob := apollo.New(&cc)
+	sharedCC = &cc
+	os.Exit(m.Run())
+}
+
+func getSharedContext(t *testing.T) *OgmiosChainContext.OgmiosChainContext {
+	if initErr != nil {
+		t.Skip(
+			"Skipping test (OGMIOS): could not initialize: " + initErr.Error(),
+		)
+	}
+	if sharedCC == nil {
+		t.Fatal("Shared Ogmios context not initialized")
+	}
+	return sharedCC
+}
+
+func TestOGMIOS_FailedSubmissionThrows(t *testing.T) {
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -56,12 +86,7 @@ func TestOGMIOS_FailedSubmissionThrows(t *testing.T) {
 }
 
 func TestOGMIOS_BurnPlutus(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
+	cc := getSharedContext(t)
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
@@ -83,7 +108,7 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 				},
 			})),
 	}
-	apollob := apollo.New(&cc)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
@@ -102,19 +127,14 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 }
 
 func TestOGMIOS_MintPlutus(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
+	cc := getSharedContext(t)
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
 	policy := Policy.PolicyId{
 		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
 	}
-	apollob := apollo.New(&cc)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()[:5]...).
 		SetChangeAddress(decoded_addr).
@@ -133,13 +153,8 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 }
 
 func TestOGMIOS_SimpleTransaction(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -158,13 +173,8 @@ func TestOGMIOS_SimpleTransaction(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithChange(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -192,13 +202,8 @@ func TestOGMIOS_TransactionWithChange(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -218,13 +223,8 @@ func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -244,13 +244,8 @@ func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -270,13 +265,8 @@ func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -296,13 +286,8 @@ func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithTtl(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -322,13 +307,8 @@ func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -352,18 +332,17 @@ func TestOGMIOS_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
-		SetShelleyMetadata(Metadata.ShelleyMaryMetadata{Metadata: Metadata.Metadata{1: "test"}}).
+		SetShelleyMetadata(
+			Metadata.ShelleyMaryMetadata{
+				Metadata: Metadata.Metadata{1: "test"},
+			},
+		).
 		Complete()
 	if err != nil {
 		t.Error(err)
@@ -374,17 +353,17 @@ func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
-		PayToContract(decoded_addr_for_fixtures, &PlutusData.PlutusData{}, 10_000_000, true).
+		PayToContract(
+			decoded_addr_for_fixtures,
+			&PlutusData.PlutusData{},
+			10_000_000,
+			true,
+		).
 		Complete()
 	if err != nil {
 		t.Error(err)
@@ -398,13 +377,8 @@ func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithReferenceScript(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -420,13 +394,8 @@ func TestOGMIOS_TransactionWithReferenceScript(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -442,18 +411,18 @@ func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
-		AddReferenceInput(hex.EncodeToString(testutils.InitUtxosDifferentiated()[0].Input.TransactionId), testutils.InitUtxosDifferentiated()[0].Input.Index).
+		AddReferenceInput(
+			hex.EncodeToString(
+				testutils.InitUtxosDifferentiated()[0].Input.TransactionId,
+			),
+			testutils.InitUtxosDifferentiated()[0].Input.Index,
+		).
 		Complete()
 	if err != nil {
 		t.Error(err)
@@ -464,13 +433,8 @@ func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -486,13 +450,8 @@ func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithCertificates(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -508,13 +467,8 @@ func TestOGMIOS_TransactionWithCertificates(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithMint(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -534,13 +488,8 @@ func TestOGMIOS_TransactionWithMint(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithScript(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -556,13 +505,8 @@ func TestOGMIOS_TransactionWithScript(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithDatum(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
@@ -578,13 +522,8 @@ func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 }
 
 func TestOGMIOS_TransactionWithRedeemer(t *testing.T) {
-	ogmigoClient := ogmigo.New(ogmigo.WithEndpoint(OGMIGOS_BASE_URL))
-	kugoClient := kugo.New(kugo.WithEndpoint(KUGO_BASE_URL))
-	cc := OgmiosChainContext.NewOgmiosChainContext(ogmigoClient, kugoClient)
-	if err := cc.Init(); err != nil {
-		t.Fatal("could not initialize: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
 	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
