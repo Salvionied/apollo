@@ -132,7 +132,10 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 	}
 }
 
-func datum_OgmigoToApollo(d string, dh string) (*PlutusData.DatumOption, error) {
+func datum_OgmigoToApollo(
+	d string,
+	dh string,
+) (*PlutusData.DatumOption, error) {
 	if d != "" {
 		datumBytes, err := hex.DecodeString(d)
 		if err != nil {
@@ -353,7 +356,9 @@ func (occ *OgmiosChainContext) LatestBlock() (Base.Block, error) {
 	}
 	s, ok := point.PointStruct()
 	if !ok {
-		return Base.Block{}, errors.New("OgmiosChainContext: LatestBlock: expected a struct, got origin point")
+		return Base.Block{}, errors.New(
+			"OgmiosChainContext: LatestBlock: expected a struct, got origin point",
+		)
 	}
 	return Base.Block{
 		Hash: s.ID,

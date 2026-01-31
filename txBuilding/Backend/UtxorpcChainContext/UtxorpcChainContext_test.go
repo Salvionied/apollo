@@ -2,6 +2,8 @@ package UtxorpcChainContext
 
 import (
 	"encoding/hex"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -30,16 +32,34 @@ var decoded_addr_for_fixtures, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 )
 
-func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
+// Shared chain context to avoid creating multiple connections to remote service
+var sharedCC *UtxorpcChainContext
+
+func TestMain(m *testing.M) {
+	cc, err := NewUtxorpcChainContext(UTXORPC_BASE_URL, int(MAINNET))
 	if err != nil {
-		t.Fatal("API error: " + err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Failed to initialize UTXORPC context: %v\n",
+			err,
+		)
+		os.Exit(1)
 	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	sharedCC = &cc
+	os.Exit(m.Run())
+}
+
+func getSharedContext(t *testing.T) *UtxorpcChainContext {
+	if sharedCC == nil {
+		t.Fatal("Shared UTXORPC context not initialized")
+	}
+	return sharedCC
+}
+
+func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -55,13 +75,7 @@ func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 	// UTXORPC does not support ExUnit estimation for Plutus scripts.
 	// This test verifies that the expected error is returned.
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
+	cc := getSharedContext(t)
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
@@ -83,8 +97,8 @@ func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 				},
 			})),
 	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -108,21 +122,15 @@ func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
 	// UTXORPC does not support ExUnit estimation for Plutus scripts.
 	// This test verifies that the expected error is returned.
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
+	cc := getSharedContext(t)
 	decoded_addr, _ := Address.DecodeAddress(
 		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 	)
 	policy := Policy.PolicyId{
 		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
 	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()[:5]...).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -144,15 +152,9 @@ func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
 }
 
 func TestUTXORPC_SimpleTransaction(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -167,15 +169,9 @@ func TestUTXORPC_SimpleTransaction(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithChange(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 5_000_000).
@@ -199,19 +195,17 @@ func TestUTXORPC_TransactionWithChange(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
-		SetShelleyMetadata(Metadata.ShelleyMaryMetadata{Metadata: Metadata.Metadata{1: "test"}}).
+		SetShelleyMetadata(
+			Metadata.ShelleyMaryMetadata{
+				Metadata: Metadata.Metadata{1: "test"},
+			},
+		).
 		Complete()
 	if err != nil {
 		t.Fatal(err)
@@ -222,18 +216,17 @@ func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
-		PayToContract(decoded_addr_for_fixtures, &PlutusData.PlutusData{}, 10_000_000, true).
+		PayToContract(
+			decoded_addr_for_fixtures,
+			&PlutusData.PlutusData{},
+			10_000_000,
+			true,
+		).
 		Complete()
 	if err != nil {
 		t.Fatal(err)
@@ -247,15 +240,9 @@ func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -270,15 +257,9 @@ func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -294,15 +275,9 @@ func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -318,15 +293,9 @@ func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -342,15 +311,9 @@ func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -365,19 +328,18 @@ func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
-		AddReferenceInput(hex.EncodeToString(testutils.InitUtxosDifferentiated()[0].Input.TransactionId), testutils.InitUtxosDifferentiated()[0].Input.Index).
+		AddReferenceInput(
+			hex.EncodeToString(
+				testutils.InitUtxosDifferentiated()[0].Input.TransactionId,
+			),
+			testutils.InitUtxosDifferentiated()[0].Input.Index,
+		).
 		Complete()
 	if err != nil {
 		t.Fatal(err)
@@ -388,15 +350,9 @@ func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -411,15 +367,9 @@ func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithTtl(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -434,15 +384,9 @@ func TestUTXORPC_TransactionWithTtl(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -457,15 +401,9 @@ func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -480,15 +418,9 @@ func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithMint(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -507,15 +439,9 @@ func TestUTXORPC_TransactionWithMint(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithScript(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -530,15 +456,9 @@ func TestUTXORPC_TransactionWithScript(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithDatum(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	apollob, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	apollob, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -553,15 +473,9 @@ func TestUTXORPC_TransactionWithDatum(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	apollob := apollo.New(&cc)
-	_, err = apollob.
+	cc := getSharedContext(t)
+	apollob := apollo.New(cc)
+	_, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -576,15 +490,9 @@ func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
 }
 
 func TestUTXORPC_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
-	cc, err := NewUtxorpcChainContext(
-		UTXORPC_BASE_URL,
-		int(MAINNET),
-	)
-	if err != nil {
-		t.Fatal("API error: " + err.Error())
-	}
-	built := apollo.New(&cc)
-	_, err = built.
+	cc := getSharedContext(t)
+	built := apollo.New(cc)
+	_, err := built.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).

@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
 	"slices"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 // ReadKind extracts the kind discriminator from a CBOR-decoded value.

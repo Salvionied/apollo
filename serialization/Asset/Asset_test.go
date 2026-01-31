@@ -189,7 +189,9 @@ func TestDeterministicCBOREncodingSortOrder(t *testing.T) {
 	}
 
 	if !bytes.Equal(enc1, enc2) {
-		t.Errorf("Same assets with different map order produced different encodings")
+		t.Errorf(
+			"Same assets with different map order produced different encodings",
+		)
 		t.Errorf("a1 encoding: %x", enc1)
 		t.Errorf("a2 encoding: %x", enc2)
 	}
@@ -298,12 +300,21 @@ func TestCanonicalCBOROrdering(t *testing.T) {
 			actual := extractKeyOrder(encoded)
 
 			if len(actual) != len(tt.expected) {
-				t.Fatalf("Key count mismatch: got %d, want %d", len(actual), len(tt.expected))
+				t.Fatalf(
+					"Key count mismatch: got %d, want %d",
+					len(actual),
+					len(tt.expected),
+				)
 			}
 
 			for i, key := range actual {
 				if key != tt.expected[i] {
-					t.Errorf("Key order mismatch at position %d: got %q, want %q", i, key, tt.expected[i])
+					t.Errorf(
+						"Key order mismatch at position %d: got %q, want %q",
+						i,
+						key,
+						tt.expected[i],
+					)
 					t.Errorf("Full actual order: %v", actual)
 					t.Errorf("Full expected order: %v", tt.expected)
 					break

@@ -1106,24 +1106,39 @@ func TestRedeemersAreSortedCanonically(t *testing.T) {
 
 	scriptUtxo1 := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-			Index:         0,
+			TransactionId: []byte(
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			),
+			Index: 0,
 		},
-		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
 	}
 	scriptUtxo2 := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-			Index:         0,
+			TransactionId: []byte(
+				"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			),
+			Index: 0,
 		},
-		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
 	}
 	scriptUtxo3 := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
-			TransactionId: []byte("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
-			Index:         0,
+			TransactionId: []byte(
+				"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			),
+			Index: 0,
 		},
-		Output: TransactionOutput.SimpleTransactionOutput(decoded_addr, Value.SimpleValue(15_000_000, nil)),
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
 	}
 
 	// Create redeemers - we'll add them in reverse order (2, 1, 0)
@@ -1177,12 +1192,22 @@ func TestRedeemersAreSortedCanonically(t *testing.T) {
 
 		// Check canonical ordering: first by Tag, then by Index
 		if prev.Tag > curr.Tag {
-			t.Errorf("Redeemers not sorted by Tag: redeemer[%d].Tag=%d > redeemer[%d].Tag=%d",
-				i-1, prev.Tag, i, curr.Tag)
+			t.Errorf(
+				"Redeemers not sorted by Tag: redeemer[%d].Tag=%d > redeemer[%d].Tag=%d",
+				i-1,
+				prev.Tag,
+				i,
+				curr.Tag,
+			)
 		}
 		if prev.Tag == curr.Tag && prev.Index >= curr.Index {
-			t.Errorf("Redeemers not sorted by Index within same Tag: redeemer[%d].Index=%d >= redeemer[%d].Index=%d",
-				i-1, prev.Index, i, curr.Index)
+			t.Errorf(
+				"Redeemers not sorted by Index within same Tag: redeemer[%d].Index=%d >= redeemer[%d].Index=%d",
+				i-1,
+				prev.Index,
+				i,
+				curr.Index,
+			)
 		}
 	}
 
@@ -1190,7 +1215,12 @@ func TestRedeemersAreSortedCanonically(t *testing.T) {
 	expectedIndexes := []int{0, 1, 2}
 	for i, r := range redeemers {
 		if r.Index != expectedIndexes[i] {
-			t.Errorf("Redeemer[%d] has Index=%d, expected %d", i, r.Index, expectedIndexes[i])
+			t.Errorf(
+				"Redeemer[%d] has Index=%d, expected %d",
+				i,
+				r.Index,
+				expectedIndexes[i],
+			)
 		}
 	}
 }

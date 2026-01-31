@@ -1234,7 +1234,9 @@ func (pd *PlutusData) String() string {
 			for _, pair := range pairs {
 				keyString := pair.Key.String()
 				valueString := pair.Value.String()
-				sb.WriteString("    " + keyString + " => " + valueString + ",\n")
+				sb.WriteString(
+					"    " + keyString + " => " + valueString + ",\n",
+				)
 			}
 			sb.WriteByte('}')
 		}
@@ -1333,13 +1335,17 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 			Sort: cbor.SortBytewiseLexical,
 		}.EncMode()
 		if pd.TagNr != 0 {
-			return customEnc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+			return customEnc.Marshal(
+				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
+			)
 		}
 		return customEnc.Marshal(pd.Value)
 	case PlutusIntMap:
 		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
 		if pd.TagNr != 0 {
-			return canonicalenc.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
+			return canonicalenc.Marshal(
+				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
+			)
 		}
 		return canonicalenc.Marshal(pd.Value)
 	case PlutusBigInt:
@@ -1348,7 +1354,9 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 		// Convert PlutusMapPairs back to a CBOR map
 		pairs, ok := pd.Value.(PlutusMapPairs)
 		if !ok {
-			return nil, errors.New("PlutusGenericMap value is not PlutusMapPairs")
+			return nil, errors.New(
+				"PlutusGenericMap value is not PlutusMapPairs",
+			)
 		}
 		// Encode as raw key-value pairs with definite-length map header
 		result := make([]byte, 0)
@@ -1362,8 +1370,16 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 			result = append(result, apolloCbor.CborMap2ByteLen,
 				byte(mapLen>>8), byte(mapLen))
 		case mapLen <= 0xffffffff:
-			result = append(result, apolloCbor.CborMap4ByteLen,
-				byte(mapLen>>24), byte(mapLen>>16), byte(mapLen>>8), byte(mapLen))
+			result = append(
+				result,
+				apolloCbor.CborMap4ByteLen,
+				byte(
+					mapLen>>24,
+				),
+				byte(mapLen>>16),
+				byte(mapLen>>8),
+				byte(mapLen),
+			)
 		default:
 			ml := uint64(mapLen)
 			result = append(result, apolloCbor.CborMap8ByteLen,
@@ -1580,7 +1596,10 @@ func (pd *PlutusData) unmarshalMap(value []uint8) error {
 
 // unmarshalTaggedMap handles CBOR tags whose content is a map that might have tag-based keys.
 // This is needed because cbor.Tag with map content containing tag keys fails during generic decode.
-func (pd *PlutusData) unmarshalTaggedMap(tagNumber uint64, mapContent []byte) error {
+func (pd *PlutusData) unmarshalTaggedMap(
+	tagNumber uint64,
+	mapContent []byte,
+) error {
 	dataType, val, err := decodeMapValue(mapContent)
 	if err != nil {
 		return err
