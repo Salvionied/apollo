@@ -41,41 +41,41 @@ const (
 )
 
 type Apollo struct {
-	Context            Base.ChainContext
-	payments           []PaymentI
-	isEstimateRequired bool
-	auxiliaryData      *Metadata.AuxiliaryData
-	utxos              []UTxO.UTxO
-	preselectedUtxos   []UTxO.UTxO
-	additionalUtxos    []UTxO.UTxO
-	inputAddresses     []Address.Address
-	tx                 *Transaction.Transaction
-	datums             []PlutusData.PlutusData
-	requiredSigners    []serialization.PubKeyHash
-	v1scripts          []PlutusData.PlutusV1Script
-	v2scripts          []PlutusData.PlutusV2Script
-	v3scripts          []PlutusData.PlutusV3Script
-	redeemers          []Redeemer.Redeemer
-	mintRedeemers      []Redeemer.Redeemer
-	redeemersToUTxO    map[string]Redeemer.Redeemer
-	stakeRedeemers     map[string]Redeemer.Redeemer
-	mint               []Unit
-	collaterals        []UTxO.UTxO
-	Fee                int64
-	FeePadding         int64
-	Ttl                int64
-	ValidityStart      int64
-	totalCollateral    int
-	referenceInputs    []TransactionInput.TransactionInput
-	collateralReturn   *TransactionOutput.TransactionOutput
-	withdrawals        Withdrawal.Withdrawal
-	certificates       *Certificate.Certificates
-	nativescripts      []NativeScript.NativeScript
-	usedUtxos          map[string]bool
-	referenceScripts   []PlutusData.ScriptHashable
-	wallet             apollotypes.Wallet
-	scriptHashes       []string
-	forceFee           bool
+	Context                  Base.ChainContext
+	payments                 []PaymentI
+	isEstimateRequired       bool
+	auxiliaryData            *Metadata.AuxiliaryData
+	utxos                    []UTxO.UTxO
+	preselectedUtxos         []UTxO.UTxO
+	additionalUtxos          []UTxO.UTxO
+	inputAddresses           []Address.Address
+	tx                       *Transaction.Transaction
+	datums                   []PlutusData.PlutusData
+	requiredSigners          []serialization.PubKeyHash
+	v1scripts                []PlutusData.PlutusV1Script
+	v2scripts                []PlutusData.PlutusV2Script
+	v3scripts                []PlutusData.PlutusV3Script
+	redeemers                []Redeemer.Redeemer
+	mintRedeemers            []Redeemer.Redeemer
+	redeemersToUTxO          map[string]Redeemer.Redeemer
+	stakeRedeemers           map[string]Redeemer.Redeemer
+	mint                     []Unit
+	collaterals              []UTxO.UTxO
+	Fee                      int64
+	FeePadding               int64
+	Ttl                      int64
+	ValidityStart            int64
+	totalCollateral          int
+	referenceInputs          []TransactionInput.TransactionInput
+	collateralReturn         *TransactionOutput.TransactionOutput
+	withdrawals              Withdrawal.Withdrawal
+	certificates             *Certificate.Certificates
+	nativescripts            []NativeScript.NativeScript
+	usedUtxos                map[string]bool
+	referenceScripts         []PlutusData.ScriptHashable
+	wallet                   apollotypes.Wallet
+	scriptHashes             []string
+	forceFee                 bool
 	referencedScriptVersions map[string]bool
 }
 
@@ -84,42 +84,41 @@ const PlutusV2 = "V2"
 const PlutusV3 = "V3"
 
 func PlutusV1CostModelKey() serialization.CustomBytes {
-    return serialization.CustomBytes{Value: "00"}
+	return serialization.CustomBytes{Value: "00"}
 }
 func PlutusV2CostModelKey() serialization.CustomBytes {
-    return serialization.CustomBytesInt(1)
+	return serialization.CustomBytesInt(1)
 }
 func PlutusV3CostModelKey() serialization.CustomBytes {
-    return serialization.CustomBytesInt(2)
+	return serialization.CustomBytesInt(2)
 }
-
 
 func New(cc Base.ChainContext) *Apollo {
 	return &Apollo{
-		Context:            cc,
-		payments:           []PaymentI{},
-		isEstimateRequired: false,
-		auxiliaryData:      &Metadata.AuxiliaryData{},
-		utxos:              []UTxO.UTxO{},
-		preselectedUtxos:   []UTxO.UTxO{},
-		inputAddresses:     []Address.Address{},
-		tx:                 nil,
-		datums:             make([]PlutusData.PlutusData, 0),
-		requiredSigners:    make([]serialization.PubKeyHash, 0),
-		v1scripts:          make([]PlutusData.PlutusV1Script, 0),
-		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
-		v3scripts:          make([]PlutusData.PlutusV3Script, 0),
-		redeemers:          make([]Redeemer.Redeemer, 0),
-		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
-		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
-		mint:               make([]Unit, 0),
-		collaterals:        make([]UTxO.UTxO, 0),
-		withdrawals:        Withdrawal.New(),
-		Fee:                0,
-		FeePadding:         0,
-		usedUtxos:          make(map[string]bool, 0),
-		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
-		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
+		Context:                  cc,
+		payments:                 []PaymentI{},
+		isEstimateRequired:       false,
+		auxiliaryData:            &Metadata.AuxiliaryData{},
+		utxos:                    []UTxO.UTxO{},
+		preselectedUtxos:         []UTxO.UTxO{},
+		inputAddresses:           []Address.Address{},
+		tx:                       nil,
+		datums:                   make([]PlutusData.PlutusData, 0),
+		requiredSigners:          make([]serialization.PubKeyHash, 0),
+		v1scripts:                make([]PlutusData.PlutusV1Script, 0),
+		v2scripts:                make([]PlutusData.PlutusV2Script, 0),
+		v3scripts:                make([]PlutusData.PlutusV3Script, 0),
+		redeemers:                make([]Redeemer.Redeemer, 0),
+		redeemersToUTxO:          make(map[string]Redeemer.Redeemer),
+		stakeRedeemers:           make(map[string]Redeemer.Redeemer),
+		mint:                     make([]Unit, 0),
+		collaterals:              make([]UTxO.UTxO, 0),
+		withdrawals:              Withdrawal.New(),
+		Fee:                      0,
+		FeePadding:               0,
+		usedUtxos:                make(map[string]bool, 0),
+		referenceInputs:          make([]TransactionInput.TransactionInput, 0),
+		referenceScripts:         make([]PlutusData.ScriptHashable, 0),
 		referencedScriptVersions: make(map[string]bool),
 	}
 }
@@ -703,6 +702,9 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	}
 	//ADDCHANGEANDFEE
 	b, err = b.addChangeAndFee()
+	if err != nil {
+		return nil, tx_cbor, err
+	}
 	//FINALIZE TX
 	body := b.buildTxBody()
 	witnessSet := b.buildWitnessSet()
@@ -933,8 +935,6 @@ func (b *Apollo) AttachV3Script(script PlutusData.PlutusV3Script) *Apollo {
 	return b
 }
 
-
-
 func (a *Apollo) SetWalletFromMnemonic(mnemonic string) *Apollo {
 	paymentPath := "m/1852'/1815'/0'/0/0"
 	stakingPath := "m/1852'/1815'/0'/2/0"
@@ -1119,7 +1119,6 @@ func (b *Apollo) AddReferenceScriptV3(txHash string, index int) *Apollo {
 	b.referencedScriptVersions[PlutusV3] = true
 	return b
 }
-
 
 func (b *Apollo) AddReferenceInput(txHash string, index int) *Apollo {
 	decodedHash, _ := hex.DecodeString(txHash)
