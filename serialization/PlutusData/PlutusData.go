@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"reflect"
 	"sort"
 
@@ -1149,6 +1150,7 @@ const (
 	PlutusArray PlutusType = iota
 	PlutusMap
 	PlutusInt
+	PlutusBigInt
 	PlutusBytes
 	PlutusShortArray
 )
@@ -1330,6 +1332,10 @@ func (cm *CborMap) UnmarshalCBOR(value []uint8) error {
 }
 
 func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
+	if pd.PlutusDataType == PlutusBigInt {
+		// Big integers are marshaled directly - cbor handles them properly
+		return cbor.Marshal(pd.Value)
+	}
 	if pd.TagNr == 0 {
 		return cbor.Marshal(pd.Value)
 	} else {
@@ -1393,7 +1399,7 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 	}
 	ok, valid := x.(cbor.Tag)
 	if valid {
-		switch ok.Content.(type) {
+		switch content := ok.Content.(type) {
 		case []interface{}:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusArray
@@ -1415,14 +1421,27 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []uint8:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusBytes
-			pd.Value = ok.Content
+			pd.Value = content
+		case big.Int:
+			// Big integer encoded with CBOR tag 2 (positive) or 3 (negative)
+			pd.PlutusDataType = PlutusBigInt
+			pd.Value = content
+			pd.TagNr = 0
+		case *big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			if content != nil {
+				pd.Value = *content
+			} else {
+				pd.Value = big.Int{}
+			}
+			pd.TagNr = 0
 
 		default:
 			//TODO SKIP
 			return nil
 		}
 	} else {
-		switch x.(type) {
+		switch v := x.(type) {
 		case []interface{}:
 			if value[0] == 0x9f {
 				y := PlutusIndefArray{}
@@ -1445,12 +1464,24 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			}
 		case uint64:
 			pd.PlutusDataType = PlutusInt
-			pd.Value = x
+			pd.Value = v
+			pd.TagNr = 0
+		case big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			pd.Value = v
+			pd.TagNr = 0
+		case *big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			if v != nil {
+				pd.Value = *v
+			} else {
+				pd.Value = big.Int{}
+			}
 			pd.TagNr = 0
 
 		case []uint8:
 			pd.PlutusDataType = PlutusBytes
-			pd.Value = x
+			pd.Value = v
 			pd.TagNr = 0
 
 		case map[interface{}]interface{}:
