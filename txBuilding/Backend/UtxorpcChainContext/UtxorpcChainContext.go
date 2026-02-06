@@ -476,12 +476,7 @@ func (u *UtxorpcChainContext) LastBlockSlot() (int, error) {
 func (u *UtxorpcChainContext) Utxos(
 	address Address.Address,
 ) ([]UTxO.UTxO, error) {
-	addrCbor, err := address.MarshalCBOR()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal address: %w", err)
-	}
-
-	resp, err := u.client.GetUtxosByAddress(addrCbor)
+	resp, err := u.client.GetUtxosByAddress(address.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get UTxOs: %w", err)
 	}
