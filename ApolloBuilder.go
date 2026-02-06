@@ -562,7 +562,7 @@ func (b *Apollo) updateExUnits() (*Apollo, []byte, error) {
 	if b.isEstimateRequired {
 		estimated_execution_units, tx_cbor, err := b.estimateExunits()
 		if err != nil {
-			return nil, tx_cbor, err
+			return b, tx_cbor, err
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf("%s:%d", Redeemer.RedeemerTagNames[redeemer.Tag], redeemer.Index)
@@ -629,7 +629,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
-		return nil, nil, err
+		return b, nil, err
 	}
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
@@ -667,7 +667,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 						}
 					}
 					if !found {
-						return nil, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
+						return b, nil, fmt.Errorf("missing required assets: %v", unfulfilledAmount)
 					}
 
 				}
@@ -678,7 +678,7 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 				break
 			}
 			if len(available_utxos) == 0 {
-				return nil, nil, errors.New("not enough funds")
+				return b, nil, errors.New("not enough funds")
 			}
 			utxo := available_utxos[0]
 			selectedUtxos = append(selectedUtxos, utxo)
@@ -698,12 +698,12 @@ func (b *Apollo) Complete() (*Apollo, []byte, error) {
 	//UPDATE EXUNITS
 	b, tx_cbor, err := b.updateExUnits()
 	if err != nil {
-		return nil, tx_cbor, err
+		return b, tx_cbor, err
 	}
 	//ADDCHANGEANDFEE
 	b, err = b.addChangeAndFee()
 	if err != nil {
-		return nil, tx_cbor, err
+		return b, tx_cbor, err
 	}
 	//FINALIZE TX
 	body := b.buildTxBody()
@@ -812,7 +812,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
-		return nil, err
+		return b, err
 	}
 	b.Fee = estimatedFee
 	requestedAmount.AddLovelace(b.Fee)
@@ -835,7 +835,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		}
 		newestFee, err := b.estimateFee()
 		if err != nil {
-			return nil, err
+			return b, err
 		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
@@ -869,7 +869,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 
 		newestFee, err := b.estimateFee()
 		if err != nil {
-			return nil, err
+			return b, err
 		}
 		if newestFee > b.Fee {
 			difference := newestFee - b.Fee
