@@ -639,11 +639,107 @@ func (occ *OgmiosChainContext) LatestEpochParams() (Base.ProtocolParameters, err
 	}, nil
 }
 
-func (occ *OgmiosChainContext) GenesisParams() Base.GenesisParameters {
-	genesisParams := Base.GenesisParameters{}
-	//TODO
-	return genesisParams
+// ogmiosGenesisConfig represents the Ogmios v6 shelley genesis response.
+type ogmiosGenesisConfig struct {
+	ActiveSlotsCoefficient json.RawMessage `json:"activeSlotsCoefficient"`
+	UpdateQuorum           int             `json:"updateQuorum"`
+	MaxLovelaceSupply      json.Number     `json:"maxLovelaceSupply"`
+	NetworkMagic           int             `json:"networkMagic"`
+	EpochLength            int             `json:"epochLength"`
+	StartTime              string          `json:"startTime"`
+	SlotsPerKESPeriod      int             `json:"slotsPerKESPeriod"`
+	SlotLength             slotLengthObj   `json:"slotLength"`
+	MaxKESEvolutions       int             `json:"maxKESEvolutions"`
+	SecurityParameter      int             `json:"securityParameter"`
 }
+
+// slotLengthObj represents the slot length object from Ogmios.
+type slotLengthObj struct {
+	Milliseconds int `json:"milliseconds"`
+}
+
+// fractionObj represents a fraction as an object with numerator and denominator.
+type fractionObj struct {
+	Numerator   int `json:"numerator"`
+	Denominator int `json:"denominator"`
+}
+
+// parseActiveSlotsCoefficient parses the activeSlotsCoefficient field which
+// can be a fraction object, a string fraction, or a plain float.
+func parseActiveSlotsCoefficient(raw json.RawMessage) float32 {
+	// Try parsing as fraction object {"numerator": N, "denominator": D}
+	var frac fractionObj
+	if err := json.Unmarshal(raw, &frac); err == nil && frac.Denominator != 0 {
+		return float32(frac.Numerator) / float32(frac.Denominator)
+	}
+
+	// Try parsing as string fraction "N/D" using the existing ratio helper
+	var strVal string
+	if err := json.Unmarshal(raw, &strVal); err == nil {
+		if result := ratio(strVal); result != 0 {
+			return result
+		}
+	}
+
+	// Try parsing as plain float
+	var floatVal float64
+	if err := json.Unmarshal(raw, &floatVal); err == nil {
+		return float32(floatVal)
+	}
+
+	return 0
+}
+
+func (occ *OgmiosChainContext) GenesisParams() Base.GenesisParameters {
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
+	rawConfig, err := occ.ogmigo.GenesisConfig(ctx, "shelley")
+	if err != nil {
+		fmt.Printf(
+			"OgmiosChainContext: GenesisParams: failed to get genesis config: %v\n",
+			err,
+		)
+		return Base.GenesisParameters{}
+	}
+
+	var config ogmiosGenesisConfig
+	if err := json.Unmarshal(rawConfig, &config); err != nil {
+		fmt.Printf(
+			"OgmiosChainContext: GenesisParams: failed to parse genesis config: %v\n",
+			err,
+		)
+		return Base.GenesisParameters{}
+	}
+
+	// Parse startTime from ISO 8601 to Unix timestamp
+	systemStart := 0
+	if config.StartTime != "" {
+		t, err := time.Parse(time.RFC3339, config.StartTime)
+		if err == nil {
+			systemStart = int(t.Unix())
+		}
+	}
+
+	// Convert slot length from milliseconds to seconds
+	slotLength := config.SlotLength.Milliseconds / 1000
+
+	return Base.GenesisParameters{
+		ActiveSlotsCoefficient: parseActiveSlotsCoefficient(
+			config.ActiveSlotsCoefficient,
+		),
+		UpdateQuorum:      config.UpdateQuorum,
+		MaxLovelaceSupply: config.MaxLovelaceSupply.String(),
+		NetworkMagic:      config.NetworkMagic,
+		EpochLength:       config.EpochLength,
+		SystemStart:       systemStart,
+		SlotsPerKesPeriod: config.SlotsPerKESPeriod,
+		SlotLength:        slotLength,
+		MaxKesEvolutions:  config.MaxKESEvolutions,
+		SecurityParam:     config.SecurityParameter,
+	}
+}
+
 func (occ *OgmiosChainContext) _CheckEpochAndUpdate() (bool, error) {
 	if occ._epoch_info.EndTime <= int(time.Now().Unix()) {
 		latestEpochs, err := occ.LatestEpoch()
@@ -718,11 +814,19 @@ func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
 	}
 	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
 	if err != nil {
-		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExSteps %q: %w", protocol_param.MaxTxExSteps, err)
+		return 0, fmt.Errorf(
+			"MaxTxFee: invalid MaxTxExSteps %q: %w",
+			protocol_param.MaxTxExSteps,
+			err,
+		)
 	}
 	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
 	if err != nil {
-		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExMem %q: %w", protocol_param.MaxTxExMem, err)
+		return 0, fmt.Errorf(
+			"MaxTxFee: invalid MaxTxExMem %q: %w",
+			protocol_param.MaxTxExMem,
+			err,
+		)
 	}
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
