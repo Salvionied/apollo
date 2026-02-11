@@ -139,6 +139,59 @@ func (sr ScriptRef) Len() int {
 	return len(sr)
 }
 
+// MarshalCBOR encodes ScriptRef as CBOR tag 24 wrapping a byte string,
+// per the Cardano CDDL: script_ref = #6.24(bytes .cbor script)
+func (sr ScriptRef) MarshalCBOR() ([]byte, error) {
+	return cbor.Marshal(cbor.Tag{Number: 24, Content: []byte(sr)})
+}
+
+// UnmarshalCBOR decodes ScriptRef from CBOR tag 24 wrapping a byte string.
+func (sr *ScriptRef) UnmarshalCBOR(data []byte) error {
+	var tag cbor.Tag
+	if err := cbor.Unmarshal(data, &tag); err != nil {
+		return err
+	}
+	if tag.Number != 24 {
+		return fmt.Errorf("expected CBOR tag 24, got %d", tag.Number)
+	}
+	content, ok := tag.Content.([]byte)
+	if !ok {
+		return errors.New("expected byte string content in CBOR tag 24")
+	}
+	*sr = ScriptRef(content)
+	return nil
+}
+
+// NewV1ScriptRef creates a ScriptRef for a Plutus V1 script.
+// The inner CBOR encoding is [1, script_bytes] per the Cardano CDDL.
+func NewV1ScriptRef(script PlutusV1Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(1), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
+// NewV2ScriptRef creates a ScriptRef for a Plutus V2 script.
+// The inner CBOR encoding is [2, script_bytes] per the Cardano CDDL.
+func NewV2ScriptRef(script PlutusV2Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(2), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
+// NewV3ScriptRef creates a ScriptRef for a Plutus V3 script.
+// The inner CBOR encoding is [3, script_bytes] per the Cardano CDDL.
+func NewV3ScriptRef(script PlutusV3Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(3), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
 type CostModels map[serialization.CustomBytes]CM
 
 type CM map[string]int

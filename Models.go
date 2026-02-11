@@ -71,6 +71,7 @@ type Payment struct {
 	Datum     *PlutusData.PlutusData
 	DatumHash []byte
 	IsInline  bool
+	ScriptRef *PlutusData.ScriptRef
 }
 
 /*
@@ -104,6 +105,10 @@ func PaymentFromTxOut(txOut *TransactionOutput.TransactionOutput) *Payment {
 	}
 	if hasDatumHash && hasInlineDatum {
 		payment.IsInline = true
+	}
+
+	if sr := txOut.GetScriptRef(); sr != nil && sr.Len() > 0 {
+		payment.ScriptRef = sr
 	}
 
 	for policyId, assets := range txOut.GetAmount().GetAssets() {
@@ -220,26 +225,31 @@ func (p *Payment) EnsureMinUTXO(cc Base.ChainContext) {
 
 	*TransactionOutput.TransactionOutput: The created TransactionOutput object.
 */
+// ScriptRef is only valid on post-Alonzo outputs, so any payment with a ScriptRef
+// must take the post-Alonzo path even if it has no inline datum or datum hash.
 func (p *Payment) ToTxOut() *TransactionOutput.TransactionOutput {
-	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
-	if p.IsInline {
+	if p.IsInline || p.ScriptRef != nil {
 		txO := TransactionOutput.TransactionOutput{}
 		txO.IsPostAlonzo = true
-		l := PlutusData.DatumOptionInline(p.Datum)
-		txO.PostAlonzo.Datum = &l
 		txO.PostAlonzo.Address = p.Receiver
 		txO.PostAlonzo.Amount = p.ToValue().ToAlonzoValue()
-
-		if p.Datum != nil {
-			txOut.SetDatum(p.Datum)
+		if p.IsInline && p.Datum != nil {
+			l := PlutusData.DatumOptionInline(p.Datum)
+			txO.PostAlonzo.Datum = &l
+		} else if !p.IsInline && p.DatumHash != nil {
+			l := PlutusData.DatumOptionHash(p.DatumHash)
+			txO.PostAlonzo.Datum = &l
+		}
+		if p.ScriptRef != nil {
+			txO.PostAlonzo.ScriptRef = p.ScriptRef
 		}
 		return &txO
-	} else {
-		if p.DatumHash != nil {
-			txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
-			txOut.PreAlonzo.HasDatum = true
+	}
 
-		}
+	txOut := TransactionOutput.SimpleTransactionOutput(p.Receiver, p.ToValue())
+	if p.DatumHash != nil {
+		txOut.PreAlonzo.DatumHash = serialization.DatumHash{Payload: p.DatumHash}
+		txOut.PreAlonzo.HasDatum = true
 	}
 
 	return &txOut
