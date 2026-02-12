@@ -451,3 +451,110 @@ func TestGetDatumNilDatum(t *testing.T) {
 		t.Error("GetDatum should return nil for pre-Alonzo outputs")
 	}
 }
+
+func TestScriptRefCborRoundTrip(t *testing.T) {
+	script := PlutusData.PlutusV2Script([]byte("test script bytes"))
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV2ScriptRef failed: %v", err)
+	}
+
+	// Marshal
+	encoded, err := cbor.Marshal(sr)
+	if err != nil {
+		t.Fatalf("ScriptRef MarshalCBOR failed: %v", err)
+	}
+
+	// Unmarshal
+	var decoded PlutusData.ScriptRef
+	err = cbor.Unmarshal(encoded, &decoded)
+	if err != nil {
+		t.Fatalf("ScriptRef UnmarshalCBOR failed: %v", err)
+	}
+
+	if len(sr) != len(decoded) {
+		t.Errorf("ScriptRef round-trip length mismatch: got %d, want %d", len(decoded), len(sr))
+	}
+	for i := range sr {
+		if sr[i] != decoded[i] {
+			t.Errorf("ScriptRef round-trip byte mismatch at index %d", i)
+			break
+		}
+	}
+}
+
+func TestTransactionOutputWithScriptRef(t *testing.T) {
+	script := PlutusData.PlutusV2Script([]byte("test script"))
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV2ScriptRef failed: %v", err)
+	}
+
+	txo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address:   addr,
+			Amount:    amNoAssets.ToAlonzoValue(),
+			ScriptRef: &sr,
+		},
+	}
+
+	// Verify GetScriptRef
+	gotSr := txo.GetScriptRef()
+	if gotSr == nil || gotSr.Len() == 0 {
+		t.Fatal("GetScriptRef returned nil or empty")
+	}
+
+	// Marshal and unmarshal round-trip
+	encoded, err := cbor.Marshal(&txo)
+	if err != nil {
+		t.Fatalf("TransactionOutput MarshalCBOR failed: %v", err)
+	}
+
+	var decoded TransactionOutput.TransactionOutput
+	err = cbor.Unmarshal(encoded, &decoded)
+	if err != nil {
+		t.Fatalf("TransactionOutput UnmarshalCBOR failed: %v", err)
+	}
+
+	if !decoded.IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output after round-trip")
+	}
+	if decoded.PostAlonzo.ScriptRef == nil {
+		t.Fatal("ScriptRef lost during round-trip")
+	}
+	if decoded.PostAlonzo.ScriptRef.Len() != sr.Len() {
+		t.Errorf("ScriptRef length mismatch: got %d, want %d", decoded.PostAlonzo.ScriptRef.Len(), sr.Len())
+	}
+}
+
+func TestCloneWithScriptRef(t *testing.T) {
+	script := PlutusData.PlutusV3Script([]byte("v3 script"))
+	sr, err := PlutusData.NewV3ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV3ScriptRef failed: %v", err)
+	}
+
+	txo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address:   addr,
+			Amount:    amNoAssets.ToAlonzoValue(),
+			ScriptRef: &sr,
+		},
+	}
+
+	cloned := txo.Clone()
+	if cloned.PostAlonzo.ScriptRef == nil {
+		t.Fatal("ScriptRef not preserved in Clone()")
+	}
+	if cloned.PostAlonzo.ScriptRef.Len() != sr.Len() {
+		t.Errorf("Cloned ScriptRef length mismatch: got %d, want %d", cloned.PostAlonzo.ScriptRef.Len(), sr.Len())
+	}
+
+	// Verify deep copy: modifying clone should not affect original
+	(*cloned.PostAlonzo.ScriptRef)[0] = 0xFF
+	if (*txo.PostAlonzo.ScriptRef)[0] == 0xFF {
+		t.Error("Clone is not a deep copy: modifying clone affected original")
+	}
+}

@@ -30,11 +30,17 @@ type TransactionOutputAlonzo struct {
 		TransactionOutputAlonzo: A deep copy of the TransactionOutputAlonzo.
 */
 func (t TransactionOutputAlonzo) Clone() TransactionOutputAlonzo {
-	return TransactionOutputAlonzo{
+	cloned := TransactionOutputAlonzo{
 		Address: t.Address,
 		Amount:  t.Amount.Clone(),
 		Datum:   t.Datum,
 	}
+	if t.ScriptRef != nil {
+		cp := make(PlutusData.ScriptRef, len(*t.ScriptRef))
+		copy(cp, *t.ScriptRef)
+		cloned.ScriptRef = &cp
+	}
+	return cloned
 }
 
 /*
@@ -398,19 +404,20 @@ func (to *TransactionOutput) GetDatumOption() *PlutusData.DatumOption {
 	}
 }
 
-/**
+/*
 GetScriptRef retrieves, if available, the ScriptRef of the TransactionOutput.
+Returns nil if the output is pre-Alonzo or if no reference script is attached.
+Callers must check for nil before using the returned pointer.
 
 Returns:
-	*PlutusData.PlutusData: The ScriptRef of the TransictionOutput or an empty PlutusData.ScriptRef.
-*/
 
+	*PlutusData.ScriptRef: The ScriptRef of the TransactionOutput, or nil if none is present.
+*/
 func (to *TransactionOutput) GetScriptRef() *PlutusData.ScriptRef {
 	if to.IsPostAlonzo {
 		return to.PostAlonzo.ScriptRef
-	} else {
-		return new(PlutusData.ScriptRef)
 	}
+	return nil
 }
 
 /*

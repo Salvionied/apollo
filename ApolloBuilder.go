@@ -79,6 +79,10 @@ type Apollo struct {
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
+	// err records the first error encountered during builder method calls.
+	// It is checked and returned by Complete(), so individual builder methods
+	// do not propagate errors directly and callers must inspect the result of Complete().
+	err error
 }
 
 /*
@@ -317,9 +321,18 @@ func (b *Apollo) PayToAddressBech32(
 	lovelace int,
 	units ...Unit,
 ) *Apollo {
-	decoded_addr, _ := Address.DecodeAddress(address)
+	if b.err != nil {
+		return b
+	}
+	decoded_addr, err := Address.DecodeAddress(address)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
 	return b.AddPayment(
-		&Payment{lovelace, decoded_addr, units, nil, nil, false},
+		&Payment{Lovelace: lovelace, Receiver: decoded_addr, Units: units},
 	)
 }
 
@@ -344,7 +357,10 @@ func (b *Apollo) PayToAddress(
 	lovelace int,
 	units ...Unit,
 ) *Apollo {
-	return b.AddPayment(&Payment{lovelace, address, units, nil, nil, false})
+	if b.err != nil {
+		return b
+	}
+	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units})
 }
 
 /*
@@ -394,15 +410,191 @@ func (b *Apollo) PayToContract(
 	isInline bool,
 	units ...Unit,
 ) *Apollo {
+	if b.err != nil {
+		return b
+	}
 	if isInline {
 		b = b.AddPayment(
-			&Payment{lovelace, contractAddress, units, pd, nil, isInline},
+			&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, IsInline: isInline},
 		)
 	} else if pd != nil {
-		dataHash, _ := PlutusData.PlutusDataHash(pd)
-		b = b.AddPayment(&Payment{lovelace, contractAddress, units, pd, dataHash.Payload, isInline})
+		dataHash, err := PlutusData.PlutusDataHash(pd)
+		if err != nil {
+			if b.err == nil {
+				b.err = err
+			}
+			return b
+		}
+		b = b.AddPayment(&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, DatumHash: dataHash.Payload})
 	} else {
-		b = b.AddPayment(&Payment{lovelace, contractAddress, units, nil, nil, isInline})
+		b = b.AddPayment(&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units})
+	}
+	if pd != nil && !isInline {
+		b = b.AddDatum(pd)
+	}
+	return b
+}
+
+// PayToAddressWithV1ReferenceScript creates a payment to the specified address
+// with a Plutus V1 reference script attached to the output.
+func (b *Apollo) PayToAddressWithV1ReferenceScript(
+	address Address.Address,
+	lovelace int,
+	script PlutusData.PlutusV1Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV1ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+}
+
+// PayToAddressWithV2ReferenceScript creates a payment to the specified address
+// with a Plutus V2 reference script attached to the output.
+func (b *Apollo) PayToAddressWithV2ReferenceScript(
+	address Address.Address,
+	lovelace int,
+	script PlutusData.PlutusV2Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+}
+
+// PayToAddressWithV3ReferenceScript creates a payment to the specified address
+// with a Plutus V3 reference script attached to the output.
+func (b *Apollo) PayToAddressWithV3ReferenceScript(
+	address Address.Address,
+	lovelace int,
+	script PlutusData.PlutusV3Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV3ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+}
+
+// PayToContractWithV1ReferenceScript creates a payment to a contract address with a datum
+// and a Plutus V1 reference script attached to the output.
+func (b *Apollo) PayToContractWithV1ReferenceScript(
+	contractAddress Address.Address,
+	pd *PlutusData.PlutusData,
+	lovelace int,
+	isInline bool,
+	script PlutusData.PlutusV1Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV1ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+}
+
+// PayToContractWithV2ReferenceScript creates a payment to a contract address with a datum
+// and a Plutus V2 reference script attached to the output.
+func (b *Apollo) PayToContractWithV2ReferenceScript(
+	contractAddress Address.Address,
+	pd *PlutusData.PlutusData,
+	lovelace int,
+	isInline bool,
+	script PlutusData.PlutusV2Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+}
+
+// PayToContractWithV3ReferenceScript creates a payment to a contract address with a datum
+// and a Plutus V3 reference script attached to the output.
+func (b *Apollo) PayToContractWithV3ReferenceScript(
+	contractAddress Address.Address,
+	pd *PlutusData.PlutusData,
+	lovelace int,
+	isInline bool,
+	script PlutusData.PlutusV3Script,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	sr, err := PlutusData.NewV3ScriptRef(script)
+	if err != nil {
+		if b.err == nil {
+			b.err = err
+		}
+		return b
+	}
+	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+}
+
+// payToContractWithScriptRef is a helper that creates a contract payment with a reference script.
+// It handles both inline datums and datum hashes, and adds the datum to the witness set when not inline.
+func (b *Apollo) payToContractWithScriptRef(
+	contractAddress Address.Address,
+	pd *PlutusData.PlutusData,
+	lovelace int,
+	isInline bool,
+	sr *PlutusData.ScriptRef,
+	units ...Unit,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	if isInline {
+		b = b.AddPayment(
+			&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, IsInline: isInline, ScriptRef: sr},
+		)
+	} else if pd != nil {
+		dataHash, err := PlutusData.PlutusDataHash(pd)
+		if err != nil {
+			if b.err == nil {
+				b.err = err
+			}
+			return b
+		}
+		b = b.AddPayment(&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, DatumHash: dataHash.Payload, ScriptRef: sr})
+	} else {
+		b = b.AddPayment(&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, ScriptRef: sr})
 	}
 	if pd != nil && !isInline {
 		b = b.AddDatum(pd)
@@ -2286,6 +2478,9 @@ func CountRequiredAssets(assets MultiAsset.MultiAsset[int64]) int {
 	error: An error if any issues are encountered during the process.
 */
 func (b *Apollo) Complete() (*Apollo, error) {
+	if b.err != nil {
+		return nil, b.err
+	}
 	selectedUtxos := make([]UTxO.UTxO, 0)
 	selectedAmount := Value.Value{}
 	for _, utxo := range b.preselectedUtxos {

@@ -596,6 +596,25 @@ func TestAddSameScriptTwiceV2(t *testing.T) {
 	}
 }
 
+func TestAddSameScriptTwiceV3(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	apollob := apollo.New(&cc)
+	apollob = apollob.AttachV3Script([]byte("Hello, World!")).
+		AttachV3Script([]byte("Hello, World!"))
+	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(built.GetTx().TransactionWitnessSet.PlutusV3Script) != 1 {
+		t.Error("Tx is not correct")
+	}
+}
+
 func TestSetChangeAddressBech32(t *testing.T) {
 	cc := apollo.NewEmptyBackend()
 	apollob := apollo.New(&cc)
@@ -1222,5 +1241,260 @@ func TestRedeemersAreSortedCanonically(t *testing.T) {
 				expectedIndexes[i],
 			)
 		}
+	}
+}
+
+func TestPayToAddressWithV2ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV2ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	// The first output should have the reference script
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+
+	firstOutput := outputs[0]
+	if !firstOutput.IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if firstOutput.PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if firstOutput.PostAlonzo.ScriptRef.Len() == 0 {
+		t.Fatal("Expected non-empty ScriptRef")
+	}
+}
+
+func TestPayToAddressWithV1ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV1Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV1ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+}
+
+func TestPayToAddressWithV3ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV3Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV3ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+}
+
+func TestPayToContractWithV2ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
+	}
+}
+
+func TestPayToContractWithV2ReferenceScriptDatumHash(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, false, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected datum hash to be set on post-Alonzo output with ScriptRef")
+	}
+}
+
+func TestPayToContractWithV1ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV1Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV1ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
+	}
+}
+
+func TestPayToContractWithV3ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV3Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV3ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
 	}
 }
