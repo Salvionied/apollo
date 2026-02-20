@@ -2094,9 +2094,24 @@ func TestAddressFromBytes(t *testing.T) {
 		)
 	}
 
-	newAddr = Address.WalletAddressFromBytes(nil, addr.StakingPart, 0)
+	newAddr = Address.WalletAddressFromBytes(
+		nil, addr.StakingPart, 0,
+	)
+	if newAddr == nil {
+		t.Error("expected non-nil stake address")
+	} else if newAddr.AddressType != Address.NONE_KEY {
+		t.Errorf(
+			"\nexpected AddressType: %v\nresult: %v",
+			Address.NONE_KEY,
+			newAddr.AddressType,
+		)
+	}
+	newAddr = Address.WalletAddressFromBytes(nil, nil, 0)
 	if newAddr != nil {
-		t.Errorf("\nexpected: %v\nresult: %v", nil, newAddr)
+		t.Errorf(
+			"\nexpected: %v\nresult: %v",
+			nil, newAddr,
+		)
 	}
 }
 

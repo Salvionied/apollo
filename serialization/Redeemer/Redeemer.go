@@ -1,6 +1,11 @@
 package Redeemer
 
-import "github.com/Salvionied/apollo/serialization/PlutusData"
+import (
+	"bytes"
+
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/fxamacker/cbor/v2"
+)
 
 type RedeemerTag int
 
@@ -61,6 +66,69 @@ type Redeemer struct {
 	Index   int
 	Data    PlutusData.PlutusData
 	ExUnits ExecutionUnits
+}
+
+type Redeemers struct {
+	Redeemers []Redeemer
+}
+
+type RedeemerKey struct {
+	_     struct{} `cbor:",toarray"`
+	Tag   RedeemerTag
+	Index int
+}
+
+type RedeemerValue struct {
+	_       struct{} `cbor:",toarray"`
+	Data    PlutusData.PlutusData
+	ExUnits ExecutionUnits
+}
+
+func cborMapHeader(length int) []byte {
+	if length <= 0x17 {
+		return []byte{0xa0 + byte(length)}
+	} else if length <= 0xff {
+		return []byte{0xb8, byte(length)}
+	} else if length <= 0xffff {
+		return []byte{
+			0xb9,
+			byte((length >> 8) & 0xff),
+			byte(length & 0xff),
+		}
+	} else {
+		panic(
+			"apollo/serialization/Redeemer: " +
+				"Very long cbor map header",
+		)
+	}
+}
+
+func (r *Redeemers) MarshalCBOR() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := cbor.NewEncoder(&buf)
+	for _, item := range r.Redeemers {
+		err := enc.Encode(RedeemerKey{
+			Tag:   item.Tag,
+			Index: item.Index,
+		})
+		if err != nil {
+			return nil, err
+		}
+		err = enc.Encode(RedeemerValue{
+			Data:    item.Data,
+			ExUnits: item.ExUnits,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	m := buf.Bytes()
+	header := cborMapHeader(len(r.Redeemers))
+	res := make([]byte, 0, len(header)+len(m))
+	res = append(res, header...)
+	res = append(res, m...)
+	return res, nil
 }
 
 /*
