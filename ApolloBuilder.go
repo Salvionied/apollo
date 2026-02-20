@@ -79,6 +79,7 @@ type Apollo struct {
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
+	forceFee           bool
 	// err records the first error encountered during builder method calls.
 	// It is checked and returned by Complete(), so individual builder methods
 	// do not propagate errors directly and callers must inspect the result of Complete().
@@ -378,6 +379,46 @@ func (b *Apollo) PayToAddress(
 */
 func (b *Apollo) AddDatum(pd *PlutusData.PlutusData) *Apollo {
 	b.datums = append(b.datums, *pd)
+	return b
+}
+
+/*
+*
+
+	PayToContractAsHash creates a payment to a smart
+	contract address using a pre-computed datum hash
+	instead of inline datum data.
+
+	Params:
+
+		contractAddress (Address.Address): The contract
+		  address to send the payment to.
+		pdHash ([]byte): The pre-computed datum hash.
+		lovelace (int): The amount in lovelace to send.
+		isInline (bool): Whether the datum is inline.
+		units (...Unit): Units to include in the payment.
+
+	Returns:
+
+		*Apollo: A pointer to the modified Apollo instance.
+*/
+func (b *Apollo) PayToContractAsHash(
+	contractAddress Address.Address,
+	pdHash []byte,
+	lovelace int,
+	isInline bool,
+	units ...Unit,
+) *Apollo {
+	b = b.AddPayment(
+		&Payment{
+			Lovelace:  lovelace,
+			Receiver:  contractAddress,
+			Units:     units,
+			Datum:     nil,
+			DatumHash: pdHash,
+			IsInline:  false,
+		},
+	)
 	return b
 }
 
@@ -2092,7 +2133,28 @@ func (b *Apollo) buildFullFakeTx() (*Transaction.Transaction, error) {
 		int64: The estimated transaction fee.
 */
 func (b *Apollo) estimateFee() (int64, error) {
-	pExU := Redeemer.ExecutionUnits{Mem: 0, Steps: 0}
+	if b.forceFee {
+		return b.Fee, nil
+	}
+	return b.GetEstimatedFee()
+}
+
+/*
+*
+
+	GetEstimatedFee estimates the transaction fee based on
+	execution units and transaction size. This is the public
+	wrapper around the internal fee estimation logic.
+
+	Returns:
+
+		int64: The estimated transaction fee.
+		error: An error if fee estimation fails.
+*/
+func (b *Apollo) GetEstimatedFee() (int64, error) {
+	pExU := Redeemer.ExecutionUnits{
+		Mem: 0, Steps: 0,
+	}
 	for _, redeemer := range b.redeemers {
 		pExU.Sum(redeemer.ExUnits)
 	}
@@ -2107,7 +2169,9 @@ func (b *Apollo) estimateFee() (int64, error) {
 		return 0, err
 	}
 	fakeTxBytes, _ := fftx.Bytes()
-	fakeTxLength := len([]byte(hex.EncodeToString(fakeTxBytes)))
+	fakeTxLength := len(
+		[]byte(hex.EncodeToString(fakeTxBytes)),
+	)
 	estimatedFee, err := Utils.Fee(
 		b.Context,
 		fakeTxLength,
@@ -2120,7 +2184,28 @@ func (b *Apollo) estimateFee() (int64, error) {
 	}
 	estimatedFee += b.FeePadding
 	return estimatedFee, nil
+}
 
+/*
+*
+
+	ForceFee sets a fixed fee for the transaction,
+	bypassing automatic fee estimation. When set,
+	the estimateFee method will return this fee
+	instead of computing one.
+
+	Params:
+
+		fee (int64): The fee to use for the transaction.
+
+	Returns:
+
+		*Apollo: A pointer to the modified Apollo instance.
+*/
+func (b *Apollo) ForceFee(fee int64) *Apollo {
+	b.Fee = fee
+	b.forceFee = true
+	return b
 }
 
 /*
@@ -2782,6 +2867,30 @@ func (b *Apollo) getPositiveMints() (mints Value.Value) {
 	}
 	return mints
 
+}
+
+/*
+*
+
+	GetMints returns all pending mints (both positive
+	and negative quantities) as a Value. This exposes
+	the internal mint tracking for external callers.
+
+	Returns:
+
+		Value.Value: The total minted value.
+*/
+func (b *Apollo) GetMints() Value.Value {
+	mints := Value.Value{}
+	for _, mintUnit := range b.mint {
+		usedUnit := Unit{
+			PolicyId: mintUnit.PolicyId,
+			Name:     mintUnit.Name,
+			Quantity: mintUnit.Quantity,
+		}
+		mints = mints.Add(usedUnit.ToValue())
+	}
+	return mints
 }
 
 /*
