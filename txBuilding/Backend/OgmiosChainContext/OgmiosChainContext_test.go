@@ -15,7 +15,6 @@ import (
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
@@ -70,7 +69,7 @@ func getSharedContext(t *testing.T) *OgmiosChainContext.OgmiosChainContext {
 func TestOGMIOS_FailedSubmissionThrows(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -109,7 +108,7 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 			})),
 	}
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -118,7 +117,7 @@ func TestOGMIOS_BurnPlutus(t *testing.T) {
 				Name:     "TEST",
 				Quantity: -1,
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		CompleteExact(0)
 	if err != nil {
@@ -135,7 +134,7 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
 	}
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()[:5]...).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -144,7 +143,7 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 				Name:     "TEST",
 				Quantity: 1,
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		CompleteExact(0)
 	if err != nil {
@@ -155,7 +154,7 @@ func TestOGMIOS_MintPlutus(t *testing.T) {
 func TestOGMIOS_SimpleTransaction(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -175,7 +174,7 @@ func TestOGMIOS_SimpleTransaction(t *testing.T) {
 func TestOGMIOS_TransactionWithChange(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 5_000_000).
@@ -204,7 +203,7 @@ func TestOGMIOS_TransactionWithChange(t *testing.T) {
 func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -225,7 +224,7 @@ func TestOGMIOS_TransactionWithCollateral(t *testing.T) {
 func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -246,7 +245,7 @@ func TestOGMIOS_TransactionWithCollateralReturn(t *testing.T) {
 func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -267,7 +266,7 @@ func TestOGMIOS_TransactionWithMultipleCollaterals(t *testing.T) {
 func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -288,7 +287,7 @@ func TestOGMIOS_TransactionWithValidityStart(t *testing.T) {
 func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -309,7 +308,7 @@ func TestOGMIOS_TransactionWithTtl(t *testing.T) {
 func TestOGMIOS_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -334,7 +333,7 @@ func TestOGMIOS_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -355,7 +354,7 @@ func TestOGMIOS_TransactionWithMetadata(t *testing.T) {
 func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToContract(
@@ -379,7 +378,7 @@ func TestOGMIOS_TransactionWithInlineDatum(t *testing.T) {
 func TestOGMIOS_TransactionWithReferenceScript(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -396,7 +395,7 @@ func TestOGMIOS_TransactionWithReferenceScript(t *testing.T) {
 func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -413,7 +412,7 @@ func TestOGMIOS_TransactionWithRequiredSigners(t *testing.T) {
 func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -435,7 +434,7 @@ func TestOGMIOS_TransactionWithReferenceInputs(t *testing.T) {
 func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -452,7 +451,7 @@ func TestOGMIOS_TransactionWithWithdrawals(t *testing.T) {
 func TestOGMIOS_TransactionWithCertificates(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -469,7 +468,7 @@ func TestOGMIOS_TransactionWithCertificates(t *testing.T) {
 func TestOGMIOS_TransactionWithMint(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -490,7 +489,7 @@ func TestOGMIOS_TransactionWithMint(t *testing.T) {
 func TestOGMIOS_TransactionWithScript(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -507,7 +506,7 @@ func TestOGMIOS_TransactionWithScript(t *testing.T) {
 func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -524,7 +523,7 @@ func TestOGMIOS_TransactionWithDatum(t *testing.T) {
 func TestOGMIOS_TransactionWithRedeemer(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
