@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/fxamacker/cbor/v2"
 )
@@ -308,4 +309,52 @@ func TestPlutusDataFromJson(t *testing.T) {
 	}
 	//t.Error("test")
 
+}
+
+func TestCborMapRoundTrip(t *testing.T) {
+	key1 := serialization.CustomBytes{Value: "00"}
+	key2 := serialization.CustomBytes{Value: "01"}
+	m := map[serialization.CustomBytes]PlutusData.PlutusData{
+		key1: {
+			TagNr:    121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{},
+		},
+		key2: {
+			TagNr:    121,
+			PlutusDataType: PlutusData.PlutusArray,
+			Value: PlutusData.PlutusIndefArray{},
+		},
+	}
+	cm := PlutusData.CborMap{Contents: &m}
+	data, err := cm.MarshalCBOR()
+	if err != nil {
+		t.Fatal("MarshalCBOR failed:", err)
+	}
+	var cm2 PlutusData.CborMap
+	err = cm2.UnmarshalCBOR(data)
+	if err != nil {
+		t.Fatal("UnmarshalCBOR failed:", err)
+	}
+	if cm2.Contents == nil {
+		t.Fatal("Contents should not be nil")
+	}
+	if len(*cm2.Contents) != 2 {
+		t.Errorf(
+			"expected 2 entries, got %d",
+			len(*cm2.Contents),
+		)
+	}
+}
+
+func TestCborMapNilContents(t *testing.T) {
+	cm := PlutusData.CborMap{}
+	data, err := cm.MarshalCBOR()
+	if err != nil {
+		t.Fatal("MarshalCBOR failed:", err)
+	}
+	// Should be an empty map, not CBOR null
+	if hex.EncodeToString(data) == "f6" {
+		t.Error("nil Contents should not encode as null")
+	}
 }

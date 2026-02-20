@@ -1,6 +1,13 @@
 package Redeemer
 
-import "github.com/Salvionied/apollo/serialization/PlutusData"
+import (
+	"bytes"
+	"fmt"
+	"sort"
+
+	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/fxamacker/cbor/v2"
+)
 
 type RedeemerTag int
 
@@ -61,6 +68,86 @@ type Redeemer struct {
 	Index   int
 	Data    PlutusData.PlutusData
 	ExUnits ExecutionUnits
+}
+
+// TODO: add UnmarshalCBOR for round-trip support.
+type Redeemers struct {
+	Redeemers []Redeemer
+}
+
+type RedeemerKey struct {
+	_     struct{} `cbor:",toarray"`
+	Tag   RedeemerTag
+	Index int
+}
+
+type RedeemerValue struct {
+	_       struct{} `cbor:",toarray"`
+	Data    PlutusData.PlutusData
+	ExUnits ExecutionUnits
+}
+
+func cborMapHeader(length int) ([]byte, error) {
+	if length <= 0x17 {
+		return []byte{0xa0 + byte(length)}, nil
+	} else if length <= 0xff {
+		return []byte{0xb8, byte(length)}, nil
+	} else if length <= 0xffff {
+		return []byte{
+			0xb9,
+			byte((length >> 8) & 0xff),
+			byte(length & 0xff),
+		}, nil
+	}
+	return nil, fmt.Errorf(
+		"cbor map length %d exceeds maximum supported",
+		length,
+	)
+}
+
+func (r *Redeemers) MarshalCBOR() ([]byte, error) {
+	sorted := make([]Redeemer, len(r.Redeemers))
+	copy(sorted, r.Redeemers)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Tag != sorted[j].Tag {
+			return sorted[i].Tag < sorted[j].Tag
+		}
+		return sorted[i].Index < sorted[j].Index
+	})
+
+	em, err := cbor.CanonicalEncOptions().EncMode()
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	enc := em.NewEncoder(&buf)
+	for _, item := range sorted {
+		err := enc.Encode(RedeemerKey{
+			Tag:   item.Tag,
+			Index: item.Index,
+		})
+		if err != nil {
+			return nil, err
+		}
+		err = enc.Encode(RedeemerValue{
+			Data:    item.Data,
+			ExUnits: item.ExUnits,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	m := buf.Bytes()
+	header, err := cborMapHeader(len(sorted))
+	if err != nil {
+		return nil, err
+	}
+	res := make([]byte, 0, len(header)+len(m))
+	res = append(res, header...)
+	res = append(res, m...)
+	return res, nil
 }
 
 /*

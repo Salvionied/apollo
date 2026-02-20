@@ -981,6 +981,38 @@ func decodeMapValue(data []byte) (PlutusType, any, error) {
 	return PlutusGenericMap, mapPairs, nil
 }
 
+type CborMap struct {
+	Contents *map[serialization.CustomBytes]PlutusData
+}
+
+func (cm *CborMap) MarshalCBOR() ([]uint8, error) {
+	opts := cbor.CanonicalEncOptions()
+	opts.IndefLength = cbor.IndefLengthAllowed
+	em, err := opts.EncMode()
+	if err != nil {
+		return nil, err
+	}
+	if cm.Contents == nil {
+		empty := make(
+			map[serialization.CustomBytes]PlutusData,
+		)
+		return em.Marshal(empty)
+	}
+	return em.Marshal(*cm.Contents)
+}
+
+func (cm *CborMap) UnmarshalCBOR(
+	value []uint8,
+) error {
+	if cm.Contents == nil {
+		m := make(
+			map[serialization.CustomBytes]PlutusData,
+		)
+		cm.Contents = &m
+	}
+	return cbor.Unmarshal(value, cm.Contents)
+}
+
 type PlutusList interface {
 	Len() int
 }
@@ -1298,7 +1330,7 @@ func (pd *PlutusData) String() string {
 		if v, ok := pd.Value.(uint64); ok {
 			sb.WriteString(strconv.FormatUint(v, 10))
 		} else {
-			sb.WriteString(fmt.Sprintf("%v", pd.Value))
+			fmt.Fprintf(&sb, "%v", pd.Value)
 		}
 		sb.WriteByte(')')
 	case PlutusBytes:
@@ -1306,11 +1338,11 @@ func (pd *PlutusData) String() string {
 		if v, ok := pd.Value.([]uint8); ok {
 			sb.WriteString(hex.EncodeToString(v))
 		} else {
-			sb.WriteString(fmt.Sprintf("%v", pd.Value))
+			fmt.Fprintf(&sb, "%v", pd.Value)
 		}
 		sb.WriteByte(')')
 	default:
-		sb.WriteString(fmt.Sprintf("%v", pd.Value))
+		fmt.Fprintf(&sb, "%v", pd.Value)
 	}
 	return sb.String()
 }

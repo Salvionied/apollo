@@ -2094,9 +2094,132 @@ func TestAddressFromBytes(t *testing.T) {
 		)
 	}
 
-	newAddr = Address.WalletAddressFromBytes(nil, addr.StakingPart, 0)
+	newAddr = Address.WalletAddressFromBytes(
+		nil, addr.StakingPart, 0,
+	)
+	if newAddr == nil {
+		t.Error("expected non-nil stake address")
+	} else if newAddr.AddressType != Address.NONE_KEY {
+		t.Errorf(
+			"\nexpected AddressType: %v\nresult: %v",
+			Address.NONE_KEY,
+			newAddr.AddressType,
+		)
+	}
+	newAddr = Address.WalletAddressFromBytes(nil, nil, 0)
 	if newAddr != nil {
-		t.Errorf("\nexpected: %v\nresult: %v", nil, newAddr)
+		t.Errorf(
+			"\nexpected: %v\nresult: %v",
+			nil, newAddr,
+		)
+	}
+}
+
+func TestAddressFromBytesScriptTypes(t *testing.T) {
+	payment := []byte{
+		148, 147, 49, 92, 217, 46, 181, 216,
+		196, 48, 78, 103, 183, 225, 106, 227,
+		109, 97, 211, 69, 2, 105, 70, 87,
+		129, 26, 44, 142,
+	}
+	staking := []byte{
+		51, 123, 98, 207, 255, 100, 3, 160,
+		106, 58, 203, 195, 79, 140, 70, 0,
+		60, 105, 254, 121, 163, 98, 140, 239,
+		169, 196, 114, 81,
+	}
+	cases := []struct {
+		name           string
+		payScript      bool
+		stakeScript    bool
+		expectedType   byte
+	}{
+		{
+			"SCRIPT_KEY",
+			true, false,
+			Address.SCRIPT_KEY,
+		},
+		{
+			"KEY_SCRIPT",
+			false, true,
+			Address.KEY_SCRIPT,
+		},
+		{
+			"SCRIPT_SCRIPT",
+			true, true,
+			Address.SCRIPT_SCRIPT,
+		},
+		{
+			"KEY_KEY",
+			false, false,
+			Address.KEY_KEY,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			addr := Address.AddressFromBytes(
+				payment, tc.payScript,
+				staking, tc.stakeScript, 0,
+			)
+			if addr.AddressType != tc.expectedType {
+				t.Errorf(
+					"expected type %v, got %v",
+					tc.expectedType,
+					addr.AddressType,
+				)
+			}
+		})
+	}
+	// SCRIPT_NONE
+	addr := Address.AddressFromBytes(
+		payment, true, nil, false, 0,
+	)
+	if addr.AddressType != Address.SCRIPT_NONE {
+		t.Errorf(
+			"expected SCRIPT_NONE, got %v",
+			addr.AddressType,
+		)
+	}
+	// NONE_SCRIPT
+	addr = Address.AddressFromBytes(
+		nil, false, staking, true, 0,
+	)
+	if addr.AddressType != Address.NONE_SCRIPT {
+		t.Errorf(
+			"expected NONE_SCRIPT, got %v",
+			addr.AddressType,
+		)
+	}
+}
+
+func TestIsPublicKeyAddress(t *testing.T) {
+	cases := []struct {
+		name     string
+		addrType byte
+		expected bool
+	}{
+		{"KEY_KEY", Address.KEY_KEY, true},
+		{"KEY_NONE", Address.KEY_NONE, true},
+		{"SCRIPT_KEY", Address.SCRIPT_KEY, false},
+		{"SCRIPT_NONE", Address.SCRIPT_NONE, false},
+		{"KEY_SCRIPT", Address.KEY_SCRIPT, false},
+		{"SCRIPT_SCRIPT", Address.SCRIPT_SCRIPT, false},
+		{"NONE_KEY", Address.NONE_KEY, false},
+		{"NONE_SCRIPT", Address.NONE_SCRIPT, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			addr := Address.Address{
+				AddressType: tc.addrType,
+			}
+			if addr.IsPublicKeyAddress() != tc.expected {
+				t.Errorf(
+					"expected %v, got %v",
+					tc.expected,
+					addr.IsPublicKeyAddress(),
+				)
+			}
+		})
 	}
 }
 
