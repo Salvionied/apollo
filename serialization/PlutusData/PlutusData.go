@@ -1298,7 +1298,7 @@ func (pd *PlutusData) String() string {
 		if v, ok := pd.Value.(uint64); ok {
 			sb.WriteString(strconv.FormatUint(v, 10))
 		} else {
-			sb.WriteString(fmt.Sprintf("%v", pd.Value))
+			fmt.Fprintf(&sb, "%v", pd.Value)
 		}
 		sb.WriteByte(')')
 	case PlutusBytes:
@@ -1306,11 +1306,11 @@ func (pd *PlutusData) String() string {
 		if v, ok := pd.Value.([]uint8); ok {
 			sb.WriteString(hex.EncodeToString(v))
 		} else {
-			sb.WriteString(fmt.Sprintf("%v", pd.Value))
+			fmt.Fprintf(&sb, "%v", pd.Value)
 		}
 		sb.WriteByte(')')
 	default:
-		sb.WriteString(fmt.Sprintf("%v", pd.Value))
+		fmt.Fprintf(&sb, "%v", pd.Value)
 	}
 	return sb.String()
 }
