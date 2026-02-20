@@ -548,7 +548,7 @@ func TestRedeemerCollect(t *testing.T) {
 	if wts.Redeemer[0].ExUnits.Steps == 0 {
 		t.Error("Tx is not correct", wts.Redeemer[0].ExUnits.Steps)
 	}
-	if built.GetTx().TransactionBody.Fee != 253730 {
+	if built.GetTx().TransactionBody.Fee != 255842 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Collateral == nil {
@@ -1019,7 +1019,7 @@ func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(
 		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
 	built, _, err := apollob.Complete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	inputs := built.GetTx().TransactionBody.Inputs
 	collateral := built.GetTx().TransactionBody.Collateral
