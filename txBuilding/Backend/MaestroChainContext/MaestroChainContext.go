@@ -139,10 +139,10 @@ func (mcc *MaestroChainContext) LatestEpochParams() (Base.ProtocolParameters, er
 		return protocolParams, err
 	}
 	// Map ALL the fields
-	protocolParams.MinFeeConstant = int(
+	protocolParams.MinFeeConstant = int64(
 		ppFromApi.Data.MinFeeConstant.LovelaceAmount.Lovelace,
 	)
-	protocolParams.MinFeeCoefficient = int(ppFromApi.Data.MinFeeCoefficient)
+	protocolParams.MinFeeCoefficient = int64(ppFromApi.Data.MinFeeCoefficient)
 	protocolParams.MaxTxSize = int(ppFromApi.Data.MaxTransactionSize.Bytes)
 	protocolParams.MaxBlockSize = int(ppFromApi.Data.MaxBlockBodySize.Bytes)
 	protocolParams.MaxBlockHeaderSize = int(
@@ -274,8 +274,14 @@ func (mcc *MaestroChainContext) MaxTxFee() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExSteps %q: %w", protocol_param.MaxTxExSteps, err)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExMem %q: %w", protocol_param.MaxTxExMem, err)
+	}
 	return Base.Fee(mcc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 func (mcc *MaestroChainContext) TxOuts(txHash string) ([]Base.Output, error) {
@@ -318,14 +324,19 @@ func (mcc *MaestroChainContext) GetUtxoFromRef(
 	if err != nil {
 		return utxo, err
 	}
-	decodedCbor, _ := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
+	decodedCbor, err := hex.DecodeString(txOutputByRef.Data.TxOutCbor)
+	if err != nil {
+		return nil, fmt.Errorf("GetUtxoFromRef: invalid CBOR hex: %w", err)
+	}
 	output := TransactionOutput.TransactionOutput{}
 	err = cbor.Unmarshal(decodedCbor, &output)
 	if err != nil {
-
-		return nil, err
+		return nil, fmt.Errorf("GetUtxoFromRef: failed to unmarshal CBOR: %w", err)
 	}
-	decodedHash, _ := hex.DecodeString(txHash)
+	decodedHash, err := hex.DecodeString(txHash)
+	if err != nil {
+		return nil, fmt.Errorf("GetUtxoFromRef: invalid tx hash %q: %w", txHash, err)
+	}
 	utxo = &UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: decodedHash,
@@ -415,16 +426,22 @@ func (mcc *MaestroChainContext) Utxos(
 
 	for _, maestroUtxo := range utxosAtAddressAtApi.Data {
 		utxo := UTxO.UTxO{}
-		decodedHash, _ := hex.DecodeString(maestroUtxo.TxHash)
+		decodedHash, err := hex.DecodeString(maestroUtxo.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf("Utxos: invalid tx hash %q: %w", maestroUtxo.TxHash, err)
+		}
 		utxo.Input = TransactionInput.TransactionInput{
 			TransactionId: decodedHash,
 			Index:         int(maestroUtxo.Index),
 		}
 		output := TransactionOutput.TransactionOutput{}
-		decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
+		decodedCbor, err := hex.DecodeString(maestroUtxo.TxOutCbor)
+		if err != nil {
+			return nil, fmt.Errorf("Utxos: invalid CBOR hex: %w", err)
+		}
 		err = cbor.Unmarshal(decodedCbor, &output)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Utxos: failed to unmarshal CBOR: %w", err)
 		}
 		utxo.Output = output
 		utxos = append(utxos, utxo)
@@ -441,16 +458,22 @@ func (mcc *MaestroChainContext) Utxos(
 		}
 		for _, maestroUtxo := range utxosAtAddressAtApi.Data {
 			utxo := UTxO.UTxO{}
-			decodedHash, _ := hex.DecodeString(maestroUtxo.TxHash)
+			decodedHash, err := hex.DecodeString(maestroUtxo.TxHash)
+			if err != nil {
+				return nil, fmt.Errorf("Utxos: invalid tx hash %q: %w", maestroUtxo.TxHash, err)
+			}
 			utxo.Input = TransactionInput.TransactionInput{
 				TransactionId: decodedHash,
 				Index:         int(maestroUtxo.Index),
 			}
 			output := TransactionOutput.TransactionOutput{}
-			decodedCbor, _ := hex.DecodeString(maestroUtxo.TxOutCbor)
+			decodedCbor, err := hex.DecodeString(maestroUtxo.TxOutCbor)
+			if err != nil {
+				return nil, fmt.Errorf("Utxos: invalid CBOR hex: %w", err)
+			}
 			err = cbor.Unmarshal(decodedCbor, &output)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("Utxos: failed to unmarshal CBOR: %w", err)
 			}
 			utxo.Output = output
 			utxos = append(utxos, utxo)
@@ -473,9 +496,12 @@ func (mcc *MaestroChainContext) SubmitTx(
 
 		return serialization.TransactionId{}, err
 	}
-	decodedResponseHash, _ := hex.DecodeString(resp.Data)
+	decodedResponseHash, err := hex.DecodeString(resp.Data)
+	if err != nil {
+		return serialization.TransactionId{}, fmt.Errorf("SubmitTx: invalid response hash: %w", err)
+	}
 	return serialization.TransactionId{
-		Payload: []byte(decodedResponseHash),
+		Payload: decodedResponseHash,
 	}, nil
 }
 

@@ -1,14 +1,78 @@
 package MultiAsset
 
 import (
+	"bytes"
+	"encoding/hex"
 	"reflect"
+	"slices"
 
 	"github.com/Salvionied/apollo/serialization/Asset"
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/Policy"
+	apolloCbor "github.com/Salvionied/apollo/serialization/cbor"
 )
 
 type MultiAsset[V int64 | uint64] map[Policy.PolicyId]Asset.Asset[V]
+
+/*
+IsEmpty returns true if the MultiAsset is nil or empty.
+This method is used by the CBOR library to determine if the field should be
+omitted when using the "omitempty" tag.
+*/
+func (ma MultiAsset[V]) IsEmpty() bool {
+	return len(ma) == 0
+}
+
+/*
+MarshalCBOR serializes the MultiAsset to CBOR format with deterministic key
+ordering. Policy IDs are sorted lexicographically by their byte representation,
+and asset names within each policy are also sorted lexicographically.
+*/
+func (ma MultiAsset[V]) MarshalCBOR() ([]byte, error) {
+	policyIds := make([]Policy.PolicyId, 0, len(ma))
+	for pid := range ma {
+		policyIds = append(policyIds, pid)
+	}
+
+	slices.SortFunc(policyIds, func(i, j Policy.PolicyId) int {
+		iBytes, iErr := hex.DecodeString(i.Value)
+		jBytes, jErr := hex.DecodeString(j.Value)
+		// If either decode fails, fall back to string comparison
+		if iErr != nil || jErr != nil {
+			return bytes.Compare([]byte(i.Value), []byte(j.Value))
+		}
+		return bytes.Compare(iBytes, jBytes)
+	})
+
+	var buf bytes.Buffer
+	mapLen := len(ma)
+	if mapLen < 24 {
+		buf.WriteByte(apolloCbor.CborMapBase | byte(mapLen))
+	} else if mapLen < 256 {
+		buf.WriteByte(apolloCbor.CborMap1ByteLen)
+		buf.WriteByte(byte(mapLen))
+	} else {
+		buf.WriteByte(apolloCbor.CborMap2ByteLen)
+		buf.WriteByte(byte(mapLen >> 8))
+		buf.WriteByte(byte(mapLen))
+	}
+
+	for _, pid := range policyIds {
+		keyBytes, err := pid.MarshalCBOR()
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(keyBytes)
+
+		valBytes, err := ma[pid].MarshalCBOR()
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(valBytes)
+	}
+
+	return buf.Bytes(), nil
+}
 
 /*
 *

@@ -1,13 +1,82 @@
 package Asset
 
 import (
+	"bytes"
+	"encoding/hex"
 	"maps"
 	"reflect"
+	"slices"
 
 	"github.com/Salvionied/apollo/serialization/AssetName"
+	apolloCbor "github.com/Salvionied/apollo/serialization/cbor"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Asset[V int64 | uint64] map[AssetName.AssetName]V
+
+/*
+IsEmpty returns true if the Asset is nil or empty.
+This method is used by the CBOR library to determine if the field should be
+omitted when using the "omitempty" tag.
+*/
+func (a Asset[V]) IsEmpty() bool {
+	return len(a) == 0
+}
+
+/*
+MarshalCBOR serializes the Asset to CBOR format with deterministic key ordering.
+Asset names are sorted lexicographically by their byte representation.
+*/
+func (a Asset[V]) MarshalCBOR() ([]byte, error) {
+	assetNames := make([]AssetName.AssetName, 0, len(a))
+	for name := range a {
+		assetNames = append(assetNames, name)
+	}
+
+	slices.SortFunc(assetNames, func(i, j AssetName.AssetName) int {
+		iBytes, iErr := hex.DecodeString(i.HexString())
+		jBytes, jErr := hex.DecodeString(j.HexString())
+		// If either decode fails, fall back to string comparison
+		if iErr != nil || jErr != nil {
+			return bytes.Compare([]byte(i.HexString()), []byte(j.HexString()))
+		}
+		// RFC 7049 Section 3.9: shorter keys sort first
+		if len(iBytes) != len(jBytes) {
+			return len(iBytes) - len(jBytes)
+		}
+		// Same length: lexicographic byte comparison
+		return bytes.Compare(iBytes, jBytes)
+	})
+
+	var buf bytes.Buffer
+	mapLen := len(a)
+	if mapLen < 24 {
+		buf.WriteByte(apolloCbor.CborMapBase | byte(mapLen))
+	} else if mapLen < 256 {
+		buf.WriteByte(apolloCbor.CborMap1ByteLen)
+		buf.WriteByte(byte(mapLen))
+	} else {
+		buf.WriteByte(apolloCbor.CborMap2ByteLen)
+		buf.WriteByte(byte(mapLen >> 8))
+		buf.WriteByte(byte(mapLen))
+	}
+
+	for _, name := range assetNames {
+		keyBytes, err := name.MarshalCBOR()
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(keyBytes)
+
+		valBytes, err := cbor.Marshal(a[name])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(valBytes)
+	}
+
+	return buf.Bytes(), nil
+}
 
 /*
 *

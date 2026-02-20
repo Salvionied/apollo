@@ -105,15 +105,15 @@ func Fee(
 		baseFee = baseFee * mult
 	}
 
-	fee := int64((txSize)*pps.MinFeeCoefficient+
-		pps.MinFeeConstant+
-		int(float32(steps)*pps.PriceStep)+
-		int(float32(mem)*pps.PriceMem)) + int64(addedFee)
+	fee := int64(txSize)*pps.MinFeeCoefficient +
+		pps.MinFeeConstant +
+		int64(float32(steps)*pps.PriceStep) +
+		int64(float32(mem)*pps.PriceMem) + int64(addedFee)
 	return fee, nil
 }
 
 func Copy[T serialization.Clonable[T]](input []T) []T {
-	res := make([]T, 0)
+	res := make([]T, 0, len(input))
 	for _, value := range input {
 		res = append(res, value.Clone())
 	}

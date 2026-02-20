@@ -2,6 +2,7 @@ package Base
 
 import (
 	"encoding/hex"
+	"fmt"
 	"strconv"
 
 	"github.com/Salvionied/apollo/serialization"
@@ -36,8 +37,8 @@ type GenesisParameters struct {
 }
 
 type ProtocolParameters struct {
-	MinFeeConstant                   int                `json:"min_fee_b"`
-	MinFeeCoefficient                int                `json:"min_fee_a"`
+	MinFeeConstant                   int64              `json:"min_fee_b"`
+	MinFeeCoefficient                int64              `json:"min_fee_a"`
 	MaxBlockSize                     int                `json:"max_block_size"`
 	MaxTxSize                        int                `json:"max_tx_size"`
 	MaxBlockHeaderSize               int                `json:"max_block_header_size"`
@@ -95,9 +96,15 @@ type Output struct {
 	ReferenceScriptHash string          `json:"reference_script_hash"`
 }
 
-func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
-	txOut := o.ToTransactionOutput()
-	decodedTxHash, _ := hex.DecodeString(txHash)
+func (o Output) ToUTxO(txHash string) (*UTxO.UTxO, error) {
+	txOut, err := o.ToTransactionOutput()
+	if err != nil {
+		return nil, fmt.Errorf("ToUTxO: %w", err)
+	}
+	decodedTxHash, err := hex.DecodeString(txHash)
+	if err != nil {
+		return nil, fmt.Errorf("ToUTxO: invalid tx hash %q: %w", txHash, err)
+	}
 	utxo := UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
 			TransactionId: decodedTxHash,
@@ -105,21 +112,29 @@ func (o Output) ToUTxO(txHash string) *UTxO.UTxO {
 		},
 		Output: txOut,
 	}
-	return &utxo
+	return &utxo, nil
 }
 
-func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
-	address, _ := Address.DecodeAddress(o.Address)
+func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, error) {
+	address, err := Address.DecodeAddress(o.Address)
+	if err != nil {
+		return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid address %q: %w", o.Address, err)
+	}
 	amount := o.Amount
 	lovelace_amount := 0
 	multi_assets := MultiAsset.MultiAsset[int64]{}
 	for _, item := range amount {
 		if item.Unit == "lovelace" {
-			amount, _ := strconv.Atoi(item.Quantity)
-			lovelace_amount += amount
+			amt, err := strconv.Atoi(item.Quantity)
+			if err != nil {
+				return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid lovelace quantity %q: %w", item.Quantity, err)
+			}
+			lovelace_amount += amt
 		} else {
-			asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
-
+			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
+			if err != nil {
+				return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid asset quantity %q: %w", item.Quantity, err)
+			}
 			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
 			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
 			_, ok := multi_assets[policy_id]
@@ -143,19 +158,21 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 	}
 	datum_hash := serialization.DatumHash{}
 	if o.DataHash != "" && o.InlineDatum == "" {
-		decoded_hash, _ := hex.DecodeString(o.DataHash)
-
+		decoded_hash, err := hex.DecodeString(o.DataHash)
+		if err != nil {
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid data hash %q: %w", o.DataHash, err)
+		}
 		datum_hash = serialization.DatumHash{Payload: decoded_hash}
 	}
-	datum := PlutusData.PlutusData{}
 	if o.InlineDatum != "" {
-		decoded, _ := hex.DecodeString(o.InlineDatum)
-
-		var x PlutusData.PlutusData
-		// TODO: error check correctly
-		_ = cbor.Unmarshal(decoded, &x)
-
-		datum = x
+		decoded, err := hex.DecodeString(o.InlineDatum)
+		if err != nil {
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid inline datum hex: %w", err)
+		}
+		var datum PlutusData.PlutusData
+		if err := cbor.Unmarshal(decoded, &datum); err != nil {
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid inline datum CBOR: %w", err)
+		}
 		tx_out := TransactionOutput.TransactionOutput{
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 				Address: address,
@@ -167,7 +184,7 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 			},
 			IsPostAlonzo: true,
 		}
-		return tx_out
+		return tx_out, nil
 	}
 	tx_out := TransactionOutput.TransactionOutput{
 		PreAlonzo: TransactionOutput.TransactionOutputShelley{
@@ -177,7 +194,7 @@ func (o Output) ToTransactionOutput() TransactionOutput.TransactionOutput {
 			HasDatum:  len(datum_hash.Payload) > 0},
 		IsPostAlonzo: false,
 	}
-	return tx_out
+	return tx_out, nil
 }
 
 type TxUtxos struct {
@@ -308,12 +325,12 @@ func Fee(
 ) (int, error) {
 	protocol_param, err := context.GetProtocolParams()
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
-	return int(length*protocol_param.MinFeeCoefficient) +
-		int(protocol_param.MinFeeConstant) +
-		int(exec_steps*int(protocol_param.PriceStep)) +
-		int(max_mem_unit*int(protocol_param.PriceMem)), nil
+	return int(int64(length)*protocol_param.MinFeeCoefficient +
+		protocol_param.MinFeeConstant +
+		int64(exec_steps)*int64(protocol_param.PriceStep) +
+		int64(max_mem_unit)*int64(protocol_param.PriceMem)), nil
 
 }
 
@@ -354,8 +371,8 @@ type BlockfrostProtocolParams struct {
 
 func (p BlockfrostProtocolParams) ToBaseParams() ProtocolParameters {
 	return ProtocolParameters{
-		MinFeeConstant:                   p.MinFeeConstant,
-		MinFeeCoefficient:                p.MinFeeCoefficient,
+		MinFeeConstant:                   int64(p.MinFeeConstant),
+		MinFeeCoefficient:                int64(p.MinFeeCoefficient),
 		MaxBlockSize:                     p.MaxBlockSize,
 		MaxTxSize:                        p.MaxTxSize,
 		MaxBlockHeaderSize:               p.MaxBlockHeaderSize,

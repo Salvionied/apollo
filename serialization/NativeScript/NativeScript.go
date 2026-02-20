@@ -85,11 +85,12 @@ type SerialHash struct {
 		error: An error if the hashing fails.
 */
 func (ns NativeScript) Hash() (serialization.ScriptHash, error) {
-	finalbytes := []byte{0}
 	bytes, err := cbor.Marshal(ns)
 	if err != nil {
 		return serialization.ScriptHash{}, err
 	}
+	finalbytes := make([]byte, 0, 1+len(bytes))
+	finalbytes = append(finalbytes, 0)
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(28, nil)
 	if err != nil {

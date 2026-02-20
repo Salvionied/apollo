@@ -118,7 +118,11 @@ func (bfc *BlockFrostChainContext) GetUtxoFromRef(
 	}
 	for _, txOut := range txOuts {
 		if txOut.OutputIndex == index {
-			return txOut.ToUTxO(txHash), nil
+			utxo, err := txOut.ToUTxO(txHash)
+			if err != nil {
+				return nil, err
+			}
+			return utxo, nil
 		}
 	}
 	return nil, errors.New("UTXO doesn't exist")
@@ -211,9 +215,9 @@ func (bfc *BlockFrostChainContext) LatestEpoch() (Base.Epoch, error) {
 		if err != nil {
 			return resultingEpoch, err
 		}
-		Cache.Set("latest_epoch", response)
+		_ = Cache.Set("latest_epoch", response)
 		now := time.Now()
-		Cache.Set("latest_epoch_time", now)
+		_ = Cache.Set("latest_epoch_time", now)
 		return response, nil
 	} else {
 		return resultingEpoch, nil
@@ -315,9 +319,9 @@ func (bfc *BlockFrostChainContext) LatestEpochParams() (Base.ProtocolParameters,
 		if err != nil {
 			return pm, err
 		}
-		Cache.Set("latest_epoch_params", response)
+		_ = Cache.Set("latest_epoch_params", response)
 		now := time.Now()
-		Cache.Set("latest_epoch_params_time", now)
+		_ = Cache.Set("latest_epoch_params_time", now)
 		return response.ToBaseParams(), nil
 	} else {
 		return pm, nil
@@ -357,9 +361,9 @@ func (bfc *BlockFrostChainContext) GenesisParams() (Base.GenesisParameters, erro
 		if err != nil {
 			return gp, err
 		}
-		Cache.Set("genesis_params", response)
+		_ = Cache.Set("genesis_params", response)
 		now := time.Now()
-		Cache.Set("genesis_params_time", now)
+		_ = Cache.Set("genesis_params_time", now)
 		return response, nil
 	} else {
 
@@ -432,8 +436,14 @@ func (bfc *BlockFrostChainContext) MaxTxFee() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExSteps %q: %w", protocol_param.MaxTxExSteps, err)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf("MaxTxFee: invalid MaxTxExMem %q: %w", protocol_param.MaxTxExMem, err)
+	}
 	return Base.Fee(bfc, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
@@ -444,9 +454,12 @@ func (bfc *BlockFrostChainContext) Utxos(
 	if err != nil {
 		return nil, err
 	}
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, len(results))
 	for _, result := range results {
-		decodedTxId, _ := hex.DecodeString(result.TxHash)
+		decodedTxId, err := hex.DecodeString(result.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf("Utxos: invalid tx hash %q: %w", result.TxHash, err)
+		}
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: decodedTxId,
 			Index:         result.OutputIndex,
@@ -456,11 +469,16 @@ func (bfc *BlockFrostChainContext) Utxos(
 		multi_assets := MultiAsset.MultiAsset[int64]{}
 		for _, item := range amount {
 			if item.Unit == "lovelace" {
-				amount, _ := strconv.Atoi(item.Quantity)
-
-				lovelace_amount += amount
+				amt, err := strconv.Atoi(item.Quantity)
+				if err != nil {
+					return nil, fmt.Errorf("Utxos: invalid lovelace quantity %q: %w", item.Quantity, err)
+				}
+				lovelace_amount += amt
 			} else {
-				asset_quantity, _ := strconv.ParseInt(item.Quantity, 10, 64)
+				asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
+				if err != nil {
+					return nil, fmt.Errorf("Utxos: invalid asset quantity %q: %w", item.Quantity, err)
+				}
 				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
 				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
 				_, ok := multi_assets[policy_id]
@@ -484,20 +502,23 @@ func (bfc *BlockFrostChainContext) Utxos(
 		}
 		datum_hash := serialization.DatumHash{}
 		if result.DataHash != "" && result.InlineDatum == "" {
-
-			datum_hash = serialization.DatumHash{}
-			copy(datum_hash.Payload[:], result.DataHash[:])
+			decoded_hash, err := hex.DecodeString(result.DataHash)
+			if err != nil {
+				return nil, fmt.Errorf("Utxos: invalid data hash %q: %w", result.DataHash, err)
+			}
+			datum_hash = serialization.DatumHash{Payload: decoded_hash}
 		}
 		var tx_out TransactionOutput.TransactionOutput
 		if result.InlineDatum != "" {
-			decoded, _ := hex.DecodeString(result.InlineDatum)
-			var x PlutusData.PlutusData
-			err := cbor.Unmarshal(decoded, &x)
+			decoded, err := hex.DecodeString(result.InlineDatum)
 			if err != nil {
-				continue
+				return nil, fmt.Errorf("Utxos: invalid inline datum hex: %w", err)
 			}
-			l := PlutusData.DatumOptionInline(&x)
-
+			var datum PlutusData.PlutusData
+			if err := cbor.Unmarshal(decoded, &datum); err != nil {
+				return nil, fmt.Errorf("Utxos: invalid inline datum CBOR: %w", err)
+			}
+			l := PlutusData.DatumOptionInline(&datum)
 			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
 				PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
 					Address: address,
@@ -521,7 +542,10 @@ func (bfc *BlockFrostChainContext) SpecialSubmitTx(
 	logger chan string,
 ) (serialization.TransactionId, error) {
 	resId := serialization.TransactionId{}
-	txBytes, _ := cbor.Marshal(tx)
+	txBytes, err := cbor.Marshal(tx)
+	if err != nil {
+		return resId, fmt.Errorf("SpecialSubmitTx: failed to marshal transaction: %w", err)
+	}
 	if bfc.CustomSubmissionEndpoints != nil {
 		logger <- ("Custom Submission Endpoints Found, submitting...")
 		for _, endpoint := range bfc.CustomSubmissionEndpoints {

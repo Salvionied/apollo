@@ -1,6 +1,8 @@
 package FixedChainContext
 
 import (
+	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/Salvionied/apollo/serialization"
@@ -27,14 +29,19 @@ type CborSerializable interface {
 	cbor.Unmarshaler
 }
 
-func CheckTwoWayCbor[T CborSerializable](serializable T) {
+func CheckTwoWayCbor[T CborSerializable](serializable T) error {
 	restored := new(T)
-	serialized, _ := cbor.Marshal(serializable)
-	// TODO: properly error check
-	_ = cbor.Unmarshal(serialized, restored)
-	if !reflect.DeepEqual(serializable, restored) {
-		panic("Invalid serialization")
+	serialized, err := cbor.Marshal(serializable)
+	if err != nil {
+		return fmt.Errorf("CheckTwoWayCbor: marshal failed: %w", err)
 	}
+	if err := cbor.Unmarshal(serialized, restored); err != nil {
+		return fmt.Errorf("CheckTwoWayCbor: unmarshal failed: %w", err)
+	}
+	if !reflect.DeepEqual(serializable, restored) {
+		return errors.New("CheckTwoWayCbor: serialization round-trip mismatch")
+	}
+	return nil
 }
 
 type FixedChainContext struct {

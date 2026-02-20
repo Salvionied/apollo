@@ -1,6 +1,7 @@
 package MultiAsset_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Asset"
@@ -461,5 +462,79 @@ func TestFilter(t *testing.T) {
 	}
 	if ma2[policyT1][assetNameT2] != 0 {
 		t.Errorf("Expected 0, got %d", ma2[policyT1][assetNameT2])
+	}
+}
+
+func TestDeterministicCBOREncoding(t *testing.T) {
+	policy1 := Policy.PolicyId{
+		Value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
+	policy2 := Policy.PolicyId{
+		Value: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}
+	policy3 := Policy.PolicyId{
+		Value: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	}
+	asset1 := AssetName.NewAssetNameFromString("alpha")
+	asset2 := AssetName.NewAssetNameFromString("beta")
+
+	ma := MultiAsset.MultiAsset[int64]{
+		policy3: Asset.Asset[int64]{asset2: 200, asset1: 100},
+		policy1: Asset.Asset[int64]{asset1: 50, asset2: 150},
+		policy2: Asset.Asset[int64]{asset2: 75, asset1: 25},
+	}
+
+	var firstEncoding []byte
+	for i := 0; i < 100; i++ {
+		encoded, err := ma.MarshalCBOR()
+		if err != nil {
+			t.Fatalf("Failed to marshal MultiAsset: %v", err)
+		}
+		if firstEncoding == nil {
+			firstEncoding = encoded
+		} else if !bytes.Equal(encoded, firstEncoding) {
+			t.Errorf(
+				"Non-deterministic encoding on iteration %d: got %x, want %x",
+				i, encoded, firstEncoding,
+			)
+		}
+	}
+}
+
+func TestMultiAssetDeterministicSortOrder(t *testing.T) {
+	policy1 := Policy.PolicyId{
+		Value: "1111111111111111111111111111111111111111111111111111111a",
+	}
+	policy2 := Policy.PolicyId{
+		Value: "2222222222222222222222222222222222222222222222222222222b",
+	}
+	asset1 := AssetName.NewAssetNameFromString("x")
+	asset2 := AssetName.NewAssetNameFromString("y")
+
+	ma1 := MultiAsset.MultiAsset[int64]{
+		policy2: Asset.Asset[int64]{asset2: 2, asset1: 1},
+		policy1: Asset.Asset[int64]{asset2: 4, asset1: 3},
+	}
+
+	ma2 := MultiAsset.MultiAsset[int64]{
+		policy1: Asset.Asset[int64]{asset1: 3, asset2: 4},
+		policy2: Asset.Asset[int64]{asset1: 1, asset2: 2},
+	}
+
+	enc1, err := ma1.MarshalCBOR()
+	if err != nil {
+		t.Fatalf("Failed to marshal ma1: %v", err)
+	}
+	enc2, err := ma2.MarshalCBOR()
+	if err != nil {
+		t.Fatalf("Failed to marshal ma2: %v", err)
+	}
+
+	if !bytes.Equal(enc1, enc2) {
+		t.Errorf(
+			"Same MultiAssets with different map order produced different encodings",
+		)
+		t.Errorf("ma1 encoding: %x", enc1)
+		t.Errorf("ma2 encoding: %x", enc2)
 	}
 }

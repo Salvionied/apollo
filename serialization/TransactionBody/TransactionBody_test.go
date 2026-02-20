@@ -41,12 +41,12 @@ func TestTransactionBodyMarshalAndUnmarshal(t *testing.T) {
 	marshaled, _ := cbor.Marshal(txBody)
 	if hex.EncodeToString(
 		marshaled,
-	) != "a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240" {
+	) != "a50081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f424009a0" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
 			"Expected",
-			"a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240",
+			"a50081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f424009a0",
 		)
 	}
 	txBody2 := TransactionBody.TransactionBody{}
@@ -94,12 +94,12 @@ func TestTransactionBodyHash(t *testing.T) {
 	hash, _ := txBody.Hash()
 	if hex.EncodeToString(
 		hash,
-	) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
+	) != "2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771" {
 		t.Error(
 			"Invalid hash",
 			hex.EncodeToString(hash),
 			"Expected",
-			"49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615",
+			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
 		)
 	}
 }
@@ -112,12 +112,12 @@ func TestId(t *testing.T) {
 	txId, _ := txBody.Id()
 	if hex.EncodeToString(
 		txId.Payload,
-	) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
+	) != "2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771" {
 		t.Error(
 			"Invalid Id",
 			hex.EncodeToString(txId.Payload),
 			"Expected",
-			"49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615",
+			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
 		)
 	}
 }

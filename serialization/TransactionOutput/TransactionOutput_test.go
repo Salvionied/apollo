@@ -65,7 +65,11 @@ func TestPostAlonzo(t *testing.T) {
 }
 
 func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
+	// Original CBOR from external source (may have non-deterministic ordering)
 	cborHex := "84a500838258205628043acaccaf3e07ce6d93bec8da6ae013d2546aa1f491c68dfa2942e6aab401825820250cb6fab4bab5fe0746748cdb8dd42b545328ecc8109e16cd56c0ca9382c7bb028258205e9344d4529b623cb1e17b5a041f58f8275e0fdea54c52a7dc73e0d47ff2fe1a010183a300581d712618e94cdb06792f05ae9b1ec78b0231f4b7f4215b1b4cf52e6342de01821a00e4e1c0a0028201d81858bfd8799fd8799f4040ffd8799f581cf43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc5354441474958ffd8799f581cfd011feb9dc34f85e58e56838989816343f5c62619a82f6a089f05484c414749585f4144415f4e4654ff1903e51b002904d642c7b27c1b7fffffffffffffff581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceff1a009896801a4d6fd4bcff82583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000fea4c8258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a0633d59aab581c10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6a1444745524f1a001e8480581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20ca147534f43494554591b00000019e1ae3741581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa144534e454b1928b0581c29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6a1434d494e1a0cb30355581c533bb94a8850ee3ccbe483106489399112b74c905342cb1792a797a0a144494e44591a156f14e4581c5d16cc1a177b5d9ba9cfa9793b07e60f1fb70fea1f8aef064415d114a1434941471b0000002e921a6381581c8a1cfae21368b8bebbbed9800fec304e95cce39a2a57dc35e2e3ebaaa1444d494c4b05581c8b4e239aef4d1d1bc5dd628ff3ce34d392d632e5cda83e42d6fcb1cca14b586572636865723234393301581cd480f68af028d6324ad77df489176e7f5e5d793e09a6b133392ff2f6aa524e7563617374496e63657074696f6e31343101524e7563617374496e63657074696f6e32303601524e7563617374496e63657074696f6e33323101524e7563617374496e63657074696f6e33383501524e7563617374496e63657074696f6e34303001524e7563617374496e63657074696f6e36333701524e7563617374496e63657074696f6e36373001524e7563617374496e63657074696f6e37383701524e7563617374496e63657074696f6e38333301524e7563617374496e63657074696f6e38373001581ce3ff4ab89245ede61b3e2beab0443dbcc7ea8ca2c017478e4e8990e2a549746170707930333831014974617070793034313901497461707079313430390149746170707931343437014974617070793135353001581cf0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9aa24a626c7565646573657274014a6d6f6e74626c616e636f01021a000342dd031a05fd33e3081a05fd32b7a0f5f6"
+
+	// Expected output with deterministic MultiAsset ordering
+	expectedHex := "84a600838258205628043acaccaf3e07ce6d93bec8da6ae013d2546aa1f491c68dfa2942e6aab401825820250cb6fab4bab5fe0746748cdb8dd42b545328ecc8109e16cd56c0ca9382c7bb028258205e9344d4529b623cb1e17b5a041f58f8275e0fdea54c52a7dc73e0d47ff2fe1a010183a300581d712618e94cdb06792f05ae9b1ec78b0231f4b7f4215b1b4cf52e6342de01821a00e4e1c0a0028201d81858bfd8799fd8799f4040ffd8799f581cf43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc5354441474958ffd8799f581cfd011feb9dc34f85e58e56838989816343f5c62619a82f6a089f05484c414749585f4144415f4e4654ff1903e51b002904d642c7b27c1b7fffffffffffffff581c37dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcd8799f581cf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cceff1a009896801a4d6fd4bcff82583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000fea4c8258390137dce7298152979f0d0ff71fb2d0c759b298ac6fa7bc56b928ffc1bcf68864a338ae8ed81f61114d857cb6a215c8e685aa5c43bc1f879cce821a0633d59aab581c10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6a1444745524f1a001e8480581c25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20ca147534f43494554591b00000019e1ae3741581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa144534e454b1928b0581c29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6a1434d494e1a0cb30355581c533bb94a8850ee3ccbe483106489399112b74c905342cb1792a797a0a144494e44591a156f14e4581c5d16cc1a177b5d9ba9cfa9793b07e60f1fb70fea1f8aef064415d114a1434941471b0000002e921a6381581c8a1cfae21368b8bebbbed9800fec304e95cce39a2a57dc35e2e3ebaaa1444d494c4b05581c8b4e239aef4d1d1bc5dd628ff3ce34d392d632e5cda83e42d6fcb1cca14b586572636865723234393301581cd480f68af028d6324ad77df489176e7f5e5d793e09a6b133392ff2f6aa524e7563617374496e63657074696f6e31343101524e7563617374496e63657074696f6e32303601524e7563617374496e63657074696f6e33323101524e7563617374496e63657074696f6e33383501524e7563617374496e63657074696f6e34303001524e7563617374496e63657074696f6e36333701524e7563617374496e63657074696f6e36373001524e7563617374496e63657074696f6e37383701524e7563617374496e63657074696f6e38333301524e7563617374496e63657074696f6e38373001581ce3ff4ab89245ede61b3e2beab0443dbcc7ea8ca2c017478e4e8990e2a549746170707930333831014974617070793034313901497461707079313430390149746170707931343437014974617070793135353001581cf0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9aa24a626c7565646573657274014a6d6f6e74626c616e636f01021a000342dd031a05fd33e3081a05fd32b709a0a0f5f6"
 
 	decoded_cbor, _ := hex.DecodeString(cborHex)
 	var tx Transaction.Transaction
@@ -78,7 +82,7 @@ func TestDeSerializeTxWithPostAlonzoOut(t *testing.T) {
 	if err != nil {
 		t.Error("Error While remarshaling", err)
 	}
-	if hex.EncodeToString(remarshaled) != cborHex {
+	if hex.EncodeToString(remarshaled) != expectedHex {
 		t.Error("Error while reserializing", hex.EncodeToString(remarshaled))
 	}
 
@@ -417,5 +421,140 @@ func TestSetDatum(t *testing.T) {
 	}
 	if clonedShelley.GetDatumHash() == nil {
 		t.Error("Error while getting datum hash")
+	}
+}
+
+func TestGetDatumNilDatum(t *testing.T) {
+	// Test that GetDatum returns nil when PostAlonzo.Datum is nil
+	// This tests the nil check added to prevent panic on nil dereference
+	txoWithNilDatum := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address: addr,
+			Amount:  amNoAssets.ToAlonzoValue(),
+			Datum:   nil, // explicitly nil
+		},
+	}
+	if txoWithNilDatum.GetDatum() != nil {
+		t.Error("GetDatum should return nil when Datum is nil")
+	}
+
+	// Test pre-Alonzo output also returns nil
+	txoPreAlonzo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: false,
+		PreAlonzo: TransactionOutput.TransactionOutputShelley{
+			Address: addr,
+			Amount:  amNoAssets,
+		},
+	}
+	if txoPreAlonzo.GetDatum() != nil {
+		t.Error("GetDatum should return nil for pre-Alonzo outputs")
+	}
+}
+
+func TestScriptRefCborRoundTrip(t *testing.T) {
+	script := PlutusData.PlutusV2Script([]byte("test script bytes"))
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV2ScriptRef failed: %v", err)
+	}
+
+	// Marshal
+	encoded, err := cbor.Marshal(sr)
+	if err != nil {
+		t.Fatalf("ScriptRef MarshalCBOR failed: %v", err)
+	}
+
+	// Unmarshal
+	var decoded PlutusData.ScriptRef
+	err = cbor.Unmarshal(encoded, &decoded)
+	if err != nil {
+		t.Fatalf("ScriptRef UnmarshalCBOR failed: %v", err)
+	}
+
+	if len(sr) != len(decoded) {
+		t.Errorf("ScriptRef round-trip length mismatch: got %d, want %d", len(decoded), len(sr))
+	}
+	for i := range sr {
+		if sr[i] != decoded[i] {
+			t.Errorf("ScriptRef round-trip byte mismatch at index %d", i)
+			break
+		}
+	}
+}
+
+func TestTransactionOutputWithScriptRef(t *testing.T) {
+	script := PlutusData.PlutusV2Script([]byte("test script"))
+	sr, err := PlutusData.NewV2ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV2ScriptRef failed: %v", err)
+	}
+
+	txo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address:   addr,
+			Amount:    amNoAssets.ToAlonzoValue(),
+			ScriptRef: &sr,
+		},
+	}
+
+	// Verify GetScriptRef
+	gotSr := txo.GetScriptRef()
+	if gotSr == nil || gotSr.Len() == 0 {
+		t.Fatal("GetScriptRef returned nil or empty")
+	}
+
+	// Marshal and unmarshal round-trip
+	encoded, err := cbor.Marshal(&txo)
+	if err != nil {
+		t.Fatalf("TransactionOutput MarshalCBOR failed: %v", err)
+	}
+
+	var decoded TransactionOutput.TransactionOutput
+	err = cbor.Unmarshal(encoded, &decoded)
+	if err != nil {
+		t.Fatalf("TransactionOutput UnmarshalCBOR failed: %v", err)
+	}
+
+	if !decoded.IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output after round-trip")
+	}
+	if decoded.PostAlonzo.ScriptRef == nil {
+		t.Fatal("ScriptRef lost during round-trip")
+	}
+	if decoded.PostAlonzo.ScriptRef.Len() != sr.Len() {
+		t.Errorf("ScriptRef length mismatch: got %d, want %d", decoded.PostAlonzo.ScriptRef.Len(), sr.Len())
+	}
+}
+
+func TestCloneWithScriptRef(t *testing.T) {
+	script := PlutusData.PlutusV3Script([]byte("v3 script"))
+	sr, err := PlutusData.NewV3ScriptRef(script)
+	if err != nil {
+		t.Fatalf("NewV3ScriptRef failed: %v", err)
+	}
+
+	txo := TransactionOutput.TransactionOutput{
+		IsPostAlonzo: true,
+		PostAlonzo: TransactionOutput.TransactionOutputAlonzo{
+			Address:   addr,
+			Amount:    amNoAssets.ToAlonzoValue(),
+			ScriptRef: &sr,
+		},
+	}
+
+	cloned := txo.Clone()
+	if cloned.PostAlonzo.ScriptRef == nil {
+		t.Fatal("ScriptRef not preserved in Clone()")
+	}
+	if cloned.PostAlonzo.ScriptRef.Len() != sr.Len() {
+		t.Errorf("Cloned ScriptRef length mismatch: got %d, want %d", cloned.PostAlonzo.ScriptRef.Len(), sr.Len())
+	}
+
+	// Verify deep copy: modifying clone should not affect original
+	(*cloned.PostAlonzo.ScriptRef)[0] = 0xFF
+	if (*txo.PostAlonzo.ScriptRef)[0] == 0xFF {
+		t.Error("Clone is not a deep copy: modifying clone affected original")
 	}
 }

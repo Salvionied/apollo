@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,17 +14,12 @@ import (
 	"github.com/Salvionied/apollo/constants"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	apolloCbor "github.com/Salvionied/apollo/serialization/cbor"
 
 	"github.com/fxamacker/cbor/v2"
 
 	"golang.org/x/crypto/blake2b"
 )
-
-// TODO: remove me
-// type _Script struct {
-// 	_      struct{} `cbor:",toarray"`
-// 	Script []byte
-// }
 
 type DatumType byte
 
@@ -145,6 +139,59 @@ func (sr ScriptRef) Len() int {
 	return len(sr)
 }
 
+// MarshalCBOR encodes ScriptRef as CBOR tag 24 wrapping a byte string,
+// per the Cardano CDDL: script_ref = #6.24(bytes .cbor script)
+func (sr ScriptRef) MarshalCBOR() ([]byte, error) {
+	return cbor.Marshal(cbor.Tag{Number: 24, Content: []byte(sr)})
+}
+
+// UnmarshalCBOR decodes ScriptRef from CBOR tag 24 wrapping a byte string.
+func (sr *ScriptRef) UnmarshalCBOR(data []byte) error {
+	var tag cbor.Tag
+	if err := cbor.Unmarshal(data, &tag); err != nil {
+		return err
+	}
+	if tag.Number != 24 {
+		return fmt.Errorf("expected CBOR tag 24, got %d", tag.Number)
+	}
+	content, ok := tag.Content.([]byte)
+	if !ok {
+		return errors.New("expected byte string content in CBOR tag 24")
+	}
+	*sr = ScriptRef(content)
+	return nil
+}
+
+// NewV1ScriptRef creates a ScriptRef for a Plutus V1 script.
+// The inner CBOR encoding is [1, script_bytes] per the Cardano CDDL.
+func NewV1ScriptRef(script PlutusV1Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(1), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
+// NewV2ScriptRef creates a ScriptRef for a Plutus V2 script.
+// The inner CBOR encoding is [2, script_bytes] per the Cardano CDDL.
+func NewV2ScriptRef(script PlutusV2Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(2), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
+// NewV3ScriptRef creates a ScriptRef for a Plutus V3 script.
+// The inner CBOR encoding is [3, script_bytes] per the Cardano CDDL.
+func NewV3ScriptRef(script PlutusV3Script) (ScriptRef, error) {
+	inner, err := cbor.Marshal([]interface{}{uint64(3), []byte(script)})
+	if err != nil {
+		return nil, err
+	}
+	return ScriptRef(inner), nil
+}
+
 type CostModels map[serialization.CustomBytes]CM
 
 type CM map[string]int
@@ -160,8 +207,8 @@ type CM map[string]int
 		error: An error if marshaling fails.
 */
 func (cm CM) MarshalCBOR() ([]byte, error) {
-	res := make([]int, 0)
-	mk := make([]string, 0)
+	res := make([]int, 0, len(cm))
+	mk := make([]string, 0, len(cm))
 	for k := range cm {
 		mk = append(mk, k)
 	}
@@ -666,8 +713,8 @@ var PLUTUSV3COSTMODEL = CostModelArray(
 		error: An error if marshaling fails.
 */
 func (cv CostView) MarshalCBOR() ([]byte, error) {
-	res := make([]int, 0)
-	mk := make([]string, 0)
+	res := make([]int, 0, len(cv))
+	mk := make([]string, 0, len(cv))
 	for k := range cv {
 		mk = append(mk, k)
 	}
@@ -873,7 +920,66 @@ const (
 	PlutusBigInt
 	PlutusBytes
 	PlutusShortArray
+	PlutusGenericMap // For maps with complex keys (like constructor-tagged values)
 )
+
+// PlutusMapPair represents a key-value pair in a Plutus data map
+// where both key and value can be any PlutusData type.
+// This is needed for maps where keys are constructor-tagged values.
+type PlutusMapPair struct {
+	Key   PlutusData
+	Value PlutusData
+}
+
+// PlutusMapPairs represents a Plutus data map as a slice of key-value pairs.
+// This representation is used instead of a Go map when keys are complex
+// types like constructor-tagged values.
+type PlutusMapPairs []PlutusMapPair
+
+// decodeMapValue attempts to decode CBOR map data using multiple strategies.
+// It tries simpler map types first, falling back to PlutusMapPairs for complex keys.
+// Returns the decoded PlutusType, value, and any error.
+func decodeMapValue(data []byte) (PlutusType, any, error) {
+	// Strategy 1: Try map[CustomBytes]PlutusData (handles most common cases)
+	simpleMap := map[serialization.CustomBytes]PlutusData{}
+	if err := cbor.Unmarshal(data, &simpleMap); err == nil {
+		// Check if all keys are integers (PlutusIntMap) or all are bytes (PlutusMap)
+		allInt := len(simpleMap) > 0
+		for k := range simpleMap {
+			if !k.IsInt() {
+				allInt = false
+				break
+			}
+		}
+		if allInt {
+			return PlutusIntMap, simpleMap, nil
+		}
+		return PlutusMap, simpleMap, nil
+	}
+
+	// Strategy 2: Try map[PlutusDataKey]PlutusData
+	keyMap := map[PlutusDataKey]PlutusData{}
+	if err := cbor.Unmarshal(data, &keyMap); err == nil {
+		return PlutusMap, keyMap, nil
+	}
+
+	// Strategy 3: Use DecodeMapPairs for complex keys (like constructor tags)
+	pairs, pairErr := apolloCbor.DecodeMapPairs(data)
+	if pairErr != nil {
+		return 0, nil, fmt.Errorf("map decode failed: %w", pairErr)
+	}
+
+	mapPairs := make(PlutusMapPairs, len(pairs))
+	for i, pair := range pairs {
+		if err := cbor.Unmarshal(pair.KeyRaw, &mapPairs[i].Key); err != nil {
+			return 0, nil, fmt.Errorf("map key decode: %w", err)
+		}
+		if err := cbor.Unmarshal(pair.ValueRaw, &mapPairs[i].Value); err != nil {
+			return 0, nil, fmt.Errorf("map value decode: %w", err)
+		}
+	}
+	return PlutusGenericMap, mapPairs, nil
+}
 
 type PlutusList interface {
 	Len() int
@@ -915,7 +1021,7 @@ func (pia PlutusDefArray) Len() int {
 		PlutusIndefArray: A deep copy of the PlutusIndefArray.
 */
 func (pia *PlutusIndefArray) Clone() PlutusIndefArray {
-	ret := PlutusIndefArray{}
+	ret := make(PlutusIndefArray, 0, len(*pia))
 	for _, v := range *pia {
 		ret = append(ret, v.Clone())
 	}
@@ -1006,9 +1112,8 @@ func (pd *Datum) Clone() Datum {
 func (pd Datum) MarshalCBOR() ([]uint8, error) {
 	if pd.TagNr == 0 {
 		return cbor.Marshal(pd.Value)
-	} else {
-		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 	}
+	return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 }
 
 /*
@@ -1103,84 +1208,111 @@ type PlutusData struct {
 }
 
 func (pd *PlutusData) String() string {
-	res := ""
+	var sb strings.Builder
 	if pd.TagNr != 0 {
-		res += fmt.Sprintf("Constr: %d\n", pd.TagNr)
+		sb.WriteString("Constr: ")
+		sb.WriteString(strconv.FormatUint(pd.TagNr, 10))
+		sb.WriteByte('\n')
 	}
 	switch pd.PlutusDataType {
 	case PlutusArray:
-		res += "Array[\n"
+		sb.WriteString("Array[\n")
 		value, ok := pd.Value.(PlutusIndefArray)
 		if ok {
 			for _, v := range value {
 				contentString := v.String()
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == len(strings.Split(contentString, "\n"))-1 {
-						res += "    " + line
+						sb.WriteString("    " + line)
 					} else {
-						res += "    " + line + "\n"
+						sb.WriteString("    " + line + "\n")
 					}
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "]"
+			sb.WriteByte(']')
 		}
 		value2, ok := pd.Value.(PlutusDefArray)
 		if ok {
 			for _, v := range value2 {
 				contentString := v.String()
 				for line := range strings.SplitSeq(contentString, "\n") {
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "]"
+			sb.WriteByte(']')
 		}
 	case PlutusMap:
 		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
 		if ok {
-			res += "Map{\n"
+			sb.WriteString("Map{\n")
 			for k, v := range value {
 				contentString := v.String()
-				res += k.String() + ": "
+				sb.WriteString(k.String() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
-						res += line + "\n"
+						sb.WriteString(line + "\n")
 						continue
 					}
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "}"
+			sb.WriteByte('}')
 		}
 
 	case PlutusIntMap:
 		value, ok := pd.Value.(map[serialization.CustomBytes]PlutusData)
 		if ok {
-			res += "IntMap{\n"
+			sb.WriteString("IntMap{\n")
 			for k, v := range value {
 				contentString := v.String()
-				res += fmt.Sprint(k) + ": "
+				sb.WriteString(k.String() + ": ")
 				for idx, line := range strings.Split(contentString, "\n") {
 					if idx == 0 {
-						res += line + "\n"
+						sb.WriteString(line + "\n")
 						continue
 					}
-					res += "    " + line + "\n"
+					sb.WriteString("    " + line + "\n")
 				}
-				res += ",\n"
+				sb.WriteString(",\n")
 			}
-			res += "}"
+			sb.WriteByte('}')
+		}
+	case PlutusGenericMap:
+		pairs, ok := pd.Value.(PlutusMapPairs)
+		if ok {
+			sb.WriteString("GenericMap{\n")
+			for _, pair := range pairs {
+				keyString := pair.Key.String()
+				valueString := pair.Value.String()
+				sb.WriteString(
+					"    " + keyString + " => " + valueString + ",\n",
+				)
+			}
+			sb.WriteByte('}')
 		}
 	case PlutusInt:
-		res += fmt.Sprintf("Int(%d)", pd.Value.(uint64))
+		sb.WriteString("Int(")
+		if v, ok := pd.Value.(uint64); ok {
+			sb.WriteString(strconv.FormatUint(v, 10))
+		} else {
+			fmt.Fprintf(&sb, "%v", pd.Value)
+		}
+		sb.WriteByte(')')
 	case PlutusBytes:
-		res += fmt.Sprintf("Bytes(%s)", hex.EncodeToString(pd.Value.([]uint8)))
+		sb.WriteString("Bytes(")
+		if v, ok := pd.Value.([]uint8); ok {
+			sb.WriteString(hex.EncodeToString(v))
+		} else {
+			fmt.Fprintf(&sb, "%v", pd.Value)
+		}
+		sb.WriteByte(')')
 	default:
-		res += fmt.Sprintf("%v", pd.Value)
+		fmt.Fprintf(&sb, "%v", pd.Value)
 	}
-	return res
+	return sb.String()
 }
 
 /*
@@ -1259,27 +1391,72 @@ func (pd *PlutusData) MarshalCBOR() ([]uint8, error) {
 			return customEnc.Marshal(
 				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
 			)
-		} else {
-			return customEnc.Marshal(pd.Value)
 		}
+		return customEnc.Marshal(pd.Value)
 	case PlutusIntMap:
 		canonicalenc, _ := cbor.CanonicalEncOptions().EncMode()
 		if pd.TagNr != 0 {
 			return canonicalenc.Marshal(
 				cbor.Tag{Number: pd.TagNr, Content: pd.Value},
 			)
-		} else {
-			return canonicalenc.Marshal(pd.Value)
 		}
+		return canonicalenc.Marshal(pd.Value)
 	case PlutusBigInt:
 		return cbor.Marshal(pd.Value)
+	case PlutusGenericMap:
+		// Convert PlutusMapPairs back to a CBOR map
+		pairs, ok := pd.Value.(PlutusMapPairs)
+		if !ok {
+			return nil, errors.New(
+				"PlutusGenericMap value is not PlutusMapPairs",
+			)
+		}
+		// Encode as raw key-value pairs with definite-length map header
+		result := make([]byte, 0)
+		mapLen := len(pairs)
+		switch {
+		case mapLen < 24:
+			result = append(result, byte(apolloCbor.CborMapBase+mapLen))
+		case mapLen <= 0xff:
+			result = append(result, apolloCbor.CborMap1ByteLen, byte(mapLen))
+		case mapLen <= 0xffff:
+			result = append(result, apolloCbor.CborMap2ByteLen,
+				byte(mapLen>>8), byte(mapLen))
+		case mapLen <= 0xffffffff:
+			result = append(
+				result,
+				apolloCbor.CborMap4ByteLen,
+				byte(
+					mapLen>>24,
+				),
+				byte(mapLen>>16),
+				byte(mapLen>>8),
+				byte(mapLen),
+			)
+		default:
+			ml := uint64(mapLen)
+			result = append(result, apolloCbor.CborMap8ByteLen,
+				byte(ml>>56), byte(ml>>48), byte(ml>>40), byte(ml>>32),
+				byte(ml>>24), byte(ml>>16), byte(ml>>8), byte(ml))
+		}
+		for _, pair := range pairs {
+			keyBytes, err := cbor.Marshal(pair.Key)
+			if err != nil {
+				return nil, err
+			}
+			valueBytes, err := cbor.Marshal(pair.Value)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, keyBytes...)
+			result = append(result, valueBytes...)
+		}
+		return result, nil
 	default:
-		//enc, _ := cbor.EncOptions{Sort: cbor.SortCTAP2}.EncMode()
 		if pd.TagNr == 0 {
 			return cbor.Marshal(pd.Value)
-		} else {
-			return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 		}
+		return cbor.Marshal(cbor.Tag{Number: pd.TagNr, Content: pd.Value})
 	}
 
 }
@@ -1451,9 +1628,38 @@ func (pd *PlutusData) UnmarshalJSON(value []byte) error {
 
 		}
 	default:
-		fmt.Println("DEFAULT", x)
-
+		return fmt.Errorf("unsupported JSON structure for PlutusData: %T", x)
 	}
+	return nil
+}
+
+// unmarshalMap handles CBOR map decoding for PlutusData.
+// This is separate because CBOR maps with tag-based keys (like constructor keys)
+// cannot be decoded into Go maps directly due to cbor.Tag not being comparable.
+func (pd *PlutusData) unmarshalMap(value []uint8) error {
+	dataType, val, err := decodeMapValue(value)
+	if err != nil {
+		return err
+	}
+	pd.PlutusDataType = dataType
+	pd.Value = val
+	pd.TagNr = 0
+	return nil
+}
+
+// unmarshalTaggedMap handles CBOR tags whose content is a map that might have tag-based keys.
+// This is needed because cbor.Tag with map content containing tag keys fails during generic decode.
+func (pd *PlutusData) unmarshalTaggedMap(
+	tagNumber uint64,
+	mapContent []byte,
+) error {
+	dataType, val, err := decodeMapValue(mapContent)
+	if err != nil {
+		return err
+	}
+	pd.PlutusDataType = dataType
+	pd.Value = val
+	pd.TagNr = tagNumber
 	return nil
 }
 
@@ -1488,19 +1694,199 @@ func (pdk *PlutusDataKey) MarshalCBOR() ([]uint8, error) {
 	   		error: An error, if any, during unmarshaling.
 */
 func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
-	var x any
-	err := cbor.Unmarshal(value, &x)
-	if err != nil {
-		return err
+	if len(value) == 0 {
+		return errors.New("empty CBOR data")
 	}
+
+	// Determine CBOR major type from the first byte
+	// This allows us to route to type-specific handlers without using generic any decode,
+	// which fails when there are maps with tag-based keys (cbor.Tag is not comparable)
+	majorType := value[0] >> 5
+
+	switch majorType {
+	case 0, 1: // Unsigned or negative integer
+		var intVal uint64
+		if err := cbor.Unmarshal(value, &intVal); err != nil {
+			// Try big int
+			var bigVal big.Int
+			if err2 := cbor.Unmarshal(value, &bigVal); err2 != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusBigInt
+			pd.Value = bigVal
+			pd.TagNr = 0
+			return nil
+		}
+		pd.PlutusDataType = PlutusInt
+		pd.Value = intVal
+		pd.TagNr = 0
+		return nil
+
+	case 2: // Byte string
+		var byteVal []byte
+		if err := cbor.Unmarshal(value, &byteVal); err != nil {
+			return err
+		}
+		pd.PlutusDataType = PlutusBytes
+		pd.Value = byteVal
+		pd.TagNr = 0
+		return nil
+
+	case 4: // Array
+		// Decode array elements as PlutusData to handle nested maps with tag keys
+		if value[0] == 0x9f { // Indefinite length array
+			y := PlutusIndefArray{}
+			if err := cbor.Unmarshal(value, &y); err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusArray
+			pd.Value = y
+			pd.TagNr = 0
+		} else { // Definite length array
+			y := PlutusDefArray{}
+			if err := cbor.Unmarshal(value, &y); err != nil {
+				return err
+			}
+			pd.PlutusDataType = PlutusArray
+			pd.Value = y
+			pd.TagNr = 0
+		}
+		return nil
+
+	case 5: // Map
+		return pd.unmarshalMap(value)
+
+	case 6: // Tag
+		return pd.unmarshalTag(value)
+
+	case 7: // Simple values (false, true, null, undefined, floats)
+		// Handle CBOR null (0xf6) which represents an empty/uninitialized PlutusData
+		if value[0] == 0xf6 {
+			pd.PlutusDataType = PlutusBytes
+			pd.Value = []byte{}
+			pd.TagNr = 0
+			return nil
+		}
+		// For other simple values, fall through to generic decode
+		fallthrough
+
+	default:
+		// Fallback to generic decode for unknown types
+		var x any
+		err := cbor.Unmarshal(value, &x)
+		if err != nil {
+			return err
+		}
+		// Handle the result
+		return pd.handleGenericValue(x, value)
+	}
+}
+
+// unmarshalTag handles CBOR tags (major type 6) for PlutusData.
+// This is separate to avoid the cbor.Unmarshal(value, &any) issue where nested
+// maps with tag keys cause decode failures.
+func (pd *PlutusData) unmarshalTag(value []uint8) error {
+	// Decode as RawTag to get tag number and preserve raw content bytes
+	var rawTag apolloCbor.RawTag
+	if err := apolloCbor.Decode(value, &rawTag); err != nil {
+		return errors.New("tag decode: " + err.Error())
+	}
+
+	tagNum := rawTag.Number
+	content := []byte(rawTag.Content)
+
+	// Handle special CBOR tags first
+	switch tagNum {
+	case 2, 3: // Big integer tags (2 = positive, 3 = negative)
+		// Big integers are encoded as byte strings
+		var bigInt big.Int
+		if err := cbor.Unmarshal(value, &bigInt); err != nil {
+			return errors.New("big int decode: " + err.Error())
+		}
+		pd.PlutusDataType = PlutusBigInt
+		pd.Value = bigInt
+		pd.TagNr = 0
+		return nil
+	}
+
+	if len(content) == 0 {
+		// Empty tag content
+		pd.PlutusDataType = PlutusArray
+		pd.Value = PlutusIndefArray{}
+		pd.TagNr = tagNum
+		return nil
+	}
+
+	// Determine content type and handle accordingly
+	contentMajorType := content[0] >> 5
+
+	switch contentMajorType {
+	case 2: // Byte string - common for tag 24 (CBOR-encoded data)
+		var byteContent []byte
+		if err := cbor.Unmarshal(content, &byteContent); err != nil {
+			return errors.New("tag byte content: " + err.Error())
+		}
+		pd.PlutusDataType = PlutusBytes
+		pd.Value = byteContent
+		pd.TagNr = tagNum
+		return nil
+
+	case 4: // Array - constructor with fields
+		if content[0] == 0x9f { // Indefinite array
+			y := PlutusIndefArray{}
+			if err := cbor.Unmarshal(content, &y); err != nil {
+				return errors.New("tag indef array content: " + err.Error())
+			}
+			pd.PlutusDataType = PlutusArray
+			pd.Value = y
+			pd.TagNr = tagNum
+		} else {
+			y := PlutusDefArray{}
+			if err := cbor.Unmarshal(content, &y); err != nil {
+				return errors.New("tag def array content: " + err.Error())
+			}
+			pd.PlutusDataType = PlutusArray
+			pd.Value = y
+			pd.TagNr = tagNum
+		}
+		return nil
+
+	case 5: // Map - handle with our special map decoder
+		return pd.unmarshalTaggedMap(tagNum, content)
+
+	default:
+		// For other content types, try generic decode on the content
+		var contentPd PlutusData
+		if err := contentPd.UnmarshalCBOR(content); err != nil {
+			return errors.New("tag content decode: " + err.Error())
+		}
+		// Wrap the decoded content
+		pd.PlutusDataType = contentPd.PlutusDataType
+		pd.Value = contentPd.Value
+		pd.TagNr = tagNum
+		return nil
+	}
+}
+
+// handleGenericValue processes an already-decoded interface{} value.
+// This is only used as a fallback for unusual CBOR types.
+func (pd *PlutusData) handleGenericValue(x any, value []uint8) error {
+	var err error
 	//fmt.Println(hex.EncodeToString(value))
 	ok, valid := x.(cbor.Tag)
 	if valid {
-		switch ok.Content.(type) {
+		switch content := ok.Content.(type) {
 		case big.Int:
 			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x.(big.Int)
-			pd.Value = tmpBigInt
+			pd.Value = content
+			pd.TagNr = 0
+		case *big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			if content != nil {
+				pd.Value = *content
+			} else {
+				pd.Value = big.Int{}
+			}
 			pd.TagNr = 0
 		case []any:
 			pd.TagNr = ok.Number
@@ -1525,26 +1911,14 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		case []uint8:
 			pd.TagNr = ok.Number
 			pd.PlutusDataType = PlutusBytes
-			pd.Value = ok.Content
+			pd.Value = content
 		case map[any]any:
-			y := map[serialization.CustomBytes]PlutusData{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				return err
+			dataType, val, decErr := decodeMapValue(value)
+			if decErr != nil {
+				return decErr
 			}
-			isInt := false
-			for k := range y {
-				if k.IsInt() {
-					isInt = true
-					break
-				}
-			}
-			if isInt {
-				pd.PlutusDataType = PlutusIntMap
-			} else {
-				pd.PlutusDataType = PlutusMap
-			}
-			pd.Value = y
+			pd.PlutusDataType = dataType
+			pd.Value = val
 			pd.TagNr = 0
 
 		default:
@@ -1555,8 +1929,15 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 		switch x := x.(type) {
 		case big.Int:
 			pd.PlutusDataType = PlutusBigInt
-			tmpBigInt := x
-			pd.Value = tmpBigInt
+			pd.Value = x
+			pd.TagNr = 0
+		case *big.Int:
+			pd.PlutusDataType = PlutusBigInt
+			if x != nil {
+				pd.Value = *x
+			} else {
+				pd.Value = big.Int{}
+			}
 			pd.TagNr = 0
 		case []any:
 			if value[0] == 0x9f {
@@ -1589,35 +1970,20 @@ func (pd *PlutusData) UnmarshalCBOR(value []uint8) error {
 			pd.TagNr = 0
 
 		case map[any]any:
-			y := map[serialization.CustomBytes]PlutusData{}
-			err = cbor.Unmarshal(value, &y)
-			if err != nil {
-				y := map[PlutusDataKey]PlutusData{}
-				err := cbor.Unmarshal(value, &y)
-				if err != nil {
-					return err
-				}
-				pd.PlutusDataType = PlutusMap
-				pd.Value = &y
-				pd.TagNr = 0
-				return err
+			dataType, val, decErr := decodeMapValue(value)
+			if decErr != nil {
+				return decErr
 			}
-			isInt := false
-			for k := range y {
-				if k.IsInt() {
-					isInt = true
-					break
-				}
-			}
-			if isInt {
-				pd.PlutusDataType = PlutusIntMap
-			} else {
-				pd.PlutusDataType = PlutusMap
-			}
-			pd.Value = y
+			pd.PlutusDataType = dataType
+			pd.Value = val
 			pd.TagNr = 0
 		default:
-			_ = fmt.Errorf("invalid nested struct in plutus data %s", reflect.TypeOf(x))
+			// Fallback for nil and unrecognized types from generic interface{} decode.
+			// Return an error so callers are aware that an unsupported type was encountered.
+			pd.PlutusDataType = PlutusBytes
+			pd.Value = []byte{}
+			pd.TagNr = 0
+			return fmt.Errorf("handleGenericValue: unsupported generic value type %T", x)
 		}
 
 	}
@@ -1665,11 +2031,11 @@ func ToCbor(x any) (string, error) {
 			error: An error if the PlutusDataHash fails.
 */
 func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
-	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(pd)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
+	finalbytes := make([]byte, 0, len(bytes))
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
@@ -1696,11 +2062,11 @@ func PlutusDataHash(pd *PlutusData) (serialization.DatumHash, error) {
 		error: An error if the hash Datum fails.
 */
 func HashDatum(d cbor.Marshaler) (serialization.DatumHash, error) {
-	finalbytes := []byte{}
 	bytes, err := cbor.Marshal(d)
 	if err != nil {
 		return serialization.DatumHash{}, err
 	}
+	finalbytes := make([]byte, 0, len(bytes))
 	finalbytes = append(finalbytes, bytes...)
 	hash, err := blake2b.New(32, nil)
 	if err != nil {
@@ -1797,6 +2163,7 @@ func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error) {
 
 func (ps3 *PlutusV3Script) ToAddress(
 	stakingCredential []byte,
+	isStakingScript bool,
 	network constants.Network,
 ) Address.Address {
 	hash := PlutusScriptHash(ps3)
@@ -1821,23 +2188,45 @@ func (ps3 *PlutusV3Script) ToAddress(
 			}
 		}
 	} else {
-		if network == constants.MAINNET {
-			return Address.Address{
-				PaymentPart: hash.Bytes(),
-				StakingPart: stakingCredential,
-				Network:     Address.MAINNET,
-				AddressType: Address.SCRIPT_KEY,
-				HeaderByte:  0b00010001,
-				Hrp:         "addr",
+		if isStakingScript {
+			if network == constants.MAINNET {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.MAINNET,
+					AddressType: Address.SCRIPT_SCRIPT,
+					HeaderByte:  0b00110001,
+					Hrp:         "addr",
+				}
+			} else {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.TESTNET,
+					AddressType: Address.SCRIPT_SCRIPT,
+					HeaderByte:  0b00110000,
+					Hrp:         "addr_test",
+				}
 			}
 		} else {
-			return Address.Address{
-				PaymentPart: hash.Bytes(),
-				StakingPart: stakingCredential,
-				Network:     Address.TESTNET,
-				AddressType: Address.SCRIPT_KEY,
-				HeaderByte:  0b00010000,
-				Hrp:         "addr_test",
+			if network == constants.MAINNET {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.MAINNET,
+					AddressType: Address.SCRIPT_KEY,
+					HeaderByte:  0b00010001,
+					Hrp:         "addr",
+				}
+			} else {
+				return Address.Address{
+					PaymentPart: hash.Bytes(),
+					StakingPart: stakingCredential,
+					Network:     Address.TESTNET,
+					AddressType: Address.SCRIPT_KEY,
+					HeaderByte:  0b00010000,
+					Hrp:         "addr_test",
+				}
 			}
 		}
 	}

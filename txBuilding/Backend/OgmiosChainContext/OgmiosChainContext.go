@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -40,13 +40,17 @@ type OgmiosChainContext struct {
 	_Network        int
 	_genesis_param  Base.GenesisParameters
 	_protocol_param Base.ProtocolParameters
-	ogmigo          ogmigo.Client
-	kugo            kugo.Client
+	ogmigo          *ogmigo.Client
+	kugo            *kugo.Client
+	// Optional base context used for requests. If nil, context.Background() is used.
+	BaseContext context.Context
+	// Optional per-request timeout. If zero, no timeout is applied.
+	RequestTimeout time.Duration
 }
 
 func NewOgmiosChainContext(
-	ogmigoClient ogmigo.Client,
-	kugoClient kugo.Client,
+	ogmigoClient *ogmigo.Client,
+	kugoClient *kugo.Client,
 ) OgmiosChainContext {
 	occ := OgmiosChainContext{
 		ogmigo: ogmigoClient,
@@ -55,15 +59,36 @@ func NewOgmiosChainContext(
 	return occ
 }
 
-func (occ *OgmiosChainContext) Init() {
-	latest_epochs := occ.LatestEpoch()
-	occ._epoch_info = latest_epochs
+// requestContext returns a context for making requests, applying the optional
+// timeout if configured. The returned cancel function must always be called
+// to release resources.
+func (occ *OgmiosChainContext) requestContext() (context.Context, context.CancelFunc) {
+	ctx := occ.BaseContext
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if occ.RequestTimeout > 0 {
+		return context.WithTimeout(ctx, occ.RequestTimeout)
+	}
+	return ctx, func() {}
+}
+
+func (occ *OgmiosChainContext) Init() error {
+	latestEpochs, err := occ.LatestEpoch()
+	if err != nil {
+		return fmt.Errorf("OgmiosChainContext: Init: %w", err)
+	}
+	occ._epoch_info = latestEpochs
 	//Init Genesis
 	params := occ.GenesisParams()
 	occ._genesis_param = params
 	//init epoch
-	latest_params := occ.LatestEpochParams()
-	occ._protocol_param = latest_params
+	latestParams, err := occ.LatestEpochParams()
+	if err != nil {
+		return fmt.Errorf("OgmiosChainContext: Init: %w", err)
+	}
+	occ._protocol_param = latestParams
+	return nil
 }
 
 func multiAsset_OgmigoToApollo(
@@ -107,41 +132,44 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 	}
 }
 
-func datum_OgmigoToApollo(d string, dh string) *PlutusData.DatumOption {
+func datum_OgmigoToApollo(
+	d string,
+	dh string,
+) (*PlutusData.DatumOption, error) {
 	if d != "" {
 		datumBytes, err := hex.DecodeString(d)
 		if err != nil {
-			log.Fatal(
-				err,
-				"OgmiosChainContext: Failed to decode datum from hex: %v",
+			return nil, fmt.Errorf(
+				"OgmiosChainContext: failed to decode datum from hex %q: %w",
 				d,
+				err,
 			)
 		}
 		var pd PlutusData.PlutusData
 		err = cbor.Unmarshal(datumBytes, &pd)
 		if err != nil {
-			log.Fatal(
-				err,
-				"OgmiosChainContext: datum is not valid plutus data: %v",
+			return nil, fmt.Errorf(
+				"OgmiosChainContext: datum is not valid plutus data %q: %w",
 				d,
+				err,
 			)
 		}
 		res := PlutusData.DatumOptionInline(&pd)
-		return &res
+		return &res, nil
 	}
 	if dh != "" {
 		datumHashBytes, err := hex.DecodeString(dh)
 		if err != nil {
-			log.Fatal(
-				err,
-				"OgmiosChainContext: Failed to decode datum hash from hex: %v",
+			return nil, fmt.Errorf(
+				"OgmiosChainContext: failed to decode datum hash from hex %q: %w",
 				dh,
+				err,
 			)
 		}
 		res := PlutusData.DatumOptionHash(datumHashBytes)
-		return &res
+		return &res, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func scriptRef_OgmigoToApollo(
@@ -165,20 +193,34 @@ func scriptRef_OgmigoToApollo(
 	return &ref, nil
 }
 
-func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
+func Utxo_OgmigoToApollo(u shared.Utxo) (UTxO.UTxO, error) {
 	txHashRaw, err := hex.DecodeString(u.Transaction.ID)
 	if err != nil {
-		log.Fatal(err, "Failed to decode ogmigo transaction ID")
+		return UTxO.UTxO{}, fmt.Errorf(
+			"OgmiosChainContext: failed to decode transaction ID %q: %w",
+			u.Transaction.ID,
+			err,
+		)
 	}
 	addr, err := Address.DecodeAddress(u.Address)
 	if err != nil {
-		log.Fatal(err, "Failed to decode ogmigo address")
+		return UTxO.UTxO{}, fmt.Errorf(
+			"OgmiosChainContext: failed to decode address %q: %w",
+			u.Address,
+			err,
+		)
 	}
-	datum := datum_OgmigoToApollo(u.Datum, u.DatumHash)
+	datum, err := datum_OgmigoToApollo(u.Datum, u.DatumHash)
+	if err != nil {
+		return UTxO.UTxO{}, err
+	}
 	v := value_OgmigoToApollo(u.Value)
 	scriptRef, err := scriptRef_OgmigoToApollo(u.Script)
 	if err != nil {
-		log.Fatal(err, "Failed to convert script ref from ogmigo")
+		return UTxO.UTxO{}, fmt.Errorf(
+			"OgmiosChainContext: failed to convert script ref: %w",
+			err,
+		)
 	}
 	return UTxO.UTxO{
 		Input: TransactionInput.TransactionInput{
@@ -195,14 +237,16 @@ func Utxo_OgmigoToApollo(u shared.Utxo) UTxO.UTxO {
 			PreAlonzo:    TransactionOutput.TransactionOutputShelley{},
 			IsPostAlonzo: true,
 		},
-	}
+	}, nil
 }
 
 func (occ *OgmiosChainContext) GetUtxoFromRef(
 	txHash string,
 	index int,
 ) (*UTxO.UTxO, error) {
-	ctx := context.Background()
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	utxos, err := occ.ogmigo.UtxosByTxIn(ctx, chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{
 			ID: txHash,
@@ -210,23 +254,29 @@ func (occ *OgmiosChainContext) GetUtxoFromRef(
 		Index: uint32(index),
 	})
 	if err != nil {
-		log.Fatal(err, "REQUEST PROTOCOL")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: GetUtxoFromRef: failed to query UTxO: %w",
+			err,
+		)
 	}
 	if len(utxos) == 0 {
 		return nil, nil
-	} else {
-		apolloUtxo := Utxo_OgmigoToApollo(utxos[0])
-		return &apolloUtxo, nil
 	}
+	apolloUtxo, err := Utxo_OgmigoToApollo(utxos[0])
+	if err != nil {
+		return nil, err
+	}
+	return &apolloUtxo, nil
 }
 
 func statequeryValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
-	amts := make([]Base.AddressAmount, 0)
+	assets := v.AssetsExceptAda()
+	amts := make([]Base.AddressAmount, 0, 1+len(assets))
 	amts = append(amts, Base.AddressAmount{
 		Unit:     "lovelace",
 		Quantity: strconv.FormatInt(v.AdaLovelace().Int64(), 10),
 	})
-	for policyId, tokenMap := range v.AssetsExceptAda() {
+	for policyId, tokenMap := range assets {
 		for tokenName, quantity := range tokenMap {
 			amts = append(amts, Base.AddressAmount{
 				Unit:     policyId + tokenName,
@@ -256,12 +306,11 @@ func chainsyncValue_toAddressAmount(v shared.Value) []Base.AddressAmount {
 }
 
 func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
-	ctx := context.Background()
 	outs := make([]Base.Output, 1)
-	more_utxos := true
-	chunk_size := 10
-	for more_utxos {
-		queries := make([]chainsync.TxInQuery, chunk_size)
+	moreUtxos := true
+	chunkSize := 10
+	for moreUtxos {
+		queries := make([]chainsync.TxInQuery, chunkSize)
 		for ix := range queries {
 			queries[ix] = chainsync.TxInQuery{
 				Transaction: shared.UtxoTxID{
@@ -270,9 +319,11 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 				Index: uint32(ix),
 			}
 		}
+		ctx, cancel := occ.requestContext()
 		us, err := occ.ogmigo.UtxosByTxIn(ctx, queries...)
-		if len(us) < chunk_size || err != nil {
-			more_utxos = false
+		cancel()
+		if len(us) < chunkSize || err != nil {
+			moreUtxos = false
 		}
 		for _, u := range us {
 			am := statequeryValue_toAddressAmount(u.Value)
@@ -292,61 +343,72 @@ func (occ *OgmiosChainContext) TxOuts(txHash string) []Base.Output {
 }
 
 // Seems unused
-func (occ *OgmiosChainContext) LatestBlock() Base.Block {
-	ctx := context.Background()
+func (occ *OgmiosChainContext) LatestBlock() (Base.Block, error) {
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	point, err := occ.ogmigo.ChainTip(ctx)
 	if err != nil {
-		log.Fatal(
-			"OgmiosChainContext: LatestBlock: failed to request chain tip",
+		return Base.Block{}, fmt.Errorf(
+			"OgmiosChainContext: LatestBlock: failed to request chain tip: %w",
 			err,
 		)
 	}
 	s, ok := point.PointStruct()
 	if !ok {
-		log.Fatal("OgmiosChainContext: LatestBlock: expected a struct")
+		return Base.Block{}, errors.New(
+			"OgmiosChainContext: LatestBlock: expected a struct, got origin point",
+		)
 	}
 	return Base.Block{
 		Hash: s.ID,
 		Slot: int(s.Slot),
-	}
+	}, nil
 }
 
-func (occ *OgmiosChainContext) LatestEpoch() Base.Epoch {
-	ctx := context.Background()
+func (occ *OgmiosChainContext) LatestEpoch() (Base.Epoch, error) {
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	current, err := occ.ogmigo.CurrentEpoch(ctx)
 	if err != nil {
-		log.Fatal(
+		return Base.Epoch{}, fmt.Errorf(
+			"OgmiosChainContext: LatestEpoch: failed to request current epoch: %w",
 			err,
-			"OgmiosChainContext: LatestEpoch: failed to request current epoch",
 		)
 	}
 	return Base.Epoch{
 		Epoch: int(current),
-	}
+	}, nil
 }
 
 func (occ *OgmiosChainContext) AddressUtxos(
 	address string,
 	gather bool,
-) []Base.AddressUTXO {
-	ctx := context.Background()
-	addressUtxos := make([]Base.AddressUTXO, 0)
+) ([]Base.AddressUTXO, error) {
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	matches, err := occ.kugo.Matches(
 		ctx,
 		kugo.OnlyUnspent(),
 		kugo.Address(address),
 	)
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: AddressUtxos: kupo request failed")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: AddressUtxos: kupo request failed: %w",
+			err,
+		)
 	}
+	addressUtxos := make([]Base.AddressUTXO, 0, len(matches))
 	for _, match := range matches {
 		datum := ""
 		if match.DatumType == "inline" {
 			datum, err = occ.kugo.Datum(ctx, match.DatumHash)
 			if err != nil {
-				log.Fatal(
+				return nil, fmt.Errorf(
+					"OgmiosChainContext: AddressUtxos: kupo datum request failed: %w",
 					err,
-					"OgmiosChainContext: AddressUtxos: kupo datum request failed",
 				)
 			}
 		}
@@ -362,8 +424,7 @@ func (occ *OgmiosChainContext) AddressUtxos(
 			InlineDatum: datum,
 		})
 	}
-	return addressUtxos
-
+	return addressUtxos, nil
 }
 
 type Lovelace struct {
@@ -477,26 +538,28 @@ func ratio(s string) float32 {
 	return float32(num) / float32(den)
 }
 
-func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
-	ctx := context.Background()
+func (occ *OgmiosChainContext) LatestEpochParams() (Base.ProtocolParameters, error) {
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	pparams, err := occ.ogmigo.CurrentProtocolParameters(ctx)
 	if err != nil {
-		log.Fatal(
+		return Base.ProtocolParameters{}, fmt.Errorf(
+			"OgmiosChainContext: LatestEpochParams: protocol parameters request failed: %w",
 			err,
-			"OgmiosChainContext: LatestEpochParams: protocol parameters request failed",
 		)
 	}
 	var ogmiosParams OgmiosProtocolParameters
 	if err := json.Unmarshal(pparams, &ogmiosParams); err != nil {
-		log.Fatal(
+		return Base.ProtocolParameters{}, fmt.Errorf(
+			"OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters: %w",
 			err,
-			"OgmiosChainContext: LatestEpochParams: failed to parse protocol parameters",
 		)
 	}
 
 	return Base.ProtocolParameters{
-		MinFeeConstant:     int(ogmiosParams.MinFeeConstant.Lovelace),
-		MinFeeCoefficient:  int(ogmiosParams.MinFeeCoefficient),
+		MinFeeConstant:     int64(ogmiosParams.MinFeeConstant.Lovelace),
+		MinFeeCoefficient:  int64(ogmiosParams.MinFeeCoefficient),
 		MaxBlockSize:       int(ogmiosParams.MaxBlockSize.Bytes),
 		MaxTxSize:          int(ogmiosParams.MaxTxSize.Bytes),
 		MaxBlockHeaderSize: int(ogmiosParams.MaxBlockHeaderSize.Bytes),
@@ -573,21 +636,120 @@ func (occ *OgmiosChainContext) LatestEpochParams() Base.ProtocolParameters {
 			ogmiosParams.MinFeeReferenceScripts.Multiplier,
 		),
 		CostModels: ogmiosParams.CostModels,
+	}, nil
+}
+
+// ogmiosGenesisConfig represents the Ogmios v6 shelley genesis response.
+type ogmiosGenesisConfig struct {
+	ActiveSlotsCoefficient json.RawMessage `json:"activeSlotsCoefficient"`
+	UpdateQuorum           int             `json:"updateQuorum"`
+	MaxLovelaceSupply      json.Number     `json:"maxLovelaceSupply"`
+	NetworkMagic           int             `json:"networkMagic"`
+	EpochLength            int             `json:"epochLength"`
+	StartTime              string          `json:"startTime"`
+	SlotsPerKESPeriod      int             `json:"slotsPerKESPeriod"`
+	SlotLength             slotLengthObj   `json:"slotLength"`
+	MaxKESEvolutions       int             `json:"maxKESEvolutions"`
+	SecurityParameter      int             `json:"securityParameter"`
+}
+
+// slotLengthObj represents the slot length object from Ogmios.
+type slotLengthObj struct {
+	Milliseconds int `json:"milliseconds"`
+}
+
+// fractionObj represents a fraction as an object with numerator and denominator.
+type fractionObj struct {
+	Numerator   int `json:"numerator"`
+	Denominator int `json:"denominator"`
+}
+
+// parseActiveSlotsCoefficient parses the activeSlotsCoefficient field which
+// can be a fraction object, a string fraction, or a plain float.
+func parseActiveSlotsCoefficient(raw json.RawMessage) float32 {
+	// Try parsing as fraction object {"numerator": N, "denominator": D}
+	var frac fractionObj
+	if err := json.Unmarshal(raw, &frac); err == nil && frac.Denominator != 0 {
+		return float32(frac.Numerator) / float32(frac.Denominator)
 	}
+
+	// Try parsing as string fraction "N/D" using the existing ratio helper
+	var strVal string
+	if err := json.Unmarshal(raw, &strVal); err == nil {
+		if result := ratio(strVal); result != 0 {
+			return result
+		}
+	}
+
+	// Try parsing as plain float
+	var floatVal float64
+	if err := json.Unmarshal(raw, &floatVal); err == nil {
+		return float32(floatVal)
+	}
+
+	return 0
 }
 
 func (occ *OgmiosChainContext) GenesisParams() Base.GenesisParameters {
-	genesisParams := Base.GenesisParameters{}
-	//TODO
-	return genesisParams
-}
-func (occ *OgmiosChainContext) _CheckEpochAndUpdate() bool {
-	if occ._epoch_info.EndTime <= int(time.Now().Unix()) {
-		latest_epochs := occ.LatestEpoch()
-		occ._epoch_info = latest_epochs
-		return true
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
+	rawConfig, err := occ.ogmigo.GenesisConfig(ctx, "shelley")
+	if err != nil {
+		fmt.Printf(
+			"OgmiosChainContext: GenesisParams: failed to get genesis config: %v\n",
+			err,
+		)
+		return Base.GenesisParameters{}
 	}
-	return false
+
+	var config ogmiosGenesisConfig
+	if err := json.Unmarshal(rawConfig, &config); err != nil {
+		fmt.Printf(
+			"OgmiosChainContext: GenesisParams: failed to parse genesis config: %v\n",
+			err,
+		)
+		return Base.GenesisParameters{}
+	}
+
+	// Parse startTime from ISO 8601 to Unix timestamp
+	systemStart := 0
+	if config.StartTime != "" {
+		t, err := time.Parse(time.RFC3339, config.StartTime)
+		if err == nil {
+			systemStart = int(t.Unix())
+		}
+	}
+
+	// Convert slot length from milliseconds to seconds
+	slotLength := config.SlotLength.Milliseconds / 1000
+
+	return Base.GenesisParameters{
+		ActiveSlotsCoefficient: parseActiveSlotsCoefficient(
+			config.ActiveSlotsCoefficient,
+		),
+		UpdateQuorum:      config.UpdateQuorum,
+		MaxLovelaceSupply: config.MaxLovelaceSupply.String(),
+		NetworkMagic:      config.NetworkMagic,
+		EpochLength:       config.EpochLength,
+		SystemStart:       systemStart,
+		SlotsPerKesPeriod: config.SlotsPerKESPeriod,
+		SlotLength:        slotLength,
+		MaxKesEvolutions:  config.MaxKESEvolutions,
+		SecurityParam:     config.SecurityParameter,
+	}
+}
+
+func (occ *OgmiosChainContext) _CheckEpochAndUpdate() (bool, error) {
+	if occ._epoch_info.EndTime <= int(time.Now().Unix()) {
+		latestEpochs, err := occ.LatestEpoch()
+		if err != nil {
+			return false, err
+		}
+		occ._epoch_info = latestEpochs
+		return true, nil
+	}
+	return false, nil
 }
 
 func (occ *OgmiosChainContext) Network() int {
@@ -595,21 +757,35 @@ func (occ *OgmiosChainContext) Network() int {
 }
 
 func (occ *OgmiosChainContext) Epoch() (int, error) {
-	if occ._CheckEpochAndUpdate() {
-		new_epoch := occ.LatestEpoch()
-		occ._epoch = new_epoch.Epoch
+	updated, err := occ._CheckEpochAndUpdate()
+	if err != nil {
+		return 0, err
+	}
+	if updated {
+		newEpoch, err := occ.LatestEpoch()
+		if err != nil {
+			return 0, err
+		}
+		occ._epoch = newEpoch.Epoch
 	}
 	return occ._epoch, nil
 }
 
 // Seems unused
 func (occ *OgmiosChainContext) LastBlockSlot() (int, error) {
-	block := occ.LatestBlock()
+	block, err := occ.LatestBlock()
+	if err != nil {
+		return 0, err
+	}
 	return block.Slot, nil
 }
 
 func (occ *OgmiosChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
-	if occ._CheckEpochAndUpdate() {
+	updated, err := occ._CheckEpochAndUpdate()
+	if err != nil {
+		return Base.GenesisParameters{}, err
+	}
+	if updated {
 		params := occ.GenesisParams()
 		occ._genesis_param = params
 	}
@@ -617,17 +793,41 @@ func (occ *OgmiosChainContext) GetGenesisParams() (Base.GenesisParameters, error
 }
 
 func (occ *OgmiosChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
-	if occ._CheckEpochAndUpdate() {
-		latest_params := occ.LatestEpochParams()
-		occ._protocol_param = latest_params
+	updated, err := occ._CheckEpochAndUpdate()
+	if err != nil {
+		return Base.ProtocolParameters{}, err
+	}
+	if updated {
+		latestParams, err := occ.LatestEpochParams()
+		if err != nil {
+			return Base.ProtocolParameters{}, err
+		}
+		occ._protocol_param = latestParams
 	}
 	return occ._protocol_param, nil
 }
 
 func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
-	protocol_param, _ := occ.GetProtocolParams()
-	maxTxExSteps, _ := strconv.Atoi(protocol_param.MaxTxExSteps)
-	maxTxExMem, _ := strconv.Atoi(protocol_param.MaxTxExMem)
+	protocol_param, err := occ.GetProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	maxTxExSteps, err := strconv.Atoi(protocol_param.MaxTxExSteps)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"MaxTxFee: invalid MaxTxExSteps %q: %w",
+			protocol_param.MaxTxExSteps,
+			err,
+		)
+	}
+	maxTxExMem, err := strconv.Atoi(protocol_param.MaxTxExMem)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"MaxTxFee: invalid MaxTxExMem %q: %w",
+			protocol_param.MaxTxExMem,
+			err,
+		)
+	}
 	return Base.Fee(occ, protocol_param.MaxTxSize, maxTxExSteps, maxTxExMem)
 }
 
@@ -636,10 +836,20 @@ func (occ *OgmiosChainContext) MaxTxFee() (int, error) {
 func (occ *OgmiosChainContext) Utxos(
 	address Address.Address,
 ) ([]UTxO.UTxO, error) {
-	results := occ.AddressUtxos(address.String(), true)
-	utxos := make([]UTxO.UTxO, 0)
+	results, err := occ.AddressUtxos(address.String(), true)
+	if err != nil {
+		return nil, err
+	}
+	utxos := make([]UTxO.UTxO, 0, len(results))
 	for _, result := range results {
-		decodedTxId, _ := hex.DecodeString(result.TxHash)
+		decodedTxId, err := hex.DecodeString(result.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"OgmiosChainContext: Utxos: failed to decode tx hash %q: %w",
+				result.TxHash,
+				err,
+			)
+		}
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: decodedTxId,
 			Index:         result.OutputIndex,
@@ -649,15 +859,23 @@ func (occ *OgmiosChainContext) Utxos(
 		multi_assets := MultiAsset.MultiAsset[int64]{}
 		for _, item := range amount {
 			if item.Unit == "lovelace" {
-				amount, err := strconv.Atoi(item.Quantity)
+				amt, err := strconv.Atoi(item.Quantity)
 				if err != nil {
-					log.Fatal(err)
+					return nil, fmt.Errorf(
+						"OgmiosChainContext: Utxos: failed to parse lovelace quantity %q: %w",
+						item.Quantity,
+						err,
+					)
 				}
-				lovelace_amount += amount
+				lovelace_amount += amt
 			} else {
 				asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
 				if err != nil {
-					log.Fatal(err)
+					return nil, fmt.Errorf(
+						"OgmiosChainContext: Utxos: failed to parse asset quantity %q: %w",
+						item.Quantity,
+						err,
+					)
 				}
 				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
 				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
@@ -682,20 +900,32 @@ func (occ *OgmiosChainContext) Utxos(
 		}
 		datum_hash := serialization.DatumHash{}
 		if result.DataHash != "" && result.InlineDatum == "" {
-
-			datum_hash = serialization.DatumHash{}
-			copy(datum_hash.Payload[:], result.DataHash[:])
+			decoded_hash, err := hex.DecodeString(result.DataHash)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"OgmiosChainContext: Utxos: invalid data hash %q: %w",
+					result.DataHash,
+					err,
+				)
+			}
+			datum_hash = serialization.DatumHash{Payload: decoded_hash}
 		}
 		var tx_out TransactionOutput.TransactionOutput
 		if result.InlineDatum != "" {
 			decoded, err := hex.DecodeString(result.InlineDatum)
 			if err != nil {
-				log.Fatal(err)
+				return nil, fmt.Errorf(
+					"OgmiosChainContext: Utxos: failed to decode inline datum: %w",
+					err,
+				)
 			}
 			var x PlutusData.PlutusData
 			err = cbor.Unmarshal(decoded, &x)
 			if err != nil {
-				log.Fatal(err)
+				return nil, fmt.Errorf(
+					"OgmiosChainContext: Utxos: failed to unmarshal inline datum: %w",
+					err,
+				)
 			}
 			l := PlutusData.DatumOptionInline(&x)
 			tx_out = TransactionOutput.TransactionOutput{IsPostAlonzo: true,
@@ -719,36 +949,50 @@ func (occ *OgmiosChainContext) Utxos(
 func (occ *OgmiosChainContext) SubmitTx(
 	tx Transaction.Transaction,
 ) (serialization.TransactionId, error) {
-	ctx := context.Background()
-	bytes, err := tx.Bytes()
+	txBytes, err := tx.Bytes()
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error getting tx bytes")
+		return serialization.TransactionId{}, fmt.Errorf(
+			"OgmiosChainContext: SubmitTx: failed to get tx bytes: %w",
+			err,
+		)
 	}
-	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(bytes))
+
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
+	_, err = occ.ogmigo.SubmitTx(ctx, hex.EncodeToString(txBytes))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: SubmitTx: Error submitting tx")
+		return serialization.TransactionId{}, fmt.Errorf(
+			"OgmiosChainContext: SubmitTx: failed to submit tx: %w",
+			err,
+		)
 	}
 	txId, _ := tx.TransactionBody.Id()
 	return txId, nil
-
 }
 
 func (occ *OgmiosChainContext) EvaluateTx(
 	tx []uint8,
 ) (map[string]Redeemer.ExecutionUnits, error) {
-	final_result := make(map[string]Redeemer.ExecutionUnits)
-	ctx := context.Background()
+	ctx, cancel := occ.requestContext()
+	defer cancel()
+
 	eval, err := occ.ogmigo.EvaluateTx(ctx, hex.EncodeToString(tx))
 	if err != nil {
-		log.Fatal(err, "OgmiosChainContext: EvaluateTx: Error evaluating tx")
+		return nil, fmt.Errorf(
+			"OgmiosChainContext: EvaluateTx: failed to evaluate tx: %w",
+			err,
+		)
 	}
+
+	result := make(map[string]Redeemer.ExecutionUnits)
 	for _, e := range eval.ExUnits {
-		final_result[e.Validator.Purpose] = Redeemer.ExecutionUnits{
+		result[e.Validator.Purpose] = Redeemer.ExecutionUnits{
 			Mem:   int64(e.Budget.Memory),
 			Steps: int64(e.Budget.Cpu),
 		}
 	}
-	return final_result, nil
+	return result, nil
 }
 
 // This is unused

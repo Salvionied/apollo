@@ -4,9 +4,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
@@ -15,13 +17,113 @@ import (
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
 	"github.com/Salvionied/apollo/txBuilding/Backend/Base"
+	cardanopb "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
+	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
 	utxorpc "github.com/utxorpc/go-sdk"
+	"github.com/utxorpc/go-sdk/cardano"
 )
+
+// bigIntToInt64 extracts an int64 value from a protobuf BigInt.
+// BigInt can contain: Int (int64), BigUInt (unsigned bytes), or BigNInt (negative bytes).
+func bigIntToInt64(b *cardanopb.BigInt) (int64, error) {
+	if b == nil {
+		return 0, errors.New("BigInt is nil")
+	}
+	switch v := b.GetBigInt().(type) {
+	case *cardanopb.BigInt_Int:
+		return v.Int, nil
+	case *cardanopb.BigInt_BigUInt:
+		bi := new(big.Int).SetBytes(v.BigUInt)
+		if !bi.IsInt64() {
+			return 0, fmt.Errorf("BigUInt value %s overflows int64", bi.String())
+		}
+		return bi.Int64(), nil
+	case *cardanopb.BigInt_BigNInt:
+		bi := new(big.Int).SetBytes(v.BigNInt)
+		bi.Neg(bi)
+		if !bi.IsInt64() {
+			return 0, fmt.Errorf("BigNInt value %s overflows int64", bi.String())
+		}
+		return bi.Int64(), nil
+	default:
+		return 0, errors.New("BigInt has no value set")
+	}
+}
+
+// bigIntToUint64 extracts a uint64 value from a protobuf BigInt.
+func bigIntToUint64(b *cardanopb.BigInt) (uint64, error) {
+	if b == nil {
+		return 0, errors.New("BigInt is nil")
+	}
+	switch v := b.GetBigInt().(type) {
+	case *cardanopb.BigInt_Int:
+		if v.Int < 0 {
+			return 0, fmt.Errorf("negative Int value %d cannot convert to uint64", v.Int)
+		}
+		return uint64(v.Int), nil
+	case *cardanopb.BigInt_BigUInt:
+		bi := new(big.Int).SetBytes(v.BigUInt)
+		if !bi.IsUint64() {
+			return 0, fmt.Errorf("BigUInt value %s overflows uint64", bi.String())
+		}
+		return bi.Uint64(), nil
+	case *cardanopb.BigInt_BigNInt:
+		return 0, errors.New("negative BigNInt cannot convert to uint64")
+	default:
+		return 0, errors.New("BigInt has no value set")
+	}
+}
+
+// bigIntToString converts a protobuf BigInt to its string representation.
+func bigIntToString(b *cardanopb.BigInt) (string, error) {
+	if b == nil {
+		return "", errors.New("BigInt is nil")
+	}
+	switch v := b.GetBigInt().(type) {
+	case *cardanopb.BigInt_Int:
+		return strconv.FormatInt(v.Int, 10), nil
+	case *cardanopb.BigInt_BigUInt:
+		bi := new(big.Int).SetBytes(v.BigUInt)
+		return bi.String(), nil
+	case *cardanopb.BigInt_BigNInt:
+		bi := new(big.Int).SetBytes(v.BigNInt)
+		bi.Neg(bi)
+		return bi.String(), nil
+	default:
+		return "", errors.New("BigInt has no value set")
+	}
+}
+
+// Protocol parameter parsing helpers that wrap conversion with consistent error formatting
+func parseParamInt64(b *cardanopb.BigInt, field string) (int64, error) {
+	val, err := bigIntToInt64(b)
+	if err != nil {
+		return 0, fmt.Errorf("GetProtocolParams: %s: %w", field, err)
+	}
+	return val, nil
+}
+
+func parseParamUint64(b *cardanopb.BigInt, field string) (uint64, error) {
+	val, err := bigIntToUint64(b)
+	if err != nil {
+		return 0, fmt.Errorf("GetProtocolParams: %s: %w", field, err)
+	}
+	return val, nil
+}
+
+func parseParamString(b *cardanopb.BigInt, field string) (string, error) {
+	val, err := bigIntToString(b)
+	if err != nil {
+		return "", fmt.Errorf("GetProtocolParams: %s: %w", field, err)
+	}
+	return val, nil
+}
 
 type UtxorpcChainContext struct {
 	_Network        int
 	_protocol_param Base.ProtocolParameters
-	client          *utxorpc.UtxorpcClient
+	_genesis_param  Base.GenesisParameters
+	client          *cardano.Client
 	latestUpdate    time.Time
 }
 
@@ -67,12 +169,12 @@ func NewUtxorpcChainContext(
 			networkString,
 		)
 	}
-	utxorpcClient := utxorpc.NewClient(utxorpc.WithBaseUrl(baseUrl))
+	cardanoclient := cardano.NewClient(utxorpc.WithBaseUrl(baseUrl))
 	if _dmtrApiKey != "" {
-		utxorpcClient.SetHeader("dmtr-api-key", _dmtrApiKey)
+		cardanoclient.UtxorpcClient.SetHeader("dmtr-api-key", _dmtrApiKey)
 	}
 	u := UtxorpcChainContext{
-		client: utxorpcClient, _Network: network,
+		client: cardanoclient, _Network: network,
 	}
 	err := u.init()
 	return u, err
@@ -88,53 +190,114 @@ func (u *UtxorpcChainContext) Network() int {
 }
 
 func (u *UtxorpcChainContext) GetGenesisParams() (Base.GenesisParameters, error) {
-	genesisParams := Base.GenesisParameters{}
-	// NO GENESIS PARAMS IN UTXORPC
-	return genesisParams, nil
+	if time.Since(u.latestUpdate) > time.Minute*5 {
+		genesisParams := Base.GenesisParameters{}
+		gpFromApi, err := u.client.UtxorpcClient.ReadGenesis(
+			connect.NewRequest(&query.ReadGenesisRequest{}),
+		)
+		if err != nil {
+			return genesisParams, err
+		}
+		gpCardano := gpFromApi.Msg.GetCardano()
+		// Map the fields
+		if gpCardano.GetActiveSlotsCoeff() != nil {
+			genesisParams.ActiveSlotsCoefficient = float32(
+				gpCardano.GetActiveSlotsCoeff().GetNumerator(),
+			) / float32(
+				gpCardano.GetActiveSlotsCoeff().GetDenominator(),
+			)
+		}
+		genesisParams.UpdateQuorum = int(gpCardano.GetUpdateQuorum())
+		maxLovelaceSupply, err := bigIntToString(gpCardano.GetMaxLovelaceSupply())
+		if err != nil {
+			return genesisParams, fmt.Errorf("GetGenesisParams: MaxLovelaceSupply: %w", err)
+		}
+		genesisParams.MaxLovelaceSupply = maxLovelaceSupply
+		genesisParams.NetworkMagic = int(gpCardano.GetNetworkMagic())
+		genesisParams.EpochLength = int(gpCardano.GetEpochLength())
+		// SystemStart is a string timestamp, need to parse to unix timestamp
+		// For now, leave as 0 or parse if needed
+		genesisParams.SlotsPerKesPeriod = int(gpCardano.GetSlotsPerKesPeriod())
+		genesisParams.SlotLength = int(gpCardano.GetSlotLength())
+		genesisParams.MaxKesEvolutions = int(gpCardano.GetMaxKesEvolutions())
+		genesisParams.SecurityParam = int(gpCardano.GetSecurityParam())
+
+		u._genesis_param = genesisParams
+		u.latestUpdate = time.Now()
+		return genesisParams, nil
+	}
+	return u._genesis_param, nil
 }
 
 func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, error) {
 	if time.Since(u.latestUpdate) > time.Minute*5 {
 		protocolParams := Base.ProtocolParameters{}
-		ppFromApi, err := u.client.ReadParams()
+		ppFromApi, err := u.client.UtxorpcClient.ReadParams(
+			connect.NewRequest(&query.ReadParamsRequest{}),
+		)
 		if err != nil {
 			return protocolParams, err
 		}
 		ppCardano := ppFromApi.Msg.GetValues().GetCardano()
+		if ppCardano == nil {
+			return protocolParams, errors.New("GetProtocolParams: API returned nil Cardano parameters")
+		}
 		// Map ALL the fields
-		protocolParams.MinFeeConstant = int(ppCardano.GetMinFeeConstant())
-		protocolParams.MinFeeCoefficient = int(ppCardano.GetMinFeeCoefficient())
+		minFeeConstant, err := parseParamInt64(ppCardano.GetMinFeeConstant(), "MinFeeConstant")
+		if err != nil {
+			return protocolParams, err
+		}
+		minFeeCoefficient, err := parseParamInt64(ppCardano.GetMinFeeCoefficient(), "MinFeeCoefficient")
+		if err != nil {
+			return protocolParams, err
+		}
+		protocolParams.MinFeeConstant = minFeeConstant
+		protocolParams.MinFeeCoefficient = minFeeCoefficient
 		protocolParams.MaxTxSize = int(ppCardano.GetMaxTxSize())
 		protocolParams.MaxBlockSize = int(ppCardano.GetMaxBlockBodySize())
 		protocolParams.MaxBlockHeaderSize = int(
 			ppCardano.GetMaxBlockHeaderSize(),
 		)
-		protocolParams.KeyDeposits = strconv.FormatUint(
-			ppCardano.GetStakeKeyDeposit(),
-			10,
-		)
-		protocolParams.PoolDeposits = strconv.FormatUint(
-			ppCardano.GetPoolDeposit(),
-			10,
-		)
-		protocolParams.PooolInfluence = float32(
-			uint32(
-				ppCardano.GetPoolInfluence().GetNumerator(),
-			) / ppCardano.GetPoolInfluence().
-				GetDenominator(),
-		)
-		protocolParams.MonetaryExpansion = float32(
-			uint32(
-				ppCardano.GetMonetaryExpansion().GetNumerator(),
-			) / ppCardano.GetMonetaryExpansion().
-				GetDenominator(),
-		)
-		protocolParams.TreasuryExpansion = float32(
-			uint32(
-				ppCardano.GetTreasuryExpansion().GetNumerator(),
-			) / ppCardano.GetTreasuryExpansion().
-				GetDenominator(),
-		)
+		stakeKeyDeposit, err := parseParamUint64(ppCardano.GetStakeKeyDeposit(), "StakeKeyDeposit")
+		if err != nil {
+			return protocolParams, err
+		}
+		poolDeposit, err := parseParamUint64(ppCardano.GetPoolDeposit(), "PoolDeposit")
+		if err != nil {
+			return protocolParams, err
+		}
+		protocolParams.KeyDeposits = strconv.FormatUint(stakeKeyDeposit, 10)
+		protocolParams.PoolDeposits = strconv.FormatUint(poolDeposit, 10)
+		if ppCardano.GetPoolInfluence().GetDenominator() != 0 {
+			protocolParams.PooolInfluence = float32(
+				uint32(
+					ppCardano.GetPoolInfluence().GetNumerator(),
+				) / ppCardano.GetPoolInfluence().
+					GetDenominator(),
+			)
+		} else {
+			protocolParams.PooolInfluence = 0
+		}
+		if ppCardano.GetMonetaryExpansion().GetDenominator() != 0 {
+			protocolParams.MonetaryExpansion = float32(
+				uint32(
+					ppCardano.GetMonetaryExpansion().GetNumerator(),
+				) / ppCardano.GetMonetaryExpansion().
+					GetDenominator(),
+			)
+		} else {
+			protocolParams.MonetaryExpansion = 0
+		}
+		if ppCardano.GetTreasuryExpansion().GetDenominator() != 0 {
+			protocolParams.TreasuryExpansion = float32(
+				uint32(
+					ppCardano.GetTreasuryExpansion().GetNumerator(),
+				) / ppCardano.GetTreasuryExpansion().
+					GetDenominator(),
+			)
+		} else {
+			protocolParams.TreasuryExpansion = 0
+		}
 		protocolParams.DecentralizationParam = 0
 		protocolParams.ExtraEntropy = ""
 		protocolParams.ProtocolMajorVersion = int(
@@ -145,24 +308,33 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		)
 		//CHECK HERE
 		//protocolParams.MinUtxo = ppFromApi.Data.
-		protocolParams.MinPoolCost = strconv.FormatUint(
-			ppCardano.GetMinPoolCost(),
-			10,
-		)
-		protocolParams.PriceMem = float32(
-			uint32(
-				ppCardano.GetPrices().GetMemory().GetNumerator(),
-			) / ppCardano.GetPrices().
-				GetMemory().
-				GetDenominator(),
-		)
-		protocolParams.PriceStep = float32(
-			uint32(
-				ppCardano.GetPrices().GetSteps().GetNumerator(),
-			) / ppCardano.GetPrices().
-				GetSteps().
-				GetDenominator(),
-		)
+		minPoolCost, err := parseParamString(ppCardano.GetMinPoolCost(), "MinPoolCost")
+		if err != nil {
+			return protocolParams, err
+		}
+		protocolParams.MinPoolCost = minPoolCost
+		if ppCardano.GetPrices().GetMemory().GetDenominator() != 0 {
+			protocolParams.PriceMem = float32(
+				uint32(
+					ppCardano.GetPrices().GetMemory().GetNumerator(),
+				) / ppCardano.GetPrices().
+					GetMemory().
+					GetDenominator(),
+			)
+		} else {
+			protocolParams.PriceMem = 0
+		}
+		if ppCardano.GetPrices().GetSteps().GetDenominator() != 0 {
+			protocolParams.PriceStep = float32(
+				uint32(
+					ppCardano.GetPrices().GetSteps().GetNumerator(),
+				) / ppCardano.GetPrices().
+					GetSteps().
+					GetDenominator(),
+			)
+		} else {
+			protocolParams.PriceStep = 0
+		}
 		protocolParams.MaxTxExMem = strconv.FormatUint(
 			ppCardano.GetMaxExecutionUnitsPerTransaction().GetMemory(),
 			10,
@@ -189,10 +361,11 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		protocolParams.MaxCollateralInuts = int(
 			ppCardano.GetMaxCollateralInputs(),
 		)
-		protocolParams.CoinsPerUtxoByte = strconv.FormatUint(
-			ppCardano.GetCoinsPerUtxoByte(),
-			10,
-		)
+		coinsPerUtxoByte, err := parseParamString(ppCardano.GetCoinsPerUtxoByte(), "CoinsPerUtxoByte")
+		if err != nil {
+			return protocolParams, err
+		}
+		protocolParams.CoinsPerUtxoByte = coinsPerUtxoByte
 		protocolParams.CoinsPerUtxoWord = "0"
 		protocolParams.CostModels = map[string][]int64{
 			"PlutusV1": ppCardano.GetCostModels().GetPlutusV1().GetValues(),
@@ -209,66 +382,69 @@ func (u *UtxorpcChainContext) GetUtxoFromRef(
 	txHash string,
 	txIndex int,
 ) (*UTxO.UTxO, error) {
-	tmpUtxo := &UTxO.UTxO{}
 	resp, err := u.client.GetUtxoByRef(txHash, uint32(txIndex))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read UTxO: %w", err)
 	}
-	for _, item := range resp.Msg.GetItems() {
-		tmpUtxo.Input = TransactionInput.TransactionInput{
-			TransactionId: item.GetTxoRef().GetHash(),
-			Index:         int(item.GetTxoRef().GetIndex()),
-		}
-		tmpOutput := TransactionOutput.TransactionOutput{}
-		err = tmpOutput.UnmarshalCBOR(item.GetNativeBytes())
-		if err != nil {
-			return nil, err
-		}
-		tmpUtxo.Output = tmpOutput
+
+	if len(resp.Msg.Items) == 0 {
+		return nil, nil // Not found
 	}
-	return tmpUtxo, nil
+
+	item := resp.Msg.Items[0]
+	tmpUtxo := UTxO.UTxO{}
+	tmpUtxo.Input = TransactionInput.TransactionInput{
+		TransactionId: item.TxoRef.Hash,
+		Index:         int(item.TxoRef.Index),
+	}
+	tmpOutput := TransactionOutput.TransactionOutput{}
+	err = tmpOutput.UnmarshalCBOR(item.NativeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal output: %w", err)
+	}
+	tmpUtxo.Output = tmpOutput
+	return &tmpUtxo, nil
 }
 
 func (u *UtxorpcChainContext) EvaluateTx(
 	txBytes []byte,
 ) (map[string]Redeemer.ExecutionUnits, error) {
-	eval_resp, err := u.client.EvalTx(hex.EncodeToString(txBytes))
+	resp, err := u.client.EvaluateTransaction(hex.EncodeToString(txBytes))
 	if err != nil {
-		return map[string]Redeemer.ExecutionUnits{}, err
+		return nil, fmt.Errorf("failed to evaluate transaction: %w", err)
 	}
-	resp := make(map[string]Redeemer.ExecutionUnits)
-	// Use single report since we know we have 1 Tx to eval
-	redeemers := eval_resp.Msg.GetReport()[0].GetCardano().GetRedeemers()
-	for _, r := range redeemers {
-		purpose := r.GetPurpose().String()
-		switch purpose {
-		case "REDEEMER_PURPOSE_SPEND":
-			purpose = "spend"
-		case "REDEEMER_PURPOSE_MINT":
-			purpose = "mint"
-		case "REDEEMER_PURPOSE_CERT":
-			purpose = "certificate"
-		case "REDEEMER_PURPOSE_REWARD":
-			purpose = "withdrawal"
-		case "REDEEMER_PURPOSE_VOTE":
-			purpose = "vote"
-		case "REDEEMER_PURPOSE_PROPOSE":
-			purpose = "proposal"
-		default:
-			return resp, errors.New("unknown purpose")
-		}
-		units := r.GetExUnits()
-		resp[fmt.Sprintf("%s:%d", purpose, r.GetIndex())] = Redeemer.ExecutionUnits{
-			Steps: int64(units.GetSteps()),
-			Mem:   int64(units.GetMemory()),
+
+	// Parse the response
+	result := make(map[string]Redeemer.ExecutionUnits)
+	report := resp.Msg.GetReport()
+	if report != nil {
+		if cardanoEval := report.GetCardano(); cardanoEval != nil {
+			tagStrings := []string{"spend", "mint", "cert", "wdrl"}
+			for _, r := range cardanoEval.Redeemers {
+				tagStr := tagStrings[r.Purpose]
+				key := fmt.Sprintf("%s:%d", tagStr, r.Index)
+				result[key] = Redeemer.ExecutionUnits{
+					Steps: int64(r.ExUnits.Steps),
+					Mem:   int64(r.ExUnits.Memory),
+				}
+			}
 		}
 	}
-	return resp, nil
+	return result, nil
 }
 
 func (u *UtxorpcChainContext) Epoch() (int, error) {
-	// TODO
-	return 0, nil
+	resp, err := u.client.GetTip()
+	if err != nil {
+		return 0, fmt.Errorf("failed to read tip: %w", err)
+	}
+	slot := resp.Msg.Tip.Slot
+	epochLength := uint64(432000) // Mainnet epoch length
+	if u._Network != 0 {
+		epochLength = 86400 // Testnet
+	}
+	epoch := int(slot / epochLength)
+	return epoch, nil
 }
 
 func (u *UtxorpcChainContext) MaxTxFee() (int, error) {
@@ -288,7 +464,9 @@ func (u *UtxorpcChainContext) MaxTxFee() (int, error) {
 }
 
 func (u *UtxorpcChainContext) LastBlockSlot() (int, error) {
-	ppFromApi, err := u.client.ReadParams()
+	ppFromApi, err := u.client.UtxorpcClient.ReadParams(
+		connect.NewRequest(&query.ReadParamsRequest{}),
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -298,25 +476,22 @@ func (u *UtxorpcChainContext) LastBlockSlot() (int, error) {
 func (u *UtxorpcChainContext) Utxos(
 	address Address.Address,
 ) ([]UTxO.UTxO, error) {
-	ret := []UTxO.UTxO{}
-	addrCbor, err := address.MarshalCBOR()
+	resp, err := u.client.GetUtxosByAddress(address.Bytes())
 	if err != nil {
-		return ret, err
+		return nil, fmt.Errorf("failed to get UTxOs: %w", err)
 	}
-	var tmpUtxo UTxO.UTxO
-	resp, err := u.client.GetUtxosByAddress(addrCbor)
-	if err != nil {
-		return ret, err
-	}
-	for _, item := range resp.Msg.GetItems() {
+
+	ret := make([]UTxO.UTxO, 0, len(resp.Msg.Items))
+	for _, item := range resp.Msg.Items {
+		tmpUtxo := UTxO.UTxO{}
 		tmpUtxo.Input = TransactionInput.TransactionInput{
-			TransactionId: item.GetTxoRef().GetHash(),
-			Index:         int(item.GetTxoRef().GetIndex()),
+			TransactionId: item.TxoRef.Hash,
+			Index:         int(item.TxoRef.Index),
 		}
 		tmpOutput := TransactionOutput.TransactionOutput{}
-		err = tmpOutput.UnmarshalCBOR(item.GetNativeBytes())
+		err = tmpOutput.UnmarshalCBOR(item.NativeBytes)
 		if err != nil {
-			return ret, err
+			return ret, fmt.Errorf("failed to unmarshal output: %w", err)
 		}
 		tmpUtxo.Output = tmpOutput
 		ret = append(ret, tmpUtxo)
@@ -329,11 +504,19 @@ func (u *UtxorpcChainContext) SubmitTx(
 ) (serialization.TransactionId, error) {
 	txBytes, err := tx.Bytes()
 	if err != nil {
-		return serialization.TransactionId{Payload: []byte{}}, err
+		return serialization.TransactionId{}, fmt.Errorf(
+			"failed to encode transaction: %w",
+			err,
+		)
 	}
-	_, err = u.client.SubmitTx(hex.EncodeToString(txBytes))
+
+	resp, err := u.client.SubmitTransaction(hex.EncodeToString(txBytes))
 	if err != nil {
-		return serialization.TransactionId{Payload: []byte{}}, err
+		return serialization.TransactionId{}, fmt.Errorf(
+			"failed to submit transaction: %w",
+			err,
+		)
 	}
-	return tx.Id(), nil
+
+	return serialization.TransactionId{Payload: resp.Msg.GetRef()}, nil
 }

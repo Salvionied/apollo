@@ -17,7 +17,7 @@ import (
 var TESTADDRESS = "addr_test1vrm9x2zsux7va6w892g38tvchnzahvcd9tykqf3ygnmwtaqyfg52x"
 
 func InitUtxos() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 10)
 	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
@@ -43,7 +43,7 @@ func InitUtxos() []UTxO.UTxO {
 	return utxos
 }
 func InitUtxosDifferentiated() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 10)
 	for i := range 10 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),
@@ -73,7 +73,7 @@ func InitUtxosDifferentiated() []UTxO.UTxO {
 }
 
 func InitUtxosCongested() []UTxO.UTxO {
-	utxos := make([]UTxO.UTxO, 0)
+	utxos := make([]UTxO.UTxO, 0, 100)
 	for i := range 100 {
 		tx_in := TransactionInput.TransactionInput{
 			TransactionId: make([]byte, 32),

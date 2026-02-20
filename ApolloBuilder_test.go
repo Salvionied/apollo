@@ -1,6 +1,7 @@
 package apollo_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -24,12 +25,6 @@ import (
 	"github.com/Salvionied/apollo/txBuilding/TxBuilder"
 	"github.com/fxamacker/cbor/v2"
 )
-
-const BLOCKFROST_BASE_URL_TESTNET = "https://cardano-testnet.blockfrost.io/api"
-const BLOCKFROST_BASE_URL_PREVIEW = "https://cardano-preview.blockfrost.io/api"
-const BLOCKFROST_BASE_URL_PREPROD = "https://cardano-preprod.blockfrost.io/api"
-
-var BLOCKFROST_API_KEY = "mainnet88ZdHRG3UHXf2IEIT098i53GWWpbZWlU"
 
 var decoded_addr, _ = Address.DecodeAddress(
 	"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
@@ -57,17 +52,6 @@ var collateralUtxo = UTxO.UTxO{
 	Output: TransactionOutput.SimpleTransactionOutput(
 		decoded_addr,
 		Value.SimpleValue(5_000_000, nil))}
-
-var collateralUtxo2 = UTxO.UTxO{
-	Input: TransactionInput.TransactionInput{
-		TransactionId: []byte(
-			"d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056",
-		),
-		Index: 1,
-	},
-	Output: TransactionOutput.SimpleTransactionOutput(
-		decoded_addr,
-		Value.SimpleValue(10_000_000, nil))}
 
 func TestUnmarshal(t *testing.T) {
 	tx := Transaction.Transaction{}
@@ -564,7 +548,7 @@ func TestRedeemerCollect(t *testing.T) {
 	if wts.Redeemer[0].ExUnits.Steps == 0 {
 		t.Error("Tx is not correct", wts.Redeemer[0].ExUnits.Steps)
 	}
-	if built.GetTx().TransactionBody.Fee != 253554 {
+	if built.GetTx().TransactionBody.Fee != 253730 {
 		t.Error("Tx is not correct", built.GetTx().TransactionBody.Fee)
 	}
 	if built.GetTx().TransactionBody.Collateral == nil {
@@ -608,6 +592,25 @@ func TestAddSameScriptTwiceV2(t *testing.T) {
 		t.Error(err)
 	}
 	if len(built.GetTx().TransactionWitnessSet.PlutusV2Script) != 1 {
+		t.Error("Tx is not correct")
+	}
+}
+
+func TestAddSameScriptTwiceV3(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	apollob := apollo.New(&cc)
+	apollob = apollob.AttachV3Script([]byte("Hello, World!")).
+		AttachV3Script([]byte("Hello, World!"))
+	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(built.GetTx().TransactionWitnessSet.PlutusV3Script) != 1 {
 		t.Error("Tx is not correct")
 	}
 }
@@ -922,6 +925,179 @@ func TestEmptyRedeemerHashConway(t *testing.T) {
 
 }
 
+func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	utxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(utxo).
+		AddInput(utxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
+		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert UTxO in inputs once
+	count := 0
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) &&
+			inp.Index == utxo.Input.Index {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Error("UTxO not exactly once in inputs")
+	}
+	// Assert in collateral
+	found := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) &&
+			col.Index == utxo.Input.Index {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("UTxO not in collateral")
+	}
+	// Assert balance
+	inputVal := Value.SimpleValue(10_000_000, nil)
+	outputVal := Value.SimpleValue(0, nil)
+	for _, out := range built.GetTx().TransactionBody.Outputs {
+		outputVal = outputVal.Add(out.GetAmount())
+	}
+	outputVal.AddLovelace(built.Fee)
+	if !inputVal.Equal(outputVal) {
+		t.Error("Transaction not balanced")
+	}
+}
+
+func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(
+	t *testing.T,
+) {
+	cc := FixedChainContext.InitFixedChainContext()
+	smallUtxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(
+				2_000_000,
+				nil,
+			), // Insufficient for collateral (5M min)
+		),
+	}
+	largeUtxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x04},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(smallUtxo, largeUtxo).
+		AddInput(smallUtxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
+		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert small UTxO in inputs
+	foundSmallInInputs := false
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, smallUtxo.Input.TransactionId) &&
+			inp.Index == smallUtxo.Input.Index {
+			foundSmallInInputs = true
+			break
+		}
+	}
+	if !foundSmallInInputs {
+		t.Error("Small UTxO not in inputs")
+	}
+	// Assert large UTxO in collateral
+	foundLargeInCollateral := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, largeUtxo.Input.TransactionId) &&
+			col.Index == largeUtxo.Input.Index {
+			foundLargeInCollateral = true
+			break
+		}
+	}
+	if !foundLargeInCollateral {
+		t.Error("Large UTxO not in collateral")
+	}
+}
+
+func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	utxo := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte{0x01, 0x02, 0x03},
+			Index:         0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(10_000_000, nil),
+		),
+	}
+	apollob := apollo.New(&cc).
+		AddInputAddressFromBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
+		AddLoadedUTxOs(utxo).
+		AddInput(utxo).
+		AddCollateral(utxo).
+		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000)
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	inputs := built.GetTx().TransactionBody.Inputs
+	collateral := built.GetTx().TransactionBody.Collateral
+	// Assert UTxO in inputs once
+	count := 0
+	for _, inp := range inputs {
+		if bytes.Equal(inp.TransactionId, utxo.Input.TransactionId) &&
+			inp.Index == utxo.Input.Index {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Error("UTxO not exactly once in inputs")
+	}
+	// Assert in collateral
+	found := false
+	for _, col := range collateral {
+		if bytes.Equal(col.TransactionId, utxo.Input.TransactionId) &&
+			col.Index == utxo.Input.Index {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("UTxO not in collateral")
+	}
+}
+
 // func TestEmptyRedeemerWithDatum(t *testing.T) {
 // 	cborHex := "A1049FD8799FD8799FD8799FD8799F581C1F8041E566929CA05888BB49DA8A75692E80939F75AEC43973EF1151FFD8799FD8799FD8799F581C67668BFD3B9855AB4DCF72F5F1F3155830EA77F13413A9AC27A5DA37FFFFFFFF581C1F8041E566929CA05888BB49DA8A75692E80939F75AEC43973EF11511B00000191B369950BD8799FD8799F4040FFD8799F581C95A427E384527065F2F8946F5E86320D0117839A5E98EA2C0B55FB004448554E54FFFFFFD8799FD879801A01D073DBFFFFFF"
 // 	decodedHex, _ := hex.DecodeString(cborHex)
@@ -939,3 +1115,386 @@ func TestEmptyRedeemerHashConway(t *testing.T) {
 // 	}
 
 // }
+
+// TestRedeemersAreSortedCanonically verifies that redeemers are sorted by (Tag, Index)
+// regardless of the order they are added. This ensures deterministic script_data_hash
+// calculation.
+func TestRedeemersAreSortedCanonically(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	apollob := apollo.New(&cc)
+
+	scriptUtxo1 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte(
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			),
+			Index: 0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
+	}
+	scriptUtxo2 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte(
+				"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			),
+			Index: 0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
+	}
+	scriptUtxo3 := UTxO.UTxO{
+		Input: TransactionInput.TransactionInput{
+			TransactionId: []byte(
+				"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			),
+			Index: 0,
+		},
+		Output: TransactionOutput.SimpleTransactionOutput(
+			decoded_addr,
+			Value.SimpleValue(15_000_000, nil),
+		),
+	}
+
+	// Create redeemers - we'll add them in reverse order (2, 1, 0)
+	// to test that they get sorted correctly
+	redeemer := Redeemer.Redeemer{
+		Tag:   Redeemer.SPEND,
+		Index: 0, // Index will be updated by setRedeemerIndexes
+		Data: PlutusData.PlutusData{
+			TagNr:          121,
+			PlutusDataType: PlutusData.PlutusBytes,
+			Value:          []byte("test"),
+		},
+	}
+
+	datum := PlutusData.PlutusData{
+		TagNr:          121,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte("test"),
+	}
+
+	utxos := testutils.InitUtxosDifferentiated()
+
+	// Add UTxOs in reverse order (c, b, a) - after sorting by txid,
+	// they should be (a=0, b=1, c=2)
+	apollob = apollob.SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...).
+		CollectFrom(scriptUtxo3, redeemer). // Will be index 2 after sorting
+		CollectFrom(scriptUtxo2, redeemer). // Will be index 1 after sorting
+		CollectFrom(scriptUtxo1, redeemer). // Will be index 0 after sorting
+		AttachDatum(&datum).
+		AttachV1Script([]byte("test script")).
+		SetEstimationExUnitsRequired()
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Failed to build transaction: %v", err)
+	}
+
+	wts := built.GetTx().TransactionWitnessSet
+	redeemers := wts.Redeemer
+
+	// Verify we have 3 redeemers
+	if len(redeemers) != 3 {
+		t.Fatalf("Expected 3 redeemers, got %d", len(redeemers))
+	}
+
+	// Verify redeemers are sorted by (Tag, Index)
+	for i := 1; i < len(redeemers); i++ {
+		prev := redeemers[i-1]
+		curr := redeemers[i]
+
+		// Check canonical ordering: first by Tag, then by Index
+		if prev.Tag > curr.Tag {
+			t.Errorf(
+				"Redeemers not sorted by Tag: redeemer[%d].Tag=%d > redeemer[%d].Tag=%d",
+				i-1,
+				prev.Tag,
+				i,
+				curr.Tag,
+			)
+		}
+		if prev.Tag == curr.Tag && prev.Index >= curr.Index {
+			t.Errorf(
+				"Redeemers not sorted by Index within same Tag: redeemer[%d].Index=%d >= redeemer[%d].Index=%d",
+				i-1,
+				prev.Index,
+				i,
+				curr.Index,
+			)
+		}
+	}
+
+	// Verify the indexes are 0, 1, 2 (corresponding to sorted input order)
+	expectedIndexes := []int{0, 1, 2}
+	for i, r := range redeemers {
+		if r.Index != expectedIndexes[i] {
+			t.Errorf(
+				"Redeemer[%d] has Index=%d, expected %d",
+				i,
+				r.Index,
+				expectedIndexes[i],
+			)
+		}
+	}
+}
+
+func TestPayToAddressWithV2ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV2ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	// The first output should have the reference script
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+
+	firstOutput := outputs[0]
+	if !firstOutput.IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if firstOutput.PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if firstOutput.PostAlonzo.ScriptRef.Len() == 0 {
+		t.Fatal("Expected non-empty ScriptRef")
+	}
+}
+
+func TestPayToAddressWithV1ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV1Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV1ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+}
+
+func TestPayToAddressWithV3ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV3Script([]byte("Hello, World!"))
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToAddressWithV3ReferenceScript(decoded_addr, 5_000_000, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output with ScriptRef")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+}
+
+func TestPayToContractWithV2ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
+	}
+}
+
+func TestPayToContractWithV2ReferenceScriptDatumHash(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV2Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, false, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected datum hash to be set on post-Alonzo output with ScriptRef")
+	}
+}
+
+func TestPayToContractWithV1ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV1Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV1ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
+	}
+}
+
+func TestPayToContractWithV3ReferenceScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	decoded_addr, _ := Address.DecodeAddress(
+		"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
+	)
+	script := PlutusData.PlutusV3Script([]byte("Hello, World!"))
+	datum := PlutusData.PlutusData{
+		TagNr:          0,
+		PlutusDataType: PlutusData.PlutusBytes,
+		Value:          []byte{0x01, 0x02, 0x03},
+	}
+
+	apollob := apollo.New(&cc)
+	apollob = apollob.
+		PayToContractWithV3ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+
+	built, err := apollob.Complete()
+	if err != nil {
+		t.Fatalf("Complete() failed: %v", err)
+	}
+
+	outputs := built.GetTx().TransactionBody.Outputs
+	if len(outputs) == 0 {
+		t.Fatal("Expected at least one output")
+	}
+	if !outputs[0].IsPostAlonzo {
+		t.Fatal("Expected post-Alonzo output")
+	}
+	if outputs[0].PostAlonzo.ScriptRef == nil {
+		t.Fatal("Expected ScriptRef to be set on output")
+	}
+	if outputs[0].PostAlonzo.Datum == nil {
+		t.Fatal("Expected inline datum to be set on output")
+	}
+}

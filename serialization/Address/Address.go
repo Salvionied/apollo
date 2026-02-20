@@ -181,7 +181,7 @@ func (addr Address) Bytes() []byte {
 	} else {
 		staking = make([]byte, 0)
 	}
-	result := make([]byte, 0)
+	result := make([]byte, 0, 1+len(payment)+len(staking))
 	result = append(result, addr.HeaderByte)
 	result = append(result, payment...)
 	return append(result, staking...)
