@@ -316,14 +316,14 @@ func TestCborMapRoundTrip(t *testing.T) {
 	key2 := serialization.CustomBytes{Value: "01"}
 	m := map[serialization.CustomBytes]PlutusData.PlutusData{
 		key1: {
-			TagNr:    121,
+			TagNr:          121,
 			PlutusDataType: PlutusData.PlutusArray,
-			Value: PlutusData.PlutusIndefArray{},
+			Value:          PlutusData.PlutusIndefArray{},
 		},
 		key2: {
-			TagNr:    121,
+			TagNr:          121,
 			PlutusDataType: PlutusData.PlutusArray,
-			Value: PlutusData.PlutusIndefArray{},
+			Value:          PlutusData.PlutusIndefArray{},
 		},
 	}
 	cm := PlutusData.CborMap{Contents: &m}
