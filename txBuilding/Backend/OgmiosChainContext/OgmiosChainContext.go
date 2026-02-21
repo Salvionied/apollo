@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -635,7 +636,7 @@ func (occ *OgmiosChainContext) LatestEpochParams() (Base.ProtocolParameters, err
 		MinFeeReferenceScriptsMultiplier: int(
 			ogmiosParams.MinFeeReferenceScripts.Multiplier,
 		),
-		CostModels: ogmiosParams.CostModels,
+		CostModelsRaw: ogmiosParams.CostModels,
 	}, nil
 }
 
@@ -993,6 +994,95 @@ func (occ *OgmiosChainContext) EvaluateTx(
 		}
 	}
 	return result, nil
+}
+
+// EvaluateTxWithAdditionalUtxos is not supported by Ogmios.
+// Returns an error if non-empty additional UTxOs are provided.
+func (occ *OgmiosChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	if len(utxos) > 0 {
+		return nil, fmt.Errorf(
+			"OgmiosChainContext does not support" +
+				" additional UTxOs for evaluation",
+		)
+	}
+	return occ.EvaluateTx(tx)
+}
+
+func int64sToInts(vals []int64) PlutusData.CostModel {
+	cm := make(PlutusData.CostModel, len(vals))
+	for i, v := range vals {
+		if v > int64(math.MaxInt) {
+			cm[i] = math.MaxInt
+		} else if v < int64(math.MinInt) {
+			cm[i] = math.MinInt
+		} else {
+			cm[i] = int(v)
+		}
+	}
+	return cm
+}
+
+// CostModelsV1 returns the Plutus V1 cost model from
+// protocol parameters, or nil if unavailable.
+func (occ *OgmiosChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, err := occ.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v1"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
+}
+
+// CostModelsV2 returns the Plutus V2 cost model from
+// protocol parameters, or nil if unavailable.
+func (occ *OgmiosChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, err := occ.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v2"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
+}
+
+// CostModelsV3 returns the Plutus V3 cost model from
+// protocol parameters, or nil if unavailable.
+func (occ *OgmiosChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, err := occ.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v3"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
 }
 
 // This is unused
