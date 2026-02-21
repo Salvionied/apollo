@@ -15,7 +15,6 @@ import (
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
@@ -106,7 +105,7 @@ func getSharedContext(
 func TestFailedSubmissionThrows(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(
 			"addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu",
 		).
@@ -150,7 +149,7 @@ func TestBurnPlutus(t *testing.T) {
 	}
 
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -159,7 +158,7 @@ func TestBurnPlutus(t *testing.T) {
 				Name:     "TEST",
 				Quantity: int(-1),
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		Complete()
 	if err != nil {
@@ -171,7 +170,7 @@ func TestBurnPlutus(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00e1eefb021a0002f2c509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354200b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00e1eefb021a0002f2c509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354200b5820c898e2e6a189450b9c0d0a405643a32bd74eafa8c978aaed3aae4dbad86ce36da10581840100f6820000f5f6" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
@@ -197,7 +196,7 @@ func TestMintPlutus(t *testing.T) {
 	}
 
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -206,7 +205,7 @@ func TestMintPlutus(t *testing.T) {
 				Name:     "TEST",
 				Quantity: int(1),
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		Complete()
 	if err != nil {
@@ -218,7 +217,7 @@ func TestMintPlutus(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00e1e193a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401021a0003002d09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000181825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00e1e193a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401021a0003002d09a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b5820c898e2e6a189450b9c0d0a405643a32bd74eafa8c978aaed3aae4dbad86ce36da10581840100f6820000f5f6" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
@@ -243,7 +242,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 			Value.SimpleValue(15000000, nil)),
 	}
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -252,7 +251,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 				Name:     "TEST",
 				Quantity: int(1),
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).PayToAddress(
 		decoded_addr,
 		1200000,
@@ -272,7 +271,7 @@ func TestMintPlutusWithPayment(t *testing.T) {
 	}
 	if hex.EncodeToString(
 		txBytes,
-	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00146324a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cd6817021a0003168509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b58207c2fde0c1908393e41c7b4afbfee2686378e714d70fc335b6cd0142ac6de9772a10581840000f6820000f5f6" {
+	) != "84a5008182584064356431663763323233646338386262343134373461663233623638356530323437333037653934653731356566356536326633323561633934663733303536000182825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c9821a00146324a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa1445445535401825839010a59337f7b3a913424d7f7a151401e052642b68e948d8cacadc6372016a9999419cc5a61ca62da81e378d7538213a3715a6b858c948c69c91a00cd6817021a0003168509a1581c279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3fa14454455354010b5820c898e2e6a189450b9c0d0a405643a32bd74eafa8c978aaed3aae4dbad86ce36da10581840100f6820000f5f6" {
 		t.Error("Tx is not correct", hex.EncodeToString(txBytes))
 	}
 }
@@ -313,7 +312,7 @@ func TestAddInputs(t *testing.T) {
 	}
 	apollob := apollo.New(cc)
 	apollob = apollob.AddInput(testUtxo).SetChangeAddress(decoded_addr)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -369,7 +368,7 @@ func TestConsumeUtxo(t *testing.T) {
 		t.Error(err)
 	}
 	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -443,7 +442,7 @@ func TestConsumeAssetsFromUtxo(t *testing.T) {
 		t.Error(err)
 	}
 	apollob = apollob.AddLoadedUTxOs(biAdaUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -521,7 +520,7 @@ func TestPayToContract(t *testing.T) {
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
 		PayToContract(decoded_addr, &datum, 1_000_000, false).
 		PayToContract(decoded_addr, &datum, 1_000_000, true)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -578,7 +577,7 @@ func TestRequiredSigner(t *testing.T) {
 	apollob := apollo.New(cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
 		AddRequiredSignerFromAddress(decoded_addr, true, true)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -602,7 +601,7 @@ func TestRequiredSigner(t *testing.T) {
 	apollob = apollo.New(cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
 		AddRequiredSignerFromBech32(decoded_addr.String(), true, true)
-	built, err = apollob.Complete()
+	built, _, err = apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -627,7 +626,7 @@ func TestRequiredSigner(t *testing.T) {
 	apollob = apollo.New(cc)
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(InputUtxo).
 		AddRequiredSigner(serialization.PubKeyHash(decoded_addr.PaymentPart))
-	built, err = apollob.Complete()
+	built, _, err = apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -653,7 +652,7 @@ func TestFeePadding(t *testing.T) {
 		AddLoadedUTxOs(InputUtxo).
 		PayToContract(decoded_addr, nil, 1_000_000, false).
 		SetFeePadding(500_000)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -691,7 +690,7 @@ func TestSetCollateral(t *testing.T) {
 		PayToContract(decoded_addr, nil, 1_000_000, false).
 		SetFeePadding(500_000).
 		AddCollateral(collateralUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -714,7 +713,7 @@ func TestCollateralwithReturn(t *testing.T) {
 		PayToContract(decoded_addr, nil, 1_000_000, false).
 		SetFeePadding(500_000).
 		AddCollateral(collateralUtxo2)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
