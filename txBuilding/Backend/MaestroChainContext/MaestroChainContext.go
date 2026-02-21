@@ -10,6 +10,7 @@ import (
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -543,5 +544,41 @@ func (mcc *MaestroChainContext) GetContractCbor(
 	decodedBytes, _ := hex.DecodeString(scCborBytes)
 	_ = cbor.Unmarshal(decodedBytes, &bytes)
 	return hex.EncodeToString(bytes), nil
+}
 
+func (mcc *MaestroChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return mcc.EvaluateTx(tx)
+}
+
+func (mcc *MaestroChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, _ := mcc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (mcc *MaestroChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, _ := mcc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (mcc *MaestroChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, _ := mcc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	return nil
 }

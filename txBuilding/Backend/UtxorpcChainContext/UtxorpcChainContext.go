@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -132,6 +133,29 @@ func (u *UtxorpcChainContext) GetContractCbor(
 	scriptHash string,
 ) (string, error) {
 	return "", nil
+}
+
+func convertCostModels(
+	raw map[string][]int64,
+) map[Base.CostModelsPlutusVersion]PlutusData.CostModel {
+	result := make(
+		map[Base.CostModelsPlutusVersion]PlutusData.CostModel,
+	)
+	for k, v := range raw {
+		cm := make(PlutusData.CostModel, len(v))
+		for i, val := range v {
+			cm[i] = int(val)
+		}
+		switch k {
+		case "PlutusV1":
+			result[Base.CostModelsPlutusV1] = cm
+		case "PlutusV2":
+			result[Base.CostModelsPlutusV2] = cm
+		case "PlutusV3":
+			result[Base.CostModelsPlutusV3] = cm
+		}
+	}
+	return result
 }
 
 func NewUtxorpcChainContext(
@@ -367,11 +391,14 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		}
 		protocolParams.CoinsPerUtxoByte = coinsPerUtxoByte
 		protocolParams.CoinsPerUtxoWord = "0"
-		protocolParams.CostModels = map[string][]int64{
+		protocolParams.CostModelsRaw = map[string][]int64{
 			"PlutusV1": ppCardano.GetCostModels().GetPlutusV1().GetValues(),
 			"PlutusV2": ppCardano.GetCostModels().GetPlutusV2().GetValues(),
 			"PlutusV3": ppCardano.GetCostModels().GetPlutusV3().GetValues(),
 		}
+		protocolParams.CostModels = convertCostModels(
+			protocolParams.CostModelsRaw,
+		)
 		u._protocol_param = protocolParams
 		u.latestUpdate = time.Now()
 	}
@@ -519,4 +546,41 @@ func (u *UtxorpcChainContext) SubmitTx(
 	}
 
 	return serialization.TransactionId{Payload: resp.Msg.GetRef()}, nil
+}
+
+func (u *UtxorpcChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return u.EvaluateTx(tx)
+}
+
+func (u *UtxorpcChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, _ := u.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (u *UtxorpcChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, _ := u.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (u *UtxorpcChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, _ := u.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	return nil
 }

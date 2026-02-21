@@ -758,3 +758,40 @@ func (bfc *BlockFrostChainContext) GetContractCbor(
 	}
 	return response.Cbor, nil
 }
+
+func (bfc *BlockFrostChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []byte,
+	additionalUtxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return bfc.EvaluateTx(tx)
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, _ := bfc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, _ := bfc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	return nil
+}
+
+func (bfc *BlockFrostChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, _ := bfc.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	return nil
+}
