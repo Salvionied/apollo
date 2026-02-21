@@ -10,6 +10,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Asset"
 	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
@@ -235,6 +236,27 @@ func (f FixedChainContext) EvaluateTx(
 	}, nil
 }
 
-func (f FixedChainContext) GetContractCbor(scriptHash string) (string, error) {
+func (f FixedChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return f.EvaluateTx(tx)
+}
+
+func (f FixedChainContext) CostModelsV1() PlutusData.CostModel {
+	return PlutusData.CostModel{}
+}
+
+func (f FixedChainContext) CostModelsV2() PlutusData.CostModel {
+	return PlutusData.CostModel{}
+}
+
+func (f FixedChainContext) CostModelsV3() PlutusData.CostModel {
+	return PlutusData.CostModel{}
+}
+
+func (f FixedChainContext) GetContractCbor(
+	scriptHash string,
+) (string, error) {
 	return "", nil
 }

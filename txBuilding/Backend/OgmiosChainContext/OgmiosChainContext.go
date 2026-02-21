@@ -635,7 +635,7 @@ func (occ *OgmiosChainContext) LatestEpochParams() (Base.ProtocolParameters, err
 		MinFeeReferenceScriptsMultiplier: int(
 			ogmiosParams.MinFeeReferenceScripts.Multiplier,
 		),
-		CostModels: ogmiosParams.CostModels,
+		CostModelsRaw: ogmiosParams.CostModels,
 	}, nil
 }
 
@@ -993,6 +993,66 @@ func (occ *OgmiosChainContext) EvaluateTx(
 		}
 	}
 	return result, nil
+}
+
+func (occ *OgmiosChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	return occ.EvaluateTx(tx)
+}
+
+func int64sToInts(vals []int64) PlutusData.CostModel {
+	cm := make(PlutusData.CostModel, len(vals))
+	for i, v := range vals {
+		cm[i] = int(v)
+	}
+	return cm
+}
+
+func (occ *OgmiosChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, _ := occ.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v1"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
+}
+
+func (occ *OgmiosChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, _ := occ.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v2"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
+}
+
+func (occ *OgmiosChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, _ := occ.GetProtocolParams()
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if v, ok := pp.CostModelsRaw["plutus:v3"]; ok {
+			return int64sToInts(v)
+		}
+	}
+	return nil
 }
 
 // This is unused
