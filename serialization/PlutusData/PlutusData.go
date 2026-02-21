@@ -981,6 +981,24 @@ func decodeMapValue(data []byte) (PlutusType, any, error) {
 	return PlutusGenericMap, mapPairs, nil
 }
 
+type CborMap struct {
+	Contents *map[serialization.CustomBytes]PlutusData
+}
+
+func (cm *CborMap) MarshalCBOR() ([]uint8, error) {
+	em, err := cbor.CanonicalEncOptions().EncMode()
+	if err != nil {
+		return nil, err
+	}
+	return em.Marshal(cm.Contents)
+}
+
+func (cm *CborMap) UnmarshalCBOR(
+	value []uint8,
+) error {
+	return cbor.Unmarshal(value, cm.Contents)
+}
+
 type PlutusList interface {
 	Len() int
 }

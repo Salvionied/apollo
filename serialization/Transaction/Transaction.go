@@ -29,9 +29,21 @@ type Transaction struct {
 		error: An error if the Bytes fails.
 */
 func (tx *Transaction) Bytes() ([]byte, error) {
-	cborred, err := cbor.Marshal(tx)
+	opts := cbor.CanonicalEncOptions()
+	opts.IndefLength = cbor.IndefLengthAllowed
+	em, err := opts.EncMode()
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling transaction, %w", err)
+		return nil, fmt.Errorf(
+			"error creating canonical enc mode, %w",
+			err,
+		)
+	}
+	cborred, err := em.Marshal(tx)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error marshaling transaction, %w",
+			err,
+		)
 	}
 	return cborred, nil
 }
