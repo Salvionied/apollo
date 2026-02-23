@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	connectrpc.com/connect v1.19.1
-	filippo.io/edwards25519 v1.1.0
+	filippo.io/edwards25519 v1.2.0
 	github.com/SundaeSwap-finance/kugo v1.3.0
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.0
 	github.com/fxamacker/cbor/v2 v2.9.0
