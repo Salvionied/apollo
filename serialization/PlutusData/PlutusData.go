@@ -981,6 +981,38 @@ func decodeMapValue(data []byte) (PlutusType, any, error) {
 	return PlutusGenericMap, mapPairs, nil
 }
 
+type CborMap struct {
+	Contents *map[serialization.CustomBytes]PlutusData
+}
+
+func (cm *CborMap) MarshalCBOR() ([]uint8, error) {
+	opts := cbor.CanonicalEncOptions()
+	opts.IndefLength = cbor.IndefLengthAllowed
+	em, err := opts.EncMode()
+	if err != nil {
+		return nil, err
+	}
+	if cm.Contents == nil {
+		empty := make(
+			map[serialization.CustomBytes]PlutusData,
+		)
+		return em.Marshal(empty)
+	}
+	return em.Marshal(*cm.Contents)
+}
+
+func (cm *CborMap) UnmarshalCBOR(
+	value []uint8,
+) error {
+	if cm.Contents == nil {
+		m := make(
+			map[serialization.CustomBytes]PlutusData,
+		)
+		cm.Contents = &m
+	}
+	return cbor.Unmarshal(value, cm.Contents)
+}
+
 type PlutusList interface {
 	Len() int
 }
