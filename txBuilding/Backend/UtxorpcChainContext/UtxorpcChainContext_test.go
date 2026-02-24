@@ -16,7 +16,6 @@ import (
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Policy"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
 	"github.com/Salvionied/apollo/serialization/UTxO"
@@ -59,7 +58,7 @@ func getSharedContext(t *testing.T) *UtxorpcChainContext {
 func TestUTXORPC_FailedSubmissionThrows(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -98,7 +97,7 @@ func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 			})),
 	}
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, txBytes, err := apollob.
 		AddLoadedUTxOs(testUtxo).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -107,7 +106,7 @@ func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 				Name:     "TEST",
 				Quantity: -1,
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		Complete()
 	if err == nil {
@@ -116,6 +115,11 @@ func TestUTXORPC_BurnPlutus_ReturnsExUnitError(t *testing.T) {
 	// Verify we get the expected ExUnit-related error
 	if !strings.Contains(strings.ToLower(err.Error()), "exunit") {
 		t.Fatalf("expected ExUnit-related error, got: %v", err)
+	}
+	if txBytes == nil {
+		t.Error(
+			"expected diagnostic tx bytes on failure",
+		)
 	}
 }
 
@@ -130,7 +134,7 @@ func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
 		Value: "279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
 	}
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, txBytes, err := apollob.
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()[:5]...).
 		SetChangeAddress(decoded_addr).
 		MintAssetsWithRedeemer(
@@ -139,7 +143,7 @@ func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
 				Name:     "TEST",
 				Quantity: 1,
 			},
-			Redeemer.Redeemer{},
+			PlutusData.PlutusData{},
 		).
 		Complete()
 	if err == nil {
@@ -149,12 +153,17 @@ func TestUTXORPC_MintPlutus_ReturnsExUnitError(t *testing.T) {
 	if !strings.Contains(strings.ToLower(err.Error()), "exunit") {
 		t.Fatalf("expected ExUnit-related error, got: %v", err)
 	}
+	if txBytes == nil {
+		t.Error(
+			"expected diagnostic tx bytes on failure",
+		)
+	}
 }
 
 func TestUTXORPC_SimpleTransaction(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -171,7 +180,7 @@ func TestUTXORPC_SimpleTransaction(t *testing.T) {
 func TestUTXORPC_TransactionWithChange(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 5_000_000).
@@ -197,7 +206,7 @@ func TestUTXORPC_TransactionWithChange(t *testing.T) {
 func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -218,7 +227,7 @@ func TestUTXORPC_TransactionWithMetadata(t *testing.T) {
 func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToContract(
@@ -242,7 +251,7 @@ func TestUTXORPC_TransactionWithInlineDatum(t *testing.T) {
 func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -259,7 +268,7 @@ func TestUTXORPC_TransactionWithReferenceScript(t *testing.T) {
 func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -277,7 +286,7 @@ func TestUTXORPC_TransactionWithCollateral(t *testing.T) {
 func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -295,7 +304,7 @@ func TestUTXORPC_TransactionWithCollateralReturn(t *testing.T) {
 func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -313,7 +322,7 @@ func TestUTXORPC_TransactionWithMultipleCollaterals(t *testing.T) {
 func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -330,7 +339,7 @@ func TestUTXORPC_TransactionWithRequiredSigners(t *testing.T) {
 func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -352,7 +361,7 @@ func TestUTXORPC_TransactionWithReferenceInputs(t *testing.T) {
 func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -369,7 +378,7 @@ func TestUTXORPC_TransactionWithValidityStart(t *testing.T) {
 func TestUTXORPC_TransactionWithTtl(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -386,7 +395,7 @@ func TestUTXORPC_TransactionWithTtl(t *testing.T) {
 func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -403,7 +412,7 @@ func TestUTXORPC_TransactionWithWithdrawals(t *testing.T) {
 func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -420,7 +429,7 @@ func TestUTXORPC_TransactionWithCertificates(t *testing.T) {
 func TestUTXORPC_TransactionWithMint(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -441,7 +450,7 @@ func TestUTXORPC_TransactionWithMint(t *testing.T) {
 func TestUTXORPC_TransactionWithScript(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -458,7 +467,7 @@ func TestUTXORPC_TransactionWithScript(t *testing.T) {
 func TestUTXORPC_TransactionWithDatum(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	apollob, err := apollob.
+	apollob, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -475,7 +484,7 @@ func TestUTXORPC_TransactionWithDatum(t *testing.T) {
 func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
 	cc := getSharedContext(t)
 	apollob := apollo.New(cc)
-	_, err := apollob.
+	_, _, err := apollob.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).
@@ -492,7 +501,7 @@ func TestUTXORPC_TransactionWithRedeemer(t *testing.T) {
 func TestUTXORPC_TransactionWithCollateralAndCollateralReturn(t *testing.T) {
 	cc := getSharedContext(t)
 	built := apollo.New(cc)
-	_, err := built.
+	_, _, err := built.
 		AddInputAddressFromBech32(decoded_addr_for_fixtures.String()).
 		AddLoadedUTxOs(testutils.InitUtxosDifferentiated()...).
 		PayToAddressBech32(decoded_addr_for_fixtures.String(), 10_000_000).

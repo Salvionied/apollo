@@ -959,23 +959,32 @@ func (b *Apollo) MintAssets(mintUnit Unit) *Apollo {
 /*
 *
 
-	MintAssetsWithRedeemer adds a minting unit with an associated redeemer to the transaction's minting set.
+	MintAssetsWithRedeemer adds a minting unit with an
+	associated redeemer to the transaction's minting set.
+	The redeemer is auto-created with the MINT tag from
+	the provided PlutusData.
 
 	Params:
 		mintUnit Unit: The minting unit to add.
-
-
-		redeemer Redeemer.Redeemer: The redeemer associated with the minting unit.
+		redeemerData PlutusData.PlutusData: The redeemer
+			data for the minting unit.
 
 	Returns:
-		*Apollo: A pointer to the Apollo object with the minting unit added.
+		*Apollo: A pointer to the Apollo object with
+		the minting unit added.
 */
 func (b *Apollo) MintAssetsWithRedeemer(
 	mintUnit Unit,
-	redeemer Redeemer.Redeemer,
+	redeemerData PlutusData.PlutusData,
 ) *Apollo {
 	b.mint = append(b.mint, mintUnit)
-	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = redeemer
+	newRedeemer := Redeemer.Redeemer{
+		Tag:     Redeemer.MINT,
+		Index:   0,
+		Data:    redeemerData,
+		ExUnits: Redeemer.ExecutionUnits{},
+	}
+	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = newRedeemer
 	b.isEstimateRequired = true
 	return b
 }
@@ -1015,6 +1024,11 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 	}
 	aux_data_hash := b.auxiliaryData.Hash()
 	mints := b.getMints()
+	var withdrawals *Withdrawal.Withdrawal
+	if b.withdrawals != nil &&
+		b.withdrawals.Size() > 0 {
+		withdrawals = b.withdrawals
+	}
 	txb := TransactionBody.TransactionBody{
 		Inputs:            inputs,
 		Outputs:           b.buildOutputs(),
@@ -1027,8 +1041,11 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 		ValidityStart:     b.ValidityStart,
 		Collateral:        collaterals,
 		Certificates:      b.certificates,
-		Withdrawals:       b.withdrawals,
-		ReferenceInputs:   append(b.referenceInputs, b.referenceInputsV3...),
+		Withdrawals:       withdrawals,
+		ReferenceInputs: append(
+			b.referenceInputs,
+			b.referenceInputsV3...,
+		),
 	}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
@@ -2415,16 +2432,30 @@ func (b *Apollo) Clone() *Apollo {
 	Returns:
 		map[string]Redeemer.ExecutionUnits: A map of estimated execution units.
 */
-func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
+func (b *Apollo) estimateExunits() (
+	map[string]Redeemer.ExecutionUnits,
+	[]byte,
+	error,
+) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, err := cloned_b.Complete()
+	updated_b, _, err := cloned_b.Complete()
 	if err != nil {
-		return make(map[string]Redeemer.ExecutionUnits, 0), err
+		return make(
+			map[string]Redeemer.ExecutionUnits, 0,
+		), nil, err
 	}
-	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
-	return b.Context.EvaluateTx(tx_cbor)
+	tx_cbor, err := cbor.Marshal(updated_b.tx)
+	if err != nil {
+		return make(
+			map[string]Redeemer.ExecutionUnits, 0,
+		), nil, err
+	}
+	result, err := b.Context.EvaluateTx(tx_cbor)
+	if err != nil {
+		return result, tx_cbor, err
+	}
+	return result, nil, nil
 }
 
 /*
@@ -2435,11 +2466,16 @@ func (b *Apollo) estimateExunits() (map[string]Redeemer.ExecutionUnits, error) {
 	Returns:
 		*Apollo: A pointer to the Apollo object to support method chaining.
 */
-func (b *Apollo) updateExUnits() (*Apollo, error) {
+func (b *Apollo) updateExUnits() (
+	*Apollo, []byte, error,
+) {
 	if b.isEstimateRequired {
-		estimated_execution_units, err := b.estimateExunits()
+		estimated_execution_units, tx_cbor, err :=
+			b.estimateExunits()
 		if err != nil {
-			return b, errors.New("could not estimate ExUnits")
+			return b, tx_cbor, fmt.Errorf(
+				"could not estimate ExUnits: %w", err,
+			)
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf(
@@ -2523,7 +2559,7 @@ func (b *Apollo) updateExUnits() (*Apollo, error) {
 		}
 		return a.Index - b.Index
 	})
-	return b, nil
+	return b, nil, nil
 }
 
 /*
@@ -2553,18 +2589,28 @@ func CountRequiredAssets(assets MultiAsset.MultiAsset[int64]) int {
 /*
 *
 
-	Complete assembles and finalizes the Apollo transaction, handling
-	inputs, change, fees, collateral and witness data.
+	Complete assembles and finalizes the Apollo
+	transaction, handling inputs, change, fees,
+	collateral and witness data.
+
+	If this fails due to a script failure, it
+	returns the failed tx cbor as bytes for
+	diagnostic purposes.
 
 	Returns:
 
-
-	*Apollo: A pointer to the Apollo object representing the completed transaction.
-	error: An error if any issues are encountered during the process.
+	*Apollo: A pointer to the Apollo object
+	representing the completed transaction.
+	[]byte: The failed transaction bytes for
+	diagnostics, or nil on success.
+	error: An error if any issues are encountered
+	during the process.
 */
-func (b *Apollo) Complete() (*Apollo, error) {
+func (b *Apollo) Complete() (
+	*Apollo, []byte, error,
+) {
 	if b.err != nil {
-		return nil, b.err
+		return nil, nil, b.err
 	}
 	selectedUtxos := make([]UTxO.UTxO, 0)
 	selectedAmount := Value.Value{}
@@ -2617,7 +2663,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	}
 	estimatedFee, err := b.estimateFee()
 	if err != nil {
-		return b, err
+		return b, nil, err
 	}
 	requestedAmount.AddLovelace(estimatedFee + constants.MIN_LOVELACE)
 	unfulfilledAmount := requestedAmount.Sub(selectedAmount)
@@ -2665,7 +2711,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 					}
 					available_utxos = newAvailUtxos
 					if !found {
-						return nil, errors.New("missing required assets")
+						return nil, nil, errors.New(
+							"missing required assets",
+						)
 					}
 
 				}
@@ -2678,7 +2726,9 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		) {
 
 			if len(available_utxos) == 0 {
-				return nil, errors.New("not enough funds")
+				return nil, nil, errors.New(
+					"not enough funds",
+				)
 			}
 			utxo := available_utxos[0]
 			selectedUtxos = append(selectedUtxos, utxo)
@@ -2696,22 +2746,22 @@ func (b *Apollo) Complete() (*Apollo, error) {
 	//SET COLLATERAL
 	b, err = b.setCollateral()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	//UPDATE EXUNITS
-	b, err = b.updateExUnits()
+	b, txCbor, err := b.updateExUnits()
 	if err != nil {
-		return b, err
+		return b, txCbor, err
 	}
 	//ADDCHANGEANDFEE
 	b, err = b.addChangeAndFee()
 	if err != nil {
-		return nil, err
+		return nil, txCbor, err
 	}
 	//FINALIZE TX
 	body, err := b.buildTxBody()
 	if err != nil {
-		return nil, err
+		return nil, txCbor, err
 	}
 	witnessSet := b.buildWitnessSet()
 	b.tx = &Transaction.Transaction{
@@ -2720,7 +2770,7 @@ func (b *Apollo) Complete() (*Apollo, error) {
 		AuxiliaryData:         b.auxiliaryData,
 		Valid:                 true,
 	}
-	return b, nil
+	return b, nil, nil
 }
 
 /*
@@ -3693,25 +3743,27 @@ func (b *Apollo) AddCollateral(utxo UTxO.UTxO) *Apollo {
 	return b
 }
 
-func (b *Apollo) CompleteExact(fee int) (*Apollo, error) {
+func (b *Apollo) CompleteExact(
+	fee int,
+) (*Apollo, []byte, error) {
 	//SET REDEEMER INDEXES
 	b = b.setRedeemerIndexes()
 	//SET COLLATERAL
 	b, err := b.setCollateral()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	//UPDATE EXUNITS
-	b, err = b.updateExUnitsExact(fee)
+	b, txCbor, err := b.updateExUnitsExact(fee)
 	if err != nil {
-		return b, err
+		return b, txCbor, err
 	}
 	//ADDCHANGEANDFEE
 	b.Fee = int64(fee)
 	//FINALIZE TX
 	body, err := b.buildTxBody()
 	if err != nil {
-		return nil, err
+		return nil, txCbor, err
 	}
 	witnessSet := b.buildWitnessSet()
 	b.tx = &Transaction.Transaction{
@@ -3720,25 +3772,47 @@ func (b *Apollo) CompleteExact(fee int) (*Apollo, error) {
 		AuxiliaryData:         b.auxiliaryData,
 		Valid:                 true,
 	}
-	return b, nil
+	return b, nil, nil
 }
 
 func (b *Apollo) estimateExunitsExact(
 	fee int,
-) (map[string]Redeemer.ExecutionUnits, error) {
+) (
+	map[string]Redeemer.ExecutionUnits,
+	[]byte,
+	error,
+) {
 	cloned_b := b.Clone()
 	cloned_b.isEstimateRequired = false
-	updated_b, _ := cloned_b.CompleteExact(fee)
-	//updated_b = updated_b.fakeWitness()
-	tx_cbor, _ := cbor.Marshal(updated_b.tx)
-	return b.Context.EvaluateTx(tx_cbor)
+	updated_b, _, err := cloned_b.CompleteExact(fee)
+	if err != nil {
+		return make(
+			map[string]Redeemer.ExecutionUnits, 0,
+		), nil, err
+	}
+	tx_cbor, err := cbor.Marshal(updated_b.tx)
+	if err != nil {
+		return make(
+			map[string]Redeemer.ExecutionUnits, 0,
+		), nil, err
+	}
+	result, err := b.Context.EvaluateTx(tx_cbor)
+	if err != nil {
+		return result, tx_cbor, err
+	}
+	return result, nil, nil
 }
 
-func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
+func (b *Apollo) updateExUnitsExact(
+	fee int,
+) (*Apollo, []byte, error) {
 	if b.isEstimateRequired {
-		estimated_execution_units, err := b.estimateExunitsExact(fee)
+		estimated_execution_units, tx_cbor, err :=
+			b.estimateExunitsExact(fee)
 		if err != nil {
-			return b, err
+			return b, tx_cbor, fmt.Errorf(
+				"could not estimate ExUnits: %w", err,
+			)
 		}
 		for k, redeemer := range b.redeemersToUTxO {
 			key := fmt.Sprintf(
@@ -3804,7 +3878,7 @@ func (b *Apollo) updateExUnitsExact(fee int) (*Apollo, error) {
 		}
 		return a.Index - b.Index
 	})
-	return b, nil
+	return b, nil, nil
 }
 
 func (b *Apollo) GetPaymentsLength() int {

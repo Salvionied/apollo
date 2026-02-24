@@ -95,7 +95,7 @@ func TestEnsureTxIsBalanced(t *testing.T) {
 		AddLoadedUTxOs(utxos...).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300)
-	apollob, err := apollob.Complete()
+	apollob, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -174,7 +174,7 @@ func TestComplexTxBuild(t *testing.T) {
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", int(2_000_000)).
 		SetTtl(0 + 300).
 		SetValidityStart(0)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -258,7 +258,7 @@ func TestFakeBurnBalancing(t *testing.T) {
 		MintAssets(
 			apollo.NewUnit("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a", "bluedesert", -1),
 		)
-	apollob, err = apollob.Complete()
+	apollob, _, err = apollob.Complete()
 	if err != nil {
 		fmt.Println("HERE")
 		t.Error(err)
@@ -502,7 +502,7 @@ func TestRedeemerCollect(t *testing.T) {
 		CollectFrom(InputUtxo, redeemer).
 		AttachDatum(&datum).
 		AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -567,7 +567,7 @@ func TestAddSameScriptTwiceV1(t *testing.T) {
 	apollob = apollob.AttachV1Script([]byte("Hello, World!")).
 		AttachV1Script([]byte("Hello, World!"))
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 
@@ -587,7 +587,7 @@ func TestAddSameScriptTwiceV2(t *testing.T) {
 	apollob = apollob.AttachV2Script([]byte("Hello, World!")).
 		AttachV2Script([]byte("Hello, World!"))
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -606,7 +606,7 @@ func TestAddSameScriptTwiceV3(t *testing.T) {
 	apollob = apollob.AttachV3Script([]byte("Hello, World!")).
 		AttachV3Script([]byte("Hello, World!"))
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -620,7 +620,7 @@ func TestSetChangeAddressBech32(t *testing.T) {
 	apollob := apollo.New(&cc)
 	apollob = apollob.SetChangeAddressBech32("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seyu").
 		AddInput(InputUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -640,7 +640,7 @@ func TestSetWalletFromBech32(t *testing.T) {
 		t.Error(err)
 	}
 	apollob = apollob.AddInput(InputUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -662,7 +662,7 @@ func TestRefInput(t *testing.T) {
 	apollob = apollob.AddInput(InputUtxo).
 		AddReferenceInput(hex.EncodeToString(InputUtxo.Input.TransactionId), 0).
 		AddCollateral(collateralUtxo)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -699,7 +699,7 @@ func TestExactComplete(t *testing.T) {
 		CollectFrom(InputUtxo, redeemer).
 		AttachDatum(&datum).
 		AttachV1Script([]byte("Hello, World!")).SetEstimationExUnitsRequired()
-	built, err := apollob.CompleteExact(200_000)
+	built, _, err := apollob.CompleteExact(200_000)
 	if err != nil {
 		t.Error(err)
 	}
@@ -762,7 +762,7 @@ func TestCongestedBuild(t *testing.T) {
 	utxos := testutils.InitUtxosCongested()
 	apollob = apollob.SetChangeAddress(decoded_addr).AddLoadedUTxOs(utxos...).
 		AddPayment(apollo.NewPayment("addr1qy99jvml0vafzdpy6lm6z52qrczjvs4k362gmr9v4hrrwgqk4xvegxwvtfsu5ck6s83h346nsgf6xu26dwzce9yvd8ysd2seya", 150_000_000, nil))
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -943,7 +943,7 @@ func TestUTxOAsBothInputAndCollateral_SufficientValue(t *testing.T) {
 		AddInput(utxo).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
 		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -1017,7 +1017,7 @@ func TestUTxOAsBothInputAndCollateral_InsufficientCollateralValue(
 		AddInput(smallUtxo).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000).
 		AddReferenceInput("d5d1f7c223dc88bb41474af23b685e0247307e94e715ef5e62f325ac94f73056", 1)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -1067,7 +1067,7 @@ func TestUTxOAsBothInputAndCollateral_ExplicitAddCollateral(t *testing.T) {
 		AddInput(utxo).
 		AddCollateral(utxo).
 		PayToAddressBech32("addr1qxajla3qcrwckzkur8n0lt02rg2sepw3kgkstckmzrz4ccfm3j9pqrqkea3tns46e3qy2w42vl8dvvue8u45amzm3rjqvv2nxh", 1_000_000)
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Error(err)
 	}
@@ -1191,7 +1191,7 @@ func TestRedeemersAreSortedCanonically(t *testing.T) {
 		AttachV1Script([]byte("test script")).
 		SetEstimationExUnitsRequired()
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Failed to build transaction: %v", err)
 	}
@@ -1258,7 +1258,7 @@ func TestPayToAddressWithV2ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1295,7 +1295,7 @@ func TestPayToAddressWithV1ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1326,7 +1326,7 @@ func TestPayToAddressWithV3ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1362,7 +1362,7 @@ func TestPayToContractWithV2ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1401,7 +1401,7 @@ func TestPayToContractWithV2ReferenceScriptDatumHash(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1440,7 +1440,7 @@ func TestPayToContractWithV1ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
@@ -1479,7 +1479,7 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
-	built, err := apollob.Complete()
+	built, _, err := apollob.Complete()
 	if err != nil {
 		t.Fatalf("Complete() failed: %v", err)
 	}
