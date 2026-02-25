@@ -75,7 +75,7 @@ type Apollo struct {
 	withdrawals        *Withdrawal.Withdrawal
 	certificates       *Certificate.Certificates
 	nativescripts      []NativeScript.NativeScript
-	usedUtxos          []string
+	usedUtxos          map[string]bool
 	referenceScripts   []PlutusData.ScriptHashable
 	wallet             apollotypes.Wallet
 	scriptHashes       []string
@@ -123,7 +123,7 @@ func New(cc Base.ChainContext) *Apollo {
 		collaterals:        make([]UTxO.UTxO, 0),
 		Fee:                0,
 		FeePadding:         0,
-		usedUtxos:          make([]string, 0),
+		usedUtxos:          make(map[string]bool),
 		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
 		referenceInputsV3:  make([]TransactionInput.TransactionInput, 0),
 		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
@@ -155,9 +155,11 @@ func (b *Apollo) GetWallet() apollotypes.Wallet {
 		*Apollo: A pointer to the modified Apollo instance.
 */
 func (b *Apollo) AddInput(utxos ...UTxO.UTxO) *Apollo {
-	b.preselectedUtxos = append(b.preselectedUtxos, utxos...)
+	b.preselectedUtxos = append(
+		b.preselectedUtxos, utxos...,
+	)
 	for _, utxo := range utxos {
-		b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+		b.usedUtxos[utxo.GetKey()] = true
 	}
 	return b
 }
@@ -2236,7 +2238,7 @@ func (b *Apollo) ForceFee(fee int64) *Apollo {
 func (b *Apollo) getAvailableUtxos() []UTxO.UTxO {
 	availableUtxos := make([]UTxO.UTxO, 0)
 	for _, utxo := range b.utxos {
-		if !slices.Contains(b.usedUtxos, utxo.GetKey()) {
+		if !b.usedUtxos[utxo.GetKey()] {
 			availableUtxos = append(availableUtxos, utxo)
 		}
 	}
@@ -2338,75 +2340,115 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 	}
 
 	for _, utxo := range b.utxos {
-		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount &&
-			len(utxo.Output.GetValue().GetAssets()) <= 5 {
-			return_amount := utxo.Output.GetValue().
-				GetCoin() -
-				int64(
-					collateral_amount,
-				)
-			min_lovelace, err := Utils.MinLovelacePostAlonzo(
-				TransactionOutput.SimpleTransactionOutput(
-					b.inputAddresses[0],
-					Value.SimpleValue(
-						return_amount,
-						utxo.Output.GetAmount().GetAssets(),
-					),
-				),
-				b.Context,
-			)
-			if err != nil {
-				return b, err
-			}
-			if min_lovelace > return_amount && return_amount != 0 {
-				continue
-			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-				b.collaterals = append(b.collaterals, utxo)
-				b.totalCollateral = int64(collateral_amount)
-				return b, nil
-			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
-				b.collaterals = append(b.collaterals, utxo)
-				b.collateralReturn = &returnOutput
-				b.totalCollateral = int64(collateral_amount)
-				return b, nil
-			}
+		if len(utxo.Output.GetAmount().GetAssets()) > 0 {
+			continue
 		}
+		if int(utxo.Output.GetValue().GetCoin()) <
+			collateral_amount {
+			continue
+		}
+		addr := utxo.Output.GetAddress()
+		if addr.AddressType != Address.KEY_KEY &&
+			addr.AddressType != Address.KEY_NONE {
+			continue
+		}
+		return_amount := utxo.Output.GetValue().
+			GetCoin() -
+			int64(
+				collateral_amount,
+			)
+		min_lovelace, err := Utils.MinLovelacePostAlonzo(
+			TransactionOutput.SimpleTransactionOutput(
+				b.inputAddresses[0],
+				Value.PureLovelaceValue(
+					return_amount,
+				),
+			),
+			b.Context,
+		)
+		if err != nil {
+			return b, err
+		}
+		if min_lovelace > return_amount &&
+			return_amount != 0 {
+			continue
+		}
+		returnOutput :=
+			TransactionOutput.SimpleTransactionOutput(
+				b.inputAddresses[0],
+				Value.PureLovelaceValue(
+					return_amount,
+				),
+			)
+		b.collaterals = append(b.collaterals, utxo)
+		if return_amount == 0 {
+			b.totalCollateral = int64(
+				collateral_amount,
+			)
+			return b, nil
+		}
+		b.collateralReturn = &returnOutput
+		b.totalCollateral = int64(collateral_amount)
+		return b, nil
 	}
+	// Fallback: allow UTxOs with some assets
 	for _, utxo := range b.utxos {
-		if int(utxo.Output.GetValue().GetCoin()) >= collateral_amount {
-			return_amount := utxo.Output.GetValue().
-				GetCoin() -
-				int64(
-					collateral_amount,
-				)
-			min_lovelace, err := Utils.MinLovelacePostAlonzo(
-				TransactionOutput.SimpleTransactionOutput(
-					b.inputAddresses[0],
-					Value.SimpleValue(
-						return_amount,
-						utxo.Output.GetAmount().GetAssets(),
-					),
-				),
-				b.Context,
-			)
-			if err != nil {
-				return b, err
-			}
-			if min_lovelace > return_amount && return_amount != 0 {
-				continue
-			} else if return_amount == 0 && len(utxo.Output.GetAmount().GetAssets()) == 0 {
-				b.collaterals = append(b.collaterals, utxo)
-				b.totalCollateral = int64(collateral_amount)
-				return b, nil
-			} else {
-				returnOutput := TransactionOutput.SimpleTransactionOutput(b.inputAddresses[0], Value.SimpleValue(return_amount, utxo.Output.GetValue().GetAssets()))
-				b.collaterals = append(b.collaterals, utxo)
-				b.collateralReturn = &returnOutput
-				b.totalCollateral = int64(collateral_amount)
-				return b, nil
-			}
+		if int(utxo.Output.GetValue().GetCoin()) <
+			collateral_amount {
+			continue
 		}
+		addr := utxo.Output.GetAddress()
+		if addr.AddressType != Address.KEY_KEY &&
+			addr.AddressType != Address.KEY_NONE {
+			continue
+		}
+		return_amount := utxo.Output.GetValue().
+			GetCoin() -
+			int64(
+				collateral_amount,
+			)
+		min_lovelace, err := Utils.MinLovelacePostAlonzo(
+			TransactionOutput.SimpleTransactionOutput(
+				b.inputAddresses[0],
+				Value.SimpleValue(
+					return_amount,
+					utxo.Output.GetAmount().GetAssets(),
+				),
+			),
+			b.Context,
+		)
+		if err != nil {
+			return b, err
+		}
+		if min_lovelace > return_amount &&
+			return_amount != 0 {
+			continue
+		} else if return_amount == 0 &&
+			len(
+				utxo.Output.GetAmount().GetAssets(),
+			) == 0 {
+			b.collaterals = append(
+				b.collaterals, utxo,
+			)
+			b.totalCollateral = int64(
+				collateral_amount,
+			)
+			return b, nil
+		} else if return_amount == 0 {
+			continue
+		}
+		returnOutput :=
+			TransactionOutput.SimpleTransactionOutput(
+				b.inputAddresses[0],
+				Value.SimpleValue(
+					return_amount,
+					utxo.Output.GetValue().GetAssets(),
+				),
+			)
+		b.collaterals = append(b.collaterals, utxo)
+		b.collateralReturn = &returnOutput
+		b.totalCollateral = int64(collateral_amount)
+		return b, nil
 	}
 	return b, errors.New("NoCollateral")
 }
@@ -2421,6 +2463,12 @@ func (b *Apollo) setCollateral() (*Apollo, error) {
 */
 func (b *Apollo) Clone() *Apollo {
 	clone := *b
+	clone.usedUtxos = make(
+		map[string]bool, len(b.usedUtxos),
+	)
+	for k, v := range b.usedUtxos {
+		clone.usedUtxos[k] = v
+	}
 	return &clone
 }
 
@@ -2688,14 +2736,14 @@ func (b *Apollo) Complete() (
 								utxo.Output.GetValue(),
 							)
 							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
 							found = true
 							break
 						} else if ma.GetByPolicyAndId(pol, asset) > 0 {
 							selectedUtxos = append(selectedUtxos, utxo)
 							selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 							usedIdxs = append(usedIdxs, idx)
-							b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+							b.usedUtxos[utxo.GetKey()] = true
 							selectedSoFar += ma.GetByPolicyAndId(pol, asset)
 							if selectedSoFar >= amt {
 								found = true
@@ -2734,7 +2782,7 @@ func (b *Apollo) Complete() (
 			selectedUtxos = append(selectedUtxos, utxo)
 			selectedAmount = selectedAmount.Add(utxo.Output.GetValue())
 			available_utxos = available_utxos[1:]
-			b.usedUtxos = append(b.usedUtxos, utxo.GetKey())
+			b.usedUtxos[utxo.GetKey()] = true
 		}
 
 	}
@@ -2960,6 +3008,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		providedAmount = providedAmount.Add(utxo.Output.GetValue())
 	}
 	providedAmount = providedAmount.Add(mints)
+	providedAmount = providedAmount.Sub(burns)
 	requestedAmount := Value.Value{}
 	for _, payment := range b.payments {
 		requestedAmount = requestedAmount.Add(payment.ToValue())
@@ -2999,7 +3048,6 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 			)
 		}
 	}
-	requestedAmount = requestedAmount.Add(burns)
 	var err error
 	b.Fee, err = b.estimateFee()
 	if err != nil {
@@ -3027,7 +3075,7 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 			return b, errors.New("no remaining UTxOs")
 		}
 		b.preselectedUtxos = append(b.preselectedUtxos, sortedUtxos[0])
-		b.usedUtxos = append(b.usedUtxos, sortedUtxos[0].GetKey())
+		b.usedUtxos[sortedUtxos[0].GetKey()] = true
 		return b.addChangeAndFee()
 	}
 	isOver, err := isOverUtxoLimit(change, b.inputAddresses[0], b.Context)
@@ -3117,7 +3165,7 @@ func (b *Apollo) CollectFrom(
 ) *Apollo {
 	b.isEstimateRequired = true
 	b.preselectedUtxos = append(b.preselectedUtxos, inputUtxo)
-	b.usedUtxos = append(b.usedUtxos, inputUtxo.GetKey())
+	b.usedUtxos[inputUtxo.GetKey()] = true
 	b.redeemersToUTxO[hex.EncodeToString(inputUtxo.Input.TransactionId)+strconv.Itoa(inputUtxo.Input.Index)] = redeemer
 	return b
 }
@@ -3590,12 +3638,13 @@ func (b *Apollo) SetShelleyMetadata(
 /*
 *
 
-	GetUsedUTxOs returns the list of used UTxOs in the transaction.
+	GetUsedUTxOs returns the map of used UTxOs in the
+	transaction.
 
 	Returns:
-	   []string: The list of used UTxOs as strings.
+	   map[string]bool: The map of used UTxOs.
 */
-func (b *Apollo) GetUsedUTxOs() []string {
+func (b *Apollo) GetUsedUTxOs() map[string]bool {
 	return b.usedUtxos
 }
 
