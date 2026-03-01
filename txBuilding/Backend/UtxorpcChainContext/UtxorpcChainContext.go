@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/PlutusData"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -132,6 +134,54 @@ func (u *UtxorpcChainContext) GetContractCbor(
 	scriptHash string,
 ) (string, error) {
 	return "", nil
+}
+
+func int64sToInts(
+	vals []int64,
+) PlutusData.CostModel {
+	cm := make(PlutusData.CostModel, len(vals))
+	for i, v := range vals {
+		if v > int64(math.MaxInt) {
+			cm[i] = math.MaxInt
+		} else if v < int64(math.MinInt) {
+			cm[i] = math.MinInt
+		} else {
+			cm[i] = int(v)
+		}
+	}
+	return cm
+}
+
+// convertCostModels converts raw cost model data keyed by
+// version string into the typed CostModelsPlutusVersion map.
+// Unrecognized keys are skipped for forward compatibility.
+func convertCostModels(
+	raw map[string][]int64,
+) map[Base.CostModelsPlutusVersion]PlutusData.CostModel {
+	result := make(
+		map[Base.CostModelsPlutusVersion]PlutusData.CostModel,
+	)
+	for k, v := range raw {
+		cm := make(PlutusData.CostModel, len(v))
+		for i, val := range v {
+			if val > int64(math.MaxInt) {
+				cm[i] = math.MaxInt
+			} else if val < int64(math.MinInt) {
+				cm[i] = math.MinInt
+			} else {
+				cm[i] = int(val)
+			}
+		}
+		switch k {
+		case "PlutusV1":
+			result[Base.CostModelsPlutusV1] = cm
+		case "PlutusV2":
+			result[Base.CostModelsPlutusV2] = cm
+		case "PlutusV3":
+			result[Base.CostModelsPlutusV3] = cm
+		}
+	}
+	return result
 }
 
 func NewUtxorpcChainContext(
@@ -367,11 +417,14 @@ func (u *UtxorpcChainContext) GetProtocolParams() (Base.ProtocolParameters, erro
 		}
 		protocolParams.CoinsPerUtxoByte = coinsPerUtxoByte
 		protocolParams.CoinsPerUtxoWord = "0"
-		protocolParams.CostModels = map[string][]int64{
+		protocolParams.CostModelsRaw = map[string][]int64{
 			"PlutusV1": ppCardano.GetCostModels().GetPlutusV1().GetValues(),
 			"PlutusV2": ppCardano.GetCostModels().GetPlutusV2().GetValues(),
 			"PlutusV3": ppCardano.GetCostModels().GetPlutusV3().GetValues(),
 		}
+		protocolParams.CostModels = convertCostModels(
+			protocolParams.CostModelsRaw,
+		)
 		u._protocol_param = protocolParams
 		u.latestUpdate = time.Now()
 	}
@@ -519,4 +572,79 @@ func (u *UtxorpcChainContext) SubmitTx(
 	}
 
 	return serialization.TransactionId{Payload: resp.Msg.GetRef()}, nil
+}
+
+// EvaluateTxWithAdditionalUtxos is not supported by UTxO RPC.
+// Returns an error if non-empty additional UTxOs are provided.
+func (u *UtxorpcChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []uint8,
+	utxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	if len(utxos) > 0 {
+		return nil, fmt.Errorf(
+			"UtxorpcChainContext does not support" +
+				" additional UTxOs for evaluation",
+		)
+	}
+	return u.EvaluateTx(tx)
+}
+
+// CostModelsV1 returns the Plutus V1 cost model from
+// protocol parameters, or nil if unavailable.
+func (u *UtxorpcChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, err := u.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV1"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
+}
+
+// CostModelsV2 returns the Plutus V2 cost model from
+// protocol parameters, or nil if unavailable.
+func (u *UtxorpcChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, err := u.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV2"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
+}
+
+// CostModelsV3 returns the Plutus V3 cost model from
+// protocol parameters, or nil if unavailable.
+func (u *UtxorpcChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, err := u.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV3"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
 }

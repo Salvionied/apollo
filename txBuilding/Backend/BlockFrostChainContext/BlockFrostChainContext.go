@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -757,4 +758,95 @@ func (bfc *BlockFrostChainContext) GetContractCbor(
 		return "", err
 	}
 	return response.Cbor, nil
+}
+
+// EvaluateTxWithAdditionalUtxos is not supported by BlockFrost.
+// Returns an error if non-empty additional UTxOs are provided.
+func (bfc *BlockFrostChainContext) EvaluateTxWithAdditionalUtxos(
+	tx []byte,
+	additionalUtxos []UTxO.UTxO,
+) (map[string]Redeemer.ExecutionUnits, error) {
+	if len(additionalUtxos) > 0 {
+		return nil, fmt.Errorf(
+			"BlockFrostChainContext does not support" +
+				" additional UTxOs for evaluation",
+		)
+	}
+	return bfc.EvaluateTx(tx)
+}
+
+func int64sToInts(
+	vals []int64,
+) PlutusData.CostModel {
+	cm := make(PlutusData.CostModel, len(vals))
+	for i, v := range vals {
+		if v > int64(math.MaxInt) {
+			cm[i] = math.MaxInt
+		} else if v < int64(math.MinInt) {
+			cm[i] = math.MinInt
+		} else {
+			cm[i] = int(v)
+		}
+	}
+	return cm
+}
+
+// CostModelsV1 returns the Plutus V1 cost model from
+// protocol parameters, or nil if unavailable.
+func (bfc *BlockFrostChainContext) CostModelsV1() PlutusData.CostModel {
+	pp, err := bfc.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV1]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV1"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
+}
+
+// CostModelsV2 returns the Plutus V2 cost model from
+// protocol parameters, or nil if unavailable.
+func (bfc *BlockFrostChainContext) CostModelsV2() PlutusData.CostModel {
+	pp, err := bfc.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV2]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV2"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
+}
+
+// CostModelsV3 returns the Plutus V3 cost model from
+// protocol parameters, or nil if unavailable.
+func (bfc *BlockFrostChainContext) CostModelsV3() PlutusData.CostModel {
+	pp, err := bfc.GetProtocolParams()
+	if err != nil {
+		return nil
+	}
+	if pp.CostModels != nil {
+		if cm, ok := pp.CostModels[Base.CostModelsPlutusV3]; ok {
+			return cm
+		}
+	}
+	if pp.CostModelsRaw != nil {
+		if raw, ok := pp.CostModelsRaw["PlutusV3"]; ok {
+			return int64sToInts(raw)
+		}
+	}
+	return nil
 }
