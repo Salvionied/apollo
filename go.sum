@@ -1,7 +1,7 @@
 connectrpc.com/connect v1.19.1 h1:R5M57z05+90EfEvCY1b7hBxDVOUl45PrtXtAV2fOC14=
 connectrpc.com/connect v1.19.1/go.mod h1:tN20fjdGlewnSFeZxLKb0xwIZ6ozc3OQs2hTXy4du9w=
-filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
-filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
+filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
 github.com/SundaeSwap-finance/kugo v1.3.0 h1:8+c+LJWJ0iByzRJXMMTGtWtsbWQmMIJxBb9mkId9XDU=
 github.com/SundaeSwap-finance/kugo v1.3.0/go.mod h1:NZT9DzTSH8N8IM0Mzn/ISn8xASefO0Xqipw8TGGpMvg=
 github.com/SundaeSwap-finance/ogmigo/v6 v6.2.0 h1:DshTW5GtTzUyktZnHvMLkBzxEVkZzAfG1062cZ455no=
