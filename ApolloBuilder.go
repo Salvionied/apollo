@@ -44,46 +44,71 @@ const (
 )
 
 type Apollo struct {
-	Context            Base.ChainContext
-	payments           []PaymentI
-	isEstimateRequired bool
-	auxiliaryData      *Metadata.AuxiliaryData
-	utxos              []UTxO.UTxO
-	preselectedUtxos   []UTxO.UTxO
-	inputAddresses     []Address.Address
-	tx                 *Transaction.Transaction
-	datums             []PlutusData.PlutusData
-	requiredSigners    []serialization.PubKeyHash
-	v1scripts          []PlutusData.PlutusV1Script
-	v2scripts          []PlutusData.PlutusV2Script
-	v3scripts          []PlutusData.PlutusV3Script
-	redeemers          []Redeemer.Redeemer
-	redeemersToUTxO    map[string]Redeemer.Redeemer
-	stakeRedeemers     map[string]Redeemer.Redeemer
-	mintRedeemers      map[string]Redeemer.Redeemer
-	mint               []Unit
-	collaterals        []UTxO.UTxO
-	Fee                int64
-	FeePadding         int64
-	Ttl                int64
-	ValidityStart      int64
-	collateralAmount   int
-	totalCollateral    int64
-	referenceInputs    []TransactionInput.TransactionInput
-	referenceInputsV3  []TransactionInput.TransactionInput
-	collateralReturn   *TransactionOutput.TransactionOutput
-	withdrawals        *Withdrawal.Withdrawal
-	certificates       *Certificate.Certificates
-	nativescripts      []NativeScript.NativeScript
-	usedUtxos          []string
-	referenceScripts   []PlutusData.ScriptHashable
-	wallet             apollotypes.Wallet
-	scriptHashes       []string
-	forceFee           bool
+	Context                  Base.ChainContext
+	payments                 []PaymentI
+	isEstimateRequired       bool
+	auxiliaryData            *Metadata.AuxiliaryData
+	utxos                    []UTxO.UTxO
+	preselectedUtxos         []UTxO.UTxO
+	inputAddresses           []Address.Address
+	tx                       *Transaction.Transaction
+	datums                   []PlutusData.PlutusData
+	requiredSigners          []serialization.PubKeyHash
+	v1scripts                []PlutusData.PlutusV1Script
+	v2scripts                []PlutusData.PlutusV2Script
+	v3scripts                []PlutusData.PlutusV3Script
+	redeemers                []Redeemer.Redeemer
+	redeemersToUTxO          map[string]Redeemer.Redeemer
+	stakeRedeemers           map[string]Redeemer.Redeemer
+	mintRedeemers            map[string]Redeemer.Redeemer
+	mint                     []Unit
+	collaterals              []UTxO.UTxO
+	Fee                      int64
+	FeePadding               int64
+	Ttl                      int64
+	ValidityStart            int64
+	collateralAmount         int
+	totalCollateral          int64
+	referenceInputs          []TransactionInput.TransactionInput
+	referenceInputsV3        []TransactionInput.TransactionInput
+	collateralReturn         *TransactionOutput.TransactionOutput
+	withdrawals              *Withdrawal.Withdrawal
+	certificates             *Certificate.Certificates
+	nativescripts            []NativeScript.NativeScript
+	usedUtxos                []string
+	referenceScripts         []PlutusData.ScriptHashable
+	wallet                   apollotypes.Wallet
+	scriptHashes             []string
+	forceFee                 bool
+	additionalUtxos          []UTxO.UTxO
+	referencedScriptVersions map[string]bool
 	// err records the first error encountered during builder method calls.
 	// It is checked and returned by Complete(), so individual builder methods
 	// do not propagate errors directly and callers must inspect the result of Complete().
 	err error
+}
+
+// Plutus script version identifiers used in the builder.
+const PlutusV1 = "V1"
+const PlutusV2 = "V2"
+const PlutusV3 = "V3"
+
+// PlutusV1CostModelKey returns the CBOR map key for the
+// Plutus V1 cost model in the script data hash.
+func PlutusV1CostModelKey() serialization.CustomBytes {
+	return serialization.CustomBytes{Value: "00"}
+}
+
+// PlutusV2CostModelKey returns the CBOR map key for the
+// Plutus V2 cost model in the script data hash.
+func PlutusV2CostModelKey() serialization.CustomBytes {
+	return serialization.NewCustomBytesInt(1)
+}
+
+// PlutusV3CostModelKey returns the CBOR map key for the
+// Plutus V3 cost model in the script data hash.
+func PlutusV3CostModelKey() serialization.CustomBytes {
+	return serialization.NewCustomBytesInt(2)
 }
 
 /*
@@ -104,30 +129,32 @@ type Apollo struct {
 */
 func New(cc Base.ChainContext) *Apollo {
 	return &Apollo{
-		Context:            cc,
-		payments:           []PaymentI{},
-		isEstimateRequired: false,
-		auxiliaryData:      &Metadata.AuxiliaryData{},
-		utxos:              []UTxO.UTxO{},
-		preselectedUtxos:   []UTxO.UTxO{},
-		inputAddresses:     []Address.Address{},
-		tx:                 nil,
-		datums:             make([]PlutusData.PlutusData, 0),
-		requiredSigners:    make([]serialization.PubKeyHash, 0),
-		v1scripts:          make([]PlutusData.PlutusV1Script, 0),
-		v2scripts:          make([]PlutusData.PlutusV2Script, 0),
-		redeemers:          make([]Redeemer.Redeemer, 0),
-		redeemersToUTxO:    make(map[string]Redeemer.Redeemer),
-		stakeRedeemers:     make(map[string]Redeemer.Redeemer),
-		mint:               make([]Unit, 0),
-		collaterals:        make([]UTxO.UTxO, 0),
-		Fee:                0,
-		FeePadding:         0,
-		usedUtxos:          make([]string, 0),
-		referenceInputs:    make([]TransactionInput.TransactionInput, 0),
-		referenceInputsV3:  make([]TransactionInput.TransactionInput, 0),
-		referenceScripts:   make([]PlutusData.ScriptHashable, 0),
-		mintRedeemers:      make(map[string]Redeemer.Redeemer)}
+		Context:                  cc,
+		payments:                 []PaymentI{},
+		isEstimateRequired:       false,
+		auxiliaryData:            &Metadata.AuxiliaryData{},
+		utxos:                    []UTxO.UTxO{},
+		preselectedUtxos:         []UTxO.UTxO{},
+		inputAddresses:           []Address.Address{},
+		tx:                       nil,
+		datums:                   make([]PlutusData.PlutusData, 0),
+		requiredSigners:          make([]serialization.PubKeyHash, 0),
+		v1scripts:                make([]PlutusData.PlutusV1Script, 0),
+		v2scripts:                make([]PlutusData.PlutusV2Script, 0),
+		redeemers:                make([]Redeemer.Redeemer, 0),
+		redeemersToUTxO:          make(map[string]Redeemer.Redeemer),
+		stakeRedeemers:           make(map[string]Redeemer.Redeemer),
+		mint:                     make([]Unit, 0),
+		collaterals:              make([]UTxO.UTxO, 0),
+		Fee:                      0,
+		FeePadding:               0,
+		usedUtxos:                make([]string, 0),
+		referenceInputs:          make([]TransactionInput.TransactionInput, 0),
+		referenceInputsV3:        make([]TransactionInput.TransactionInput, 0),
+		referenceScripts:         make([]PlutusData.ScriptHashable, 0),
+		mintRedeemers:            make(map[string]Redeemer.Redeemer),
+		referencedScriptVersions: make(map[string]bool),
+	}
 }
 
 /*
@@ -245,6 +272,39 @@ func (b *Apollo) ConsumeAssetsFromUtxo(
 */
 func (b *Apollo) AddLoadedUTxOs(utxos ...UTxO.UTxO) *Apollo {
 	b.utxos = append(b.utxos, utxos...)
+	return b
+}
+
+// SetAdditionalUTxOs sets extra UTxOs to pass to the backend
+// during transaction evaluation (e.g. for reference inputs).
+func (b *Apollo) SetAdditionalUTxOs(
+	utxos []UTxO.UTxO,
+) *Apollo {
+	b.additionalUtxos = utxos
+	return b
+}
+
+// AddReferenceScriptV1 marks that the transaction references
+// a Plutus V1 script, ensuring the V1 cost model is included
+// in the script data hash.
+func (b *Apollo) AddReferenceScriptV1() *Apollo {
+	b.referencedScriptVersions[PlutusV1] = true
+	return b
+}
+
+// AddReferenceScriptV2 marks that the transaction references
+// a Plutus V2 script, ensuring the V2 cost model is included
+// in the script data hash.
+func (b *Apollo) AddReferenceScriptV2() *Apollo {
+	b.referencedScriptVersions[PlutusV2] = true
+	return b
+}
+
+// AddReferenceScriptV3 marks that the transaction references
+// a Plutus V3 script, ensuring the V3 cost model is included
+// in the script data hash.
+func (b *Apollo) AddReferenceScriptV3() *Apollo {
+	b.referencedScriptVersions[PlutusV3] = true
 	return b
 }
 
@@ -851,16 +911,44 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	datums := b.datums
 	usedCms := map[any]cbor.Marshaler{}
 	if len(redeemers) > 0 {
-		if len(PV1Scripts) > 0 {
-			usedCms[serialization.CustomBytes{Value: "00"}] = PlutusData.PLUTUSV1COSTMODEL
+		if len(PV1Scripts) > 0 ||
+			b.referencedScriptVersions[PlutusV1] {
+			key := PlutusV1CostModelKey()
+			cm := b.Context.CostModelsV1()
+			if len(cm) > 0 {
+				usedCms[key] =
+					PlutusData.CostModelV1(cm)
+			} else {
+				usedCms[key] =
+					PlutusData.PLUTUSV1COSTMODEL
+			}
 		}
-		if len(PV2Scripts) > 0 || len(b.referenceInputs) > 0 {
-			usedCms[1] = PlutusData.PLUTUSV2COSTMODEL
+		if len(PV2Scripts) > 0 ||
+			len(b.referenceInputs) > 0 ||
+			b.referencedScriptVersions[PlutusV2] {
+			key := PlutusV2CostModelKey()
+			cm := b.Context.CostModelsV2()
+			if len(cm) > 0 {
+				usedCms[key] =
+					PlutusData.CostModelV2(cm)
+			} else {
+				usedCms[key] =
+					PlutusData.PLUTUSV2COSTMODEL
+			}
 		}
-		if len(PV3Scripts) > 0 || len(b.referenceInputsV3) > 0 {
-			usedCms[2] = PlutusData.PLUTUSV3COSTMODEL
+		if len(PV3Scripts) > 0 ||
+			len(b.referenceInputsV3) > 0 ||
+			b.referencedScriptVersions[PlutusV3] {
+			key := PlutusV3CostModelKey()
+			cm := b.Context.CostModelsV3()
+			if len(cm) > 0 {
+				usedCms[key] =
+					PlutusData.CostModelV3(cm)
+			} else {
+				usedCms[key] =
+					PlutusData.PLUTUSV3COSTMODEL
+			}
 		}
-
 	}
 
 	var redeemer_bytes []byte
@@ -872,8 +960,9 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	var err error
 	var datum_bytes []byte
 	if len(datums) > 0 {
-
-		datum_bytes, err = cbor.Marshal(PlutusData.PlutusIndefArray(datums))
+		datum_bytes, err = cbor.Marshal(
+			PlutusData.PlutusIndefArray(datums),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -883,45 +972,12 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 	var cost_model_bytes []byte
 	cost_model_bytes, _ = cbor.Marshal(usedCms)
 	total_bytes := append(redeemer_bytes, datum_bytes...)
-	// //total_bytes := redeemer_bytes
-	// // Compute all versions of the hash
-	// // with pv1
-	// clmsBytsV1, _ := cbor.Marshal(PlutusData.COST_MODELSV1)
-	// tbytesP1 := append(total_bytes, clmsBytsV1...)
-	// fmt.Println("TOTAL_BYTES", hex.EncodeToString(tbytesP1))
-	// hashP1, err := serialization.Blake2bHash(tbytesP1)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// //fmt.Println("PRE_HASH_PV1", hex.EncodeToString(tbytesP1))
-	// fmt.Println("HASH_PV1", hex.EncodeToString(hashP1))
-	// // with pv2
-	// clmsBytsV2, _ := cbor.Marshal(map[int]cbor.Marshaler{1: PlutusData.PLUTUSV2COSTMODEL})
-	// tbytesP2 := append(total_bytes, clmsBytsV2...)
-	// hashP2, err := serialization.Blake2bHash(tbytesP2)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// //fmt.Println("PRE_HASH_PV2", hex.EncodeToString(tbytesP2))
-	// fmt.Println("HASH_PV2", hex.EncodeToString(hashP2))
-	// // No Pv version
-	// clmsNoHash, _ := hex.DecodeString("a0")
-	// tbytesNoHash := append(total_bytes, clmsNoHash...)
-	// hashNoHash, err := serialization.Blake2bHash(tbytesNoHash)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// //fmt.Println("PRE_HASH_NO_HASH", hex.EncodeToString(tbytesNoHash))
-	// fmt.Println("HASH_NO_HASH", hex.EncodeToString(hashNoHash))
 	total_bytes = append(total_bytes, cost_model_bytes...)
 	hash, err := serialization.Blake2bHash(total_bytes)
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Println("PRE_HASH", hex.EncodeToString(total_bytes))
-	// fmt.Println("HASH", hex.EncodeToString(hash))
 	return &serialization.ScriptDataHash{Payload: hash}, nil
-
 }
 
 /*
@@ -2451,7 +2507,15 @@ func (b *Apollo) estimateExunits() (
 			map[string]Redeemer.ExecutionUnits, 0,
 		), nil, err
 	}
-	result, err := b.Context.EvaluateTx(tx_cbor)
+	var result map[string]Redeemer.ExecutionUnits
+	if len(b.additionalUtxos) > 0 {
+		result, err = b.Context.EvaluateTxWithAdditionalUtxos(
+			tx_cbor,
+			b.additionalUtxos,
+		)
+	} else {
+		result, err = b.Context.EvaluateTx(tx_cbor)
+	}
 	if err != nil {
 		return result, tx_cbor, err
 	}

@@ -2129,10 +2129,10 @@ func TestAddressFromBytesScriptTypes(t *testing.T) {
 		169, 196, 114, 81,
 	}
 	cases := []struct {
-		name           string
-		payScript      bool
-		stakeScript    bool
-		expectedType   byte
+		name         string
+		payScript    bool
+		stakeScript  bool
+		expectedType byte
 	}{
 		{
 			"SCRIPT_KEY",

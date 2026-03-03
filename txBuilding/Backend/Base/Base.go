@@ -37,39 +37,57 @@ type GenesisParameters struct {
 }
 
 type ProtocolParameters struct {
-	MinFeeConstant                   int64              `json:"min_fee_b"`
-	MinFeeCoefficient                int64              `json:"min_fee_a"`
-	MaxBlockSize                     int                `json:"max_block_size"`
-	MaxTxSize                        int                `json:"max_tx_size"`
-	MaxBlockHeaderSize               int                `json:"max_block_header_size"`
-	KeyDeposits                      string             `json:"key_deposit"`
-	PoolDeposits                     string             `json:"pool_deposit"`
-	PooolInfluence                   float32            `json:"a0"`
-	MonetaryExpansion                float32            `json:"rho"`
-	TreasuryExpansion                float32            `json:"tau"`
-	DecentralizationParam            float32            `json:"decentralisation_param"`
-	ExtraEntropy                     string             `json:"extra_entropy"`
-	ProtocolMajorVersion             int                `json:"protocol_major_ver"`
-	ProtocolMinorVersion             int                `json:"protocol_minor_ver"`
-	MinUtxo                          string             `json:"min_utxo"`
-	MinPoolCost                      string             `json:"min_pool_cost"`
-	PriceMem                         float32            `json:"price_mem"`
-	PriceStep                        float32            `json:"price_step"`
-	MaxTxExMem                       string             `json:"max_tx_ex_mem"`
-	MaxTxExSteps                     string             `json:"max_tx_ex_steps"`
-	MaxBlockExMem                    string             `json:"max_block_ex_mem"`
-	MaxBlockExSteps                  string             `json:"max_block_ex_steps"`
-	MaxValSize                       string             `json:"max_val_size"`
-	CollateralPercent                int                `json:"collateral_percent"`
-	MaxCollateralInuts               int                `json:"max_collateral_inputs"`
-	CoinsPerUtxoWord                 string             `json:"coins_per_utxo_word"`
-	CoinsPerUtxoByte                 string             `json:"coins_per_utxo_byte"`
-	CostModels                       map[string][]int64 `json:"cost_models"`
-	MaximumReferenceScriptsSize      int                `json:"maximum_reference_scripts_size"`
-	MinFeeReferenceScriptsRange      int                `json:"min_fee_reference_scripts_range"`
-	MinFeeReferenceScriptsBase       int                `json:"min_fee_reference_scripts_base"`
-	MinFeeReferenceScriptsMultiplier int                `json:"min_fee_reference_scripts_multiplier"`
+	MinFeeConstant        int64   `json:"min_fee_b"`
+	MinFeeCoefficient     int64   `json:"min_fee_a"`
+	MaxBlockSize          int     `json:"max_block_size"`
+	MaxTxSize             int     `json:"max_tx_size"`
+	MaxBlockHeaderSize    int     `json:"max_block_header_size"`
+	KeyDeposits           string  `json:"key_deposit"`
+	PoolDeposits          string  `json:"pool_deposit"`
+	PooolInfluence        float32 `json:"a0"`
+	MonetaryExpansion     float32 `json:"rho"`
+	TreasuryExpansion     float32 `json:"tau"`
+	DecentralizationParam float32 `json:"decentralisation_param"`
+	ExtraEntropy          string  `json:"extra_entropy"`
+	ProtocolMajorVersion  int     `json:"protocol_major_ver"`
+	ProtocolMinorVersion  int     `json:"protocol_minor_ver"`
+	MinUtxo               string  `json:"min_utxo"`
+	MinPoolCost           string  `json:"min_pool_cost"`
+	PriceMem              float32 `json:"price_mem"`
+	PriceStep             float32 `json:"price_step"`
+	MaxTxExMem            string  `json:"max_tx_ex_mem"`
+	MaxTxExSteps          string  `json:"max_tx_ex_steps"`
+	MaxBlockExMem         string  `json:"max_block_ex_mem"`
+	MaxBlockExSteps       string  `json:"max_block_ex_steps"`
+	MaxValSize            string  `json:"max_val_size"`
+	CollateralPercent     int     `json:"collateral_percent"`
+	MaxCollateralInuts    int     `json:"max_collateral_inputs"`
+	CoinsPerUtxoWord      string  `json:"coins_per_utxo_word"`
+	CoinsPerUtxoByte      string  `json:"coins_per_utxo_byte"`
+	// Raw cost model values keyed by language
+	// version string.
+	CostModelsRaw map[string][]int64 `json:"cost_models"`
+	// Processed cost models keyed by Plutus version.
+	// Not serialized; derived from CostModelsRaw.
+	CostModels                       map[CostModelsPlutusVersion]PlutusData.CostModel `json:"-"`
+	MaximumReferenceScriptsSize      int                                              `json:"maximum_reference_scripts_size"`
+	MinFeeReferenceScriptsRange      int                                              `json:"min_fee_reference_scripts_range"`
+	MinFeeReferenceScriptsBase       int                                              `json:"min_fee_reference_scripts_base"`
+	MinFeeReferenceScriptsMultiplier int                                              `json:"min_fee_reference_scripts_multiplier"`
 }
+
+// CostModelsPlutusVersion identifies the Plutus language
+// version that a cost model applies to.
+type CostModelsPlutusVersion int
+
+const (
+	// CostModelsPlutusV1 identifies Plutus V1 cost models.
+	CostModelsPlutusV1 CostModelsPlutusVersion = iota
+	// CostModelsPlutusV2 identifies Plutus V2 cost models.
+	CostModelsPlutusV2
+	// CostModelsPlutusV3 identifies Plutus V3 cost models.
+	CostModelsPlutusV3
+)
 
 func (p ProtocolParameters) GetCoinsPerUtxoByte() int {
 	return 4310
@@ -213,8 +231,12 @@ type ChainContext interface {
 	Utxos(address Address.Address) ([]UTxO.UTxO, error)
 	SubmitTx(Transaction.Transaction) (serialization.TransactionId, error)
 	EvaluateTx([]uint8) (map[string]Redeemer.ExecutionUnits, error)
+	EvaluateTxWithAdditionalUtxos([]uint8, []UTxO.UTxO) (map[string]Redeemer.ExecutionUnits, error)
 	GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)
 	GetContractCbor(scriptHash string) (string, error)
+	CostModelsV1() PlutusData.CostModel
+	CostModelsV2() PlutusData.CostModel
+	CostModelsV3() PlutusData.CostModel
 }
 
 type Epoch struct {
