@@ -449,8 +449,7 @@ func ScriptDataHash(
 			cost_models = PlutusData.COST_MODELSV2
 		}
 	}
-	var redeemer_bytes []byte
-
+	var redeemer_bytes []byte //nolint:prealloc
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
