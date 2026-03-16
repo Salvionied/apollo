@@ -2,9 +2,11 @@ package TransactionBody
 
 import (
 	"errors"
+	"math"
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Certificate"
+	"github.com/Salvionied/apollo/serialization/Governance"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
@@ -79,43 +81,51 @@ func (s *TransactionInputSet) MarshalCBOR() ([]byte, error) {
 }
 
 type TransactionBody struct {
-	Inputs            []TransactionInput.TransactionInput   `cbor:"0,keyasint"`
-	Outputs           []TransactionOutput.TransactionOutput `cbor:"1,keyasint"`
-	Fee               int64                                 `cbor:"2,keyasint"`
-	Ttl               int64                                 `cbor:"3,keyasint,omitempty"`
-	Certificates      *Certificate.Certificates             `cbor:"4,keyasint,omitempty"`
-	Withdrawals       *Withdrawal.Withdrawal                `cbor:"5,keyasint,omitempty"`
-	UpdateProposals   []any                                 `cbor:"6,keyasint,omitempty"`
-	AuxiliaryDataHash []byte                                `cbor:"7,keyasint,omitempty"`
-	ValidityStart     int64                                 `cbor:"8,keyasint,omitempty"`
-	Mint              MultiAsset.MultiAsset[int64]          `cbor:"9,keyasint,omitempty"`
-	ScriptDataHash    []byte                                `cbor:"11,keyasint,omitempty"`
-	Collateral        []TransactionInput.TransactionInput   `cbor:"13,keyasint,omitempty"`
-	RequiredSigners   []serialization.PubKeyHash            `cbor:"14,keyasint,omitempty"`
-	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
-	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
-	TotalCollateral   int64                                 `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	Inputs               []TransactionInput.TransactionInput   `cbor:"0,keyasint"`
+	Outputs              []TransactionOutput.TransactionOutput `cbor:"1,keyasint"`
+	Fee                  int64                                 `cbor:"2,keyasint"`
+	Ttl                  int64                                 `cbor:"3,keyasint,omitempty"`
+	Certificates         *Certificate.Certificates             `cbor:"4,keyasint,omitempty"`
+	Withdrawals          *Withdrawal.Withdrawal                `cbor:"5,keyasint,omitempty"`
+	UpdateProposals      []any                                 `cbor:"6,keyasint,omitempty"`
+	AuxiliaryDataHash    []byte                                `cbor:"7,keyasint,omitempty"`
+	ValidityStart        int64                                 `cbor:"8,keyasint,omitempty"`
+	Mint                 MultiAsset.MultiAsset[int64]          `cbor:"9,keyasint,omitempty"`
+	ScriptDataHash       []byte                                `cbor:"11,keyasint,omitempty"`
+	Collateral           []TransactionInput.TransactionInput   `cbor:"13,keyasint,omitempty"`
+	RequiredSigners      []serialization.PubKeyHash            `cbor:"14,keyasint,omitempty"`
+	NetworkId            []byte                                `cbor:"15,keyasint,omitempty"`
+	CollateralReturn     *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
+	TotalCollateral      int64                                 `cbor:"17,keyasint,omitempty"`
+	ReferenceInputs      []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	VotingProcedures     *Governance.VotingProcedures          `cbor:"19,keyasint,omitempty"`
+	ProposalProcedures   *Governance.ProposalProcedures        `cbor:"20,keyasint,omitempty"`
+	CurrentTreasuryValue int64                                 `cbor:"21,keyasint,omitempty"`
+	Donation             int64                                 `cbor:"22,keyasint,omitempty"`
 }
 
 type CborBody struct {
-	Inputs            []TransactionInput.TransactionInput   `cbor:"0,keyasint"`
-	Outputs           []TransactionOutput.TransactionOutput `cbor:"1,keyasint"`
-	Fee               int64                                 `cbor:"2,keyasint"`
-	Ttl               int64                                 `cbor:"3,keyasint,omitempty"`
-	Certificates      *Certificate.Certificates             `cbor:"4,keyasint,omitempty"`
-	Withdrawals       *Withdrawal.Withdrawal                `cbor:"5,keyasint,omitempty"`
-	UpdateProposals   []any                                 `cbor:"6,keyasint,omitempty"`
-	AuxiliaryDataHash []byte                                `cbor:"7,keyasint,omitempty"`
-	ValidityStart     int64                                 `cbor:"8,keyasint,omitempty"`
-	Mint              MultiAsset.MultiAsset[int64]          `cbor:"9,keyasint,omitempty"`
-	ScriptDataHash    []byte                                `cbor:"11,keyasint,omitempty"`
-	Collateral        []TransactionInput.TransactionInput   `cbor:"13,keyasint,omitempty"`
-	RequiredSigners   []serialization.PubKeyHash            `cbor:"14,keyasint,omitempty"`
-	NetworkId         []byte                                `cbor:"15,keyasint,omitempty"`
-	CollateralReturn  *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
-	TotalCollateral   int64                                 `cbor:"17,keyasint,omitempty"`
-	ReferenceInputs   []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	Inputs               []TransactionInput.TransactionInput   `cbor:"0,keyasint"`
+	Outputs              []TransactionOutput.TransactionOutput `cbor:"1,keyasint"`
+	Fee                  int64                                 `cbor:"2,keyasint"`
+	Ttl                  int64                                 `cbor:"3,keyasint,omitempty"`
+	Certificates         *Certificate.Certificates             `cbor:"4,keyasint,omitempty"`
+	Withdrawals          *Withdrawal.Withdrawal                `cbor:"5,keyasint,omitempty"`
+	UpdateProposals      []any                                 `cbor:"6,keyasint,omitempty"`
+	AuxiliaryDataHash    []byte                                `cbor:"7,keyasint,omitempty"`
+	ValidityStart        int64                                 `cbor:"8,keyasint,omitempty"`
+	Mint                 MultiAsset.MultiAsset[int64]          `cbor:"9,keyasint,omitempty"`
+	ScriptDataHash       []byte                                `cbor:"11,keyasint,omitempty"`
+	Collateral           []TransactionInput.TransactionInput   `cbor:"13,keyasint,omitempty"`
+	RequiredSigners      []serialization.PubKeyHash            `cbor:"14,keyasint,omitempty"`
+	NetworkId            []byte                                `cbor:"15,keyasint,omitempty"`
+	CollateralReturn     *TransactionOutput.TransactionOutput  `cbor:"16,keyasint,omitempty"`
+	TotalCollateral      int64                                 `cbor:"17,keyasint,omitempty"`
+	ReferenceInputs      []TransactionInput.TransactionInput   `cbor:"18,keyasint,omitempty"`
+	VotingProcedures     *Governance.VotingProcedures          `cbor:"19,keyasint,omitempty"`
+	ProposalProcedures   *Governance.ProposalProcedures        `cbor:"20,keyasint,omitempty"`
+	CurrentTreasuryValue int64                                 `cbor:"21,keyasint,omitempty"`
+	Donation             int64                                 `cbor:"22,keyasint,omitempty"`
 }
 
 func (tx *TransactionBody) Hash() ([]byte, error) {
@@ -145,23 +155,27 @@ func (tx *TransactionBody) Id() (serialization.TransactionId, error) {
 
 func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 	cborBody := CborBody{
-		Inputs:            tx.Inputs,
-		Outputs:           tx.Outputs,
-		Fee:               tx.Fee,
-		Ttl:               tx.Ttl,
-		Certificates:      tx.Certificates,
-		Withdrawals:       tx.Withdrawals,
-		UpdateProposals:   tx.UpdateProposals,
-		AuxiliaryDataHash: tx.AuxiliaryDataHash,
-		ValidityStart:     tx.ValidityStart,
-		Mint:              tx.Mint,
-		ScriptDataHash:    tx.ScriptDataHash,
-		Collateral:        tx.Collateral,
-		RequiredSigners:   tx.RequiredSigners,
-		NetworkId:         tx.NetworkId,
-		CollateralReturn:  tx.CollateralReturn,
-		TotalCollateral:   tx.TotalCollateral,
-		ReferenceInputs:   tx.ReferenceInputs,
+		Inputs:               tx.Inputs,
+		Outputs:              tx.Outputs,
+		Fee:                  tx.Fee,
+		Ttl:                  tx.Ttl,
+		Certificates:         tx.Certificates,
+		Withdrawals:          tx.Withdrawals,
+		UpdateProposals:      tx.UpdateProposals,
+		AuxiliaryDataHash:    tx.AuxiliaryDataHash,
+		ValidityStart:        tx.ValidityStart,
+		Mint:                 tx.Mint,
+		ScriptDataHash:       tx.ScriptDataHash,
+		Collateral:           tx.Collateral,
+		RequiredSigners:      tx.RequiredSigners,
+		NetworkId:            tx.NetworkId,
+		CollateralReturn:     tx.CollateralReturn,
+		TotalCollateral:      tx.TotalCollateral,
+		ReferenceInputs:      tx.ReferenceInputs,
+		VotingProcedures:     tx.VotingProcedures,
+		ProposalProcedures:   tx.ProposalProcedures,
+		CurrentTreasuryValue: tx.CurrentTreasuryValue,
+		Donation:             tx.Donation,
 	}
 	// CanonicalEncOptions().EncMode() is not expected to fail with default
 	// options, but we still check the error defensively in case the cbor
@@ -335,5 +349,71 @@ func (tx *TransactionBody) UnmarshalCBOR(data []byte) error {
 		}
 	}
 
+	// Field 19: VotingProcedures
+	if rawBytes, ok := rawMap[19]; ok {
+		tx.VotingProcedures = &Governance.VotingProcedures{}
+		if err := tx.VotingProcedures.UnmarshalCBOR(
+			rawBytes,
+		); err != nil {
+			return errors.New(
+				"voting procedures decode: " + err.Error(),
+			)
+		}
+	}
+
+	// Field 20: ProposalProcedures
+	if rawBytes, ok := rawMap[20]; ok {
+		tx.ProposalProcedures = &Governance.ProposalProcedures{}
+		if err := tx.ProposalProcedures.UnmarshalCBOR(
+			rawBytes,
+		); err != nil {
+			return errors.New(
+				"proposal procedures decode: " + err.Error(),
+			)
+		}
+	}
+
+	// Field 21: CurrentTreasuryValue
+	if rawBytes, ok := rawMap[21]; ok {
+		val, err := decodeUint64FieldAsInt64(
+			"current treasury value",
+			rawBytes,
+		)
+		if err != nil {
+			return err
+		}
+		tx.CurrentTreasuryValue = val
+	}
+
+	// Field 22: Donation
+	if rawBytes, ok := rawMap[22]; ok {
+		val, err := decodeUint64FieldAsInt64(
+			"donation",
+			rawBytes,
+		)
+		if err != nil {
+			return err
+		}
+		tx.Donation = val
+	}
+
 	return nil
+}
+
+func decodeUint64FieldAsInt64(
+	name string,
+	rawBytes []byte,
+) (int64, error) {
+	var val uint64
+	if err := apolloCbor.Decode(rawBytes, &val); err != nil {
+		return 0, errors.New(
+			name + " decode: " + err.Error(),
+		)
+	}
+	if val > math.MaxInt64 {
+		return 0, errors.New(
+			name + " decode: value exceeds int64",
+		)
+	}
+	return int64(val), nil
 }

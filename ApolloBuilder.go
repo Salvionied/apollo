@@ -15,6 +15,7 @@ import (
 	"github.com/Salvionied/apollo/serialization/Address"
 	"github.com/Salvionied/apollo/serialization/Amount"
 	"github.com/Salvionied/apollo/serialization/Certificate"
+	"github.com/Salvionied/apollo/serialization/Governance"
 	"github.com/Salvionied/apollo/serialization/HDWallet"
 	"github.com/Salvionied/apollo/serialization/Key"
 	"github.com/Salvionied/apollo/serialization/Metadata"
@@ -82,6 +83,10 @@ type Apollo struct {
 	forceFee                 bool
 	additionalUtxos          []UTxO.UTxO
 	referencedScriptVersions map[string]bool
+	currentTreasuryValue     int64
+	donation                 int64
+	votingProcedures         *Governance.VotingProcedures
+	proposalProcedures       *Governance.ProposalProcedures
 	// err records the first error encountered during builder method calls.
 	// It is checked and returned by Complete(), so individual builder methods
 	// do not propagate errors directly and callers must inspect the result of Complete().
@@ -1113,6 +1118,10 @@ func (b *Apollo) buildTxBody() (TransactionBody.TransactionBody, error) {
 			b.referenceInputs,
 			b.referenceInputsV3...,
 		),
+		VotingProcedures:     b.votingProcedures,
+		ProposalProcedures:   b.proposalProcedures,
+		CurrentTreasuryValue: b.currentTreasuryValue,
+		Donation:             b.donation,
 	}
 	if b.totalCollateral != 0 {
 		txb.TotalCollateral = b.totalCollateral
@@ -2055,6 +2064,100 @@ func (b *Apollo) RegisterAndDelegateStakeAndVoteFromBech32(
 		drep,
 		coin,
 	)
+}
+
+// RegisterDRep adds a DRep registration certificate (kind 16).
+func (b *Apollo) RegisterDRep(
+	credential Certificate.Credential,
+	coin int64,
+	anchor *Certificate.Anchor,
+) *Apollo {
+	cert := Certificate.RegDRepCert{
+		Cred:   credential,
+		Coin:   coin,
+		Anchor: anchor,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, cert)
+	b.certificates = &certs
+	return b
+}
+
+// RetireDRep adds a DRep unregistration certificate (kind 17).
+func (b *Apollo) RetireDRep(
+	credential Certificate.Credential,
+	coin int64,
+) *Apollo {
+	cert := Certificate.UnregDRepCert{
+		Cred: credential,
+		Coin: coin,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, cert)
+	b.certificates = &certs
+	return b
+}
+
+// UpdateDRep adds a DRep update certificate (kind 18).
+func (b *Apollo) UpdateDRep(
+	credential Certificate.Credential,
+	anchor *Certificate.Anchor,
+) *Apollo {
+	cert := Certificate.UpdateDRepCert{
+		Cred:   credential,
+		Anchor: anchor,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, cert)
+	b.certificates = &certs
+	return b
+}
+
+// AuthorizeCommitteeHotKey adds a committee hot key
+// authorization certificate (kind 14).
+func (b *Apollo) AuthorizeCommitteeHotKey(
+	cold Certificate.Credential,
+	hot Certificate.Credential,
+) *Apollo {
+	cert := Certificate.AuthCommitteeHotCert{
+		Cold: cold,
+		Hot:  hot,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, cert)
+	b.certificates = &certs
+	return b
+}
+
+// ResignCommitteeColdKey adds a committee cold key
+// resignation certificate (kind 15).
+func (b *Apollo) ResignCommitteeColdKey(
+	cold Certificate.Credential,
+	anchor *Certificate.Anchor,
+) *Apollo {
+	cert := Certificate.ResignCommitteeColdCert{
+		Cold:   cold,
+		Anchor: anchor,
+	}
+	var certs Certificate.Certificates
+	if b.certificates != nil {
+		certs = *b.certificates
+	}
+	certs = append(certs, cert)
+	b.certificates = &certs
+	return b
 }
 
 /*
@@ -3726,6 +3829,72 @@ func (b *Apollo) SetTtl(ttl int64) *Apollo {
 */
 func (b *Apollo) SetValidityStart(invalidBefore int64) *Apollo {
 	b.ValidityStart = invalidBefore
+	return b
+}
+
+/*
+*
+
+	SetCurrentTreasuryValue sets the current treasury value
+	(Conway era field 21) on the transaction body.
+
+	Params:
+		value (int64): The current treasury value in lovelace.
+
+	Returns:
+		*Apollo: The modified Apollo instance.
+*/
+func (b *Apollo) SetCurrentTreasuryValue(
+	value int64,
+) *Apollo {
+	b.currentTreasuryValue = value
+	return b
+}
+
+/*
+*
+
+	AddTreasuryDonation adds to the treasury donation amount
+	(Conway era field 22) on the transaction body.
+
+	Params:
+		amount (int64): The donation amount in lovelace.
+
+	Returns:
+		*Apollo: The modified Apollo instance.
+*/
+func (b *Apollo) AddTreasuryDonation(
+	amount int64,
+) *Apollo {
+	b.donation += amount
+	return b
+}
+
+// AddVote adds a governance vote (Conway era field 19).
+func (b *Apollo) AddVote(
+	voter Governance.Voter,
+	actionId Governance.GovActionId,
+	procedure Governance.VotingProcedure,
+) *Apollo {
+	if b.votingProcedures == nil {
+		vp := make(Governance.VotingProcedures, 0)
+		b.votingProcedures = &vp
+	}
+	b.votingProcedures.Add(voter, actionId, procedure)
+	return b
+}
+
+// AddProposal adds a governance proposal (Conway era field 20).
+func (b *Apollo) AddProposal(
+	proposal Governance.ProposalProcedure,
+) *Apollo {
+	if b.proposalProcedures == nil {
+		pp := make(Governance.ProposalProcedures, 0)
+		b.proposalProcedures = &pp
+	}
+	*b.proposalProcedures = append(
+		*b.proposalProcedures, proposal,
+	)
 	return b
 }
 

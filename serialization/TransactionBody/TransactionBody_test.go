@@ -2,6 +2,8 @@ package TransactionBody_test
 
 import (
 	"encoding/hex"
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Address"
@@ -119,5 +121,98 @@ func TestId(t *testing.T) {
 			"Expected",
 			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
 		)
+	}
+}
+
+func TestTreasuryFieldsCBORRoundTrip(t *testing.T) {
+	original := TransactionBody.TransactionBody{
+		Inputs: []TransactionInput.TransactionInput{
+			SAMPLE_TX_IN,
+		},
+		Outputs: []TransactionOutput.TransactionOutput{
+			SAMPLE_TX_OUT_1,
+		},
+		Fee:                  200_000,
+		CurrentTreasuryValue: 1_000_000_000,
+		Donation:             5_000_000,
+	}
+
+	data, err := cbor.Marshal(&original)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	var decoded TransactionBody.TransactionBody
+	if err := cbor.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if decoded.CurrentTreasuryValue != 1_000_000_000 {
+		t.Fatalf(
+			"CurrentTreasuryValue: expected 1000000000, got %d",
+			decoded.CurrentTreasuryValue,
+		)
+	}
+	if decoded.Donation != 5_000_000 {
+		t.Fatalf(
+			"Donation: expected 5000000, got %d",
+			decoded.Donation,
+		)
+	}
+	if decoded.Fee != 200_000 {
+		t.Fatalf(
+			"Fee: expected 200000, got %d",
+			decoded.Fee,
+		)
+	}
+}
+
+func TestTreasuryFieldsRejectOverflow(t *testing.T) {
+	tests := []struct {
+		name      string
+		fieldKey  int
+		fieldName string
+	}{
+		{
+			name:      "current_treasury_value",
+			fieldKey:  21,
+			fieldName: "current treasury value",
+		},
+		{
+			name:      "donation",
+			fieldKey:  22,
+			fieldName: "donation",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := cbor.Marshal(map[int]any{
+				0: []TransactionInput.TransactionInput{
+					SAMPLE_TX_IN,
+				},
+				1: []TransactionOutput.TransactionOutput{
+					SAMPLE_TX_OUT_1,
+				},
+				2:           int64(200_000),
+				tc.fieldKey: uint64(math.MaxInt64) + 1,
+			})
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+
+			var decoded TransactionBody.TransactionBody
+			err = cbor.Unmarshal(data, &decoded)
+			if err == nil {
+				t.Fatal("expected overflow error")
+			}
+			if !strings.Contains(err.Error(), tc.fieldName) {
+				t.Fatalf(
+					"expected error to mention %q, got %v",
+					tc.fieldName,
+					err,
+				)
+			}
+		})
 	}
 }
