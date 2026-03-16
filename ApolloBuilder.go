@@ -951,7 +951,7 @@ func (b *Apollo) scriptDataHash() (*serialization.ScriptDataHash, error) {
 		}
 	}
 
-	var redeemer_bytes []byte
+	var redeemer_bytes []byte //nolint:prealloc
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
