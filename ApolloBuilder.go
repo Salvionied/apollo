@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 
@@ -2907,8 +2908,12 @@ func (b *Apollo) Complete() (
 		// Kind 12 = VoteRegDelegCert
 		// Kind 13 = StakeVoteRegDelegCert
 		// Deregistration (kind 1, 8) refunds the deposit, delegation (kind 2) doesn't require it
+		// Kind 16 = RegDRepCert (deposit stored in cert.Coin)
+		// Kind 17 = UnregDRepCert (refund stored in cert.Coin)
 		registrationCount := 0
 		deregistrationCount := 0
+		var drepDepositTotal int64
+		var drepRefundTotal int64
 		for _, cert := range *b.certificates {
 			kind := cert.Kind()
 			switch kind {
@@ -2916,6 +2921,14 @@ func (b *Apollo) Complete() (
 				registrationCount++
 			case 1, 8:
 				deregistrationCount++
+			case 16:
+				if rc, ok := cert.(Certificate.RegDRepCert); ok {
+					drepDepositTotal += rc.Coin
+				}
+			case 17:
+				if uc, ok := cert.(Certificate.UnregDRepCert); ok {
+					drepRefundTotal += uc.Coin
+				}
 			}
 		}
 		if registrationCount > 0 {
@@ -2932,6 +2945,30 @@ func (b *Apollo) Complete() (
 					int64(STAKE_DEPOSIT * deregistrationCount),
 				),
 			)
+		}
+		if drepDepositTotal > 0 {
+			requestedAmount = requestedAmount.Add(
+				Value.PureLovelaceValue(drepDepositTotal),
+			)
+		}
+		if drepRefundTotal > 0 {
+			requestedAmount = requestedAmount.Sub(
+				Value.PureLovelaceValue(drepRefundTotal),
+			)
+		}
+	}
+	if b.donation > 0 {
+		requestedAmount = requestedAmount.Add(
+			Value.PureLovelaceValue(b.donation),
+		)
+	}
+	if b.proposalProcedures != nil {
+		for _, proposal := range *b.proposalProcedures {
+			if proposal.Deposit > 0 {
+				requestedAmount = requestedAmount.Add(
+					Value.PureLovelaceValue(proposal.Deposit),
+				)
+			}
 		}
 	}
 	estimatedFee, err := b.estimateFee()
@@ -3246,8 +3283,12 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 		// Kind 12 = VoteRegDelegCert
 		// Kind 13 = StakeVoteRegDelegCert
 		// Deregistration (kind 1, 8) refunds the deposit, delegation (kind 2) doesn't require it
+		// Kind 16 = RegDRepCert (deposit stored in cert.Coin)
+		// Kind 17 = UnregDRepCert (refund stored in cert.Coin)
 		registrationCount := 0
 		deregistrationCount := 0
+		var drepDepositTotal int64
+		var drepRefundTotal int64
 		for _, cert := range *b.certificates {
 			kind := cert.Kind()
 			switch kind {
@@ -3255,6 +3296,14 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 				registrationCount++
 			case 1, 8:
 				deregistrationCount++
+			case 16:
+				if rc, ok := cert.(Certificate.RegDRepCert); ok {
+					drepDepositTotal += rc.Coin
+				}
+			case 17:
+				if uc, ok := cert.(Certificate.UnregDRepCert); ok {
+					drepRefundTotal += uc.Coin
+				}
 			}
 		}
 		if registrationCount > 0 {
@@ -3271,6 +3320,30 @@ func (b *Apollo) addChangeAndFee() (*Apollo, error) {
 					int64(STAKE_DEPOSIT * deregistrationCount),
 				),
 			)
+		}
+		if drepDepositTotal > 0 {
+			requestedAmount = requestedAmount.Add(
+				Value.PureLovelaceValue(drepDepositTotal),
+			)
+		}
+		if drepRefundTotal > 0 {
+			requestedAmount = requestedAmount.Sub(
+				Value.PureLovelaceValue(drepRefundTotal),
+			)
+		}
+	}
+	if b.donation > 0 {
+		requestedAmount = requestedAmount.Add(
+			Value.PureLovelaceValue(b.donation),
+		)
+	}
+	if b.proposalProcedures != nil {
+		for _, proposal := range *b.proposalProcedures {
+			if proposal.Deposit > 0 {
+				requestedAmount = requestedAmount.Add(
+					Value.PureLovelaceValue(proposal.Deposit),
+				)
+			}
 		}
 	}
 	var err error
@@ -3847,6 +3920,13 @@ func (b *Apollo) SetValidityStart(invalidBefore int64) *Apollo {
 func (b *Apollo) SetCurrentTreasuryValue(
 	value int64,
 ) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	if value < 0 {
+		b.err = errors.New("SetCurrentTreasuryValue: value must be non-negative")
+		return b
+	}
 	b.currentTreasuryValue = value
 	return b
 }
@@ -3866,6 +3946,17 @@ func (b *Apollo) SetCurrentTreasuryValue(
 func (b *Apollo) AddTreasuryDonation(
 	amount int64,
 ) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	if amount < 0 {
+		b.err = errors.New("AddTreasuryDonation: amount must be non-negative")
+		return b
+	}
+	if amount > 0 && b.donation > math.MaxInt64-amount {
+		b.err = errors.New("AddTreasuryDonation: donation amount overflow")
+		return b
+	}
 	b.donation += amount
 	return b
 }

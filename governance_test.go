@@ -2,6 +2,7 @@ package apollo_test
 
 import (
 	"bytes"
+	"math"
 	"testing"
 
 	"github.com/Salvionied/apollo"
@@ -80,6 +81,34 @@ func TestTreasuryFieldsNotSetByDefault(t *testing.T) {
 	}
 	if tx.TransactionBody.Donation != 0 {
 		t.Fatal("Donation should be 0 by default")
+	}
+}
+
+func TestSetCurrentTreasuryValueNegative(t *testing.T) {
+	a := newGovernanceTestApollo(t)
+	a = a.SetCurrentTreasuryValue(-1)
+	_, _, err := a.Complete()
+	if err == nil {
+		t.Fatal("expected error for negative treasury value")
+	}
+}
+
+func TestAddTreasuryDonationNegative(t *testing.T) {
+	a := newGovernanceTestApollo(t)
+	a = a.AddTreasuryDonation(-1)
+	_, _, err := a.Complete()
+	if err == nil {
+		t.Fatal("expected error for negative donation amount")
+	}
+}
+
+func TestAddTreasuryDonationOverflow(t *testing.T) {
+	a := newGovernanceTestApollo(t)
+	a = a.AddTreasuryDonation(math.MaxInt64)
+	a = a.AddTreasuryDonation(1)
+	_, _, err := a.Complete()
+	if err == nil {
+		t.Fatal("expected error for donation amount overflow")
 	}
 }
 
@@ -180,7 +209,7 @@ func TestAddMultipleVotes(t *testing.T) {
 func TestAddProposal(t *testing.T) {
 	a := newGovernanceTestApollo(t)
 	proposal := Governance.ProposalProcedure{
-		Deposit:       500_000_000,
+		Deposit:       2_000_000,
 		RewardAccount: make([]byte, 29),
 		Action:        Governance.InfoAction{},
 		Anchor: Certificate.Anchor{
@@ -207,9 +236,9 @@ func TestAddProposal(t *testing.T) {
 			len(pp),
 		)
 	}
-	if pp[0].Deposit != 500_000_000 {
+	if pp[0].Deposit != 2_000_000 {
 		t.Fatalf(
-			"expected deposit 500000000, got %d",
+			"expected deposit 2000000, got %d",
 			pp[0].Deposit,
 		)
 	}
@@ -219,7 +248,7 @@ func TestAddMultipleProposals(t *testing.T) {
 	a := newGovernanceTestApollo(t)
 	a = a.
 		AddProposal(Governance.ProposalProcedure{
-			Deposit:       500_000_000,
+			Deposit:       2_000_000,
 			RewardAccount: make([]byte, 29),
 			Action:        Governance.InfoAction{},
 			Anchor: Certificate.Anchor{
@@ -228,7 +257,7 @@ func TestAddMultipleProposals(t *testing.T) {
 			},
 		}).
 		AddProposal(Governance.ProposalProcedure{
-			Deposit:       750_000_000,
+			Deposit:       3_000_000,
 			RewardAccount: append(make([]byte, 28), 0x01),
 			Action: Governance.NoConfidence{
 				PrevActionId: nil,
@@ -251,15 +280,15 @@ func TestAddMultipleProposals(t *testing.T) {
 	if len(pp) != 2 {
 		t.Fatalf("expected 2 proposals, got %d", len(pp))
 	}
-	if pp[0].Deposit != 500_000_000 {
+	if pp[0].Deposit != 2_000_000 {
 		t.Fatalf(
-			"expected first deposit 500000000, got %d",
+			"expected first deposit 2000000, got %d",
 			pp[0].Deposit,
 		)
 	}
-	if pp[1].Deposit != 750_000_000 {
+	if pp[1].Deposit != 3_000_000 {
 		t.Fatalf(
-			"expected second deposit 750000000, got %d",
+			"expected second deposit 3000000, got %d",
 			pp[1].Deposit,
 		)
 	}

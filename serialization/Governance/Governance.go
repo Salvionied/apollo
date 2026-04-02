@@ -993,7 +993,11 @@ func (a ParameterChange) MarshalCBOR() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cbor.Marshal(
+	encMode, err := cbor.CanonicalEncOptions().EncMode()
+	if err != nil {
+		return nil, err
+	}
+	return encMode.Marshal(
 		[]any{a.GovActionType(), prev, a.ParamUpdate},
 	)
 }
