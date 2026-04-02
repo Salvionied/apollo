@@ -29,12 +29,12 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	marshaled, _ := tx.Bytes()
 	if hex.EncodeToString(
 		marshaled,
-	) != "84a4008182430102030001f6020009a0a0f4f6" {
+	) != "84a3008182430102030001f60200a0f4f6" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
 			"Expected",
-			"84a4008182430102030001f6020009a0a0f4f6",
+			"84a3008182430102030001f60200a0f4f6",
 		)
 	}
 	tx2 := Transaction.Transaction{}
@@ -77,12 +77,12 @@ func TestId(t *testing.T) {
 	txId := tx.Id()
 	if hex.EncodeToString(
 		txId.Payload,
-	) != "2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771" {
+	) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
 		t.Error(
 			"Invalid transaction ID",
 			hex.EncodeToString(txId.Payload),
 			"Expected",
-			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
+			"49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615",
 		)
 	}
 }

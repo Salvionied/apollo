@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/Asset"
+	"github.com/Salvionied/apollo/serialization/AssetName"
+	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/TransactionBody"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
 	"github.com/Salvionied/apollo/serialization/TransactionOutput"
@@ -41,12 +45,12 @@ func TestTransactionBodyMarshalAndUnmarshal(t *testing.T) {
 	marshaled, _ := cbor.Marshal(txBody)
 	if hex.EncodeToString(
 		marshaled,
-	) != "a50081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f424009a0" {
+	) != "a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240" {
 		t.Error(
 			"Invalid marshaling",
 			hex.EncodeToString(marshaled),
 			"Expected",
-			"a50081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f424009a0",
+			"a40081824301020300018182583901bb2ff620c0dd8b0adc19e6ffadea1a150c85d1b22d05e2db10c55c613b8c8a100c16cf62b9c2bacc40453aaa67ced633993f2b4eec5b88e41a000f4240021a000f4240031a000f4240",
 		)
 	}
 	txBody2 := TransactionBody.TransactionBody{}
@@ -86,6 +90,93 @@ func TestTransactionBodyMarshalAndUnmarshal(t *testing.T) {
 	}
 }
 
+func TestEmptyMintOmitted(t *testing.T) {
+	txBody := TransactionBody.TransactionBody{
+		Inputs: []TransactionInput.TransactionInput{
+			SAMPLE_TX_IN,
+		},
+		Outputs: []TransactionOutput.TransactionOutput{
+			SAMPLE_TX_OUT_1,
+		},
+		Fee:  1000000,
+		Mint: make(MultiAsset.MultiAsset[int64]),
+	}
+	marshaled, err := cbor.Marshal(txBody)
+	if err != nil {
+		t.Fatal("Marshal failed:", err)
+	}
+	var rawMap map[int]cbor.RawMessage
+	if err := cbor.Unmarshal(marshaled, &rawMap); err != nil {
+		t.Fatal("Unmarshal to raw map failed:", err)
+	}
+	if _, ok := rawMap[9]; ok {
+		t.Error(
+			"Empty Mint (key 9) should be omitted",
+			hex.EncodeToString(marshaled),
+		)
+	}
+}
+
+func TestNilMintOmitted(t *testing.T) {
+	txBody := TransactionBody.TransactionBody{
+		Inputs: []TransactionInput.TransactionInput{
+			SAMPLE_TX_IN,
+		},
+		Outputs: []TransactionOutput.TransactionOutput{
+			SAMPLE_TX_OUT_1,
+		},
+		Fee: 1000000,
+	}
+	marshaled, err := cbor.Marshal(txBody)
+	if err != nil {
+		t.Fatal("Marshal failed:", err)
+	}
+	var rawMap map[int]cbor.RawMessage
+	if err := cbor.Unmarshal(marshaled, &rawMap); err != nil {
+		t.Fatal("Unmarshal to raw map failed:", err)
+	}
+	if _, ok := rawMap[9]; ok {
+		t.Error(
+			"Nil Mint (key 9) should be omitted",
+			hex.EncodeToString(marshaled),
+		)
+	}
+}
+
+func TestNonEmptyMintIncluded(t *testing.T) {
+	policyId := "a0a0a0a0a0a0a0a0a0a0a0a0a0" +
+		"a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+	mint := MultiAsset.MultiAsset[int64]{
+		Policy.PolicyId{Value: policyId}: Asset.Asset[int64]{
+			AssetName.NewAssetNameFromString("token"): 100,
+		},
+	}
+	txBody := TransactionBody.TransactionBody{
+		Inputs: []TransactionInput.TransactionInput{
+			SAMPLE_TX_IN,
+		},
+		Outputs: []TransactionOutput.TransactionOutput{
+			SAMPLE_TX_OUT_1,
+		},
+		Fee:  1000000,
+		Mint: mint,
+	}
+	marshaled, err := cbor.Marshal(txBody)
+	if err != nil {
+		t.Fatal("Marshal failed:", err)
+	}
+	var rawMap map[int]cbor.RawMessage
+	if err := cbor.Unmarshal(marshaled, &rawMap); err != nil {
+		t.Fatal("Unmarshal to raw map failed:", err)
+	}
+	if _, ok := rawMap[9]; !ok {
+		t.Error(
+			"Non-empty Mint (key 9) should be present",
+			hex.EncodeToString(marshaled),
+		)
+	}
+}
+
 func TestTransactionBodyHash(t *testing.T) {
 	txBody := TransactionBody.TransactionBody{
 		Inputs: []TransactionInput.TransactionInput{
@@ -94,12 +185,12 @@ func TestTransactionBodyHash(t *testing.T) {
 	hash, _ := txBody.Hash()
 	if hex.EncodeToString(
 		hash,
-	) != "2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771" {
+	) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
 		t.Error(
 			"Invalid hash",
 			hex.EncodeToString(hash),
 			"Expected",
-			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
+			"49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615",
 		)
 	}
 }
@@ -112,12 +203,12 @@ func TestId(t *testing.T) {
 	txId, _ := txBody.Id()
 	if hex.EncodeToString(
 		txId.Payload,
-	) != "2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771" {
+	) != "49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615" {
 		t.Error(
 			"Invalid Id",
 			hex.EncodeToString(txId.Payload),
 			"Expected",
-			"2d1312c2950d08c5fe35b8d1f293d13e0cf85e51a1c1779ee05b89838cf4e771",
+			"49289fa2198208f49f62303aab86d06fb1ff960c812ee98d88c7a5cebb29b615",
 		)
 	}
 }
