@@ -114,7 +114,7 @@ type CborBody struct {
 	UpdateProposals      []any                                 `cbor:"6,keyasint,omitempty"`
 	AuxiliaryDataHash    []byte                                `cbor:"7,keyasint,omitempty"`
 	ValidityStart        int64                                 `cbor:"8,keyasint,omitempty"`
-	Mint                 MultiAsset.MultiAsset[int64]          `cbor:"9,keyasint,omitempty"`
+	Mint                 *MultiAsset.MultiAsset[int64]         `cbor:"9,keyasint,omitempty"`
 	ScriptDataHash       []byte                                `cbor:"11,keyasint,omitempty"`
 	Collateral           []TransactionInput.TransactionInput   `cbor:"13,keyasint,omitempty"`
 	RequiredSigners      []serialization.PubKeyHash            `cbor:"14,keyasint,omitempty"`
@@ -164,7 +164,6 @@ func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 		UpdateProposals:      tx.UpdateProposals,
 		AuxiliaryDataHash:    tx.AuxiliaryDataHash,
 		ValidityStart:        tx.ValidityStart,
-		Mint:                 tx.Mint,
 		ScriptDataHash:       tx.ScriptDataHash,
 		Collateral:           tx.Collateral,
 		RequiredSigners:      tx.RequiredSigners,
@@ -176,6 +175,9 @@ func (tx *TransactionBody) MarshalCBOR() ([]byte, error) {
 		ProposalProcedures:   tx.ProposalProcedures,
 		CurrentTreasuryValue: tx.CurrentTreasuryValue,
 		Donation:             tx.Donation,
+	}
+	if !tx.Mint.IsEmpty() {
+		cborBody.Mint = &tx.Mint
 	}
 	// CanonicalEncOptions().EncMode() is not expected to fail with default
 	// options, but we still check the error defensively in case the cbor
