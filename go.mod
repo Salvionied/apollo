@@ -6,7 +6,7 @@ require (
 	connectrpc.com/connect v1.19.1
 	filippo.io/edwards25519 v1.2.0
 	github.com/SundaeSwap-finance/kugo v1.3.0
-	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.0
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/tyler-smith/go-bip39 v1.1.0
