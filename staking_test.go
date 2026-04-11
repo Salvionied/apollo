@@ -795,3 +795,326 @@ func TestFullStakingFlow(t *testing.T) {
 		t.Fatal("serialized tx is empty")
 	}
 }
+
+// --- RegisterDRep tests ---
+
+func TestRegisterDRep(t *testing.T) {
+	a := newTestApollo(t)
+	cred := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cred.Hash.Payload[0] = 0xDD
+
+	a = a.RegisterDRep(
+		cred,
+		2_000_000,
+		&Certificate.Anchor{
+			Url:      "https://example.com/drep.json",
+			DataHash: make([]byte, 32),
+		},
+	)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 16 {
+		t.Fatalf(
+			"expected RegDRepCert (kind 16), got %d",
+			certs[0].Kind(),
+		)
+	}
+	dc := certs[0].DrepCredential()
+	if dc == nil {
+		t.Fatal("drep credential is nil")
+	}
+	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
+		t.Fatal("drep credential hash mismatch")
+	}
+}
+
+func TestRegisterDRepNoAnchor(t *testing.T) {
+	a := newTestApollo(t)
+	cred := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cred.Hash.Payload[0] = 0xEE
+
+	a = a.RegisterDRep(cred, 2_000_000, nil)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 16 {
+		t.Fatalf(
+			"expected RegDRepCert (kind 16), got %d",
+			certs[0].Kind(),
+		)
+	}
+	dc := certs[0].DrepCredential()
+	if dc == nil {
+		t.Fatal("drep credential is nil")
+	}
+	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
+		t.Fatal("drep credential hash mismatch")
+	}
+}
+
+// --- RetireDRep tests ---
+
+func TestRetireDRep(t *testing.T) {
+	a := newTestApollo(t)
+	cred := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cred.Hash.Payload[0] = 0xAA
+
+	a = a.RetireDRep(cred, 2_000_000)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 17 {
+		t.Fatalf(
+			"expected UnregDRepCert (kind 17), got %d",
+			certs[0].Kind(),
+		)
+	}
+	dc := certs[0].DrepCredential()
+	if dc == nil {
+		t.Fatal("drep credential is nil")
+	}
+	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
+		t.Fatal("drep credential hash mismatch")
+	}
+}
+
+// --- UpdateDRep tests ---
+
+func TestUpdateDRep(t *testing.T) {
+	a := newTestApollo(t)
+	cred := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cred.Hash.Payload[0] = 0xBB
+
+	a = a.UpdateDRep(
+		cred,
+		&Certificate.Anchor{
+			Url:      "https://example.com/update.json",
+			DataHash: make([]byte, 32),
+		},
+	)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 18 {
+		t.Fatalf(
+			"expected UpdateDRepCert (kind 18), got %d",
+			certs[0].Kind(),
+		)
+	}
+	dc := certs[0].DrepCredential()
+	if dc == nil {
+		t.Fatal("drep credential is nil")
+	}
+	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
+		t.Fatal("drep credential hash mismatch")
+	}
+}
+
+func TestUpdateDRepNoAnchor(t *testing.T) {
+	a := newTestApollo(t)
+	cred := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cred.Hash.Payload[0] = 0xCC
+
+	a = a.UpdateDRep(cred, nil)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 18 {
+		t.Fatalf(
+			"expected UpdateDRepCert (kind 18), got %d",
+			certs[0].Kind(),
+		)
+	}
+	dc := certs[0].DrepCredential()
+	if dc == nil {
+		t.Fatal("drep credential is nil")
+	}
+	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
+		t.Fatal("drep credential hash mismatch")
+	}
+}
+
+// --- AuthorizeCommitteeHotKey tests ---
+
+func TestAuthorizeCommitteeHotKey(t *testing.T) {
+	a := newTestApollo(t)
+	cold := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cold.Hash.Payload[0] = 0x11
+	hot := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	hot.Hash.Payload[0] = 0x22
+
+	a = a.AuthorizeCommitteeHotKey(cold, hot)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 14 {
+		t.Fatalf(
+			"expected AuthCommitteeHotCert (kind 14), got %d",
+			certs[0].Kind(),
+		)
+	}
+	hc := certs[0].AuthCommitteeHotCredential()
+	if hc == nil {
+		t.Fatal("hot credential is nil")
+	}
+	if !bytes.Equal(hc.Hash.Payload, hot.Hash.Payload) {
+		t.Fatal("hot credential hash mismatch")
+	}
+	cc := certs[0].AuthCommitteeColdCredential()
+	if cc == nil {
+		t.Fatal("cold credential is nil")
+	}
+	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
+		t.Fatal("cold credential hash mismatch")
+	}
+}
+
+// --- ResignCommitteeColdKey tests ---
+
+func TestResignCommitteeColdKey(t *testing.T) {
+	a := newTestApollo(t)
+	cold := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cold.Hash.Payload[0] = 0x33
+
+	a = a.ResignCommitteeColdKey(
+		cold,
+		&Certificate.Anchor{
+			Url:      "https://example.com/resign.json",
+			DataHash: make([]byte, 32),
+		},
+	)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 15 {
+		t.Fatalf(
+			"expected ResignCommitteeColdCert (kind 15), got %d",
+			certs[0].Kind(),
+		)
+	}
+	cc := certs[0].AuthCommitteeColdCredential()
+	if cc == nil {
+		t.Fatal("cold credential is nil")
+	}
+	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
+		t.Fatal("cold credential hash mismatch")
+	}
+}
+
+func TestResignCommitteeColdKeyNoAnchor(t *testing.T) {
+	a := newTestApollo(t)
+	cold := Certificate.Credential{
+		Code: 0,
+		Hash: serialization.ConstrainedBytes{
+			Payload: make([]byte, 28),
+		},
+	}
+	cold.Hash.Payload[0] = 0x44
+
+	a = a.ResignCommitteeColdKey(cold, nil)
+
+	built, _, err := a.Complete()
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	certs := *built.GetTx().TransactionBody.Certificates
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if certs[0].Kind() != 15 {
+		t.Fatalf(
+			"expected ResignCommitteeColdCert (kind 15), got %d",
+			certs[0].Kind(),
+		)
+	}
+	cc := certs[0].AuthCommitteeColdCredential()
+	if cc == nil {
+		t.Fatal("cold credential is nil")
+	}
+	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
+		t.Fatal("cold credential hash mismatch")
+	}
+}

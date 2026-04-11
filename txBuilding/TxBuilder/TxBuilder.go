@@ -450,6 +450,7 @@ func ScriptDataHash(
 		}
 	}
 	var redeemer_bytes []byte //nolint:prealloc
+
 	if len(redeemers) == 0 {
 		redeemer_bytes, _ = hex.DecodeString("a0")
 	} else {
