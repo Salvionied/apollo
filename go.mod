@@ -11,7 +11,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.18.1
-	github.com/utxorpc/go-sdk v0.0.2
+	github.com/utxorpc/go-sdk v0.0.3
 	golang.org/x/crypto v0.50.0
 	golang.org/x/text v0.36.0
 )
