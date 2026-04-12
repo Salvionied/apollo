@@ -9,7 +9,7 @@ import (
 
 	"github.com/Salvionied/apollo/crypto/bip32"
 
-	"github.com/tyler-smith/go-bip39"
+	"github.com/blinklabs-io/go-bip39"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/text/unicode/norm"
 )
