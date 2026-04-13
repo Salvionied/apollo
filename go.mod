@@ -8,7 +8,7 @@ require (
 	github.com/SundaeSwap-finance/kugo v1.3.0
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/go-bip39 v0.2.0
-	github.com/fxamacker/cbor/v2 v2.9.0
+	github.com/fxamacker/cbor/v2 v2.9.1
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.18.1
 	github.com/utxorpc/go-sdk v0.0.3
