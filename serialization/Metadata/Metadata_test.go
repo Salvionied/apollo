@@ -1,7 +1,10 @@
 package Metadata_test
 
 import (
+	"bytes"
 	"encoding/hex"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Salvionied/apollo/serialization/Metadata"
@@ -183,4 +186,136 @@ func TestMarshalEmptyAux(t *testing.T) {
 			`f6`,
 		)
 	}
+}
+
+func TestShelleyMaryMetadataFromJSONNoSchema(t *testing.T) {
+	jsonData := []byte(`{
+		"721": {
+			"policy": {
+				"Token": {
+					"name": "Apollo",
+					"serial": 1,
+					"raw": "0xdeadbeef"
+				}
+			}
+		}
+	}`)
+	shelleyMeta, err := Metadata.ShelleyMaryMetadataFromJSON(jsonData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, ok := shelleyMeta.Metadata[721].(Metadata.MetadatumMap)
+	if !ok {
+		t.Fatalf("metadata label 721 has type %T", shelleyMeta.Metadata[721])
+	}
+	policy := metadataMapValue(t, top, "policy").(Metadata.MetadatumMap)
+	token := metadataMapValue(t, policy, "Token").(Metadata.MetadatumMap)
+	if got := metadataMapValue(t, token, "name"); got != "Apollo" {
+		t.Fatalf("name = %v", got)
+	}
+	if got := metadataMapValue(t, token, "serial"); got != int64(1) {
+		t.Fatalf("serial = %v", got)
+	}
+	raw, ok := metadataMapValue(t, token, "raw").([]byte)
+	if !ok {
+		t.Fatalf("raw has unexpected type")
+	}
+	if !bytes.Equal(raw, []byte{0xde, 0xad, 0xbe, 0xef}) {
+		t.Fatalf("raw = %x", raw)
+	}
+	aux := Metadata.AuxiliaryData{}
+	aux.SetShelleyMetadata(shelleyMeta)
+	if _, err := cbor.Marshal(aux); err != nil {
+		t.Fatalf("metadata did not marshal: %v", err)
+	}
+}
+
+func TestShelleyMaryMetadataFromJSONNoSchemaMapKeys(t *testing.T) {
+	shelleyMeta, err := Metadata.ShelleyMaryMetadataFromJSON(
+		[]byte(`{"1":{"42":"number key","01":"text key","0xdead":"bytes key"}}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top := shelleyMeta.Metadata[1].(Metadata.MetadatumMap)
+	if got := metadataMapValue(t, top, int64(42)); got != "number key" {
+		t.Fatalf("numeric key value = %v", got)
+	}
+	if got := metadataMapValue(t, top, "01"); got != "text key" {
+		t.Fatalf("leading-zero key value = %v", got)
+	}
+	if got := metadataMapValue(t, top, []byte{0xde, 0xad}); got != "bytes key" {
+		t.Fatalf("bytes key value = %v", got)
+	}
+}
+
+func TestShelleyMaryMetadataFromDetailedJSON(t *testing.T) {
+	jsonData := []byte(`{
+		"1": {
+			"map": [
+				{"k": {"string": "name"}, "v": {"string": "Apollo"}},
+				{"k": {"bytes": "deadbeef"}, "v": {"list": [{"int": 1}, {"int": -1}]}}
+			]
+		}
+	}`)
+	shelleyMeta, err := Metadata.ShelleyMaryMetadataFromJSONWithSchema(
+		jsonData,
+		Metadata.JSONDetailedSchema,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top := shelleyMeta.Metadata[1].(Metadata.MetadatumMap)
+	if got := metadataMapValue(t, top, "name"); got != "Apollo" {
+		t.Fatalf("name = %v", got)
+	}
+	list, ok := metadataMapValue(t, top, []byte{0xde, 0xad, 0xbe, 0xef}).([]any)
+	if !ok {
+		t.Fatalf("bytes-key value has unexpected type")
+	}
+	if !reflect.DeepEqual(list, []any{int64(1), int64(-1)}) {
+		t.Fatalf("list = %#v", list)
+	}
+	aux := Metadata.AuxiliaryData{}
+	aux.SetShelleyMetadata(shelleyMeta)
+	if _, err := cbor.Marshal(aux); err != nil {
+		t.Fatalf("metadata did not marshal: %v", err)
+	}
+}
+
+func TestShelleyMaryMetadataFromJSONRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		json string
+	}{
+		{name: "top level array", json: `[]`},
+		{name: "bad label", json: `{"01":"x"}`},
+		{name: "bool", json: `{"1":true}`},
+		{name: "float", json: `{"1":1.2}`},
+		{name: "long text", json: `{"1":"` + strings.Repeat("a", 65) + `"}`},
+		{name: "long bytes", json: `{"1":"0x` + strings.Repeat("aa", 65) + `"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Metadata.ShelleyMaryMetadataFromJSON([]byte(test.json))
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func metadataMapValue(
+	t *testing.T,
+	metadataMap Metadata.MetadatumMap,
+	key any,
+) any {
+	t.Helper()
+	for _, entry := range metadataMap {
+		if reflect.DeepEqual(entry.Key, key) {
+			return entry.Value
+		}
+	}
+	t.Fatalf("metadata key %v not found", key)
+	return nil
 }

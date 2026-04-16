@@ -11,8 +11,11 @@ import (
 	"github.com/Salvionied/apollo"
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
+	"github.com/Salvionied/apollo/serialization/AssetName"
 	"github.com/Salvionied/apollo/serialization/MultiAsset"
+	"github.com/Salvionied/apollo/serialization/NativeScript"
 	"github.com/Salvionied/apollo/serialization/PlutusData"
+	"github.com/Salvionied/apollo/serialization/Policy"
 	"github.com/Salvionied/apollo/serialization/Redeemer"
 	"github.com/Salvionied/apollo/serialization/Transaction"
 	"github.com/Salvionied/apollo/serialization/TransactionInput"
@@ -612,6 +615,87 @@ func TestAddSameScriptTwiceV3(t *testing.T) {
 	}
 	if len(built.GetTx().TransactionWitnessSet.PlutusV3Script) != 1 {
 		t.Error("Tx is not correct")
+	}
+}
+
+func TestAddSameNativeScriptTwice(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	nativeScript := NativeScript.NewInvalidHereafter(500)
+	apollob := apollo.New(&cc).
+		AddNativeScript(nativeScript).
+		AddNativeScript(nativeScript).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...)
+	built, _, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(built.GetTx().TransactionWitnessSet.NativeScripts) != 1 {
+		t.Error("Tx is not correct")
+	}
+	if built.GetTx().TransactionWitnessSet.NativeScripts[0].Tag !=
+		NativeScript.InvalidHereafter {
+		t.Error("Tx is not correct")
+	}
+}
+
+func TestMintAssetsWithNativeScript(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	nativeScript := NativeScript.NewInvalidHereafter(500)
+	hash, err := nativeScript.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mintUnit := apollo.NewUnit(hex.EncodeToString(hash.Bytes()), "Token", 1)
+	apollob := apollo.New(&cc).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...).
+		MintAssetsWithNativeScript(mintUnit, nativeScript)
+	built, _, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(built.GetTx().TransactionWitnessSet.NativeScripts) != 1 {
+		t.Error("Tx is not correct")
+	}
+	policyId := Policy.PolicyId{Value: mintUnit.PolicyId}
+	assetName := AssetName.NewAssetNameFromString(mintUnit.Name)
+	if got := built.GetTx().TransactionBody.Mint.GetByPolicyAndId(
+		policyId,
+		assetName,
+	); got != 1 {
+		t.Errorf("minted amount = %d", got)
+	}
+}
+
+func TestSetMetadataFromJSON(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	apollob := apollo.New(&cc).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...).
+		SetMetadataFromJSON([]byte(`{"674":{"msg":["Apollo"]}}`))
+	built, _, err := apollob.Complete()
+	if err != nil {
+		t.Error(err)
+	}
+	if built.GetTx().AuxiliaryData == nil {
+		t.Fatal("AuxiliaryData is nil")
+	}
+	if len(built.GetTx().TransactionBody.AuxiliaryDataHash) != 32 {
+		t.Error("AuxiliaryDataHash is not set")
+	}
+}
+
+func TestSetMetadataFromJSONErrorReturnedOnComplete(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	_, _, err := apollo.New(&cc).
+		SetMetadataFromJSON([]byte(`{"1":true}`)).
+		Complete()
+	if err == nil {
+		t.Fatal("expected metadata parse error")
 	}
 }
 
