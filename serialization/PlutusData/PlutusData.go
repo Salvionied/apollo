@@ -1575,23 +1575,29 @@ func CostModelV3(cm CostModel) cbor.Marshaler {
 }
 
 func CostModelV2(cm CostModel) cbor.Marshaler {
-	cost := make(map[string]int)
-	for ix, s := range V2COSTMODELKEYS {
-		if ix < len(cm) {
-			cost[s] = cm[ix]
+	return cm
+}
+
+// CostModelV1Encoding produces the CIP-35 Alonzo V1 language-view encoding:
+// a CBOR bytestring wrapping an indefinite-length array of the cost model
+// integers in canonical parameter order.
+type CostModelV1Encoding CostModel
+
+func (cm CostModelV1Encoding) MarshalCBOR() ([]byte, error) {
+	inner := []byte{0x9f}
+	for _, v := range cm {
+		chunk, err := cbor.Marshal(v)
+		if err != nil {
+			return nil, err
 		}
+		inner = append(inner, chunk...)
 	}
-	return CostView(cost)
+	inner = append(inner, 0xff)
+	return cbor.Marshal(inner)
 }
 
 func CostModelV1(cm CostModel) cbor.Marshaler {
-	cost := make(map[string]int)
-	for ix, s := range V1COSTMODELKEYS {
-		if ix < len(cm) {
-			cost[s] = cm[ix]
-		}
-	}
-	return CM(cost)
+	return CostModelV1Encoding(cm)
 }
 
 type PlutusType int

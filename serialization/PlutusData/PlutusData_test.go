@@ -1,6 +1,7 @@
 package PlutusData_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"testing"
@@ -357,4 +358,120 @@ func TestCborMapNilContents(t *testing.T) {
 	if hex.EncodeToString(data) == "f6" {
 		t.Error("nil Contents should not encode as null")
 	}
+}
+
+func decodeCostModelV1(t *testing.T, encoded []byte) []int {
+	t.Helper()
+	var inner []byte
+	if err := cbor.Unmarshal(encoded, &inner); err != nil {
+		t.Fatalf("outer bytestring unmarshal failed: %v", err)
+	}
+	if len(inner) < 2 || inner[0] != 0x9f || inner[len(inner)-1] != 0xff {
+		t.Fatalf("inner bytes are not an indefinite-length CBOR array: %x", inner)
+	}
+
+	var out []int
+	if err := cbor.Unmarshal(inner, &out); err != nil {
+		t.Fatalf("inner array unmarshal failed: %v", err)
+	}
+	return out
+}
+
+func TestCostModelV1EncodingSmall(t *testing.T) {
+	in := PlutusData.CostModel{1, 2, 3}
+	got, err := PlutusData.CostModelV1Encoding(in).MarshalCBOR()
+	if err != nil {
+		t.Fatalf("MarshalCBOR: %v", err)
+	}
+
+	want, err := hex.DecodeString("459f010203ff")
+	if err != nil {
+		t.Fatalf("DecodeString: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("small case bytes mismatch:\n got  %x\n want %x", got, want)
+	}
+	if decoded := decodeCostModelV1(t, got); !equalInts(decoded, []int(in)) {
+		t.Fatalf("round-trip mismatch: got %v want %v", decoded, []int(in))
+	}
+}
+
+func TestCostModelV1EncodingMedium(t *testing.T) {
+	in := make(PlutusData.CostModel, 30)
+	for i := range in {
+		in[i] = i
+	}
+	got, err := PlutusData.CostModelV1Encoding(in).MarshalCBOR()
+	if err != nil {
+		t.Fatalf("MarshalCBOR: %v", err)
+	}
+
+	if got[0] != 0x58 {
+		t.Fatalf("expected 0x58-prefixed bytestring, got first byte %#x", got[0])
+	}
+	if decoded := decodeCostModelV1(t, got); !equalInts(decoded, []int(in)) {
+		t.Fatalf("round-trip mismatch: got %v want %v", decoded, []int(in))
+	}
+}
+
+func TestCostModelV1EncodingLarge(t *testing.T) {
+	in := make(PlutusData.CostModel, 332)
+	for i := range in {
+		in[i] = 100788 + i
+	}
+	got, err := PlutusData.CostModelV1Encoding(in).MarshalCBOR()
+	if err != nil {
+		t.Fatalf("MarshalCBOR: %v", err)
+	}
+
+	if got[0] != 0x59 {
+		t.Fatalf("expected 0x59-prefixed bytestring for 332-entry cost model, got first byte %#x", got[0])
+	}
+	if decoded := decodeCostModelV1(t, got); !equalInts(decoded, []int(in)) {
+		t.Fatalf("round-trip mismatch: len(got)=%d len(want)=%d", len(decoded), len(in))
+	}
+}
+
+func TestCostModelV2Passthrough(t *testing.T) {
+	in := PlutusData.CostModel{1, 2, 3}
+	got, err := PlutusData.CostModelV2(in).MarshalCBOR()
+	if err != nil {
+		t.Fatalf("MarshalCBOR: %v", err)
+	}
+
+	want, err := hex.DecodeString("83010203")
+	if err != nil {
+		t.Fatalf("DecodeString: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("V2 small bytes mismatch:\n got  %x\n want %x", got, want)
+	}
+
+	large := make(PlutusData.CostModel, 332)
+	for i := range large {
+		large[i] = 100788 + i
+	}
+	gotLarge, err := PlutusData.CostModelV2(large).MarshalCBOR()
+	if err != nil {
+		t.Fatalf("MarshalCBOR large: %v", err)
+	}
+	var round []int
+	if err := cbor.Unmarshal(gotLarge, &round); err != nil {
+		t.Fatalf("round-trip unmarshal failed: %v", err)
+	}
+	if !equalInts(round, []int(large)) {
+		t.Fatalf("V2 large round-trip mismatch: len(got)=%d len(want)=%d", len(round), len(large))
+	}
+}
+
+func equalInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
