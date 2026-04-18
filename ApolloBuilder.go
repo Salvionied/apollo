@@ -1062,6 +1062,33 @@ func (b *Apollo) MintAssetsWithRedeemer(
 	return b
 }
 
+// MintAssetsWithNativeScript adds a minting unit and attaches the
+// native script witness required by the minting policy.
+func (b *Apollo) MintAssetsWithNativeScript(
+	mintUnit Unit,
+	script NativeScript.NativeScript,
+) *Apollo {
+	return b.MintAssetsWithNativeScripts(mintUnit, script)
+}
+
+// MintAssetsWithNativeScripts adds a minting unit and attaches one or
+// more native script witnesses required by native-script minting policies.
+func (b *Apollo) MintAssetsWithNativeScripts(
+	mintUnit Unit,
+	scripts ...NativeScript.NativeScript,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	for _, script := range scripts {
+		b = b.AddNativeScript(script)
+		if b.err != nil {
+			return b
+		}
+	}
+	return b.MintAssets(mintUnit)
+}
+
 /**
 buildTxBody constructs and returns the transaction body for the transaction.
 
@@ -3468,6 +3495,46 @@ func (b *Apollo) CollectFrom(
 	return b
 }
 
+// AddNativeScript attaches a native script witness to the transaction.
+// Scripts are deduplicated by their ledger script hash.
+func (b *Apollo) AddNativeScript(script NativeScript.NativeScript) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	hash, err := script.Hash()
+	if err != nil {
+		if b.err == nil {
+			b.err = fmt.Errorf("native script hash failed: %w", err)
+		}
+		return b
+	}
+	scriptHash := hex.EncodeToString(hash.Bytes())
+	if slices.Contains(b.scriptHashes, scriptHash) {
+		return b
+	}
+	b.nativescripts = append(b.nativescripts, script)
+	b.scriptHashes = append(b.scriptHashes, scriptHash)
+	return b
+}
+
+// AddNativeScripts attaches one or more native script witnesses.
+func (b *Apollo) AddNativeScripts(
+	scripts ...NativeScript.NativeScript,
+) *Apollo {
+	for _, script := range scripts {
+		b = b.AddNativeScript(script)
+		if b.err != nil {
+			return b
+		}
+	}
+	return b
+}
+
+// AttachNativeScript is an alias for AddNativeScript.
+func (b *Apollo) AttachNativeScript(script NativeScript.NativeScript) *Apollo {
+	return b.AddNativeScript(script)
+}
+
 /*
 *
 
@@ -4015,6 +4082,32 @@ func (b *Apollo) SetShelleyMetadata(
 		b.auxiliaryData.SetShelleyMetadata(metadata)
 	}
 	return b
+}
+
+// SetMetadataFromJSON parses a cardano-cli-style metadata JSON document
+// using the no-schema conversion and sets it as Shelley Mary metadata.
+func (b *Apollo) SetMetadataFromJSON(jsonData []byte) *Apollo {
+	return b.SetMetadataFromJSONWithSchema(jsonData, Metadata.JSONNoSchema)
+}
+
+// SetMetadataFromJSONWithSchema parses a metadata JSON document using the
+// selected Cardano metadata JSON schema and sets it as Shelley Mary metadata.
+func (b *Apollo) SetMetadataFromJSONWithSchema(
+	jsonData []byte,
+	schema Metadata.JSONSchema,
+) *Apollo {
+	if b.err != nil {
+		return b
+	}
+	metadata, err := Metadata.ShelleyMaryMetadataFromJSONWithSchema(
+		jsonData,
+		schema,
+	)
+	if err != nil {
+		b.err = fmt.Errorf("set metadata from JSON: %w", err)
+		return b
+	}
+	return b.SetShelleyMetadata(metadata)
 }
 
 /*
