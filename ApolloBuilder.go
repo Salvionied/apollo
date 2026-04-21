@@ -438,7 +438,9 @@ func (b *Apollo) PayToAddress(
 	if b.err != nil {
 		return b
 	}
-	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units})
+	return b.AddPayment(
+		&Payment{Lovelace: lovelace, Receiver: address, Units: units},
+	)
 }
 
 /*
@@ -533,7 +535,13 @@ func (b *Apollo) PayToContract(
 	}
 	if isInline {
 		b = b.AddPayment(
-			&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, IsInline: isInline},
+			&Payment{
+				Lovelace: lovelace,
+				Receiver: contractAddress,
+				Units:    units,
+				Datum:    pd,
+				IsInline: isInline,
+			},
 		)
 	} else if pd != nil {
 		dataHash, err := PlutusData.PlutusDataHash(pd)
@@ -571,7 +579,14 @@ func (b *Apollo) PayToAddressWithV1ReferenceScript(
 		}
 		return b
 	}
-	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+	return b.AddPayment(
+		&Payment{
+			Lovelace:  lovelace,
+			Receiver:  address,
+			Units:     units,
+			ScriptRef: &sr,
+		},
+	)
 }
 
 // PayToAddressWithV2ReferenceScript creates a payment to the specified address
@@ -592,7 +607,14 @@ func (b *Apollo) PayToAddressWithV2ReferenceScript(
 		}
 		return b
 	}
-	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+	return b.AddPayment(
+		&Payment{
+			Lovelace:  lovelace,
+			Receiver:  address,
+			Units:     units,
+			ScriptRef: &sr,
+		},
+	)
 }
 
 // PayToAddressWithV3ReferenceScript creates a payment to the specified address
@@ -613,7 +635,14 @@ func (b *Apollo) PayToAddressWithV3ReferenceScript(
 		}
 		return b
 	}
-	return b.AddPayment(&Payment{Lovelace: lovelace, Receiver: address, Units: units, ScriptRef: &sr})
+	return b.AddPayment(
+		&Payment{
+			Lovelace:  lovelace,
+			Receiver:  address,
+			Units:     units,
+			ScriptRef: &sr,
+		},
+	)
 }
 
 // PayToContractWithV1ReferenceScript creates a payment to a contract address with a datum
@@ -636,7 +665,13 @@ func (b *Apollo) PayToContractWithV1ReferenceScript(
 		}
 		return b
 	}
-	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+	return b.payToContractWithScriptRef(
+		contractAddress,
+		pd,
+		lovelace,
+		isInline,
+		&sr,
+		units...)
 }
 
 // PayToContractWithV2ReferenceScript creates a payment to a contract address with a datum
@@ -659,7 +694,13 @@ func (b *Apollo) PayToContractWithV2ReferenceScript(
 		}
 		return b
 	}
-	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+	return b.payToContractWithScriptRef(
+		contractAddress,
+		pd,
+		lovelace,
+		isInline,
+		&sr,
+		units...)
 }
 
 // PayToContractWithV3ReferenceScript creates a payment to a contract address with a datum
@@ -682,7 +723,13 @@ func (b *Apollo) PayToContractWithV3ReferenceScript(
 		}
 		return b
 	}
-	return b.payToContractWithScriptRef(contractAddress, pd, lovelace, isInline, &sr, units...)
+	return b.payToContractWithScriptRef(
+		contractAddress,
+		pd,
+		lovelace,
+		isInline,
+		&sr,
+		units...)
 }
 
 // payToContractWithScriptRef is a helper that creates a contract payment with a reference script.
@@ -700,7 +747,14 @@ func (b *Apollo) payToContractWithScriptRef(
 	}
 	if isInline {
 		b = b.AddPayment(
-			&Payment{Lovelace: lovelace, Receiver: contractAddress, Units: units, Datum: pd, IsInline: isInline, ScriptRef: sr},
+			&Payment{
+				Lovelace:  lovelace,
+				Receiver:  contractAddress,
+				Units:     units,
+				Datum:     pd,
+				IsInline:  isInline,
+				ScriptRef: sr,
+			},
 		)
 	} else if pd != nil {
 		dataHash, err := PlutusData.PlutusDataHash(pd)
@@ -1059,6 +1113,48 @@ func (b *Apollo) MintAssetsWithRedeemer(
 	}
 	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = newRedeemer
 	b.isEstimateRequired = true
+	return b
+}
+
+/*
+*
+
+	MintAssetsWithRedeemerAndExUnits adds a minting unit with an
+	associated redeemer and caller-supplied execution units to the
+	transaction's minting set. Use this when ExUnits have been
+	pre-computed (e.g. offline evaluation) and should not be
+	replaced by on-chain estimation.
+
+	Unlike MintAssetsWithRedeemer, this does not flip the estimation
+	flag; if the transaction needs estimation for other redeemers,
+	call SetEstimationExUnitsRequired() explicitly. Note that
+	enabling estimation will overwrite these ExUnits when the
+	evaluator returns values for this redeemer.
+
+	Params:
+		mintUnit Unit: The minting unit to add.
+		redeemerData PlutusData.PlutusData: The redeemer
+			data for the minting unit.
+		exUnits Redeemer.ExecutionUnits: The explicit
+			execution units to attach to the redeemer.
+
+	Returns:
+		*Apollo: A pointer to the Apollo object with
+		the minting unit added.
+*/
+func (b *Apollo) MintAssetsWithRedeemerAndExUnits(
+	mintUnit Unit,
+	redeemerData PlutusData.PlutusData,
+	exUnits Redeemer.ExecutionUnits,
+) *Apollo {
+	b.mint = append(b.mint, mintUnit)
+	newRedeemer := Redeemer.Redeemer{
+		Tag:     Redeemer.MINT,
+		Index:   0,
+		Data:    redeemerData,
+		ExUnits: exUnits,
+	}
+	b.mintRedeemers[mintUnit.PolicyId+mintUnit.Name] = newRedeemer
 	return b
 }
 
@@ -3991,7 +4087,9 @@ func (b *Apollo) SetCurrentTreasuryValue(
 		return b
 	}
 	if value < 0 {
-		b.err = errors.New("SetCurrentTreasuryValue: value must be non-negative")
+		b.err = errors.New(
+			"SetCurrentTreasuryValue: value must be non-negative",
+		)
 		return b
 	}
 	b.currentTreasuryValue = value

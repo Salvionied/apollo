@@ -670,6 +670,50 @@ func TestMintAssetsWithNativeScript(t *testing.T) {
 	}
 }
 
+func TestMintAssetsWithRedeemerAndExUnits(t *testing.T) {
+	cc := apollo.NewEmptyBackend()
+	utxos := testutils.InitUtxosDifferentiated()
+	explicitExUnits := Redeemer.ExecutionUnits{
+		Mem:   1_234_567,
+		Steps: 987_654_321,
+	}
+	mintUnit := apollo.NewUnit(
+		"279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f",
+		"TEST",
+		1,
+	)
+	built, _, err := apollo.New(&cc).
+		SetChangeAddress(decoded_addr).
+		AddLoadedUTxOs(utxos...).
+		MintAssetsWithRedeemerAndExUnits(
+			mintUnit,
+			PlutusData.PlutusData{},
+			explicitExUnits,
+		).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemers := built.GetTx().TransactionWitnessSet.Redeemer
+	var mintRedeemers []Redeemer.Redeemer
+	for _, r := range redeemers {
+		if r.Tag == Redeemer.MINT {
+			mintRedeemers = append(mintRedeemers, r)
+		}
+	}
+	if len(mintRedeemers) != 1 {
+		t.Fatalf("expected 1 mint redeemer, got %d", len(mintRedeemers))
+	}
+	got := mintRedeemers[0].ExUnits
+	if got != explicitExUnits {
+		t.Errorf(
+			"ExUnits not preserved: got %+v, want %+v",
+			got,
+			explicitExUnits,
+		)
+	}
+}
+
 func TestSetMetadataFromJSON(t *testing.T) {
 	cc := apollo.NewEmptyBackend()
 	utxos := testutils.InitUtxosDifferentiated()
@@ -1442,7 +1486,13 @@ func TestPayToContractWithV2ReferenceScript(t *testing.T) {
 
 	apollob := apollo.New(&cc)
 	apollob = apollob.
-		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		PayToContractWithV2ReferenceScript(
+			decoded_addr,
+			&datum,
+			5_000_000,
+			true,
+			script,
+		).
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
@@ -1481,7 +1531,13 @@ func TestPayToContractWithV2ReferenceScriptDatumHash(t *testing.T) {
 
 	apollob := apollo.New(&cc)
 	apollob = apollob.
-		PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, false, script).
+		PayToContractWithV2ReferenceScript(
+			decoded_addr,
+			&datum,
+			5_000_000,
+			false,
+			script,
+		).
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
@@ -1501,7 +1557,9 @@ func TestPayToContractWithV2ReferenceScriptDatumHash(t *testing.T) {
 		t.Fatal("Expected ScriptRef to be set on output")
 	}
 	if outputs[0].PostAlonzo.Datum == nil {
-		t.Fatal("Expected datum hash to be set on post-Alonzo output with ScriptRef")
+		t.Fatal(
+			"Expected datum hash to be set on post-Alonzo output with ScriptRef",
+		)
 	}
 }
 
@@ -1520,7 +1578,13 @@ func TestPayToContractWithV1ReferenceScript(t *testing.T) {
 
 	apollob := apollo.New(&cc)
 	apollob = apollob.
-		PayToContractWithV1ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		PayToContractWithV1ReferenceScript(
+			decoded_addr,
+			&datum,
+			5_000_000,
+			true,
+			script,
+		).
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
@@ -1559,7 +1623,13 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 
 	apollob := apollo.New(&cc)
 	apollob = apollob.
-		PayToContractWithV3ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
+		PayToContractWithV3ReferenceScript(
+			decoded_addr,
+			&datum,
+			5_000_000,
+			true,
+			script,
+		).
 		SetChangeAddress(decoded_addr).
 		AddLoadedUTxOs(utxos...)
 
