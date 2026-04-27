@@ -3018,7 +3018,7 @@ func (b *Apollo) Complete() (
 	mintedValue := b.getPositiveMints()
 	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
-	requestedAmount.Add(burnedValue)
+	requestedAmount = requestedAmount.Add(burnedValue)
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
