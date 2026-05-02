@@ -2905,7 +2905,7 @@ func (ps3 *PlutusV3Script) ToAddress(
 				StakingPart: nil,
 				Network:     Address.TESTNET,
 				AddressType: Address.SCRIPT_KEY,
-				HeaderByte:  0b01110001,
+				HeaderByte:  0b01110000,
 				Hrp:         "addr_test",
 			}
 		}
