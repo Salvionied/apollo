@@ -3110,6 +3110,10 @@ func (b *Apollo) Complete() (
 			//BALANCE WITH ASSETS
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
+					if selectedAmount.GetAssets().
+						GetByPolicyAndId(pol, asset) >= amt {
+						continue
+					}
 					found := false
 					selectedSoFar := int64(0)
 					usedIdxs := make([]int, 0)
