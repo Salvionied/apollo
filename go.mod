@@ -10,7 +10,7 @@ require (
 	github.com/blinklabs-io/go-bip39 v0.2.0
 	github.com/fxamacker/cbor/v2 v2.9.1
 	github.com/maestro-org/go-sdk v1.2.1
-	github.com/utxorpc/go-codegen v0.18.1
+	github.com/utxorpc/go-codegen v0.19.0
 	github.com/utxorpc/go-sdk v0.0.3
 	golang.org/x/crypto v0.50.0
 	golang.org/x/text v0.36.0
