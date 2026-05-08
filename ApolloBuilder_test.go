@@ -1652,3 +1652,62 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 		t.Fatal("Expected inline datum to be set on output")
 	}
 }
+
+func TestPureBurnOnlyTransactionComplete(t *testing.T) {
+	cc := FixedChainContext.InitFixedChainContext()
+	utxos := testutils.InitUtxos()
+
+	const (
+		policyHex = "00000000000000000000000000000000000000000000000000000000"
+		assetName = "token0"
+	)
+	const burnQty = -100
+
+	built, _, err := apollo.New(&cc).
+		AddInputAddressFromBech32(testutils.TESTADDRESS).
+		AddLoadedUTxOs(utxos...).
+		MintAssets(apollo.NewUnit(policyHex, assetName, burnQty)).
+		Complete()
+	if err != nil {
+		t.Fatalf(
+			"Complete() returned error for pure-burn tx: %v", err,
+		)
+	}
+
+	tx := built.GetTx()
+	if tx == nil {
+		t.Fatal("GetTx() returned nil after successful Complete()")
+	}
+
+	utxoByKey := make(map[string]UTxO.UTxO, len(utxos))
+	for _, u := range utxos {
+		utxoByKey[u.GetKey()] = u
+	}
+
+	inputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, inp := range tx.TransactionBody.Inputs {
+		key := fmt.Sprintf(
+			"%s:%d",
+			hex.EncodeToString(inp.TransactionId),
+			inp.Index,
+		)
+		if u, ok := utxoByKey[key]; ok {
+			inputVal = inputVal.Add(u.Output.GetAmount())
+		}
+	}
+
+	outputVal := Value.SimpleValue(0, MultiAsset.MultiAsset[int64]{})
+	for _, out := range tx.TransactionBody.Outputs {
+		outputVal = outputVal.Add(out.GetAmount())
+	}
+	outputVal.AddLovelace(built.Fee)
+	outputVal = outputVal.Add(built.GetBurns())
+
+	if !inputVal.Equal(outputVal) {
+		t.Errorf(
+			"tx not balanced: inputs=%v  outputs+fee+burns=%v",
+			inputVal,
+			outputVal,
+		)
+	}
+}

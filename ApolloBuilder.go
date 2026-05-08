@@ -3018,7 +3018,7 @@ func (b *Apollo) Complete() (
 	mintedValue := b.getPositiveMints()
 	selectedAmount = selectedAmount.Add(mintedValue)
 	requestedAmount := Value.Value{}
-	requestedAmount.Add(burnedValue)
+	requestedAmount = requestedAmount.Add(burnedValue)
 	for _, payment := range b.payments {
 		payment.EnsureMinUTXO(b.Context)
 		requestedAmount = requestedAmount.Add(payment.ToValue())
@@ -3110,6 +3110,10 @@ func (b *Apollo) Complete() (
 			//BALANCE WITH ASSETS
 			for pol, assets := range unfulfilledAmount.GetAssets() {
 				for asset, amt := range assets {
+					if selectedAmount.GetAssets().
+						GetByPolicyAndId(pol, asset) >= amt {
+						continue
+					}
 					found := false
 					selectedSoFar := int64(0)
 					usedIdxs := make([]int, 0)
