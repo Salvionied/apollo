@@ -503,7 +503,7 @@ func unmarshalPlutus(
 	network byte,
 ) error {
 	types := reflect.TypeOf(v)
-	if types.Kind() != reflect.Ptr {
+	if types.Kind() != reflect.Pointer {
 		return fmt.Errorf("error: v is not a pointer %v", v)
 	}
 	constr := data.TagNr
@@ -516,7 +516,7 @@ func unmarshalPlutus(
 		fields, _ := tps.FieldByName("_")
 		switch data.PlutusDataType {
 		case PlutusData.PlutusArray:
-			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+			if reflect.TypeOf(v).Kind() != reflect.Pointer {
 				return errors.New("error: v is not a pointer")
 			}
 			if fields.Tag.Get("plutusType") != "IndefList" &&
@@ -1077,7 +1077,7 @@ func unmarshalPlutus(
 			return errors.New("error: unknown type")
 		}
 	} else {
-		if types.Kind() == reflect.Ptr {
+		if types.Kind() == reflect.Pointer {
 			types = types.Elem()
 		}
 		switch types.Kind() {
@@ -1085,7 +1085,7 @@ func unmarshalPlutus(
 			if data.PlutusDataType != PlutusData.PlutusBytes {
 				return errors.New("error: Bytes field is not a slice")
 			}
-			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+			if reflect.TypeOf(v).Kind() != reflect.Pointer {
 				return errors.New("error: v is not a pointer")
 			}
 			if reflect.TypeOf(v).Elem().Kind() != reflect.String {
@@ -1096,7 +1096,7 @@ func unmarshalPlutus(
 			if data.PlutusDataType != PlutusData.PlutusInt {
 				return errors.New("error: Int field is not int64")
 			}
-			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+			if reflect.TypeOf(v).Kind() != reflect.Pointer {
 				return errors.New("error: v is not a pointer")
 			}
 			if reflect.TypeOf(v).Elem().Kind() != reflect.Int {
@@ -1107,7 +1107,7 @@ func unmarshalPlutus(
 			if data.PlutusDataType != PlutusData.PlutusBytes {
 				return errors.New("error: Bytes field is not a slice")
 			}
-			if reflect.TypeOf(v).Kind() != reflect.Ptr {
+			if reflect.TypeOf(v).Kind() != reflect.Pointer {
 				return errors.New("error: v is not a pointer")
 			}
 			if reflect.TypeOf(v).Elem().Kind() != reflect.Slice {
