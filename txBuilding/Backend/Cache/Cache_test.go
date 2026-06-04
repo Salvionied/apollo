@@ -3,9 +3,20 @@ package Cache
 import (
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"testing"
 )
+
+func useTempCacheDir(t *testing.T) {
+	t.Helper()
+
+	cacheDir = filepath.Join(t.TempDir(), "apollo-cache")
+	cacheDirOnce = sync.Once{}
+	t.Cleanup(func() {
+		cacheDir = ""
+		cacheDirOnce = sync.Once{}
+	})
+}
 
 func TestSanitizeKey(t *testing.T) {
 	tests := []struct {
@@ -34,6 +45,8 @@ func TestSanitizeKey(t *testing.T) {
 }
 
 func TestGetSet(t *testing.T) {
+	useTempCacheDir(t)
+
 	// Test basic get/set functionality
 	type TestData struct {
 		Name  string `json:"name"`
@@ -64,6 +77,8 @@ func TestGetSet(t *testing.T) {
 }
 
 func TestGetMissingKey(t *testing.T) {
+	useTempCacheDir(t)
+
 	var data string
 	found := Get("nonexistent_key_12345", &data)
 	if found {
@@ -72,6 +87,8 @@ func TestGetMissingKey(t *testing.T) {
 }
 
 func TestPathTraversalPrevention(t *testing.T) {
+	useTempCacheDir(t)
+
 	// Attempt to write to a path outside the cache directory
 	maliciousKey := "../../../tmp/malicious"
 
@@ -97,16 +114,25 @@ func TestPathTraversalPrevention(t *testing.T) {
 	}
 }
 
-func TestCacheUsesSystemTempDir(t *testing.T) {
-	dir := getCacheDir()
-	tempDir := os.TempDir()
+func TestCacheUsesPrivateDir(t *testing.T) {
+	useTempCacheDir(t)
 
-	// Check that cache dir starts with temp dir
-	if !strings.HasPrefix(dir, tempDir) {
-		t.Errorf("Cache directory %q is not under system temp dir %q", dir, tempDir)
+	dir := getCacheDir()
+	if err := ensureCacheDir(); err != nil {
+		t.Fatalf("ensureCacheDir failed: %v", err)
 	}
 
 	if filepath.Base(dir) != "apollo-cache" {
-		t.Errorf("Cache directory should be named 'apollo-cache', got %q", filepath.Base(dir))
+		t.Errorf(
+			"Cache directory should be named 'apollo-cache', got %q",
+			filepath.Base(dir),
+		)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat cache dir: %v", err)
+	}
+	if info.Mode().Perm() != 0700 {
+		t.Errorf("cache directory permissions = %o, want 0700", info.Mode().Perm())
 	}
 }

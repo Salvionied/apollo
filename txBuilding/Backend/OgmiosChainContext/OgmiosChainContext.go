@@ -94,34 +94,40 @@ func (occ *OgmiosChainContext) Init() error {
 
 func multiAsset_OgmigoToApollo(
 	m map[string]map[string]num.Int,
-) MultiAsset.MultiAsset[int64] {
+) (MultiAsset.MultiAsset[int64], error) {
 	if len(m) == 0 {
-		return nil
+		return nil, nil
 	}
 	assetMap := make(map[Policy.PolicyId]Asset.Asset[int64])
 	for policy, tokens := range m {
 		tokensMap := make(map[AssetName.AssetName]int64)
 		for token, amt := range tokens {
-			tok := *AssetName.NewAssetNameFromHexString(token)
-			tokensMap[tok] = amt.Int64()
+			assetName := AssetName.NewAssetNameFromHexString(token)
+			if assetName == nil {
+				return nil, fmt.Errorf("invalid asset name %q", token)
+			}
+			tokensMap[*assetName] = amt.Int64()
 		}
-		pol := Policy.PolicyId{
-			Value: policy,
+		pol, err := Policy.New(policy)
+		if err != nil {
+			return nil, fmt.Errorf("invalid policy id %q: %w", policy, err)
 		}
-		assetMap[pol] = make(map[AssetName.AssetName]int64)
-		assetMap[pol] = tokensMap
+		assetMap[*pol] = tokensMap
 	}
-	return assetMap
+	return assetMap, nil
 }
 
-func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
-	ass := multiAsset_OgmigoToApollo(v.AssetsExceptAda())
+func value_OgmigoToApollo(v shared.Value) (Value.AlonzoValue, error) {
+	ass, err := multiAsset_OgmigoToApollo(v.AssetsExceptAda())
+	if err != nil {
+		return Value.AlonzoValue{}, err
+	}
 	if ass == nil {
 		return Value.AlonzoValue{
 			Am:        Amount.AlonzoAmount{},
 			Coin:      v.AdaLovelace().Int64(),
 			HasAssets: false,
-		}
+		}, nil
 	}
 	return Value.AlonzoValue{
 		Am: Amount.AlonzoAmount{
@@ -130,7 +136,7 @@ func value_OgmigoToApollo(v shared.Value) Value.AlonzoValue {
 		},
 		Coin:      0,
 		HasAssets: true,
-	}
+	}, nil
 }
 
 func datum_OgmigoToApollo(
@@ -215,7 +221,13 @@ func Utxo_OgmigoToApollo(u shared.Utxo) (UTxO.UTxO, error) {
 	if err != nil {
 		return UTxO.UTxO{}, err
 	}
-	v := value_OgmigoToApollo(u.Value)
+	v, err := value_OgmigoToApollo(u.Value)
+	if err != nil {
+		return UTxO.UTxO{}, fmt.Errorf(
+			"OgmiosChainContext: failed to convert value: %w",
+			err,
+		)
+	}
 	scriptRef, err := scriptRef_OgmigoToApollo(u.Script)
 	if err != nil {
 		return UTxO.UTxO{}, fmt.Errorf(
@@ -878,13 +890,19 @@ func (occ *OgmiosChainContext) Utxos(
 						err,
 					)
 				}
-				policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-				asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
-				_, ok := multi_assets[policy_id]
-				if !ok {
-					multi_assets[policy_id] = Asset.Asset[int64]{}
+				policyID, assetName, err := Base.ParseAssetUnit(item.Unit)
+				if err != nil {
+					return nil, fmt.Errorf(
+						"OgmiosChainContext: Utxos: invalid asset unit %q: %w",
+						item.Unit,
+						err,
+					)
 				}
-				multi_assets[policy_id][asset_name] = int64(asset_quantity)
+				_, ok := multi_assets[policyID]
+				if !ok {
+					multi_assets[policyID] = Asset.Asset[int64]{}
+				}
+				multi_assets[policyID][assetName] = int64(asset_quantity)
 			}
 		}
 		var final_amount Value.Value

@@ -27,6 +27,9 @@ func New(value string) (*PolicyId, error) {
 	if len(value) != 56 {
 		return nil, errors.New("invalid length of a policy id")
 	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return nil, err
+	}
 	return &PolicyId{
 		Value: value,
 	}, nil
@@ -116,6 +119,9 @@ func (policyId *PolicyId) UnmarshalCBOR(value []byte) error {
 		hexString := res
 		if len(hexString) != 56 {
 			return errors.New("invalid length of a policy id")
+		}
+		if _, err := hex.DecodeString(hexString); err != nil {
+			return err
 		}
 		policyId.Value = hexString
 	default:

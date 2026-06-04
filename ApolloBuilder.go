@@ -355,7 +355,13 @@ func (b *Apollo) AddInputAddress(address Address.Address) *Apollo {
 		*Apollo: A pointer to the modified Apollo instance.
 */
 func (b *Apollo) AddInputAddressFromBech32(address string) *Apollo {
-	decoded_addr, _ := Address.DecodeAddress(address)
+	decoded_addr, err := Address.DecodeAddress(address)
+	if err != nil {
+		if b.err == nil {
+			b.err = fmt.Errorf("AddInputAddressFromBech32: %w", err)
+		}
+		return b
+	}
 	b.inputAddresses = append(b.inputAddresses, decoded_addr)
 	return b
 }
@@ -800,8 +806,22 @@ func (b *Apollo) AddRequiredSignerFromBech32(
 	address string,
 	addPaymentPart, addStakingPart bool,
 ) *Apollo {
-	decoded_addr, _ := Address.DecodeAddress(address)
+	decoded_addr, err := Address.DecodeAddress(address)
+	if err != nil {
+		if b.err == nil {
+			b.err = fmt.Errorf("AddRequiredSignerFromBech32: %w", err)
+		}
+		return b
+	}
 	if addPaymentPart {
+		if len(decoded_addr.PaymentPart) != serialization.VERIFICATION_KEY_HASH_SIZE {
+			if b.err == nil {
+				b.err = errors.New(
+					"AddRequiredSignerFromBech32: invalid payment part length",
+				)
+			}
+			return b
+		}
 		b.requiredSigners = append(
 			b.requiredSigners,
 			serialization.PubKeyHash(decoded_addr.PaymentPart[0:28]),
@@ -809,6 +829,14 @@ func (b *Apollo) AddRequiredSignerFromBech32(
 
 	}
 	if addStakingPart {
+		if len(decoded_addr.StakingPart) != serialization.VERIFICATION_KEY_HASH_SIZE {
+			if b.err == nil {
+				b.err = errors.New(
+					"AddRequiredSignerFromBech32: invalid staking part length",
+				)
+			}
+			return b
+		}
 		b.requiredSigners = append(
 			b.requiredSigners,
 			serialization.PubKeyHash(decoded_addr.StakingPart[0:28]),
@@ -864,12 +892,28 @@ func (b *Apollo) AddRequiredSignerFromAddress(
 	addPaymentPart, addStakingPart bool,
 ) *Apollo {
 	if addPaymentPart {
+		if len(address.PaymentPart) != serialization.VERIFICATION_KEY_HASH_SIZE {
+			if b.err == nil {
+				b.err = errors.New(
+					"AddRequiredSignerFromAddress: invalid payment part length",
+				)
+			}
+			return b
+		}
 		pkh := serialization.PubKeyHash(address.PaymentPart)
 
 		b.requiredSigners = append(b.requiredSigners, pkh)
 
 	}
 	if addStakingPart {
+		if len(address.StakingPart) != serialization.VERIFICATION_KEY_HASH_SIZE {
+			if b.err == nil {
+				b.err = errors.New(
+					"AddRequiredSignerFromAddress: invalid staking part length",
+				)
+			}
+			return b
+		}
 		pkh := serialization.PubKeyHash(address.StakingPart)
 
 		b.requiredSigners = append(b.requiredSigners, pkh)
@@ -3764,11 +3808,35 @@ func (a *Apollo) SetWalletFromKeypair(
 ) *Apollo {
 	verificationKey_bytes, err := hex.DecodeString(vkey)
 	if err != nil {
-		fmt.Println("SetWalletFromKeypair: Failed to decode vkey")
+		if a.err == nil {
+			a.err = fmt.Errorf("SetWalletFromKeypair: decode vkey: %w", err)
+		}
+		return a
+	}
+	if len(verificationKey_bytes) != ed25519.PublicKeySize {
+		if a.err == nil {
+			a.err = fmt.Errorf(
+				"SetWalletFromKeypair: invalid vkey length %d",
+				len(verificationKey_bytes),
+			)
+		}
+		return a
 	}
 	signingKey_bytes, err := hex.DecodeString(skey)
 	if err != nil {
-		fmt.Println("SetWalletFromKeypair: Failed to decode skey")
+		if a.err == nil {
+			a.err = fmt.Errorf("SetWalletFromKeypair: decode skey: %w", err)
+		}
+		return a
+	}
+	if len(signingKey_bytes) != ed25519.SeedSize {
+		if a.err == nil {
+			a.err = fmt.Errorf(
+				"SetWalletFromKeypair: invalid skey seed length %d",
+				len(signingKey_bytes),
+			)
+		}
+		return a
 	}
 	// There are two slightly different interpretations of ed25519,
 	// depending on which thing you call the "private key".
@@ -3778,7 +3846,13 @@ func (a *Apollo) SetWalletFromKeypair(
 		Payload: ed25519.NewKeyFromSeed(signingKey_bytes),
 	}
 	verificationKey := Key.VerificationKey{Payload: verificationKey_bytes}
-	vkh, _ := verificationKey.Hash()
+	vkh, err := verificationKey.Hash()
+	if err != nil {
+		if a.err == nil {
+			a.err = fmt.Errorf("SetWalletFromKeypair: hash vkey: %w", err)
+		}
+		return a
+	}
 
 	var addr Address.Address
 	if network == constants.MAINNET {

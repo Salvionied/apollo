@@ -47,7 +47,10 @@ func (an *AssetName) MarshalCBOR() ([]byte, error) {
 		return nil, errors.New("invalid asset name length")
 	}
 
-	byteSlice, _ := hex.DecodeString(an.value)
+	byteSlice, err := hex.DecodeString(an.value)
+	if err != nil {
+		return nil, err
+	}
 
 	return cbor.Marshal(byteSlice)
 }
