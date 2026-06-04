@@ -59,6 +59,10 @@ type Apollo struct {
 	certificates       []common.CertificateWrapper
 	withdrawals        map[string]withdrawalEntry
 	auxiliaryData      *auxData
+	votingProcedures   common.VotingProcedures
+	proposalProcedures []conway.ConwayProposalProcedure
+	currentTreasury    int64
+	treasuryDonation   int64
 	collateralAmount   int64
 	scriptHashes       []string
 	changeAddress      *common.Address
@@ -632,6 +636,85 @@ func (a *Apollo) RegisterPool(params common.PoolRegistrationCertificate) *Apollo
 	return a
 }
 
+// RegisterDRep adds a DRep registration certificate.
+func (a *Apollo) RegisterDRep(cred common.Credential, coin int64, anchor *common.GovAnchor) *Apollo {
+	if coin < 0 {
+		a.setErrOnce(errors.New("RegisterDRep: coin must be non-negative"))
+		return a
+	}
+	cert := common.RegistrationDrepCertificate{
+		CertType:       uint(common.CertificateTypeRegistrationDrep),
+		DrepCredential: cred,
+		Amount:         coin,
+		Anchor:         cloneGovAnchor(anchor),
+	}
+	a.certificates = append(a.certificates, common.CertificateWrapper{
+		Type:        uint(common.CertificateTypeRegistrationDrep),
+		Certificate: &cert,
+	})
+	return a
+}
+
+// RetireDRep adds a DRep deregistration certificate.
+func (a *Apollo) RetireDRep(cred common.Credential, coin int64) *Apollo {
+	if coin < 0 {
+		a.setErrOnce(errors.New("RetireDRep: coin must be non-negative"))
+		return a
+	}
+	cert := common.DeregistrationDrepCertificate{
+		CertType:       uint(common.CertificateTypeDeregistrationDrep),
+		DrepCredential: cred,
+		Amount:         coin,
+	}
+	a.certificates = append(a.certificates, common.CertificateWrapper{
+		Type:        uint(common.CertificateTypeDeregistrationDrep),
+		Certificate: &cert,
+	})
+	return a
+}
+
+// UpdateDRep adds a DRep update certificate.
+func (a *Apollo) UpdateDRep(cred common.Credential, anchor *common.GovAnchor) *Apollo {
+	cert := common.UpdateDrepCertificate{
+		CertType:       uint(common.CertificateTypeUpdateDrep),
+		DrepCredential: cred,
+		Anchor:         cloneGovAnchor(anchor),
+	}
+	a.certificates = append(a.certificates, common.CertificateWrapper{
+		Type:        uint(common.CertificateTypeUpdateDrep),
+		Certificate: &cert,
+	})
+	return a
+}
+
+// AuthorizeCommitteeHotKey adds a committee hot key authorization certificate.
+func (a *Apollo) AuthorizeCommitteeHotKey(cold common.Credential, hot common.Credential) *Apollo {
+	cert := common.AuthCommitteeHotCertificate{
+		CertType:       uint(common.CertificateTypeAuthCommitteeHot),
+		ColdCredential: cold,
+		HotCredential:  hot,
+	}
+	a.certificates = append(a.certificates, common.CertificateWrapper{
+		Type:        uint(common.CertificateTypeAuthCommitteeHot),
+		Certificate: &cert,
+	})
+	return a
+}
+
+// ResignCommitteeColdKey adds a committee cold key resignation certificate.
+func (a *Apollo) ResignCommitteeColdKey(cold common.Credential, anchor *common.GovAnchor) *Apollo {
+	cert := common.ResignCommitteeColdCertificate{
+		CertType:       uint(common.CertificateTypeResignCommitteeCold),
+		ColdCredential: cold,
+		Anchor:         cloneGovAnchor(anchor),
+	}
+	a.certificates = append(a.certificates, common.CertificateWrapper{
+		Type:        uint(common.CertificateTypeResignCommitteeCold),
+		Certificate: &cert,
+	})
+	return a
+}
+
 // DeregisterPool adds a pool retirement certificate.
 func (a *Apollo) DeregisterPool(poolHash common.Blake2b224, epoch uint64) *Apollo {
 	cert := common.PoolRetirementCertificate{
@@ -689,6 +772,78 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 // SetShelleyMetadata sets transaction metadata from a key-value map.
 func (a *Apollo) SetShelleyMetadata(metadata map[uint64]any) *Apollo {
 	a.auxiliaryData = &auxData{metadata: metadata}
+	return a
+}
+
+// SetShelleyMetadataFromJSON parses cardano-cli no-schema metadata JSON and sets it.
+func (a *Apollo) SetShelleyMetadataFromJSON(jsonData []byte) (*Apollo, error) {
+	return a.SetShelleyMetadataFromJSONWithSchema(jsonData, MetadataJSONNoSchema)
+}
+
+// SetShelleyMetadataFromJSONWithSchema parses metadata JSON with the selected schema and sets it.
+func (a *Apollo) SetShelleyMetadataFromJSONWithSchema(jsonData []byte, schema MetadataJSONSchema) (*Apollo, error) {
+	metadata, err := ShelleyMetadataFromJSONWithSchema(jsonData, schema)
+	if err != nil {
+		return a, err
+	}
+	a.SetShelleyMetadata(metadata)
+	return a, nil
+}
+
+// SetCurrentTreasuryValue sets the Conway current treasury value field.
+func (a *Apollo) SetCurrentTreasuryValue(value int64) *Apollo {
+	if value < 0 {
+		a.setErrOnce(errors.New("SetCurrentTreasuryValue: value must be non-negative"))
+		return a
+	}
+	a.currentTreasury = value
+	return a
+}
+
+// AddTreasuryDonation adds to the Conway treasury donation amount.
+func (a *Apollo) AddTreasuryDonation(amount int64) *Apollo {
+	if amount < 0 {
+		a.setErrOnce(errors.New("AddTreasuryDonation: amount must be non-negative"))
+		return a
+	}
+	if math.MaxInt64-a.treasuryDonation < amount {
+		a.setErrOnce(errors.New("AddTreasuryDonation: donation amount overflow"))
+		return a
+	}
+	a.treasuryDonation += amount
+	return a
+}
+
+// AddVote adds or replaces a Conway governance vote for a voter/action pair.
+func (a *Apollo) AddVote(voter common.Voter, actionId common.GovActionId, procedure common.VotingProcedure) *Apollo {
+	if a.votingProcedures == nil {
+		a.votingProcedures = make(common.VotingProcedures)
+	}
+	procedure.Anchor = cloneGovAnchor(procedure.Anchor)
+	voterKey := findVotingProcedureVoter(a.votingProcedures, voter)
+	if voterKey == nil {
+		voterCopy := voter
+		voterKey = &voterCopy
+		a.votingProcedures[voterKey] = make(map[*common.GovActionId]common.VotingProcedure)
+	}
+	actionVotes := a.votingProcedures[voterKey]
+	if actionVotes == nil {
+		actionVotes = make(map[*common.GovActionId]common.VotingProcedure)
+		a.votingProcedures[voterKey] = actionVotes
+	}
+	actionKey := findVotingProcedureAction(actionVotes, actionId)
+	if actionKey == nil {
+		actionCopy := actionId
+		actionKey = &actionCopy
+	}
+	actionVotes[actionKey] = procedure
+	return a
+}
+
+// AddProposal adds a Conway governance proposal procedure.
+func (a *Apollo) AddProposal(proposal conway.ConwayProposalProcedure) *Apollo {
+	proposal.PPAnchor = *cloneGovAnchor(&proposal.PPAnchor)
+	a.proposalProcedures = append(a.proposalProcedures, proposal)
 	return a
 }
 
@@ -763,6 +918,8 @@ func (a *Apollo) Clone() *Apollo {
 		ValidityStart:      a.ValidityStart,
 		totalCollateral:    a.totalCollateral,
 		collateralAmount:   a.collateralAmount,
+		currentTreasury:    a.currentTreasury,
+		treasuryDonation:   a.treasuryDonation,
 		estimateExUnits:    a.estimateExUnits,
 		wallet:             a.wallet,
 		err:                a.err,
@@ -803,6 +960,8 @@ func (a *Apollo) Clone() *Apollo {
 	maps.Copy(clone.usedUtxos, a.usedUtxos)
 	clone.certificates = append(clone.certificates, a.certificates...)
 	clone.scriptHashes = append(clone.scriptHashes, a.scriptHashes...)
+	clone.proposalProcedures = append(clone.proposalProcedures, a.proposalProcedures...)
+	clone.votingProcedures = cloneVotingProcedures(a.votingProcedures)
 	maps.Copy(clone.redeemers, a.redeemers)
 	maps.Copy(clone.stakeRedeemers, a.stakeRedeemers)
 	maps.Copy(clone.mintRedeemers, a.mintRedeemers)
@@ -916,6 +1075,14 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	totalRequired, err = a.adjustForCertificateDeposits(totalRequired, stakeDeposit)
 	if err != nil {
 		return a, fmt.Errorf("certificate deposit overflow: %w", err)
+	}
+	governanceRequired, err := a.governanceRequiredValue()
+	if err != nil {
+		return a, err
+	}
+	totalRequired, err = totalRequired.Add(governanceRequired)
+	if err != nil {
+		return a, fmt.Errorf("governance value overflow: %w", err)
 	}
 
 	// Add preselected UTxO value plus implicit inputs (withdrawals, mints)
@@ -1089,6 +1256,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 				if depositAdj > 0 {
 					totalOutputCoin += uint64(depositAdj)
 				}
+				totalOutputCoin += governanceRequired.Coin
 				if totalOutputCoin > totalInputCoin {
 					return a, fmt.Errorf("insufficient funds: need %d more lovelace for change output min UTxO", totalOutputCoin-totalInputCoin)
 				}
@@ -1562,6 +1730,19 @@ func (a *Apollo) buildBody(
 		body.TxWithdrawals = wdMap
 	}
 
+	if len(a.votingProcedures) > 0 {
+		body.TxVotingProcedures = a.votingProcedures
+	}
+	if len(a.proposalProcedures) > 0 {
+		body.TxProposalProcedures = a.proposalProcedures
+	}
+	if a.currentTreasury > 0 {
+		body.TxCurrentTreasuryValue = a.currentTreasury
+	}
+	if a.treasuryDonation > 0 {
+		body.TxDonation = uint64(a.treasuryDonation) //nolint:gosec // validated non-negative above
+	}
+
 	// Auxiliary data hash
 	if a.auxiliaryData != nil {
 		auxHash, auxErr := a.computeAuxDataHash()
@@ -1825,6 +2006,21 @@ func (a *Apollo) sortedWithdrawalKeys() []string {
 	return keys
 }
 
+func (a *Apollo) governanceRequiredValue() (Value, error) {
+	total := uint64(0)
+	if a.treasuryDonation > 0 {
+		total = uint64(a.treasuryDonation) //nolint:gosec // validated non-negative by AddTreasuryDonation
+	}
+	for _, proposal := range a.proposalProcedures {
+		deposit := proposal.Deposit()
+		if math.MaxUint64-total < deposit {
+			return Value{}, errors.New("governance proposal deposits overflow")
+		}
+		total += deposit
+	}
+	return NewSimpleValue(total), nil
+}
+
 func (a *Apollo) hasMint() bool {
 	return len(a.mint) > 0
 }
@@ -2084,6 +2280,14 @@ func (a *Apollo) certificateDepositAdjustment(depositPerCert int64) int64 {
 		case uint(common.CertificateTypeStakeDeregistration),
 			uint(common.CertificateTypeDeregistration):
 			adjustment -= depositPerCert
+		case uint(common.CertificateTypeRegistrationDrep):
+			if c, ok := cert.Certificate.(*common.RegistrationDrepCertificate); ok {
+				adjustment += c.Amount
+			}
+		case uint(common.CertificateTypeDeregistrationDrep):
+			if c, ok := cert.Certificate.(*common.DeregistrationDrepCertificate); ok {
+				adjustment -= c.Amount
+			}
 		}
 	}
 	return adjustment
@@ -2116,6 +2320,53 @@ func addScriptLanguage(used map[string]struct{}, script common.Script) {
 	case common.PlutusV3Script, *common.PlutusV3Script:
 		used["PlutusV3"] = struct{}{}
 	}
+}
+
+func cloneGovAnchor(anchor *common.GovAnchor) *common.GovAnchor {
+	if anchor == nil {
+		return nil
+	}
+	cp := *anchor
+	return &cp
+}
+
+func findVotingProcedureVoter(votes common.VotingProcedures, voter common.Voter) *common.Voter {
+	for existing := range votes {
+		if existing.Type == voter.Type && existing.Hash == voter.Hash {
+			return existing
+		}
+	}
+	return nil
+}
+
+func findVotingProcedureAction(
+	votes map[*common.GovActionId]common.VotingProcedure,
+	actionId common.GovActionId,
+) *common.GovActionId {
+	for existing := range votes {
+		if existing.TransactionId == actionId.TransactionId && existing.GovActionIdx == actionId.GovActionIdx {
+			return existing
+		}
+	}
+	return nil
+}
+
+func cloneVotingProcedures(src common.VotingProcedures) common.VotingProcedures {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(common.VotingProcedures, len(src))
+	for voter, votes := range src {
+		voterCopy := *voter
+		voteCopy := make(map[*common.GovActionId]common.VotingProcedure, len(votes))
+		for actionId, procedure := range votes {
+			actionCopy := *actionId
+			procedure.Anchor = cloneGovAnchor(procedure.Anchor)
+			voteCopy[&actionCopy] = procedure
+		}
+		dst[&voterCopy] = voteCopy
+	}
+	return dst
 }
 
 // computeAuxDataHash computes the blake2b-256 hash of the CBOR-encoded auxiliary data.
@@ -2178,8 +2429,29 @@ func toMetadatum(v any) (common.TransactionMetadatum, error) {
 		return common.MetaInt{Value: big.NewInt(tv)}, nil
 	case uint64:
 		return common.MetaInt{Value: new(big.Int).SetUint64(tv)}, nil
+	case *big.Int:
+		if tv == nil {
+			return nil, errors.New("nil metadata integer")
+		}
+		return common.MetaInt{Value: new(big.Int).Set(tv)}, nil
+	case big.Int:
+		return common.MetaInt{Value: new(big.Int).Set(&tv)}, nil
 	case []byte:
 		return common.MetaBytes{Value: tv}, nil
+	case MetadataMap:
+		pairs := make([]common.MetaPair, 0, len(tv))
+		for idx, entry := range tv {
+			key, err := toMetadatum(entry.Key)
+			if err != nil {
+				return nil, fmt.Errorf("map entry %d key: %w", idx, err)
+			}
+			val, err := toMetadatum(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("map entry %d value: %w", idx, err)
+			}
+			pairs = append(pairs, common.MetaPair{Key: key, Value: val})
+		}
+		return common.MetaMap{Pairs: pairs}, nil
 	case map[string]any:
 		sortedKeys := make([]string, 0, len(tv))
 		for mk := range tv {

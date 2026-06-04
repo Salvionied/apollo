@@ -1,26 +1,36 @@
 # AI Agent Instructions
 
-This file provides guidance for AI coding agents working with this repository.
+This file provides guidance for AI coding agents working with Apollo v2.
 
 ## Project Overview
 
-Apollo is a pure Golang library for Cardano blockchain development. It provides CBOR serialization, transaction building, wallet management, and smart contract (Plutus) integration.
+Apollo v2 is a pure Go Cardano transaction-building library. It uses
+Blink Labs packages directly for core ledger behavior:
+
+- `github.com/blinklabs-io/gouroboros` for ledger types, CBOR, scripts,
+  addresses, transactions, certificates, and governance types
+- `github.com/blinklabs-io/bursa` for HD wallet key derivation
+- `github.com/blinklabs-io/plutigo` for Plutus data encoding/decoding
+
+Module path: `github.com/Salvionied/apollo/v2`
 
 ## Build and Test Commands
 
 ```bash
-make mod-tidy    # Fetch dependencies
-make format      # Run go fmt
-make test        # Run tests with race detection
-make clean       # Remove temporary files
+make mod-tidy    # go mod tidy
+make format      # go fmt / gofmt
+make test        # go test -v -race ./...
+make clean       # remove temporary files
 ```
 
 Single test:
+
 ```bash
 go test -v -race -run TestName ./path/to/package
 ```
 
 Linting:
+
 ```bash
 golangci-lint run
 ```
@@ -31,57 +41,69 @@ golangci-lint run
 
 | File | Purpose |
 |------|---------|
-| `ApolloBuilder.go` | Main transaction builder (fluent API) |
-| `backends.go` | Factory functions for chain contexts |
-| `Models.go` | Core types: Unit, Payment, PaymentI |
+| `apollo.go` | Main transaction builder and fluent API |
+| `models.go` | `Unit`, `Payment`, `PaymentI`, value conversion |
+| `helpers.go` | Value, script, CBOR, and witness helpers |
+| `wallet.go` | Wallet interfaces and Bursa wallet adapter |
+| `convenience.go` | Bech32/script convenience wrappers |
 
 ### Package Structure
 
 | Package | Purpose |
 |---------|---------|
-| `serialization/` | CBOR serialization for all Cardano types |
-| `txBuilding/Backend/` | Blockchain backend implementations |
-| `txBuilding/Backend/Base/` | ChainContext interface definition |
-| `crypto/` | Cryptographic primitives |
-| `apollotypes/` | Wallet interfaces |
-| `plutusencoder/` | Plutus data marshaling |
+| `backend/` | ChainContext interface and shared backend helpers |
+| `backend/blockfrost/` | Blockfrost backend |
+| `backend/maestro/` | Maestro backend |
+| `backend/ogmios/` | Ogmios/Kupo backend |
+| `backend/utxorpc/` | UTxO RPC backend |
+| `backend/fixed/` | Deterministic in-memory test backend |
+| `plutusencoder/` | Struct-tag-driven Plutus data marshaling |
+| `constants/` | Network constants |
 
 ### Key Interfaces
 
-**ChainContext** (`txBuilding/Backend/Base/Base.go`):
-- `GetProtocolParams()` - Protocol parameters
-- `Utxos(address)` - Query UTxOs
-- `SubmitTx(tx)` - Submit transaction
-- `EvaluateTx(tx)` - Evaluate Plutus scripts
+**ChainContext** (`backend/base.go`):
 
-**Wallet** (`apollotypes/Wallet.go`):
-- `GetAddress()`, `SignTx()`, `PkeyHash()`, `SkeyHash()`
+- `ProtocolParams()` - protocol parameters
+- `Utxos(address)` - query UTxOs
+- `SubmitTx(txCbor)` - submit a transaction
+- `EvaluateTx(txCbor)` - evaluate Plutus scripts
+
+**Wallet** (`wallet.go`):
+
+- `Address()`
+- `SignTxBody(txHash)`
+- `PubKeyHash()`
+- `StakePubKeyHash()`
 
 ## Coding Standards
 
 ### Error Handling
 
-- Return errors, never panic
-- Never silently ignore errors
-- Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+- Return errors, never panic in library code.
+- Never silently ignore errors.
+- Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`.
+- Fluent builder methods that cannot return an error should call
+  `setErrOnce`; `Complete()` returns the stored error.
 
 ### Naming
 
-- Use camelCase for variables (not snake_case)
-- Exported types use PascalCase
-- Package names are lowercase, single word
+- Use camelCase for variables.
+- Exported types use PascalCase.
+- Package names are lowercase and single word where possible.
 
 ### Testing
 
-- All new code requires tests
-- Use `FixedChainContext` for deterministic tests
-- Run `make test` before committing
+- New exported behavior requires tests.
+- Use `backend/fixed.FixedChainContext` for deterministic chain-context tests.
+- Run `make test` before committing when feasible.
 
-### CBOR Serialization
+### CBOR and Ledger Types
 
-- Implement `MarshalCBOR`/`UnmarshalCBOR` for custom types
-- Ensure deterministic encoding (sort map keys)
-- Test roundtrip: marshal -> unmarshal -> compare
+- Prefer gouroboros ledger/common/conway types over local duplicates.
+- Implement local CBOR only when gouroboros does not already provide the type.
+- Ensure deterministic encoding for maps and sets where Cardano requires it.
+- Test roundtrip behavior for custom encoders.
 
 ## Plutus Data Struct Tags
 
@@ -93,34 +115,29 @@ type Datum struct {
 }
 ```
 
-Options: `Bytes`, `Int`, `Map`, `IndefList`, `DefList`, `StringBytes`
+Options include `Bytes`, `Int`, `BigInt`, `Map`, `IndefList`, `DefList`,
+`StringBytes`, `HexString`, `Bool`, and `IndefBool`.
 
 ## Common Tasks
 
 ### Adding a Backend Method
 
-1. Add to interface in `txBuilding/Backend/Base/Base.go`
-2. Implement in each backend:
-   - `BlockFrostChainContext/`
-   - `MaestroChainContext/`
-   - `OgmiosChainContext/`
-   - `UtxorpcChainContext/`
-   - `FixedChainContext/`
-3. Add tests for each implementation
+1. Add it to `backend.ChainContext` in `backend/base.go`.
+2. Implement it in every backend package.
+3. Add deterministic tests using `backend/fixed`.
 
-### Adding Transaction Builder Method
+### Adding a Transaction Builder Method
 
-1. Add method to `Apollo` struct in `ApolloBuilder.go`
-2. Follow fluent API pattern (return `*Apollo`)
-3. Add test in `ApolloBuilder_test.go`
+1. Add the method to `Apollo` in `apollo.go`.
+2. Follow the fluent API pattern.
+3. Add tests in the relevant `*_test.go` file.
 
-### Adding Serialization Type
+### Adding Metadata or Governance Support
 
-1. Create package in `serialization/TypeName/`
-2. Implement CBOR marshal/unmarshal
-3. Add roundtrip tests
-4. Export from package
+Prefer `common.TransactionMetadatum`, `common.VotingProcedures`, and
+`conway.ConwayProposalProcedure` from gouroboros. Do not recreate the removed
+v1 `serialization/*` package tree.
 
 ## Go Version
 
-Requires Go 1.24+
+Requires Go 1.25+.

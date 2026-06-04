@@ -25,7 +25,7 @@ func MarshalPlutus(v any) (data.PlutusData, error) {
 
 func marshalValue(val reflect.Value) (data.PlutusData, error) {
 	// Dereference pointers
-	for val.Kind() == reflect.Ptr {
+	for val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil, errors.New("nil pointer")
 		}
@@ -142,7 +142,7 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 	}
 
 	// Dereference pointers
-	for fieldVal.Kind() == reflect.Ptr {
+	for fieldVal.Kind() == reflect.Pointer {
 		if fieldVal.IsNil() {
 			return nil, fmt.Errorf("nil pointer for field %s", field.Name)
 		}
@@ -269,7 +269,7 @@ func marshalSliceOrNested(val reflect.Value, field reflect.StructField, useIndef
 
 // marshalSliceElement marshals a single slice element, handling both struct and primitive types.
 func marshalSliceElement(elem reflect.Value) (data.PlutusData, error) {
-	for elem.Kind() == reflect.Ptr {
+	for elem.Kind() == reflect.Pointer {
 		if elem.IsNil() {
 			return nil, errors.New("nil pointer in slice")
 		}
@@ -299,7 +299,7 @@ func marshalSliceAsMap(val reflect.Value, field reflect.StructField) (data.Plutu
 		var pairs [][2]data.PlutusData
 		for i := 0; i < val.Len(); i++ {
 			elem := val.Index(i)
-			for elem.Kind() == reflect.Ptr {
+			for elem.Kind() == reflect.Pointer {
 				if elem.IsNil() {
 					return nil, fmt.Errorf("nil pointer at element %d", i)
 				}
@@ -377,7 +377,7 @@ func extractMapKey(elem reflect.Value) (data.PlutusData, int, error) {
 // UnmarshalPlutus decodes PlutusData into a Go struct using struct tags.
 func UnmarshalPlutus(pd data.PlutusData, v any) error {
 	val := reflect.ValueOf(v)
-	if val.Kind() != reflect.Ptr || val.IsNil() {
+	if val.Kind() != reflect.Pointer || val.IsNil() {
 		return errors.New("UnmarshalPlutus requires a non-nil pointer")
 	}
 	return unmarshalValue(pd, val.Elem())
@@ -564,7 +564,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 	}
 
 	// Dereference / allocate pointers
-	for fieldVal.Kind() == reflect.Ptr {
+	for fieldVal.Kind() == reflect.Pointer {
 		if fieldVal.IsNil() {
 			fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
 		}
@@ -784,7 +784,7 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 		result := reflect.MakeSlice(fieldVal.Type(), len(items), len(items))
 		for i, item := range items {
 			// Handle pointer element types (e.g. []*MyStruct)
-			if elemType.Kind() == reflect.Ptr {
+			if elemType.Kind() == reflect.Pointer {
 				ptr := reflect.New(elemType.Elem())
 				if err := unmarshalSliceElement(item, ptr.Elem()); err != nil {
 					return fmt.Errorf("element %d: %w", i, err)
@@ -901,7 +901,7 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 		result := reflect.MakeSlice(fieldVal.Type(), len(mapData.Pairs), len(mapData.Pairs))
 		for i, pair := range mapData.Pairs {
 			var elem reflect.Value
-			if elemType.Kind() == reflect.Ptr {
+			if elemType.Kind() == reflect.Pointer {
 				elem = reflect.New(elemType.Elem()).Elem()
 			} else {
 				elem = reflect.New(elemType).Elem()
@@ -909,7 +909,7 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 			if err := unmarshalMapEntry(pair, elem); err != nil {
 				return fmt.Errorf("element %d: %w", i, err)
 			}
-			if elemType.Kind() == reflect.Ptr {
+			if elemType.Kind() == reflect.Pointer {
 				result.Index(i).Set(elem.Addr())
 			} else {
 				result.Index(i).Set(elem)

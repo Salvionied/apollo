@@ -46,16 +46,29 @@ func bigIntToInt64(bi *cardano.BigInt) int64 {
 	if bi == nil {
 		return 0
 	}
-	switch v := bi.GetBigInt().(type) {
+	oneof := bi.GetBigInt()
+	if oneof == nil {
+		return 0
+	}
+	switch v := oneof.(type) {
 	case *cardano.BigInt_Int:
+		if v == nil {
+			return 0
+		}
 		return v.Int
 	case *cardano.BigInt_BigUInt:
+		if v == nil {
+			return 0
+		}
 		n := new(big.Int).SetBytes(v.BigUInt)
 		if !n.IsInt64() {
 			return math.MaxInt64
 		}
 		return n.Int64()
 	case *cardano.BigInt_BigNInt:
+		if v == nil {
+			return 0
+		}
 		n := new(big.Int).SetBytes(v.BigNInt)
 		n.Neg(n)
 		if !n.IsInt64() {
@@ -71,12 +84,25 @@ func bigIntToString(bi *cardano.BigInt) string {
 	if bi == nil {
 		return "0"
 	}
-	switch v := bi.GetBigInt().(type) {
+	oneof := bi.GetBigInt()
+	if oneof == nil {
+		return "0"
+	}
+	switch v := oneof.(type) {
 	case *cardano.BigInt_Int:
+		if v == nil {
+			return "0"
+		}
 		return strconv.FormatInt(v.Int, 10)
 	case *cardano.BigInt_BigUInt:
+		if v == nil {
+			return "0"
+		}
 		return new(big.Int).SetBytes(v.BigUInt).String()
 	case *cardano.BigInt_BigNInt:
+		if v == nil {
+			return "0"
+		}
 		n := new(big.Int).SetBytes(v.BigNInt)
 		n.Neg(n)
 		return n.String()

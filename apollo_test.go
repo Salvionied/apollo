@@ -1405,6 +1405,9 @@ func TestCompleteUsesOnlyReferencedCostModelInScriptDataHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if expected == nil {
+		t.Fatal("expected script data hash")
+	}
 	if a.tx.Body.TxScriptDataHash == nil {
 		t.Fatal("expected script data hash")
 	}
