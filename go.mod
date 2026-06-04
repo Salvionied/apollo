@@ -3,14 +3,14 @@ module github.com/Salvionied/apollo
 go 1.25.8
 
 require (
-	connectrpc.com/connect v1.19.2
+	connectrpc.com/connect v1.20.0
 	filippo.io/edwards25519 v1.2.0
 	github.com/SundaeSwap-finance/kugo v1.3.0
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/go-bip39 v0.2.0
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/maestro-org/go-sdk v1.2.1
-	github.com/utxorpc/go-codegen v0.19.0
+	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.0.4
 	golang.org/x/crypto v0.52.0
 	golang.org/x/text v0.37.0
