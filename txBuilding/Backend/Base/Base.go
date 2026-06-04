@@ -114,6 +114,30 @@ type Output struct {
 	ReferenceScriptHash string          `json:"reference_script_hash"`
 }
 
+func ParseAssetUnit(unit string) (Policy.PolicyId, AssetName.AssetName, error) {
+	if len(unit) < 56 {
+		return Policy.PolicyId{}, AssetName.AssetName{}, fmt.Errorf(
+			"asset unit is too short: %q",
+			unit,
+		)
+	}
+	policyID, err := Policy.New(unit[:56])
+	if err != nil {
+		return Policy.PolicyId{}, AssetName.AssetName{}, fmt.Errorf(
+			"invalid policy id: %w",
+			err,
+		)
+	}
+	assetName := AssetName.NewAssetNameFromHexString(unit[56:])
+	if assetName == nil {
+		return Policy.PolicyId{}, AssetName.AssetName{}, fmt.Errorf(
+			"invalid asset name: %q",
+			unit[56:],
+		)
+	}
+	return *policyID, *assetName, nil
+}
+
 func (o Output) ToUTxO(txHash string) (*UTxO.UTxO, error) {
 	txOut, err := o.ToTransactionOutput()
 	if err != nil {
@@ -136,7 +160,11 @@ func (o Output) ToUTxO(txHash string) (*UTxO.UTxO, error) {
 func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, error) {
 	address, err := Address.DecodeAddress(o.Address)
 	if err != nil {
-		return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid address %q: %w", o.Address, err)
+		return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+			"ToTransactionOutput: invalid address %q: %w",
+			o.Address,
+			err,
+		)
 	}
 	amount := o.Amount
 	lovelace_amount := 0
@@ -145,21 +173,35 @@ func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, erro
 		if item.Unit == "lovelace" {
 			amt, err := strconv.Atoi(item.Quantity)
 			if err != nil {
-				return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid lovelace quantity %q: %w", item.Quantity, err)
+				return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+					"ToTransactionOutput: invalid lovelace quantity %q: %w",
+					item.Quantity,
+					err,
+				)
 			}
 			lovelace_amount += amt
 		} else {
 			asset_quantity, err := strconv.ParseInt(item.Quantity, 10, 64)
 			if err != nil {
-				return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid asset quantity %q: %w", item.Quantity, err)
+				return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+					"ToTransactionOutput: invalid asset quantity %q: %w",
+					item.Quantity,
+					err,
+				)
 			}
-			policy_id := Policy.PolicyId{Value: item.Unit[:56]}
-			asset_name := *AssetName.NewAssetNameFromHexString(item.Unit[56:])
-			_, ok := multi_assets[policy_id]
+			policyID, assetName, err := ParseAssetUnit(item.Unit)
+			if err != nil {
+				return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+					"ToTransactionOutput: invalid asset unit %q: %w",
+					item.Unit,
+					err,
+				)
+			}
+			_, ok := multi_assets[policyID]
 			if !ok {
-				multi_assets[policy_id] = Asset.Asset[int64]{}
+				multi_assets[policyID] = Asset.Asset[int64]{}
 			}
-			multi_assets[policy_id][asset_name] = int64(asset_quantity)
+			multi_assets[policyID][assetName] = int64(asset_quantity)
 		}
 	}
 	var final_amount Value.Value
@@ -178,18 +220,28 @@ func (o Output) ToTransactionOutput() (TransactionOutput.TransactionOutput, erro
 	if o.DataHash != "" && o.InlineDatum == "" {
 		decoded_hash, err := hex.DecodeString(o.DataHash)
 		if err != nil {
-			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid data hash %q: %w", o.DataHash, err)
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+				"ToTransactionOutput: invalid data hash %q: %w",
+				o.DataHash,
+				err,
+			)
 		}
 		datum_hash = serialization.DatumHash{Payload: decoded_hash}
 	}
 	if o.InlineDatum != "" {
 		decoded, err := hex.DecodeString(o.InlineDatum)
 		if err != nil {
-			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid inline datum hex: %w", err)
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+				"ToTransactionOutput: invalid inline datum hex: %w",
+				err,
+			)
 		}
 		var datum PlutusData.PlutusData
 		if err := cbor.Unmarshal(decoded, &datum); err != nil {
-			return TransactionOutput.TransactionOutput{}, fmt.Errorf("ToTransactionOutput: invalid inline datum CBOR: %w", err)
+			return TransactionOutput.TransactionOutput{}, fmt.Errorf(
+				"ToTransactionOutput: invalid inline datum CBOR: %w",
+				err,
+			)
 		}
 		tx_out := TransactionOutput.TransactionOutput{
 			PostAlonzo: TransactionOutput.TransactionOutputAlonzo{

@@ -554,7 +554,10 @@ func unmarshalPlutus(
 						continue
 					}
 					if tps.Field(idx+1).Type.String() == "plutusencoder.Asset" {
-						asset := DecodePlutusAsset(pAEl)
+						asset, err := DecodePlutusAssetE(pAEl)
+						if err != nil {
+							return fmt.Errorf("error: %w", err)
+						}
 						reflect.ValueOf(v).
 							Elem().
 							Field(idx + 1).
@@ -734,7 +737,10 @@ func unmarshalPlutus(
 						continue
 					}
 					if tps.Field(idx+1).Type.String() == "plutusencoder.Asset" {
-						asset := DecodePlutusAsset(pAEl)
+						asset, err := DecodePlutusAssetE(pAEl)
+						if err != nil {
+							return fmt.Errorf("error: %w", err)
+						}
 						reflect.ValueOf(v).
 							Elem().
 							Field(idx + 1).
@@ -916,7 +922,10 @@ func unmarshalPlutus(
 				}
 				switch field.Type.String() {
 				case "Asset":
-					asset := DecodePlutusAsset(pAEl)
+					asset, err := DecodePlutusAssetE(pAEl)
+					if err != nil {
+						return fmt.Errorf("error: %w", err)
+					}
 					reflect.ValueOf(v).
 						Elem().
 						FieldByName(idx).

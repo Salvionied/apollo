@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/Salvionied/apollo/crypto/bech32"
 	"github.com/Salvionied/apollo/serialization/Address"
 )
 
@@ -2189,6 +2190,43 @@ func TestAddressFromBytesScriptTypes(t *testing.T) {
 			"expected NONE_SCRIPT, got %v",
 			addr.AddressType,
 		)
+	}
+}
+
+func TestDecodeAddressRejectsShortPayload(t *testing.T) {
+	emptyPayload, err := bech32.Encode("addr", nil)
+	if err != nil {
+		t.Fatalf("encode empty payload: %v", err)
+	}
+	headerOnlyData, err := bech32.ConvertBits([]byte{0x01}, 8, 5, true)
+	if err != nil {
+		t.Fatalf("convert header payload: %v", err)
+	}
+	headerOnly, err := bech32.Encode("addr", headerOnlyData)
+	if err != nil {
+		t.Fatalf("encode header payload: %v", err)
+	}
+
+	for _, input := range []string{emptyPayload, headerOnly} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := Address.DecodeAddress(input); err == nil {
+				t.Fatal("expected invalid address payload error")
+			}
+		})
+	}
+}
+
+func TestAddressUnmarshalCBORRejectsShortPayload(t *testing.T) {
+	for _, input := range [][]byte{
+		{0x40},       // empty byte string
+		{0x41, 0x01}, // header without credential payload
+	} {
+		t.Run(hex.EncodeToString(input), func(t *testing.T) {
+			var addr Address.Address
+			if err := addr.UnmarshalCBOR(input); err == nil {
+				t.Fatal("expected invalid address payload error")
+			}
+		})
 	}
 }
 

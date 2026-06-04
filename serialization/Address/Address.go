@@ -180,16 +180,15 @@ func (addr *Address) MarshalCBOR() ([]byte, error) {
 */
 func (addr *Address) UnmarshalCBOR(value []byte) error {
 	res := make([]byte, 0)
-	err := cbor.Unmarshal(value, &res)
-	header := res[0]
-	payload := res[1:]
-	addr.PaymentPart = payload[:serialization.VERIFICATION_KEY_HASH_SIZE]
-	addr.StakingPart = payload[serialization.VERIFICATION_KEY_HASH_SIZE:]
-	addr.Network = (header & 0x0F)
-	addr.AddressType = (header & 0xF0) >> 4
-	addr.HeaderByte = header
-	addr.Hrp = ComputeHrp(addr.AddressType, addr.Network)
-	return err
+	if err := cbor.Unmarshal(value, &res); err != nil {
+		return err
+	}
+	decoded, err := addressFromDecodedBytes(res)
+	if err != nil {
+		return err
+	}
+	*addr = decoded
+	return nil
 }
 
 /*
@@ -283,88 +282,80 @@ func DecodeAddress(value string) (Address, error) {
 		return Address{}, err
 	}
 
-	decoded_value, _ := bech32.ConvertBits(data, 5, 8, false)
+	decodedValue, err := bech32.ConvertBits(data, 5, 8, false)
+	if err != nil {
+		return Address{}, err
+	}
 
-	header := decoded_value[0]
-	payload := decoded_value[1:]
-	network := (header & 0x0F)
-	addr_type := (header & 0xF0) >> 4
+	return addressFromDecodedBytes(decodedValue)
+}
+
+func addressFromDecodedBytes(decodedValue []byte) (Address, error) {
+	if len(decodedValue) == 0 {
+		return Address{}, errors.New("address payload is empty")
+	}
+
+	header := decodedValue[0]
+	payload := decodedValue[1:]
+	network := header & 0x0F
+	addrType := (header & 0xF0) >> 4
+
 	if network != 0b0000 && network != 0b0001 {
 		return Address{}, errors.New("invalid network tag")
 	}
-	switch addr_type {
-	case KEY_KEY:
+
+	const hashSize = serialization.VERIFICATION_KEY_HASH_SIZE
+	switch addrType {
+	case KEY_KEY, SCRIPT_KEY, KEY_SCRIPT, SCRIPT_SCRIPT:
+		if len(payload) != 2*hashSize {
+			return Address{}, fmt.Errorf(
+				"invalid address payload length %d for type %d",
+				len(payload),
+				addrType,
+			)
+		}
 		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			payload[serialization.VERIFICATION_KEY_HASH_SIZE:],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
+			PaymentPart: payload[:hashSize],
+			StakingPart: payload[hashSize:],
+			Network:     network,
+			AddressType: addrType,
+			HeaderByte:  header,
+			Hrp:         ComputeHrp(addrType, network),
 		}, nil
-	case SCRIPT_KEY:
+	case KEY_NONE, SCRIPT_NONE:
+		if len(payload) != hashSize {
+			return Address{}, fmt.Errorf(
+				"invalid address payload length %d for type %d",
+				len(payload),
+				addrType,
+			)
+		}
 		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			payload[serialization.VERIFICATION_KEY_HASH_SIZE:],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
+			PaymentPart: payload[:hashSize],
+			StakingPart: make([]byte, 0),
+			Network:     network,
+			AddressType: addrType,
+			HeaderByte:  header,
+			Hrp:         ComputeHrp(addrType, network),
 		}, nil
-	case KEY_SCRIPT:
+	case NONE_KEY, NONE_SCRIPT:
+		if len(payload) != hashSize {
+			return Address{}, fmt.Errorf(
+				"invalid address payload length %d for type %d",
+				len(payload),
+				addrType,
+			)
+		}
 		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			payload[serialization.VERIFICATION_KEY_HASH_SIZE:],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
-		}, nil
-	case KEY_NONE:
-		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			make([]byte, 0),
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
-		}, nil
-	case SCRIPT_SCRIPT:
-		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			payload[serialization.VERIFICATION_KEY_HASH_SIZE:],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
-		}, nil
-	case SCRIPT_NONE:
-		return Address{
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			make([]byte, 0),
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
-		}, nil
-	case NONE_KEY:
-		return Address{
-			make([]byte, 0),
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
+			PaymentPart: make([]byte, 0),
+			StakingPart: payload[:hashSize],
+			Network:     network,
+			AddressType: addrType,
+			HeaderByte:  header,
+			Hrp:         ComputeHrp(addrType, network),
 		}, nil
 	default:
-		return Address{
-			make([]byte, 0),
-			payload[:serialization.VERIFICATION_KEY_HASH_SIZE],
-			network,
-			addr_type,
-			header,
-			ComputeHrp(addr_type, network),
-		}, nil
+		return Address{}, fmt.Errorf("unsupported address type %d", addrType)
 	}
 }
 

@@ -2,6 +2,8 @@ package plutusencoder
 
 import (
 	"errors"
+	"fmt"
+	"math"
 
 	"github.com/Salvionied/apollo/serialization"
 	"github.com/Salvionied/apollo/serialization/Address"
@@ -43,27 +45,43 @@ func GetAssetPlutusData(assets Asset) PlutusData.PlutusData {
 
 // / ADDRESS SUPPORT
 func DecodePlutusAsset(pd PlutusData.PlutusData) Asset {
+	asset, _ := DecodePlutusAssetE(pd)
+	return asset
+}
+
+func DecodePlutusAssetE(pd PlutusData.PlutusData) (Asset, error) {
+	type plutusDataMap = map[serialization.CustomBytes]PlutusData.PlutusData
+
 	assets := Asset{}
-	val, _ := pd.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+	val, ok := pd.Value.(plutusDataMap)
+	if !ok {
+		return nil, errors.New("asset value is not a Plutus map")
+	}
 	for key, asset := range val {
-		innerval, _ := asset.Value.(map[serialization.CustomBytes]PlutusData.PlutusData)
+		innerval, ok := asset.Value.(plutusDataMap)
+		if !ok {
+			return nil, errors.New("asset policy value is not a Plutus map")
+		}
 		inner := map[serialization.CustomBytes]int64{}
 		for k, v := range innerval {
-			x, ok := v.Value.(int64)
-			if !ok {
-				y, ok := v.Value.(uint64)
-
-				if !ok {
-					panic("error: Int Data field is not int64")
+			var x int64
+			switch y := v.Value.(type) {
+			case int64:
+				x = y
+			case uint64:
+				if y > math.MaxInt64 {
+					return nil, fmt.Errorf("asset quantity overflows int64: %d", y)
 				}
 				x = int64(y)
+			default:
+				return nil, fmt.Errorf("asset quantity has invalid type %T", v.Value)
 			}
 
 			inner[k] = x
 		}
 		assets[key] = inner
 	}
-	return assets
+	return assets, nil
 }
 
 func GetAddressPlutusData(
