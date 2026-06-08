@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
 
@@ -89,6 +91,34 @@ func (p ProtocolParameters) CoinsPerUtxoByteValue() int64 {
 type AddressAmount struct {
 	Unit     string `json:"unit"`
 	Quantity string `json:"quantity"`
+}
+
+// ParseAssetUnit splits an API asset unit into policy ID and asset name.
+func ParseAssetUnit(unit string) (common.Blake2b224, cbor.ByteString, error) {
+	if len(unit) < common.Blake2b224Size*2 {
+		return common.Blake2b224{}, cbor.ByteString{}, fmt.Errorf("asset unit is too short: %q", unit)
+	}
+	policyHex := unit[:common.Blake2b224Size*2]
+	nameHex := unit[common.Blake2b224Size*2:]
+
+	policyBytes, err := hex.DecodeString(policyHex)
+	if err != nil {
+		return common.Blake2b224{}, cbor.ByteString{}, fmt.Errorf("invalid policy ID hex %q: %w", policyHex, err)
+	}
+	if len(policyBytes) != common.Blake2b224Size {
+		return common.Blake2b224{}, cbor.ByteString{}, fmt.Errorf("invalid policy ID length: expected %d bytes, got %d", common.Blake2b224Size, len(policyBytes))
+	}
+	var policyId common.Blake2b224
+	copy(policyId[:], policyBytes)
+
+	nameBytes, err := hex.DecodeString(nameHex)
+	if err != nil {
+		return common.Blake2b224{}, cbor.ByteString{}, fmt.Errorf("invalid asset name hex %q: %w", nameHex, err)
+	}
+	if len(nameBytes) > 32 {
+		return common.Blake2b224{}, cbor.ByteString{}, fmt.Errorf("invalid asset name length: expected at most 32 bytes, got %d", len(nameBytes))
+	}
+	return policyId, cbor.NewByteString(nameBytes), nil
 }
 
 // ParseRedeemerTag parses a redeemer purpose string to a RedeemerTag.

@@ -214,22 +214,22 @@ func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, e
 // --- Ogmios response types and conversion ---
 
 type ogmiosProtocolParams struct {
-	MinFeeCoefficient int64           `json:"minFeeCoefficient"`
-	MinFeeConstant    ogmiosLovelace  `json:"minFeeConstant"`
-	MaxBlockBodySize  ogmiosBytes     `json:"maxBlockBodySize"`
-	MaxBlockHeaderSize ogmiosBytes    `json:"maxBlockHeaderSize"`
-	MaxTxSize         ogmiosBytes     `json:"maxTransactionSize"`
-	StakeKeyDeposit   ogmiosLovelace  `json:"stakeCredentialDeposit"`
-	PoolDeposit       ogmiosLovelace  `json:"stakePoolDeposit"`
-	MinPoolCost       ogmiosLovelace  `json:"minStakePoolCost"`
-	CollateralPercent int             `json:"collateralPercentage"`
-	MaxCollateral     int             `json:"maxCollateralInputs"`
-	MaxValSize        ogmiosBytes     `json:"maxValueSize"`
-	ScriptPrices      ogmiosPrices    `json:"scriptExecutionPrices"`
-	MaxTxExUnits      ogmiosExUnits   `json:"maxExecutionUnitsPerTransaction"`
-	MaxBlockExUnits   ogmiosExUnits   `json:"maxExecutionUnitsPerBlock"`
-	MinUtxoDeposit    int64           `json:"minUtxoDepositCoefficient"`
-	CostModels        json.RawMessage `json:"plutusCostModels"`
+	MinFeeCoefficient  int64           `json:"minFeeCoefficient"`
+	MinFeeConstant     ogmiosLovelace  `json:"minFeeConstant"`
+	MaxBlockBodySize   ogmiosBytes     `json:"maxBlockBodySize"`
+	MaxBlockHeaderSize ogmiosBytes     `json:"maxBlockHeaderSize"`
+	MaxTxSize          ogmiosBytes     `json:"maxTransactionSize"`
+	StakeKeyDeposit    ogmiosLovelace  `json:"stakeCredentialDeposit"`
+	PoolDeposit        ogmiosLovelace  `json:"stakePoolDeposit"`
+	MinPoolCost        ogmiosLovelace  `json:"minStakePoolCost"`
+	CollateralPercent  int             `json:"collateralPercentage"`
+	MaxCollateral      int             `json:"maxCollateralInputs"`
+	MaxValSize         ogmiosBytes     `json:"maxValueSize"`
+	ScriptPrices       ogmiosPrices    `json:"scriptExecutionPrices"`
+	MaxTxExUnits       ogmiosExUnits   `json:"maxExecutionUnitsPerTransaction"`
+	MaxBlockExUnits    ogmiosExUnits   `json:"maxExecutionUnitsPerBlock"`
+	MinUtxoDeposit     int64           `json:"minUtxoDepositCoefficient"`
+	CostModels         json.RawMessage `json:"plutusCostModels"`
 }
 
 type ogmiosLovelace struct {
@@ -443,7 +443,11 @@ func sharedValueToUtxo(txId common.Blake2b256, outputIndex uint32, value shared.
 		OutputIndex: outputIndex,
 	}
 
-	lovelace := value.AdaLovelace().Uint64()
+	lovelaceBig := value.AdaLovelace().BigInt()
+	if lovelaceBig.Sign() < 0 || !lovelaceBig.IsUint64() {
+		return common.Utxo{}, fmt.Errorf("invalid lovelace quantity %s", lovelaceBig.String())
+	}
+	lovelace := lovelaceBig.Uint64()
 	assetData := make(map[common.Blake2b224]map[cbor.ByteString]*big.Int)
 
 	for policyIdStr, assets := range value {
@@ -461,6 +465,10 @@ func sharedValueToUtxo(txId common.Blake2b256, outputIndex uint32, value shared.
 		copy(policyId[:], policyBytes)
 
 		for assetName, qty := range assets {
+			qtyBig := qty.BigInt()
+			if qtyBig.Sign() < 0 {
+				return common.Utxo{}, fmt.Errorf("negative asset quantity %s for policy %s asset %s", qtyBig.String(), policyIdStr, assetName)
+			}
 			nameBytes, err := hex.DecodeString(assetName)
 			if err != nil {
 				return common.Utxo{}, fmt.Errorf("invalid asset name hex %q: %w (asset names must be hex-encoded)", assetName, err)
@@ -468,7 +476,7 @@ func sharedValueToUtxo(txId common.Blake2b256, outputIndex uint32, value shared.
 			if _, ok := assetData[policyId]; !ok {
 				assetData[policyId] = make(map[cbor.ByteString]*big.Int)
 			}
-			assetData[policyId][cbor.NewByteString(nameBytes)] = qty.BigInt()
+			assetData[policyId][cbor.NewByteString(nameBytes)] = new(big.Int).Set(qtyBig)
 		}
 	}
 
@@ -614,4 +622,3 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 
 	return &common.ScriptRef{Type: scriptType, Script: commonScript}, nil
 }
-

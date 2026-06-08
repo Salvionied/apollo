@@ -16,7 +16,9 @@ const metadataStringMaxBytes = 64
 
 var (
 	maxMetadataInteger = new(big.Int).SetUint64(^uint64(0))
-	minMetadataInteger = new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 64))
+	// The Cardano metadata integer range is [-(2^64-1), 2^64-1]; cardano-api
+	// rejects values below negate(maxBound::Word64), i.e. below -(2^64-1).
+	minMetadataInteger = new(big.Int).Neg(maxMetadataInteger)
 )
 
 // MetadataJSONSchema selects the Cardano transaction metadata JSON mapping.

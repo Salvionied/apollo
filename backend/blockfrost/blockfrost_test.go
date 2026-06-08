@@ -1,8 +1,10 @@
 package blockfrost
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,12 +42,15 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 
 	addr := testAddress(t)
 	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	// BlockFrost returns inline_datum as a CBOR-encoded hex string.
+	// 0x182a is the CBOR encoding of the integer 42.
+	wantDatumCbor := []byte{0x18, 0x2a}
 	raw := bfAddressUTxO{
 		TxHash:              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		OutputIndex:         0,
 		Address:             addr.String(),
 		Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
-		InlineDatum:         json.RawMessage(`{"int":42}`),
+		InlineDatum:         json.RawMessage(`"182a"`),
 		ReferenceScriptHash: scriptHashHex,
 	}
 
@@ -60,11 +65,60 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	if output.Datum() == nil {
 		t.Fatal("expected inline datum to be populated")
 	}
+	// The exact on-chain CBOR bytes must be preserved so the datum hash is unchanged.
+	if got := output.Datum().Cbor(); !bytes.Equal(got, wantDatumCbor) {
+		t.Fatalf("inline datum CBOR = %x, want %x", got, wantDatumCbor)
+	}
 	scriptRef := output.ScriptRef()
 	if scriptRef == nil {
 		t.Fatal("expected reference script to be populated")
 	}
 	if _, ok := scriptRef.(common.PlutusV2Script); !ok {
 		t.Fatalf("expected PlutusV2 reference script, got %T", scriptRef)
+	}
+}
+
+func TestAddressUTxOToUtxoRejectsInvalidAssetUnit(t *testing.T) {
+	addr := testAddress(t)
+	raw := bfAddressUTxO{
+		TxHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		OutputIndex: 0,
+		Address:     addr.String(),
+		Amount: []bfAddressAmount{
+			{Unit: "lovelace", Quantity: "1000000"},
+			{Unit: "abcd", Quantity: "1"},
+		},
+	}
+	if _, err := raw.toUtxo(addr); err == nil {
+		t.Fatal("expected invalid asset unit error")
+	}
+}
+
+func TestAddressUTxOToUtxoRejectsNegativeAssetQuantity(t *testing.T) {
+	addr := testAddress(t)
+	raw := bfAddressUTxO{
+		TxHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		OutputIndex: 0,
+		Address:     addr.String(),
+		Amount: []bfAddressAmount{
+			{Unit: "lovelace", Quantity: "1000000"},
+			{Unit: "00000000000000000000000000000000000000000000000000000001", Quantity: "-1"},
+		},
+	}
+	if _, err := raw.toUtxo(addr); err == nil {
+		t.Fatal("expected negative asset quantity error")
+	}
+}
+
+func TestAddressUTxOToUtxoRejectsOutputIndexOverflow(t *testing.T) {
+	addr := testAddress(t)
+	raw := bfAddressUTxO{
+		TxHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		OutputIndex: int(math.MaxUint32) + 1,
+		Address:     addr.String(),
+		Amount:      []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+	}
+	if _, err := raw.toUtxo(addr); err == nil {
+		t.Fatal("expected output index overflow error")
 	}
 }

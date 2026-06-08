@@ -21,7 +21,6 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
-	plutigoData "github.com/blinklabs-io/plutigo/data"
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
@@ -40,7 +39,11 @@ type BlockFrostChainContext struct {
 	genesisCacheAt time.Time
 }
 
-const cacheExpiry = 5 * time.Minute
+const (
+	cacheExpiry                   = 5 * time.Minute
+	maxBlockfrostResponseBytes    = 10 * 1024 * 1024
+	maxBlockfrostErrorSnippetSize = 512
+)
 
 // NewBlockFrostChainContext creates a new BlockFrost backend.
 func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string) *BlockFrostChainContext {
@@ -77,12 +80,19 @@ func (b *BlockFrostChainContext) request(method, path string, body io.Reader, co
 		return nil, errors.New("blockfrost: nil response")
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBlockfrostResponseBytes+1))
 	if err != nil {
 		return nil, err
 	}
+	if len(data) > maxBlockfrostResponseBytes {
+		return nil, fmt.Errorf("blockfrost response body exceeds %d bytes", maxBlockfrostResponseBytes)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("blockfrost API error %d: %s", resp.StatusCode, string(data))
+		snippet := data
+		if len(snippet) > maxBlockfrostErrorSnippetSize {
+			snippet = snippet[:maxBlockfrostErrorSnippetSize]
+		}
+		return nil, fmt.Errorf("blockfrost API error %d: %s", resp.StatusCode, string(snippet))
 	}
 	return data, nil
 }
@@ -500,6 +510,9 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 	if raw.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", raw.OutputIndex)
 	}
+	if raw.OutputIndex > math.MaxUint32 {
+		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", raw.OutputIndex)
+	}
 	input := shelley.ShelleyTransactionInput{
 		TxId:        txId,
 		OutputIndex: uint32(raw.OutputIndex),
@@ -524,27 +537,18 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 			if !ok {
 				return common.Utxo{}, fmt.Errorf("invalid asset quantity %q for unit %s", amt.Quantity, amt.Unit)
 			}
-			policyHex := amt.Unit[:56]
-			nameHex := amt.Unit[56:]
-			policyBytes, err := hex.DecodeString(policyHex)
-			if err != nil {
-				return common.Utxo{}, fmt.Errorf("invalid policy ID hex %q: %w", policyHex, err)
+			if qty.Sign() < 0 {
+				return common.Utxo{}, fmt.Errorf("negative asset quantity %s for unit %s", qty.String(), amt.Unit)
 			}
-			if len(policyBytes) != common.Blake2b224Size {
-				return common.Utxo{}, fmt.Errorf("invalid policy ID length: expected %d bytes, got %d", common.Blake2b224Size, len(policyBytes))
-			}
-			var policyId common.Blake2b224
-			copy(policyId[:], policyBytes)
-
-			nameBytes, err := hex.DecodeString(nameHex)
+			policyId, assetName, err := backend.ParseAssetUnit(amt.Unit)
 			if err != nil {
-				return common.Utxo{}, fmt.Errorf("invalid asset name hex %q: %w", nameHex, err)
+				return common.Utxo{}, fmt.Errorf("invalid asset unit %q: %w", amt.Unit, err)
 			}
 
 			if _, ok := assetData[policyId]; !ok {
 				assetData[policyId] = make(map[cbor.ByteString]*big.Int)
 			}
-			assetData[policyId][cbor.NewByteString(nameBytes)] = qty
+			assetData[policyId][assetName] = qty
 		} else {
 			return common.Utxo{}, fmt.Errorf("unrecognized unit format %q: expected \"lovelace\" or hex string >= 56 chars (policy_id + asset_name)", amt.Unit)
 		}
@@ -602,13 +606,9 @@ func (b *BlockFrostChainContext) hydrateUtxo(raw bfAddressUTxO, address common.A
 		return common.Utxo{}, fmt.Errorf("unexpected UTxO output type: %T", utxo.Output)
 	}
 	if len(raw.InlineDatum) > 0 && string(raw.InlineDatum) != "null" {
-		datum, err := datumFromBlockfrostJSON(raw.InlineDatum)
+		datumOpt, err := inlineDatumOptionFromBlockfrost(raw.InlineDatum)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to decode inline datum: %w", err)
-		}
-		datumOpt, err := inlineDatumOption(datum)
-		if err != nil {
-			return common.Utxo{}, fmt.Errorf("failed to encode inline datum option: %w", err)
 		}
 		output.DatumOption = datumOpt
 	}
@@ -622,32 +622,27 @@ func (b *BlockFrostChainContext) hydrateUtxo(raw bfAddressUTxO, address common.A
 	return utxo, nil
 }
 
-func datumFromBlockfrostJSON(raw json.RawMessage) (*common.Datum, error) {
-	pd, err := plutigoData.DecodeJSON(raw)
-	if err != nil {
-		return nil, err
+// inlineDatumOptionFromBlockfrost builds an inline datum option from BlockFrost's
+// inline_datum field, which is a CBOR-encoded datum serialized as a hex string.
+// The original CBOR bytes are preserved exactly (no JSON decode/re-encode
+// round-trip) so the datum hash is not altered by a non-canonical re-encoding.
+func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTransactionOutputDatumOption, error) {
+	var datumCborHex string
+	if err := json.Unmarshal(raw, &datumCborHex); err != nil {
+		return nil, fmt.Errorf("inline datum must be a CBOR hex string: %w", err)
 	}
-	datum := &common.Datum{Data: pd}
-	cborBytes, err := plutigoData.Encode(pd)
+	datumBytes, err := hex.DecodeString(datumCborHex)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid inline datum CBOR hex %q: %w", datumCborHex, err)
 	}
-	datum.SetCbor(cborBytes)
-	return datum, nil
-}
-
-func inlineDatumOption(datum *common.Datum) (*babbage.BabbageTransactionOutputDatumOption, error) {
-	datumBytes, err := cbor.Encode(datum)
-	if err != nil {
-		return nil, err
-	}
+	// Inline datum option: [1, #6.24(datum_cbor)]
 	cborBytes, err := cbor.Encode([]any{1, cbor.Tag{Number: 24, Content: datumBytes}})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to encode inline datum option: %w", err)
 	}
 	var opt babbage.BabbageTransactionOutputDatumOption
 	if err := opt.UnmarshalCBOR(cborBytes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal inline datum option: %w", err)
 	}
 	return &opt, nil
 }

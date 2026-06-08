@@ -281,6 +281,9 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 	if raw.Index < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", raw.Index)
 	}
+	if raw.Index > math.MaxUint32 {
+		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", raw.Index)
+	}
 	input := shelley.ShelleyTransactionInput{
 		TxId:        txId,
 		OutputIndex: uint32(raw.Index),
@@ -295,31 +298,19 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 				return common.Utxo{}, fmt.Errorf("negative lovelace amount: %d", asset.Amount)
 			}
 			lovelace = uint64(asset.Amount) //nolint:gosec // validated non-negative above
-		} else if len(asset.Unit) >= 56 {
-			policyHex := asset.Unit[:56]
-			nameHex := asset.Unit[56:]
-			policyBytes, err := hex.DecodeString(policyHex)
-			if err != nil {
-				return common.Utxo{}, fmt.Errorf("invalid policy ID hex %q: %w", policyHex, err)
-			}
-			if len(policyBytes) != common.Blake2b224Size {
-				return common.Utxo{}, fmt.Errorf("invalid policy ID length: expected %d bytes, got %d", common.Blake2b224Size, len(policyBytes))
-			}
-			var policyId common.Blake2b224
-			copy(policyId[:], policyBytes)
-
-			nameBytes, err := hex.DecodeString(nameHex)
-			if err != nil {
-				return common.Utxo{}, fmt.Errorf("invalid asset name hex %q: %w", nameHex, err)
-			}
+		} else {
 			if asset.Amount < 0 {
 				return common.Utxo{}, fmt.Errorf("negative asset amount %d for unit %s", asset.Amount, asset.Unit)
+			}
+			policyId, assetName, err := backend.ParseAssetUnit(asset.Unit)
+			if err != nil {
+				return common.Utxo{}, fmt.Errorf("invalid asset unit %q: %w", asset.Unit, err)
 			}
 
 			if _, ok := assetData[policyId]; !ok {
 				assetData[policyId] = make(map[cbor.ByteString]*big.Int)
 			}
-			assetData[policyId][cbor.NewByteString(nameBytes)] = big.NewInt(asset.Amount)
+			assetData[policyId][assetName] = big.NewInt(asset.Amount)
 		}
 	}
 

@@ -137,6 +137,23 @@ func TestShelleyMetadataFromJSONNoSchemaErrors(t *testing.T) {
 	}
 }
 
+func TestShelleyMetadataFromJSONIntegerLowerBound(t *testing.T) {
+	// The Cardano transaction metadata integer range is [-(2^64-1), 2^64-1]
+	// (cardano-api validateTxMetadata rejects n < negate(maxBound::Word64)).
+	// -(2^64-1) is the smallest accepted value; -(2^64) must be rejected.
+	t.Run("min accepted", func(t *testing.T) {
+		md, err := ShelleyMetadataFromJSON([]byte(`{"1":-18446744073709551615}`))
+		if err != nil {
+			t.Fatalf("expected -18446744073709551615 to be accepted, got error: %v", err)
+		}
+		requireBigIntString(t, md[1], "-18446744073709551615")
+	})
+	t.Run("below min rejected", func(t *testing.T) {
+		_, err := ShelleyMetadataFromJSON([]byte(`{"1":-18446744073709551616}`))
+		requireExactError(t, err, "metadata[1]: metadata integer -18446744073709551616 is outside the supported range")
+	})
+}
+
 func TestShelleyMetadataFromJSONWithDetailedSchemaSuccess(t *testing.T) {
 	jsonData := []byte(`{
 		"0": {"int": -1},

@@ -1,7 +1,11 @@
 package backend
 
 import (
+	"encoding/hex"
 	"testing"
+
+	"github.com/blinklabs-io/gouroboros/cbor"
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
 
 func TestCoinsPerUtxoByteValueDefault(t *testing.T) {
@@ -112,5 +116,53 @@ func TestGenesisParametersStruct(t *testing.T) {
 	}
 	if gp.EpochLength != 432000 {
 		t.Errorf("expected 432000, got %d", gp.EpochLength)
+	}
+}
+
+func TestParseAssetUnit(t *testing.T) {
+	policyHex := "00000000000000000000000000000000000000000000000000000001"
+	assetNameHex := hex.EncodeToString([]byte("TOKEN"))
+	policyID, assetName, err := ParseAssetUnit(policyHex + assetNameHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hex.EncodeToString(policyID.Bytes()); got != policyHex {
+		t.Fatalf("policy ID = %s, want %s", got, policyHex)
+	}
+	if want := cbor.NewByteString([]byte("TOKEN")); assetName != want {
+		t.Fatalf("asset name = %s, want %s", assetName.String(), want.String())
+	}
+}
+
+func TestParseAssetUnitRejectsInvalidInput(t *testing.T) {
+	tests := []string{
+		"abcd",
+		"0000000000000000000000000000000000000000000000000000000z",
+		"00000000000000000000000000000000000000000000000000000001zz",
+		"00000000000000000000000000000000000000000000000000000001" +
+			"000000000000000000000000000000000000000000000000000000000000000000",
+	}
+	for _, unit := range tests {
+		t.Run(unit, func(t *testing.T) {
+			if _, _, err := ParseAssetUnit(unit); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestParseAssetUnitAllowsEmptyAssetName(t *testing.T) {
+	policyHex := "00000000000000000000000000000000000000000000000000000001"
+	policyID, assetName, err := ParseAssetUnit(policyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expected common.Blake2b224
+	expected[27] = 1
+	if policyID != expected {
+		t.Fatalf("policy ID = %x, want %x", policyID.Bytes(), expected.Bytes())
+	}
+	if want := cbor.NewByteString(nil); assetName != want {
+		t.Fatalf("asset name = %s, want empty", assetName.String())
 	}
 }

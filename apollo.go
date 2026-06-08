@@ -426,7 +426,10 @@ func (a *Apollo) ConsumeUTxO(utxo common.Utxo, payments ...PaymentI) (*Apollo, e
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	a.payments = append(a.payments, payments...)
 	if remainder.Coin > 0 || remainder.HasAssets() {
-		remainderPayment := NewPaymentFromValue(a.wallet.Address(), remainder)
+		remainderPayment, err := NewPaymentFromValue(a.wallet.Address(), remainder)
+		if err != nil {
+			return a, fmt.Errorf("failed to build remainder payment: %w", err)
+		}
 		a.payments = append(a.payments, remainderPayment)
 	}
 	return a, nil

@@ -1,8 +1,25 @@
 package apollo
 
 import (
+	"math/big"
 	"testing"
+
+	"github.com/blinklabs-io/gouroboros/cbor"
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
+
+// overflowAssetValue builds a Value holding a native-asset quantity of 2^64,
+// which exceeds the int64 range used by Unit.Quantity.
+func overflowAssetValue(t *testing.T) Value {
+	t.Helper()
+	var policy common.Blake2b224
+	policy[0] = 0xAB
+	huge := new(big.Int).Lsh(big.NewInt(1), 64) // 2^64, exceeds int64
+	assets := MultiAssetFromMap(map[common.Blake2b224]map[cbor.ByteString]*big.Int{
+		policy: {cbor.NewByteString([]byte("TOK")): huge},
+	})
+	return NewValue(0, assets)
+}
 
 func TestNewUnit(t *testing.T) {
 	u := NewUnit("abc123", "token", 100)
@@ -111,17 +128,38 @@ func TestPaymentToTxOut(t *testing.T) {
 func TestPaymentFromTxOut(t *testing.T) {
 	addr := testAddress(t)
 	output := NewBabbageOutputSimple(addr, 7000000)
-	p := PaymentFromTxOut(&output)
+	p, err := PaymentFromTxOut(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if p.Lovelace != 7000000 {
 		t.Errorf("expected 7000000, got %d", p.Lovelace)
+	}
+}
+
+func TestPaymentFromTxOutRejectsOverflowQuantity(t *testing.T) {
+	addr := testAddress(t)
+	output := NewBabbageOutput(addr, overflowAssetValue(t), nil, nil)
+	if _, err := PaymentFromTxOut(&output); err == nil {
+		t.Fatal("expected error for asset quantity exceeding int64 range")
 	}
 }
 
 func TestNewPaymentFromValue(t *testing.T) {
 	addr := testAddress(t)
 	v := NewSimpleValue(4000000)
-	p := NewPaymentFromValue(addr, v)
+	p, err := NewPaymentFromValue(addr, v)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if p.Lovelace != 4000000 {
 		t.Errorf("expected 4000000, got %d", p.Lovelace)
+	}
+}
+
+func TestNewPaymentFromValueRejectsOverflowQuantity(t *testing.T) {
+	addr := testAddress(t)
+	if _, err := NewPaymentFromValue(addr, overflowAssetValue(t)); err == nil {
+		t.Fatal("expected error for asset quantity exceeding int64 range")
 	}
 }

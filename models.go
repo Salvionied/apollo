@@ -3,7 +3,6 @@ package apollo
 import (
 	"encoding/hex"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -130,7 +129,9 @@ func NewPayment(receiver string, lovelace int64, units []Unit) (*Payment, error)
 }
 
 // NewPaymentFromValue creates a Payment from an Address and Value.
-func NewPaymentFromValue(receiver common.Address, value Value) *Payment {
+// It returns an error if a native-asset quantity exceeds the int64 range,
+// rather than silently truncating or saturating it to a wrong value.
+func NewPaymentFromValue(receiver common.Address, value Value) (*Payment, error) {
 	payment := &Payment{
 		Receiver: receiver,
 		Lovelace: int64(value.Coin), //nolint:gosec // ADA supply fits in int64
@@ -139,28 +140,26 @@ func NewPaymentFromValue(receiver common.Address, value Value) *Payment {
 		for _, policyId := range value.Assets.Policies() {
 			for _, assetName := range value.Assets.Assets(policyId) {
 				qty := value.Assets.Asset(policyId, assetName)
-				// Use Int64() which truncates for values > MaxInt64.
-				// This is safe because Cardano native asset quantities fit in int64.
-				q := qty.Int64()
 				if !qty.IsInt64() {
-					// Saturate to MaxInt64 for out-of-range values rather than silently truncating.
-					q = math.MaxInt64
+					return nil, fmt.Errorf("asset quantity %s for policy %s exceeds int64 range", qty.String(), hex.EncodeToString(policyId.Bytes()))
 				}
 				payment.Units = append(payment.Units, Unit{
 					PolicyId: hex.EncodeToString(policyId.Bytes()),
 					Name:     hex.EncodeToString(assetName),
-					Quantity: q,
+					Quantity: qty.Int64(),
 				})
 			}
 		}
 	}
-	return payment
+	return payment, nil
 }
 
 // PaymentFromTxOut creates a Payment from a BabbageTransactionOutput.
-func PaymentFromTxOut(txOut *babbage.BabbageTransactionOutput) *Payment {
+// It returns an error if a native-asset quantity exceeds the int64 range,
+// rather than silently truncating or saturating it to a wrong value.
+func PaymentFromTxOut(txOut *babbage.BabbageTransactionOutput) (*Payment, error) {
 	if txOut == nil {
-		return nil
+		return nil, nil
 	}
 	payment := &Payment{
 		Receiver: txOut.OutputAddress,
@@ -170,14 +169,13 @@ func PaymentFromTxOut(txOut *babbage.BabbageTransactionOutput) *Payment {
 		for _, policyId := range txOut.OutputAmount.Assets.Policies() {
 			for _, assetName := range txOut.OutputAmount.Assets.Assets(policyId) {
 				qty := txOut.OutputAmount.Assets.Asset(policyId, assetName)
-				q := qty.Int64()
 				if !qty.IsInt64() {
-					q = math.MaxInt64
+					return nil, fmt.Errorf("asset quantity %s for policy %s exceeds int64 range", qty.String(), hex.EncodeToString(policyId.Bytes()))
 				}
 				payment.Units = append(payment.Units, Unit{
 					PolicyId: hex.EncodeToString(policyId.Bytes()),
 					Name:     hex.EncodeToString(assetName),
-					Quantity: q,
+					Quantity: qty.Int64(),
 				})
 			}
 		}
@@ -189,7 +187,7 @@ func PaymentFromTxOut(txOut *babbage.BabbageTransactionOutput) *Payment {
 	} else if h := txOut.DatumHash(); h != nil {
 		payment.DatumHash = h.Bytes()
 	}
-	return payment
+	return payment, nil
 }
 
 // ToValue converts a Payment to a Value.
