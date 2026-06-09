@@ -1634,7 +1634,7 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 		switch evalKey.Tag {
 		case common.RedeemerTagSpend:
 			// Find the spending redeemer for this input index
-			if int(evalKey.Index) < len(inputs) {
+			if uint64(evalKey.Index) < uint64(len(inputs)) {
 				ref := utxoRef(inputs[evalKey.Index])
 				if entry, ok := a.redeemers[ref]; ok {
 					entry.ExUnits = bufferedUnits
@@ -1643,7 +1643,7 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 			}
 		case common.RedeemerTagMint:
 			sortedPolicies := a.sortedMintPolicyIds()
-			if int(evalKey.Index) < len(sortedPolicies) {
+			if uint64(evalKey.Index) < uint64(len(sortedPolicies)) {
 				policyHex := sortedPolicies[evalKey.Index]
 				if entry, ok := a.mintRedeemers[policyHex]; ok {
 					entry.ExUnits = bufferedUnits
@@ -1652,7 +1652,7 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 			}
 		case common.RedeemerTagReward:
 			sortedWdAddrs := a.sortedWithdrawalKeys()
-			if int(evalKey.Index) < len(sortedWdAddrs) {
+			if uint64(evalKey.Index) < uint64(len(sortedWdAddrs)) {
 				addrKey := sortedWdAddrs[evalKey.Index]
 				wd := a.withdrawals[addrKey]
 				skhHex := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
