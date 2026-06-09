@@ -300,16 +300,26 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]
 	if err != nil {
 		return nil, err
 	}
+	return evalTxResponseToExUnits(resp.Msg)
+}
 
-	result := make(map[common.RedeemerKey]common.ExUnits)
-	report := resp.Msg.GetReport()
+// evalTxResponseToExUnits converts an EvalTxResponse into a redeemer ExUnits
+// map. A missing report, missing cardano report, or zero evaluation results
+// is an error: returning an empty map with a nil error would let callers
+// silently keep zero execution budgets for their redeemers.
+func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey]common.ExUnits, error) {
+	if msg == nil {
+		return nil, errors.New("empty evaluate response")
+	}
+	report := msg.GetReport()
 	if report == nil {
-		return result, nil
+		return nil, errors.New("no evaluation report in response")
 	}
 	cardanoReport := report.GetCardano()
 	if cardanoReport == nil {
-		return result, nil
+		return nil, errors.New("no cardano evaluation report in response")
 	}
+	result := make(map[common.RedeemerKey]common.ExUnits)
 	for _, redeemer := range cardanoReport.GetRedeemers() {
 		tag, err := utxorpcPurposeToRedeemerTag(redeemer.GetPurpose())
 		if err != nil {
@@ -320,17 +330,21 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]
 			Index: redeemer.GetIndex(),
 		}
 		eu := redeemer.GetExUnits()
-		if eu != nil {
-			mem := eu.GetMemory()
-			steps := eu.GetSteps()
-			if mem > math.MaxInt64 || steps > math.MaxInt64 {
-				return nil, fmt.Errorf("ExUnits overflow: memory=%d steps=%d", mem, steps)
-			}
-			result[key] = common.ExUnits{
-				Memory: int64(mem),
-				Steps:  int64(steps),
-			}
+		if eu == nil {
+			return nil, fmt.Errorf("no ExUnits in evaluation report for redeemer %d:%d", tag, redeemer.GetIndex())
 		}
+		mem := eu.GetMemory()
+		steps := eu.GetSteps()
+		if mem > math.MaxInt64 || steps > math.MaxInt64 {
+			return nil, fmt.Errorf("ExUnits overflow: memory=%d steps=%d", mem, steps)
+		}
+		result[key] = common.ExUnits{
+			Memory: int64(mem),
+			Steps:  int64(steps),
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("script evaluation returned no results")
 	}
 	return result, nil
 }

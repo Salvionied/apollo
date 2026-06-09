@@ -292,22 +292,131 @@ func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, err
 }
 
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
-	body := bytes.NewReader(txCbor)
+	// BlockFrost expects the transaction CBOR hex-encoded in the request body
+	// (with Content-Type application/cbor), not the raw CBOR bytes.
+	body := strings.NewReader(hex.EncodeToString(txCbor))
 	data, err := b.request("POST", "/utils/txs/evaluate", body, "application/cbor")
 	if err != nil {
 		return nil, err
 	}
+	return parseEvaluateTxResponse(data)
+}
 
-	var evalResult bfEvalResult
-	if err := json.Unmarshal(data, &evalResult); err != nil {
-		return nil, err
-	}
-	if len(evalResult.Result.EvaluationFailure) > 0 && string(evalResult.Result.EvaluationFailure) != "null" {
-		return nil, fmt.Errorf("script evaluation failed: %s", string(evalResult.Result.EvaluationFailure))
-	}
+// jsonValuePresent reports whether a raw JSON field was present and not null.
+func jsonValuePresent(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed != "" && trimmed != "null"
+}
 
-	result := make(map[common.RedeemerKey]common.ExUnits)
-	for key, budget := range evalResult.Result.EvaluationResult {
+// parseEvaluateTxResponse parses a BlockFrost /utils/txs/evaluate response.
+// BlockFrost proxies Ogmios, so the payload may be either the legacy Ogmios v5
+// jsonwsp shape ({"result":{"EvaluationResult":{...}}}) or the Ogmios v6 shape
+// ({"result":[{"validator":...,"budget":...}, ...]}, with failures reported as
+// a top-level {"error":{...}} object). Any other shape, and any response with
+// zero evaluation results, is an error.
+func parseEvaluateTxResponse(data []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse evaluate response: %w", err)
+	}
+	if jsonValuePresent(envelope.Error) {
+		var ogmiosErr struct {
+			Code    int             `json:"code"`
+			Message string          `json:"message"`
+			Data    json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(envelope.Error, &ogmiosErr); err == nil && ogmiosErr.Message != "" {
+			if jsonValuePresent(ogmiosErr.Data) {
+				return nil, fmt.Errorf("script evaluation failed (code %d): %s: %s",
+					ogmiosErr.Code, ogmiosErr.Message, string(ogmiosErr.Data))
+			}
+			return nil, fmt.Errorf("script evaluation failed (code %d): %s", ogmiosErr.Code, ogmiosErr.Message)
+		}
+		return nil, fmt.Errorf("script evaluation failed: %s", string(envelope.Error))
+	}
+	if !jsonValuePresent(envelope.Result) {
+		return nil, fmt.Errorf("unrecognized evaluate response (no result or error): %s", evalErrorSnippet(data))
+	}
+	if strings.HasPrefix(strings.TrimSpace(string(envelope.Result)), "[") {
+		return parseOgmiosV6EvaluationResult(envelope.Result)
+	}
+	return parseOgmiosV5EvaluationResult(envelope.Result)
+}
+
+// parseOgmiosV6EvaluationResult parses the Ogmios v6 evaluateTransaction result
+// array: [{"validator":{"purpose":...,"index":...},"budget":{"memory":...,"cpu":...}}].
+func parseOgmiosV6EvaluationResult(raw json.RawMessage) (map[common.RedeemerKey]common.ExUnits, error) {
+	var items []struct {
+		Validator struct {
+			Purpose string `json:"purpose"`
+			Index   uint64 `json:"index"`
+		} `json:"validator"`
+		Budget struct {
+			Memory uint64 `json:"memory"`
+			Cpu    uint64 `json:"cpu"`
+		} `json:"budget"`
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("failed to parse evaluation result: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, errors.New("script evaluation returned no results")
+	}
+	result := make(map[common.RedeemerKey]common.ExUnits, len(items))
+	for _, item := range items {
+		if jsonValuePresent(item.Error) {
+			return nil, fmt.Errorf("script evaluation failed for validator %s:%d: %s",
+				item.Validator.Purpose, item.Validator.Index, string(item.Error))
+		}
+		if item.Validator.Purpose == "" {
+			return nil, fmt.Errorf("malformed evaluation result entry: %s", evalErrorSnippet(raw))
+		}
+		tag, err := backend.ParseRedeemerTag(item.Validator.Purpose)
+		if err != nil {
+			return nil, fmt.Errorf("invalid redeemer purpose %q: %w", item.Validator.Purpose, err)
+		}
+		if item.Validator.Index > math.MaxUint32 {
+			return nil, fmt.Errorf("redeemer index %d exceeds uint32 range", item.Validator.Index)
+		}
+		if item.Budget.Memory > math.MaxInt64 || item.Budget.Cpu > math.MaxInt64 {
+			return nil, fmt.Errorf("ExUnits overflow for validator %s:%d: memory=%d cpu=%d",
+				item.Validator.Purpose, item.Validator.Index, item.Budget.Memory, item.Budget.Cpu)
+		}
+		key := common.RedeemerKey{Tag: tag, Index: uint32(item.Validator.Index)}
+		result[key] = common.ExUnits{Memory: int64(item.Budget.Memory), Steps: int64(item.Budget.Cpu)}
+	}
+	return result, nil
+}
+
+// parseOgmiosV5EvaluationResult parses the legacy Ogmios v5 jsonwsp result
+// object: {"EvaluationResult":{"tag:index":{"memory":...,"steps":...}}} or
+// {"EvaluationFailure":{...}}.
+func parseOgmiosV5EvaluationResult(raw json.RawMessage) (map[common.RedeemerKey]common.ExUnits, error) {
+	var v5Result struct {
+		EvaluationResult map[string]struct {
+			Memory uint64 `json:"memory"`
+			Steps  uint64 `json:"steps"`
+		} `json:"EvaluationResult"`
+		EvaluationFailure json.RawMessage `json:"EvaluationFailure"`
+	}
+	if err := json.Unmarshal(raw, &v5Result); err != nil {
+		return nil, fmt.Errorf("failed to parse evaluation result: %w", err)
+	}
+	if jsonValuePresent(v5Result.EvaluationFailure) {
+		return nil, fmt.Errorf("script evaluation failed: %s", string(v5Result.EvaluationFailure))
+	}
+	if v5Result.EvaluationResult == nil {
+		return nil, fmt.Errorf("unrecognized evaluate response: %s", evalErrorSnippet(raw))
+	}
+	if len(v5Result.EvaluationResult) == 0 {
+		return nil, errors.New("script evaluation returned no results")
+	}
+	result := make(map[common.RedeemerKey]common.ExUnits, len(v5Result.EvaluationResult))
+	for key, budget := range v5Result.EvaluationResult {
 		parts := strings.Split(key, ":")
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("malformed redeemer key %q: expected format 'tag:index'", key)
@@ -327,6 +436,14 @@ func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerK
 		result[rKey] = common.ExUnits{Memory: int64(budget.Memory), Steps: int64(budget.Steps)}
 	}
 	return result, nil
+}
+
+// evalErrorSnippet bounds a response payload for inclusion in error messages.
+func evalErrorSnippet(data []byte) string {
+	if len(data) > maxBlockfrostErrorSnippetSize {
+		data = data[:maxBlockfrostErrorSnippetSize]
+	}
+	return string(data)
 }
 
 func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
@@ -714,14 +831,4 @@ func scriptRefFromHash(
 		}, nil
 	}
 	return nil, errors.New("unable to determine reference script language from script hash")
-}
-
-type bfEvalResult struct {
-	Result struct {
-		EvaluationResult map[string]struct {
-			Memory uint64 `json:"memory"`
-			Steps  uint64 `json:"steps"`
-		} `json:"EvaluationResult"`
-		EvaluationFailure json.RawMessage `json:"EvaluationFailure"`
-	} `json:"result"`
 }

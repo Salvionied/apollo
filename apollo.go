@@ -880,7 +880,10 @@ func (a *Apollo) SignWithSkey(skey []byte) (*Apollo, error) {
 		return a, fmt.Errorf("failed to encode tx body: %w", err)
 	}
 	a.tx.Body.SetCbor(bodyCbor)
-	txHash := a.tx.Body.Id()
+	// Hash the freshly encoded body directly; Body.Id() caches its hash and
+	// SetCbor does not invalidate the cache, so it could return a stale digest
+	// if the body was mutated after a previous Id() call.
+	txHash := common.Blake2b256Hash(bodyCbor)
 
 	witness, err := NewVkeyWitnessFromSkey(txHash, skey)
 	if err != nil {
@@ -1072,12 +1075,20 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
-	// Adjust for certificate deposits using protocol parameter
-	stakeDeposit := int64(StakeDeposit) // fallback
-	if pp, ppErr := a.Context.ProtocolParams(); ppErr == nil {
-		if d, dErr := strconv.ParseInt(pp.KeyDeposits, 10, 64); dErr == nil && d > 0 {
-			stakeDeposit = d
+	// Adjust for certificate deposits using protocol parameter. Only consult
+	// the backend when certificates are present, and fail closed on errors:
+	// a silently wrong deposit produces a value-non-conserving transaction.
+	stakeDeposit := int64(StakeDeposit)
+	if len(a.certificates) > 0 {
+		pp, ppErr := a.Context.ProtocolParams()
+		if ppErr != nil {
+			return a, fmt.Errorf("failed to get protocol params for certificate deposit: %w", ppErr)
 		}
+		d, dErr := strconv.ParseInt(pp.KeyDeposits, 10, 64)
+		if dErr != nil || d < 0 {
+			return a, fmt.Errorf("invalid key_deposit protocol parameter %q", pp.KeyDeposits)
+		}
+		stakeDeposit = d
 	}
 	totalRequired, err = a.adjustForCertificateDeposits(totalRequired, stakeDeposit)
 	if err != nil {
@@ -1093,7 +1104,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	// Add preselected UTxO value plus implicit inputs (withdrawals, mints)
-	totalInput := a.totalPreselectedValue()
+	totalInput, err := a.totalPreselectedValue()
+	if err != nil {
+		return a, err
+	}
 	if len(a.withdrawals) > 0 {
 		totalInput, err = totalInput.Add(a.totalWithdrawalValue())
 		if err != nil {
@@ -1105,7 +1119,18 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		if err != nil {
 			return a, err
 		}
-		totalInput, err = totalInput.Add(mv)
+		// Only positive mint amounts are implicit inputs for coin selection.
+		// Burns (negative amounts) are added to the selection target below so
+		// the burned tokens are actually selected from available UTxOs.
+		burnValue, err := a.burnRequirementValue()
+		if err != nil {
+			return a, err
+		}
+		mintInput, err := mv.Add(burnValue)
+		if err != nil {
+			return a, fmt.Errorf("mint value overflow: %w", err)
+		}
+		totalInput, err = totalInput.Add(mintInput)
 		if err != nil {
 			return a, fmt.Errorf("mint value overflow: %w", err)
 		}
@@ -1132,6 +1157,19 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee)))
 	if err != nil {
 		return a, fmt.Errorf("selection target overflow: %w", err)
+	}
+	// Tokens being burned must be present in the inputs. mintValue adds them
+	// to totalInput as negative amounts, which selection would otherwise
+	// ignore, silently building a transaction that cannot conserve value.
+	if a.hasMint() {
+		burnValue, err := a.burnRequirementValue()
+		if err != nil {
+			return a, err
+		}
+		selectionTarget, err = selectionTarget.Add(burnValue)
+		if err != nil {
+			return a, fmt.Errorf("selection target overflow: %w", err)
+		}
 	}
 
 	// Coin selection
@@ -1183,7 +1221,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	// Compute totalInput once (it does not change across iterations).
-	totalInput = a.sumUtxoValues(allInputUtxos)
+	totalInput, err = a.sumUtxoValues(allInputUtxos)
+	if err != nil {
+		return a, err
+	}
 	if a.hasMint() {
 		mv, err := a.mintValue()
 		if err != nil {
@@ -1211,34 +1252,44 @@ func (a *Apollo) Complete() (*Apollo, error) {
 
 	changeAddr := a.getChangeAddress()
 
-	for range maxFeeIterations {
-		// Reset outputs to base (without change) for each iteration.
-		outputs = make([]babbage.BabbageTransactionOutput, len(baseOutputs))
+	// buildOutputsWithChange computes the output set (base outputs plus a
+	// change output if needed) for the given fee.
+	buildOutputsWithChange := func(fee int64) ([]babbage.BabbageTransactionOutput, error) {
+		outputs := make([]babbage.BabbageTransactionOutput, len(baseOutputs))
 		copy(outputs, baseOutputs)
 
 		// Calculate change: totalRequired includes deposits, totalInput includes refunds.
-		feeValue := NewSimpleValue(uint64(fee))
+		if fee < 0 {
+			return nil, fmt.Errorf("negative fee: %d", fee)
+		}
+		feeValue := NewSimpleValue(uint64(fee)) //nolint:gosec // validated non-negative above
 		totalNeeded, err := totalRequired.Add(feeValue)
 		if err != nil {
-			return a, fmt.Errorf("required value overflow: %w", err)
+			return nil, fmt.Errorf("required value overflow: %w", err)
 		}
 		changeValue, err := totalInput.Sub(totalNeeded)
 		if err != nil {
-			return a, fmt.Errorf("insufficient funds: %w", err)
+			return nil, fmt.Errorf("insufficient funds: %w", err)
+		}
+		// Reject burns not covered by inputs and prune zero quantities,
+		// which are invalid in Conway-era output values.
+		changeValue.Assets, err = normalizeChangeAssets(changeValue.Assets)
+		if err != nil {
+			return nil, err
 		}
 
 		if changeValue.Coin > 0 || changeValue.HasAssets() {
 			changeOutput := NewBabbageOutput(changeAddr, changeValue, nil, nil)
 			pp, err := a.Context.ProtocolParams()
 			if err != nil {
-				return a, fmt.Errorf("failed to get protocol params for change output: %w", err)
+				return nil, fmt.Errorf("failed to get protocol params for change output: %w", err)
 			}
 			minChange, err := MinLovelacePostAlonzo(&changeOutput, pp.CoinsPerUtxoByteValue())
 			if err != nil {
-				return a, fmt.Errorf("failed to compute min UTxO for change output: %w", err)
+				return nil, fmt.Errorf("failed to compute min UTxO for change output: %w", err)
 			}
 			if minChange < 0 {
-				return a, fmt.Errorf("invalid min UTxO for change output: %d", minChange)
+				return nil, fmt.Errorf("invalid min UTxO for change output: %d", minChange)
 			}
 			if changeValue.Coin >= uint64(minChange) {
 				outputs = append(outputs, changeOutput)
@@ -1250,11 +1301,12 @@ func (a *Apollo) Complete() (*Apollo, error) {
 				changeOutput = NewBabbageOutput(changeAddr, changeValue, nil, nil)
 				actualMin, err := MinLovelacePostAlonzo(&changeOutput, pp.CoinsPerUtxoByteValue())
 				if err != nil {
-					return a, fmt.Errorf("failed to compute actual min UTxO for change output: %w", err)
+					return nil, fmt.Errorf("failed to compute actual min UTxO for change output: %w", err)
 				}
 				if actualMin > minChange {
-					shortfall += uint64(actualMin) - uint64(minChange)
-					changeValue.Coin = uint64(actualMin)
+					// minChange validated non-negative above, actualMin > minChange
+					shortfall += uint64(actualMin) - uint64(minChange) //nolint:gosec
+					changeValue.Coin = uint64(actualMin)               //nolint:gosec
 					changeOutput = NewBabbageOutput(changeAddr, changeValue, nil, nil)
 				}
 				// Verify the shortfall is covered by total input.
@@ -1264,14 +1316,14 @@ func (a *Apollo) Complete() (*Apollo, error) {
 				for _, out := range outputs {
 					totalOutputCoin += out.OutputAmount.Amount
 				}
-				totalOutputCoin += changeValue.Coin + uint64(fee)
+				totalOutputCoin += changeValue.Coin + uint64(fee) //nolint:gosec // validated non-negative above
 				depositAdj := a.certificateDepositAdjustment(stakeDeposit)
 				if depositAdj > 0 {
 					totalOutputCoin += uint64(depositAdj)
 				}
 				totalOutputCoin += governanceRequired.Coin
 				if totalOutputCoin > totalInputCoin {
-					return a, fmt.Errorf("insufficient funds: need %d more lovelace for change output min UTxO", totalOutputCoin-totalInputCoin)
+					return nil, fmt.Errorf("insufficient funds: need %d more lovelace for change output min UTxO", totalOutputCoin-totalInputCoin)
 				}
 				_ = shortfall // verified via balance check above
 				outputs = append(outputs, changeOutput)
@@ -1279,10 +1331,20 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			// If change is ADA-only but below min UTxO and has no assets,
 			// it is too small to create an output -- absorbed as additional fee.
 		}
+		return outputs, nil
+	}
+
+	converged := false
+	for range maxFeeIterations {
+		outputs, err = buildOutputsWithChange(fee)
+		if err != nil {
+			return a, err
+		}
 
 		// Re-estimate fee with the full output set (including change).
 		// If the user set an explicit fee, skip re-estimation.
 		if a.Fee > 0 {
+			converged = true
 			break
 		}
 		newFee, err := a.estimateFee(allInputUtxos, outputs)
@@ -1295,9 +1357,19 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 		if newFee <= fee {
 			// Fee did not increase; the current estimate is sufficient.
+			converged = true
 			break
 		}
 		fee = newFee
+	}
+	if !converged {
+		// The final iteration raised the fee after outputs were computed;
+		// rebuild the change output against the final fee so the transaction
+		// still conserves value.
+		outputs, err = buildOutputsWithChange(fee)
+		if err != nil {
+			return a, err
+		}
 	}
 
 	// Build transaction body
@@ -1339,14 +1411,17 @@ func (a *Apollo) Sign() (*Apollo, error) {
 		return a, errors.New("no wallet set")
 	}
 
-	// Marshal body to CBOR and set it so Id() works
+	// Marshal body to CBOR and set it for downstream consumers
 	bodyCbor, err := cbor.Encode(&a.tx.Body)
 	if err != nil {
 		return a, fmt.Errorf("failed to encode tx body: %w", err)
 	}
 	a.tx.Body.SetCbor(bodyCbor)
 
-	txHash := a.tx.Body.Id()
+	// Hash the freshly encoded body directly; Body.Id() caches its hash and
+	// SetCbor does not invalidate the cache, so it could return a stale digest
+	// if the body was mutated after a previous Id() call.
+	txHash := common.Blake2b256Hash(bodyCbor)
 
 	witness, err := a.wallet.SignTxBody(txHash)
 	if err != nil {
@@ -1432,23 +1507,24 @@ func (a *Apollo) totalOutputValue(outputs []babbage.BabbageTransactionOutput) (V
 	return total, nil
 }
 
-func (a *Apollo) totalPreselectedValue() Value {
+func (a *Apollo) totalPreselectedValue() (Value, error) {
 	return a.sumUtxoValues(a.preselectedUtxos)
 }
 
-func (a *Apollo) sumUtxoValues(utxos []common.Utxo) Value {
+func (a *Apollo) sumUtxoValues(utxos []common.Utxo) (Value, error) {
 	total := Value{}
 	for _, utxo := range utxos {
 		amt := utxo.Output.Amount()
-		if amt != nil && amt.IsUint64() {
-			sum := total.Coin + amt.Uint64()
-			if sum < total.Coin {
-				// Overflow: saturate at max uint64
-				total.Coin = math.MaxUint64
-			} else {
-				total.Coin = sum
-			}
+		// Amounts come from a remote backend; reject anything outside the
+		// uint64 lovelace range instead of silently treating it as zero.
+		if amt == nil || !amt.IsUint64() {
+			return Value{}, fmt.Errorf("UTxO %s has an invalid lovelace amount", utxoRef(utxo))
 		}
+		sum := total.Coin + amt.Uint64()
+		if sum < total.Coin {
+			return Value{}, errors.New("total input value overflows uint64")
+		}
+		total.Coin = sum
 		if utxo.Output.Assets() != nil {
 			if total.Assets == nil {
 				total.Assets = CloneMultiAsset(utxo.Output.Assets())
@@ -1457,7 +1533,7 @@ func (a *Apollo) sumUtxoValues(utxos []common.Utxo) Value {
 			}
 		}
 	}
-	return total
+	return total, nil
 }
 
 func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error) {
@@ -1488,16 +1564,20 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			continue
 		}
 
+		amt := utxo.Output.Amount()
+		// Amounts come from a remote backend; reject anything outside the
+		// uint64 lovelace range (big.Int.Uint64 is undefined out of range).
+		if amt == nil || !amt.IsUint64() {
+			return nil, fmt.Errorf("UTxO %s has an invalid lovelace amount", ref)
+		}
+
 		selected = append(selected, utxo)
 		selectedRefs = append(selectedRefs, ref)
 
-		amt := utxo.Output.Amount()
-		if amt != nil {
-			if remaining.Coin <= amt.Uint64() {
-				remaining.Coin = 0
-			} else {
-				remaining.Coin -= amt.Uint64()
-			}
+		if remaining.Coin <= amt.Uint64() {
+			remaining.Coin = 0
+		} else {
+			remaining.Coin -= amt.Uint64()
 		}
 
 		// Subtract assets from remaining
@@ -1639,8 +1719,13 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	if err != nil {
 		return fmt.Errorf("EvaluateTx failed: %w", err)
 	}
+	if len(evalResult) == 0 {
+		return errors.New("EvaluateTx returned no results")
+	}
 
-	// Update redeemers with evaluated ExUnits + buffer
+	// Update redeemers with evaluated ExUnits + buffer. Results that do not
+	// match a registered redeemer indicate a misbehaving evaluation backend;
+	// fail closed rather than sign a transaction with zero execution budgets.
 	for evalKey, evalUnits := range evalResult {
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
@@ -1649,33 +1734,63 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 		switch evalKey.Tag {
 		case common.RedeemerTagSpend:
 			// Find the spending redeemer for this input index
-			if uint64(evalKey.Index) < uint64(len(inputs)) {
-				ref := utxoRef(inputs[evalKey.Index])
-				if entry, ok := a.redeemers[ref]; ok {
-					entry.ExUnits = bufferedUnits
-					a.redeemers[ref] = entry
-				}
+			if uint64(evalKey.Index) >= uint64(len(inputs)) {
+				return fmt.Errorf("EvaluateTx returned spend redeemer index %d out of range (%d inputs)", evalKey.Index, len(inputs))
 			}
+			ref := utxoRef(inputs[evalKey.Index])
+			entry, ok := a.redeemers[ref]
+			if !ok {
+				return fmt.Errorf("EvaluateTx returned a result for input %s, which has no registered redeemer", ref)
+			}
+			entry.ExUnits = bufferedUnits
+			a.redeemers[ref] = entry
 		case common.RedeemerTagMint:
 			sortedPolicies := a.sortedMintPolicyIds()
-			if uint64(evalKey.Index) < uint64(len(sortedPolicies)) {
-				policyHex := sortedPolicies[evalKey.Index]
-				if entry, ok := a.mintRedeemers[policyHex]; ok {
-					entry.ExUnits = bufferedUnits
-					a.mintRedeemers[policyHex] = entry
-				}
+			if uint64(evalKey.Index) >= uint64(len(sortedPolicies)) {
+				return fmt.Errorf("EvaluateTx returned mint redeemer index %d out of range (%d policies)", evalKey.Index, len(sortedPolicies))
 			}
+			policyHex := sortedPolicies[evalKey.Index]
+			entry, ok := a.mintRedeemers[policyHex]
+			if !ok {
+				return fmt.Errorf("EvaluateTx returned a result for mint policy %s, which has no registered redeemer", policyHex)
+			}
+			entry.ExUnits = bufferedUnits
+			a.mintRedeemers[policyHex] = entry
 		case common.RedeemerTagReward:
 			sortedWdAddrs := a.sortedWithdrawalKeys()
-			if uint64(evalKey.Index) < uint64(len(sortedWdAddrs)) {
-				addrKey := sortedWdAddrs[evalKey.Index]
-				wd := a.withdrawals[addrKey]
-				skhHex := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
-				if entry, ok := a.stakeRedeemers[skhHex]; ok {
-					entry.ExUnits = bufferedUnits
-					a.stakeRedeemers[skhHex] = entry
-				}
+			if uint64(evalKey.Index) >= uint64(len(sortedWdAddrs)) {
+				return fmt.Errorf("EvaluateTx returned withdrawal redeemer index %d out of range (%d withdrawals)", evalKey.Index, len(sortedWdAddrs))
 			}
+			addrKey := sortedWdAddrs[evalKey.Index]
+			wd := a.withdrawals[addrKey]
+			skhHex := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
+			entry, ok := a.stakeRedeemers[skhHex]
+			if !ok {
+				return fmt.Errorf("EvaluateTx returned a result for withdrawal %s, which has no registered redeemer", skhHex)
+			}
+			entry.ExUnits = bufferedUnits
+			a.stakeRedeemers[skhHex] = entry
+		default:
+			return fmt.Errorf("EvaluateTx returned unsupported redeemer tag %d", evalKey.Tag)
+		}
+	}
+
+	// Every registered redeemer must have received an execution budget; a
+	// redeemer left at zero ExUnits would fail phase-2 validation on-chain
+	// and forfeit the collateral.
+	for ref, entry := range a.redeemers {
+		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
+			return fmt.Errorf("execution-unit evaluation returned no result for spend redeemer on input %s", ref)
+		}
+	}
+	for policyHex, entry := range a.mintRedeemers {
+		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
+			return fmt.Errorf("execution-unit evaluation returned no result for mint redeemer on policy %s", policyHex)
+		}
+	}
+	for skhHex, entry := range a.stakeRedeemers {
+		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
+			return fmt.Errorf("execution-unit evaluation returned no result for withdrawal redeemer on stake key %s", skhHex)
 		}
 	}
 
@@ -2079,6 +2194,36 @@ func (a *Apollo) GetMints() (Value, error) {
 	return a.mintValue()
 }
 
+// burnRequirementValue returns the absolute quantities of all assets being
+// burned (negative mint amounts). These must be covered by transaction inputs.
+func (a *Apollo) burnRequirementValue() (Value, error) {
+	mv, err := a.mintValue()
+	if err != nil {
+		return Value{}, err
+	}
+	if mv.Assets == nil {
+		return Value{}, nil
+	}
+	data := make(map[common.Blake2b224]map[cbor.ByteString]common.MultiAssetTypeOutput)
+	for _, policyId := range mv.Assets.Policies() {
+		for _, assetName := range mv.Assets.Assets(policyId) {
+			qty := mv.Assets.Asset(policyId, assetName)
+			if qty == nil || qty.Sign() >= 0 {
+				continue
+			}
+			if data[policyId] == nil {
+				data[policyId] = make(map[cbor.ByteString]common.MultiAssetTypeOutput)
+			}
+			data[policyId][cbor.NewByteString(assetName)] = new(big.Int).Neg(qty)
+		}
+	}
+	if len(data) == 0 {
+		return Value{}, nil
+	}
+	assets := common.NewMultiAsset[common.MultiAssetTypeOutput](data)
+	return Value{Assets: &assets}, nil
+}
+
 func (a *Apollo) buildMintAsset() (*common.MultiAsset[common.MultiAssetTypeMint], error) {
 	data := make(map[common.Blake2b224]map[cbor.ByteString]*big.Int)
 	for _, unit := range a.mint {
@@ -2456,6 +2601,9 @@ func toMetadatum(v any) (common.TransactionMetadatum, error) {
 	case common.TransactionMetadatum:
 		return tv, nil
 	case string:
+		if err := validateMetadataText(tv, "metadata"); err != nil {
+			return nil, err
+		}
 		return common.MetaText{Value: tv}, nil
 	case int:
 		return common.MetaInt{Value: big.NewInt(int64(tv))}, nil
@@ -2467,10 +2615,19 @@ func toMetadatum(v any) (common.TransactionMetadatum, error) {
 		if tv == nil {
 			return nil, errors.New("nil metadata integer")
 		}
+		if tv.Cmp(minMetadataInteger) < 0 || tv.Cmp(maxMetadataInteger) > 0 {
+			return nil, fmt.Errorf("metadata integer %s is outside the supported range", tv.String())
+		}
 		return common.MetaInt{Value: new(big.Int).Set(tv)}, nil
 	case big.Int:
+		if tv.Cmp(minMetadataInteger) < 0 || tv.Cmp(maxMetadataInteger) > 0 {
+			return nil, fmt.Errorf("metadata integer %s is outside the supported range", tv.String())
+		}
 		return common.MetaInt{Value: new(big.Int).Set(&tv)}, nil
 	case []byte:
+		if err := validateMetadataBytes(tv, "metadata"); err != nil {
+			return nil, err
+		}
 		return common.MetaBytes{Value: tv}, nil
 	case MetadataMap:
 		pairs := make([]common.MetaPair, 0, len(tv))
@@ -2494,6 +2651,9 @@ func toMetadatum(v any) (common.TransactionMetadatum, error) {
 		sort.Strings(sortedKeys)
 		pairs := make([]common.MetaPair, 0, len(tv))
 		for _, mk := range sortedKeys {
+			if err := validateMetadataText(mk, "metadata map key"); err != nil {
+				return nil, err
+			}
 			val, err := toMetadatum(tv[mk])
 			if err != nil {
 				return nil, fmt.Errorf("map key %q: %w", mk, err)

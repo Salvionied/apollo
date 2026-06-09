@@ -1,14 +1,14 @@
 module github.com/Salvionied/apollo/v2
 
-go 1.25.8
+go 1.25.10
 
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/bursa v0.16.0
-	github.com/blinklabs-io/gouroboros v0.180.0
-	github.com/blinklabs-io/plutigo v0.1.14
+	github.com/blinklabs-io/gouroboros v0.182.0
+	github.com/blinklabs-io/plutigo v0.1.15
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.0.4
@@ -39,7 +39,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect

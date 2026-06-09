@@ -199,6 +199,93 @@ func TestCoinsPerUtxoByteValueRejectsOutOfRange(t *testing.T) {
 	}
 }
 
+func TestScriptRefFromBytesVerifiesHash(t *testing.T) {
+	script := common.PlutusV2Script([]byte{0x01, 0x02, 0x03})
+	correctHash := hex.EncodeToString(script.Hash().Bytes())
+
+	ref, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV2, script, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref.Type != common.ScriptRefTypePlutusV2 {
+		t.Fatalf("script ref type = %d, want %d", ref.Type, common.ScriptRefTypePlutusV2)
+	}
+	if _, ok := ref.Script.(common.PlutusV2Script); !ok {
+		t.Fatalf("expected PlutusV2 script, got %T", ref.Script)
+	}
+}
+
+func TestScriptRefFromBytesRejectsHashMismatch(t *testing.T) {
+	script := common.PlutusV2Script([]byte{0x01, 0x02, 0x03})
+	// The same bytes hashed as PlutusV1 produce a different script hash.
+	wrongHash := hex.EncodeToString(common.PlutusV1Script(script).Hash().Bytes())
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV2, script, wrongHash); err == nil {
+		t.Fatal("expected script hash mismatch error")
+	}
+}
+
+func TestScriptRefFromBytesRejectsClaimedLanguageMismatch(t *testing.T) {
+	// Provider claims PlutusV1 for bytes whose hash was computed as PlutusV2.
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	v2Hash := hex.EncodeToString(common.PlutusV2Script(scriptBytes).Hash().Bytes())
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV1, scriptBytes, v2Hash); err == nil {
+		t.Fatal("expected script hash mismatch error for wrong language claim")
+	}
+}
+
+func TestScriptRefFromBytesSkipsVerificationWithoutHash(t *testing.T) {
+	ref, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV3, []byte{0x0a}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV3Script); !ok {
+		t.Fatalf("expected PlutusV3 script, got %T", ref.Script)
+	}
+}
+
+func TestScriptRefFromBytesRejectsInvalidHashHex(t *testing.T) {
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV2, []byte{0x01}, "zz"); err == nil {
+		t.Fatal("expected invalid hash hex error")
+	}
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV2, []byte{0x01}, "abcd"); err == nil {
+		t.Fatal("expected invalid hash length error")
+	}
+}
+
+func TestScriptRefFromBytesRejectsUnsupportedType(t *testing.T) {
+	if _, err := ScriptRefFromBytes(99, []byte{0x01}, ""); err == nil {
+		t.Fatal("expected unsupported script ref type error")
+	}
+}
+
+func TestScriptRefFromBytesNativeScript(t *testing.T) {
+	// Native script: ScriptPubkey = [0, key_hash]
+	keyHash := make([]byte, 28)
+	keyHash[0] = 0xAA
+	scriptCbor, err := cbor.Encode([]any{0, keyHash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptCbor, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	native, ok := ref.Script.(common.NativeScript)
+	if !ok {
+		t.Fatalf("expected native script, got %T", ref.Script)
+	}
+
+	// Round-trip the computed hash through verification.
+	correctHash := hex.EncodeToString(native.Hash().Bytes())
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptCbor, correctHash); err != nil {
+		t.Fatalf("expected native script hash to verify: %v", err)
+	}
+	wrongHash := hex.EncodeToString(make([]byte, common.Blake2b224Size))
+	if _, err := ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptCbor, wrongHash); err == nil {
+		t.Fatal("expected native script hash mismatch error")
+	}
+}
+
 func TestComputeMaxTxFeeOverflow(t *testing.T) {
 	pp := ProtocolParameters{
 		MaxTxSize:         1 << 30,
