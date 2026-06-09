@@ -316,12 +316,9 @@ func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerK
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer tag in key %q: %w", key, err)
 		}
-		idx, err := strconv.Atoi(parts[1])
+		idx, err := strconv.ParseUint(parts[1], 10, 32)
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer index %q in key %q: %w", parts[1], key, err)
-		}
-		if idx < 0 {
-			return nil, fmt.Errorf("negative redeemer index %d in key %q", idx, key)
 		}
 		rKey := common.RedeemerKey{Tag: tag, Index: uint32(idx)}
 		if budget.Memory > math.MaxInt64 || budget.Steps > math.MaxInt64 {

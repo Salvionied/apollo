@@ -78,6 +78,33 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 }
 
+func TestEvaluateTxRejectsRedeemerIndexOverflow(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"result": map[string]any{
+				"EvaluationResult": map[string]any{
+					"spend:4294967296": map[string]uint64{
+						"memory": 1,
+						"steps":  1,
+					},
+				},
+				"EvaluationFailure": nil,
+			},
+		})
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	_, err := ctx.EvaluateTx([]byte{0x84})
+	if err == nil {
+		t.Fatal("expected redeemer index overflow error")
+	}
+}
+
 func TestAddressUTxOToUtxoRejectsInvalidAssetUnit(t *testing.T) {
 	addr := testAddress(t)
 	raw := bfAddressUTxO{
