@@ -2,3 +2,5 @@
 sample.txt
 /scripts/results
 /bin
+coverage.out
+coverage.html

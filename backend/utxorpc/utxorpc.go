@@ -1,0 +1,414 @@
+package utxorpc
+
+import (
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"math"
+	"math/big"
+	"strconv"
+
+	"connectrpc.com/connect"
+	"github.com/blinklabs-io/gouroboros/ledger/babbage"
+	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
+	query "github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
+	submit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+	syncpb "github.com/utxorpc/go-codegen/utxorpc/v1alpha/sync"
+	sdk "github.com/utxorpc/go-sdk"
+
+	"github.com/Salvionied/apollo/v2/backend"
+)
+
+// UtxoRpcChainContext implements backend.ChainContext using the UTxO RPC protocol.
+type UtxoRpcChainContext struct {
+	client    *sdk.UtxorpcClient
+	networkId uint8
+}
+
+// NewUtxoRpcChainContext creates a new UTxO RPC chain context.
+func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]string) *UtxoRpcChainContext {
+	opts := []sdk.ClientOption{
+		sdk.WithBaseUrl(baseUrl),
+	}
+	if len(headers) > 0 {
+		opts = append(opts, sdk.WithHeaders(headers))
+	}
+	client := sdk.NewClient(opts...)
+	return &UtxoRpcChainContext{
+		client:    client,
+		networkId: networkId,
+	}
+}
+
+func bigIntToInt64(bi *cardano.BigInt) int64 {
+	if bi == nil {
+		return 0
+	}
+	oneof := bi.GetBigInt()
+	if oneof == nil {
+		return 0
+	}
+	switch v := oneof.(type) {
+	case *cardano.BigInt_Int:
+		if v == nil {
+			return 0
+		}
+		return v.Int
+	case *cardano.BigInt_BigUInt:
+		if v == nil {
+			return 0
+		}
+		n := new(big.Int).SetBytes(v.BigUInt)
+		if !n.IsInt64() {
+			return math.MaxInt64
+		}
+		return n.Int64()
+	case *cardano.BigInt_BigNInt:
+		if v == nil {
+			return 0
+		}
+		n := new(big.Int).SetBytes(v.BigNInt)
+		n.Neg(n)
+		if !n.IsInt64() {
+			return math.MinInt64
+		}
+		return n.Int64()
+	default:
+		return 0
+	}
+}
+
+func bigIntToString(bi *cardano.BigInt) string {
+	if bi == nil {
+		return "0"
+	}
+	oneof := bi.GetBigInt()
+	if oneof == nil {
+		return "0"
+	}
+	switch v := oneof.(type) {
+	case *cardano.BigInt_Int:
+		if v == nil {
+			return "0"
+		}
+		return strconv.FormatInt(v.Int, 10)
+	case *cardano.BigInt_BigUInt:
+		if v == nil {
+			return "0"
+		}
+		return new(big.Int).SetBytes(v.BigUInt).String()
+	case *cardano.BigInt_BigNInt:
+		if v == nil {
+			return "0"
+		}
+		n := new(big.Int).SetBytes(v.BigNInt)
+		n.Neg(n)
+		return n.String()
+	default:
+		return "0"
+	}
+}
+
+func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
+	req := connect.NewRequest(&query.ReadParamsRequest{})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.ReadParams(req)
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+
+	params := resp.Msg.GetValues().GetCardano()
+	if params == nil {
+		return backend.ProtocolParameters{}, errors.New("no cardano params in response")
+	}
+
+	maxBlockSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockBodySize(), "max block body size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxTxSize, err := backend.BoundedIntFromUint64(params.GetMaxTxSize(), "max tx size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxBlockHeaderSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockHeaderSize(), "max block header size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	collateralPercent, err := backend.BoundedIntFromUint64(params.GetCollateralPercentage(), "collateral percentage")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxCollateralInputs, err := backend.BoundedIntFromUint64(params.GetMaxCollateralInputs(), "max collateral inputs")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+
+	pp := backend.ProtocolParameters{
+		MinFeeCoefficient:   bigIntToInt64(params.GetMinFeeCoefficient()),
+		MinFeeConstant:      bigIntToInt64(params.GetMinFeeConstant()),
+		MaxBlockSize:        maxBlockSize,
+		MaxTxSize:           maxTxSize,
+		MaxBlockHeaderSize:  maxBlockHeaderSize,
+		CoinsPerUtxoByte:    bigIntToString(params.GetCoinsPerUtxoByte()),
+		MaxValSize:          strconv.FormatUint(params.GetMaxValueSize(), 10),
+		CollateralPercent:   collateralPercent,
+		MaxCollateralInputs: maxCollateralInputs,
+		KeyDeposits:         bigIntToString(params.GetStakeKeyDeposit()),
+		PoolDeposits:        bigIntToString(params.GetPoolDeposit()),
+	}
+
+	if txEx := params.GetMaxExecutionUnitsPerTransaction(); txEx != nil {
+		pp.MaxTxExMem = strconv.FormatUint(txEx.GetMemory(), 10)
+		pp.MaxTxExSteps = strconv.FormatUint(txEx.GetSteps(), 10)
+	}
+	if blockEx := params.GetMaxExecutionUnitsPerBlock(); blockEx != nil {
+		pp.MaxBlockExMem = strconv.FormatUint(blockEx.GetMemory(), 10)
+		pp.MaxBlockExSteps = strconv.FormatUint(blockEx.GetSteps(), 10)
+	}
+
+	prices := params.GetPrices()
+	if prices != nil {
+		if prices.GetMemory() != nil && prices.GetMemory().GetDenominator() != 0 {
+			pp.PriceMem = float64(prices.GetMemory().GetNumerator()) / float64(prices.GetMemory().GetDenominator())
+		}
+		if prices.GetSteps() != nil && prices.GetSteps().GetDenominator() != 0 {
+			pp.PriceStep = float64(prices.GetSteps().GetNumerator()) / float64(prices.GetSteps().GetDenominator())
+		}
+	}
+
+	// Parse cost models from UTxO RPC protobuf response.
+	// Keys match ComputeScriptDataHash expectations: "PlutusV1", "PlutusV2", "PlutusV3".
+	if cm := params.GetCostModels(); cm != nil {
+		pp.CostModels = make(map[string][]int64)
+		if v1 := cm.GetPlutusV1(); v1 != nil {
+			pp.CostModels["PlutusV1"] = append([]int64(nil), v1.GetValues()...)
+		}
+		if v2 := cm.GetPlutusV2(); v2 != nil {
+			pp.CostModels["PlutusV2"] = append([]int64(nil), v2.GetValues()...)
+		}
+		if v3 := cm.GetPlutusV3(); v3 != nil {
+			pp.CostModels["PlutusV3"] = append([]int64(nil), v3.GetValues()...)
+		}
+	}
+
+	return pp, nil
+}
+
+func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error) {
+	return backend.GenesisParameters{}, errors.New("genesis params not available via UTxO RPC")
+}
+
+func (u *UtxoRpcChainContext) NetworkId() uint8 {
+	return u.networkId
+}
+
+func (u *UtxoRpcChainContext) CurrentEpoch() (uint64, error) {
+	return 0, errors.New("epoch query not available via UTxO RPC")
+}
+
+func (u *UtxoRpcChainContext) MaxTxFee() (uint64, error) {
+	pp, err := u.ProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	return backend.ComputeMaxTxFee(pp)
+}
+
+func (u *UtxoRpcChainContext) Tip() (uint64, error) {
+	req := connect.NewRequest(&syncpb.ReadTipRequest{})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.ReadTip(req)
+	if err != nil {
+		return 0, err
+	}
+	tip := resp.Msg.GetTip()
+	if tip == nil {
+		return 0, errors.New("no tip in response")
+	}
+	return tip.GetSlot(), nil
+}
+
+func (u *UtxoRpcChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
+	addrBytes, err := address.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get address bytes: %w", err)
+	}
+
+	req := connect.NewRequest(&query.SearchUtxosRequest{
+		Predicate: &query.UtxoPredicate{
+			Match: &query.AnyUtxoPattern{
+				UtxoPattern: &query.AnyUtxoPattern_Cardano{
+					Cardano: &cardano.TxOutputPattern{
+						Address: &cardano.AddressPattern{
+							ExactAddress: addrBytes,
+						},
+					},
+				},
+			},
+		},
+	})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.SearchUtxos(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var utxos []common.Utxo
+	for _, item := range resp.Msg.GetItems() {
+		utxo, err := utxoFromRpc(item)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse UTxO from RPC: %w", err)
+		}
+		utxos = append(utxos, utxo)
+	}
+	return utxos, nil
+}
+
+func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
+	req := connect.NewRequest(&submit.SubmitTxRequest{
+		Tx: &submit.AnyChainTx{
+			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+		},
+	})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.SubmitTx(req)
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	ref := resp.Msg.GetRef()
+	if len(ref) == 0 {
+		return common.Blake2b256{}, errors.New("no tx ref in submit response")
+	}
+	if len(ref) != common.Blake2b256Size {
+		return common.Blake2b256{}, fmt.Errorf("invalid tx ref length: expected %d bytes, got %d", common.Blake2b256Size, len(ref))
+	}
+	var result common.Blake2b256
+	copy(result[:], ref)
+	return result, nil
+}
+
+func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+	req := connect.NewRequest(&submit.EvalTxRequest{
+		Tx: &submit.AnyChainTx{
+			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+		},
+	})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.EvalTx(req)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[common.RedeemerKey]common.ExUnits)
+	report := resp.Msg.GetReport()
+	if report == nil {
+		return result, nil
+	}
+	cardanoReport := report.GetCardano()
+	if cardanoReport == nil {
+		return result, nil
+	}
+	for _, redeemer := range cardanoReport.GetRedeemers() {
+		tag, err := utxorpcPurposeToRedeemerTag(redeemer.GetPurpose())
+		if err != nil {
+			return nil, fmt.Errorf("failed to map redeemer purpose: %w", err)
+		}
+		key := common.RedeemerKey{
+			Tag:   tag,
+			Index: redeemer.GetIndex(),
+		}
+		eu := redeemer.GetExUnits()
+		if eu != nil {
+			mem := eu.GetMemory()
+			steps := eu.GetSteps()
+			if mem > math.MaxInt64 || steps > math.MaxInt64 {
+				return nil, fmt.Errorf("ExUnits overflow: memory=%d steps=%d", mem, steps)
+			}
+			result[key] = common.ExUnits{
+				Memory: int64(mem),
+				Steps:  int64(steps),
+			}
+		}
+	}
+	return result, nil
+}
+
+func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	req := connect.NewRequest(&query.ReadUtxosRequest{
+		Keys: []*query.TxoRef{
+			{
+				Hash:  txHash.Bytes(),
+				Index: index,
+			},
+		},
+	})
+	u.client.AddHeadersToRequest(req)
+	resp, err := u.client.ReadUtxos(req)
+	if err != nil {
+		return nil, err
+	}
+	items := resp.Msg.GetItems()
+	if len(items) == 0 {
+		return nil, errors.New("utxo not found")
+	}
+	utxo, err := utxoFromRpc(items[0])
+	if err != nil {
+		return nil, err
+	}
+	return &utxo, nil
+}
+
+func (u *UtxoRpcChainContext) ScriptCbor(_ common.Blake2b224) ([]byte, error) {
+	return nil, errors.New("script lookup not available via UTxO RPC")
+}
+
+func utxoFromRpc(item *query.AnyUtxoData) (common.Utxo, error) {
+	nativeBytes := item.GetNativeBytes()
+	if len(nativeBytes) == 0 {
+		ref := item.GetTxoRef()
+		return common.Utxo{}, fmt.Errorf("no native bytes for utxo %s#%d",
+			hex.EncodeToString(ref.GetHash()), ref.GetIndex())
+	}
+
+	// Parse the CBOR-encoded transaction output
+	output, err := babbage.NewBabbageTransactionOutputFromCbor(nativeBytes)
+	if err != nil {
+		return common.Utxo{}, fmt.Errorf("failed to parse utxo CBOR: %w", err)
+	}
+
+	ref := item.GetTxoRef()
+	refHash := ref.GetHash()
+	if len(refHash) != common.Blake2b256Size {
+		return common.Utxo{}, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(refHash))
+	}
+	var txId common.Blake2b256
+	copy(txId[:], refHash)
+
+	input := shelley.ShelleyTransactionInput{
+		TxId:        txId,
+		OutputIndex: ref.GetIndex(),
+	}
+	return common.Utxo{
+		Id:     input,
+		Output: output,
+	}, nil
+}
+
+// utxorpcPurposeToRedeemerTag maps UTxO RPC redeemer purpose enum to gouroboros RedeemerTag.
+// UTxO RPC uses 1-based enum (SPEND=1, MINT=2, ...) while gouroboros uses 0-based (Spend=0, Mint=1, ...).
+func utxorpcPurposeToRedeemerTag(purpose cardano.RedeemerPurpose) (common.RedeemerTag, error) {
+	switch purpose {
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_SPEND:
+		return common.RedeemerTagSpend, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_MINT:
+		return common.RedeemerTagMint, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_CERT:
+		return common.RedeemerTagCert, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_REWARD:
+		return common.RedeemerTagReward, nil
+	default:
+		return 0, fmt.Errorf("unsupported redeemer purpose: %d", purpose)
+	}
+}

@@ -1,53 +1,87 @@
 # Plutus V3 Data Structures
 
-This document details the integration of Plutus V3 scripts within the `TransactionWitnessSet` structure in the Apollo library, as defined in [`serialization/TransactionWitnessSet/TransactionWitnessSet.go`](serialization/TransactionWitnessSet/TransactionWitnessSet.go).
+This document details how Plutus V3 scripts are represented in the transaction witness set in Apollo v2. All types come from gouroboros (`github.com/blinklabs-io/gouroboros`).
 
-## `PlutusV3Script` Field in `TransactionWitnessSet`
+## Transaction Witness Set
 
-The `TransactionWitnessSet` struct is a critical component of a Cardano transaction, containing all the necessary witnesses for validating the transaction. For Plutus V3, the `TransactionWitnessSet` includes a dedicated field to hold Plutus V3 scripts.
+The `ConwayTransactionWitnessSet` (from `gouroboros/ledger/conway`) contains fields for all Plutus script versions:
 
 ```go
-type TransactionWitnessSet struct {
- VKeyWitnesses      []*Vkeywitness                                `cbor:"0,keyasint,omitempty"`
- NativeScripts      []NativeScript.NativeScript                   `cbor:"1,keyasint,omitempty"`
- BootstrapWitnesses []*BootstrapWitness                           `cbor:"2,keyasint,omitempty"`
- PlutusV1Script     []PlutusData.PlutusV1Script                   `cbor:"3,keyasint,omitempty"`
- PlutusData         *PlutusData.PlutusIndefArray                  `cbor:"4,keyasint,omitempty"`
- Redeemers          []Redeemer.Redeemer                           `cbor:"5,keyasint,omitempty"`
- PlutusV2Script     []PlutusData.PlutusV2Script                   `cbor:"6,keyasint,omitempty"`
- PlutusV3Script     []PlutusData.PlutusV3Script                   `cbor:"7,keyasint,omitempty"` // Plutus V3 Scripts
+// From gouroboros/ledger/conway
+type ConwayTransactionWitnessSet struct {
+    cbor.DecodeStoreCbor
+    VkeyWitnesses      cbor.SetType[common.VkeyWitness]      `cbor:"0,keyasint,omitempty"`
+    WsNativeScripts    cbor.SetType[common.NativeScript]      `cbor:"1,keyasint,omitempty"`
+    BootstrapWitnesses cbor.SetType[common.BootstrapWitness]  `cbor:"2,keyasint,omitempty"`
+    WsPlutusV1Scripts  cbor.SetType[common.PlutusV1Script]    `cbor:"3,keyasint,omitempty"`
+    WsPlutusData       cbor.SetType[common.Datum]             `cbor:"4,keyasint,omitempty"`
+    WsRedeemers        ConwayRedeemers                        `cbor:"5,keyasint,omitempty"`
+    WsPlutusV2Scripts  cbor.SetType[common.PlutusV2Script]    `cbor:"6,keyasint,omitempty"`
+    WsPlutusV3Scripts  cbor.SetType[common.PlutusV3Script]    `cbor:"7,keyasint,omitempty"`
 }
 ```
 
-- `PlutusV3Script []PlutusData.PlutusV3Script`: This field is a slice of `PlutusV3Script` types. While it can hold Plutus V3 scripts, it is more common for this field to be empty, as these scripts are usually not bundled with the transaction they are validating. Instead, transactions often use references to scripts that have been included in the outputs of other transactions.
+- `WsPlutusV3Scripts`: Holds Plutus V3 scripts attached to the transaction via `AttachScript`.
 
-**Usage Context:**
+## How Apollo Populates the Witness Set
 
-When building a transaction that interacts with Plutus V3 smart contracts, any Plutus V3 scripts that need to be included in the transaction for validation purposes are added to this `PlutusV3Script` field within the `TransactionWitnessSet`. The `ApolloBuilder` automatically populates this field when `AttachV3Script` is used and the transaction witness set is built.
+When `Complete()` is called, Apollo builds the witness set from its internal state:
 
-**Example (Conceptual - internal to ApolloBuilder):**
+```go
+// Internal to Apollo - shown for illustration
+func (a *Apollo) buildWitnessSet() conway.ConwayTransactionWitnessSet {
+    ws := conway.ConwayTransactionWitnessSet{}
+    if len(a.v3scripts) > 0 {
+        ws.WsPlutusV3Scripts = cbor.NewSetType(a.v3scripts, true)
+    }
+    // ... plus V1/V2 scripts, datums, redeemers, native scripts
+    return ws
+}
+```
 
-While direct manipulation of `TransactionWitnessSet` is generally handled by the `ApolloBuilder`, conceptually, the process involves:
+Scripts are stored internally by version but attached through the unified `AttachScript` API, which detects the version automatically.
 
-1. **Attaching a Plutus V3 Script:**
+## Script Types
 
-   ```go
-   // In ApolloBuilder.AttachV3Script
-   // ...
-   b.v3scripts = append(b.v3scripts, script)
-   // ...
-   ```
+All script types implement `common.Script`:
 
-2. **Building the Transaction Witness Set:**
+| Type | Go Type | ScriptRef Type |
+|------|---------|---------------|
+| Native Script | `common.NativeScript` | 0 |
+| Plutus V1 | `common.PlutusV1Script` | 1 |
+| Plutus V2 | `common.PlutusV2Script` | 2 |
+| Plutus V3 | `common.PlutusV3Script` | 3 |
 
-   ```go
-   // In ApolloBuilder.BuildTxWitnessSet
-   // ...
-   witnessSet := &TransactionWitnessSet{
-       // ... other witnesses
-       PlutusV3Script: b.v3scripts, // Populating the PlutusV3Script field
-   }
-   // ...
-   ```
+## Redeemers
 
-This structured approach, whether by bundling scripts or more commonly by referencing them, ensures that all necessary Plutus V3 scripts are available for successful on-chain validation.
+Redeemers in v2 use the gouroboros key-value format:
+
+```go
+// From gouroboros/ledger/common
+type RedeemerKey struct {
+    Tag   RedeemerTag
+    Index uint32
+}
+
+type RedeemerValue struct {
+    Data    Datum
+    ExUnits ExUnits
+}
+```
+
+Redeemer tags: `RedeemerTagSpend`, `RedeemerTagMint`, `RedeemerTagCert`, `RedeemerTagReward`.
+
+## Datum Types
+
+Datums use `common.Datum` (alias for `common.PlutusData`). They can be attached inline to outputs or as hashes:
+
+```go
+// Inline datum on output
+a.PayToContract(scriptAddr, &datum, 5_000_000)
+
+// Datum hash on output (datum added to witness set)
+a.PayToContractWithDatumHash(scriptAddr, &datum, 5_000_000)
+
+// Add datum directly to witness set
+a.AddDatum(&datum)
+```

@@ -1,20 +1,20 @@
 # Constitutional Committee Methods
 
-This page documents constitutional committee certificate methods: `AuthorizeCommitteeHotKey`, `ResignCommitteeColdKey`. Implementation: [`ApolloBuilder.go`](../../ApolloBuilder.go), [`serialization/Certificate/Certificate.go`](../../serialization/Certificate/Certificate.go) (`AuthCommitteeHotCert`, `ResignCommitteeColdCert`). Certificate CBOR: [`serialization/Certificate/Certificate_test.go`](../../serialization/Certificate/Certificate_test.go).
+This page documents constitutional committee certificate methods: `AuthorizeCommitteeHotKey`, `ResignCommitteeColdKey`. Implementation: [`apollo.go`](../../apollo.go), `github.com/blinklabs-io/gouroboros/ledger/common` (`AuthCommitteeHotCert`, `ResignCommitteeColdCert`). Certificate CBOR: [`governance_test.go`](../../governance_test.go).
 
 The Constitutional Committee uses a **cold/hot key** separation for security. The cold key is the long-lived identity established when the committee member is approved by governance (via an `UpdateCommittee` action — see [proposal_methods.md](proposal_methods.md)). The hot key is short-lived and authorized to actively cast votes on the member's behalf, so the cold key can be kept offline.
 
 ## Method signatures
 
 ```go
-func (b *Apollo) AuthorizeCommitteeHotKey(
-    cold Certificate.Credential,
-    hot Certificate.Credential,
+func (a *Apollo) AuthorizeCommitteeHotKey(
+    cold common.Credential,
+    hot common.Credential,
 ) *Apollo
 
-func (b *Apollo) ResignCommitteeColdKey(
-    cold Certificate.Credential,
-    anchor *Certificate.Anchor,
+func (a *Apollo) ResignCommitteeColdKey(
+    cold common.Credential,
+    anchor *common.GovAnchor,
 ) *Apollo
 ```
 
@@ -28,8 +28,8 @@ Both methods append a certificate to the builder's certificate list and return t
 
 ## Inputs and constraints
 
-- `cold.Hash.Payload` and `hot.Hash.Payload` must each be exactly 28 bytes.
-- `Code` is `0` for key-hash credentials, `1` for script-hash credentials. Script committee members must be witnessed by the script.
+- `cold.Credential` and `hot.Credential` must each be exactly 28 bytes.
+- `CredType` is `0` for key-hash credentials, `1` for script-hash credentials. Script committee members must be witnessed by the script.
 - The cold key must sign `AuthorizeCommitteeHotKey` and `ResignCommitteeColdKey` (or the corresponding script must be witnessed).
 
 ## Cardano CLI equivalence (10.14.0.0)
@@ -46,18 +46,15 @@ Both methods append a certificate to the builder's certificate list and return t
 **Apollo:**
 
 ```go
-import (
-    "github.com/Salvionied/apollo/serialization"
-    "github.com/Salvionied/apollo/serialization/Certificate"
-)
+import "github.com/blinklabs-io/gouroboros/ledger/common"
 
-cold := Certificate.Credential{
-    Code: 0,
-    Hash: serialization.ConstrainedBytes{Payload: ccColdKeyHash},
+cold := common.Credential{
+    CredType:   common.CredentialTypeAddrKeyHash,
+    Credential: ccColdKeyHash,
 }
-hot := Certificate.Credential{
-    Code: 0,
-    Hash: serialization.ConstrainedBytes{Payload: ccHotKeyHash},
+hot := common.Credential{
+    CredType:   common.CredentialTypeAddrKeyHash,
+    Credential: ccHotKeyHash,
 }
 
 apollob, err = apollob.
@@ -83,7 +80,7 @@ cardano-cli conway governance committee create-hot-key-authorization-certificate
 
 ```go
 apollob, err = apollob.
-    ResignCommitteeColdKey(cold, &Certificate.Anchor{
+    ResignCommitteeColdKey(cold, &common.GovAnchor{
         Url:      "https://example.com/resignation.json",
         DataHash: resignDocHash,
     }).
@@ -115,10 +112,10 @@ cardano-cli conway governance committee create-cold-key-resignation-certificate 
 ## Evidence
 
 - **Builder behavior verified by tests**:
-  - `TestAuthorizeCommitteeHotKey` ([`staking_test.go`](../../staking_test.go)) — kind 14 emitted; both cold and hot credentials preserved.
-  - `TestResignCommitteeColdKey`, `TestResignCommitteeColdKeyNoAnchor` ([`staking_test.go`](../../staking_test.go)) — kind 15 emitted; anchor optional.
+  - `TestAuthorizeCommitteeHotKey` ([`governance_test.go`](../../governance_test.go)) — kind 14 emitted; both cold and hot credentials preserved.
+  - `TestResignCommitteeColdKey`, `TestResignCommitteeColdKeyNoAnchor` ([`governance_test.go`](../../governance_test.go)) — kind 15 emitted; anchor optional.
 - **CBOR serialization round-trips**:
-  - `TestAuthCommitteeHotCertRoundTrip` ([`serialization/Certificate/Certificate_test.go`](../../serialization/Certificate/Certificate_test.go)).
+  - `TestAuthCommitteeHotCertRoundTrip` ([`governance_test.go`](../../governance_test.go)).
   - `TestResignCommitteeColdCertAnchorsRoundTrip` — anchor present and absent.
 
 ## Caveats and validation

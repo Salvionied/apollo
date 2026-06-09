@@ -1,24 +1,34 @@
 # Deregister Methods
 
-This page documents **stake deregistration**: `DeregisterStake`, `DeregisterStakeFromAddress`, `DeregisterStakeFromBech32`. Deregistering returns the 2 ADA stake key deposit; `Complete()` accounts for the refund. Implementation: `[ApolloBuilder.go](../../ApolloBuilder.go)`, `[serialization/Certificate/Certificate.go](../../serialization/Certificate/Certificate.go)`.
+This page documents **stake deregistration**: `DeregisterStake`, `DeregisterStakeFromAddress`, `DeregisterStakeFromBech32`. Deregistering returns the 2 ADA stake key deposit; `Complete()` accounts for the refund. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go).
 
 ## Purpose and method signatures
 
+### DeregisterStake (unified)
+
 ```go
-func (b *Apollo) DeregisterStake(stakeCredential *Certificate.Credential) (*Apollo, error)
-func (b *Apollo) DeregisterStakeFromAddress(address Address.Address) (*Apollo, error)
-func (b *Apollo) DeregisterStakeFromBech32(address string) (*Apollo, error)
+func (a *Apollo) DeregisterStake(credOrAddr any) (*Apollo, error)
 ```
 
-If `stakeCredential` is `nil` in `DeregisterStake`, the credential is taken from the wallet. Each appends a `StakeDeregistration` certificate.
+`credOrAddr` can be: `*common.Credential`, `common.Credential`, `common.Address`, `string` (bech32), or `nil` (uses wallet). Appends a `StakeDeregistration` certificate.
+
+### DeregisterStakeFromAddress / DeregisterStakeFromBech32
+
+```go
+func (a *Apollo) DeregisterStakeFromAddress(addr common.Address) (*Apollo, error)
+func (a *Apollo) DeregisterStakeFromBech32(bech32 string) (*Apollo, error)
+```
+
+Type-safe convenience methods that delegate to `DeregisterStake`.
 
 ## Inputs and constraints
 
 - Credential from wallet (nil), from address, or from Bech32 string. Same pattern as registration helpers.
+- The unified method accepts any of the listed types; the `FromAddress`/`FromBech32` variants provide compile-time type safety.
 
 ## Behavior details
 
-- The transaction’s requested balance is **reduced** by the deposit refund in `Complete()` when deregistration certificates are present (see `addChangeAndFee` and balance logic in `ApolloBuilder.go`).
+- The transaction's requested balance is **reduced** by the deposit refund in `Complete()` when deregistration certificates are present.
 
 ## Cardano CLI equivalence (10.14.0.0)
 
@@ -28,15 +38,29 @@ If `stakeCredential` is `nil` in `DeregisterStake`, the credential is taken from
 
 ## Example
 
-**Apollo:**
+### Deregister using wallet credential
 
 ```go
-apollob, err = apollob.
-    DeregisterStake(nil).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+import (
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    apollo "github.com/Salvionied/apollo/v2"
+)
+
+a := apollo.New(cc)
+a.SetWallet(wallet)
+a, err := a.DeregisterStake(nil)
+if err != nil {
+    panic(err)
+}
+a.AddLoadedUTxOs(utxos...)
+a.PayToAddress(myAddr, 10_000_000)
+tx, err := a.Complete()
+```
+
+### Deregister from bech32 address
+
+```go
+a, err = a.DeregisterStakeFromBech32("stake1u...")
 ```
 
 **Cardano CLI:**
@@ -46,10 +70,8 @@ cardano-cli stake-address deregistration-certificate --stake-verification-key-fi
 cardano-cli transaction build --certificate-file dereg.cert ...
 ```
 
-## Evidence
-
-- **Implementation-only** Certificate: `TestStakeDeregistrationRoundTrip` in `Certificate_test.go`.
-
 ## Caveats and validation
 
-- Validate on preprod/mainnet with small amounts. Ensure the stake key is actually registered before deregistering.
+- Ensure the stake key is actually registered before deregistering.
+- All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.
+- Validate on preprod/mainnet with small amounts.

@@ -1,55 +1,53 @@
 # Voting Methods
 
-This page documents how to **cast votes** on governance actions: `AddVote`. Implementation: [`ApolloBuilder.go`](../../ApolloBuilder.go) (`AddVote`), [`serialization/Governance/Governance.go`](../../serialization/Governance/Governance.go) (`Voter`, `GovActionId`, `VotingProcedure`, `VotingProcedures`).
+This page documents how to **cast votes** on governance actions: `AddVote`. Implementation: [`apollo.go`](../../apollo.go) (`AddVote`), `github.com/blinklabs-io/gouroboros/ledger/common` and `github.com/blinklabs-io/gouroboros/ledger/conway` (`Voter`, `GovActionId`, `VotingProcedure`, `VotingProcedures`).
 
 A vote is a tuple of **(voter, action ID, procedure)**. A single transaction can carry many votes from many voters on many actions; Apollo groups votes by voter and deduplicates per (voter, action) pair automatically.
 
 ## Types
 
-### `Governance.Voter`
+### `common.Voter`
 
 ```go
-type VoterRole int
 const (
-    ConstitutionalCommitteeKeyHash VoterRole = 0
-    ConstitutionalCommitteeScript  VoterRole = 1
-    DRepKeyHash                    VoterRole = 2
-    DRepScript                     VoterRole = 3
-    StakePoolOperator              VoterRole = 4
+    VoterTypeConstitutionalCommitteeHotKeyHash    uint8 = 0
+    VoterTypeConstitutionalCommitteeHotScriptHash uint8 = 1
+    VoterTypeDRepKeyHash                          uint8 = 2
+    VoterTypeDRepScriptHash                       uint8 = 3
+    VoterTypeStakingPoolKeyHash                   uint8 = 4
 )
 
 type Voter struct {
-    Role VoterRole
-    Hash serialization.ConstrainedBytes  // 28-byte credential hash
+    Type uint8
+    Hash [28]byte
 }
 ```
 
 The role identifies *who* is voting; the hash is the credential. Constitutional committee members vote with their authorized **hot** credential (see [committee_methods.md](committee_methods.md)).
 
-### `Governance.GovActionId`
+### `common.GovActionId`
 
 ```go
 type GovActionId struct {
-    TransactionHash []byte  // 32-byte hash of the transaction that proposed the action
-    GovActionIndex  uint32  // index into that transaction's ProposalProcedures
+    TransactionId [32]byte
+    GovActionIdx  uint32
 }
 ```
 
 A governance action is identified by the transaction that proposed it plus the index of the proposal within that transaction's proposals array.
 
-### `Governance.VotingProcedure`
+### `common.VotingProcedure`
 
 ```go
-type Vote int
 const (
-    VoteNo      Vote = 0
-    VoteYes     Vote = 1
-    VoteAbstain Vote = 2
+    GovVoteNo      uint8 = 0
+    GovVoteYes     uint8 = 1
+    GovVoteAbstain uint8 = 2
 )
 
 type VotingProcedure struct {
-    Vote   Vote
-    Anchor *Certificate.Anchor  // optional rationale document
+    Vote   uint8
+    Anchor *common.GovAnchor  // optional rationale document
 }
 ```
 
@@ -58,10 +56,10 @@ The optional anchor lets a voter publish a written rationale for their vote. Pas
 ## Method signature
 
 ```go
-func (b *Apollo) AddVote(
-    voter Governance.Voter,
-    actionId Governance.GovActionId,
-    procedure Governance.VotingProcedure,
+func (a *Apollo) AddVote(
+    voter common.Voter,
+    actionId common.GovActionId,
+    procedure common.VotingProcedure,
 ) *Apollo
 ```
 
@@ -78,8 +76,8 @@ Append-only; chainable. Internally calls `VotingProcedures.Add()` which:
 
 ## Inputs and constraints
 
-- `voter.Hash.Payload` must be exactly 28 bytes.
-- `actionId.TransactionHash` must be exactly 32 bytes.
+- `voter.Hash` must be exactly 28 bytes.
+- `actionId.TransactionId` must be exactly 32 bytes.
 - `procedure.Anchor.DataHash` (when present) must be 32 bytes.
 
 ## Cardano CLI equivalence (10.14.0.0)
@@ -97,23 +95,20 @@ Note: cardano-cli emits a single vote file; Apollo equivalently allows multiple 
 **Apollo:**
 
 ```go
-import (
-    "github.com/Salvionied/apollo/serialization"
-    "github.com/Salvionied/apollo/serialization/Governance"
-)
+import "github.com/blinklabs-io/gouroboros/ledger/common"
 
-voter := Governance.Voter{
-    Role: Governance.DRepKeyHash,
-    Hash: serialization.ConstrainedBytes{Payload: drepKeyHash},
+voter := common.Voter{
+    Type: common.VoterTypeDRepKeyHash,
+    Hash: drepKeyHash,
 }
 
-actionId := Governance.GovActionId{
-    TransactionHash: proposalTxHash,
-    GovActionIndex:  0,
+actionId := common.GovActionId{
+    TransactionId: proposalTxHash,
+    GovActionIdx:  0,
 }
 
-procedure := Governance.VotingProcedure{
-    Vote:   Governance.VoteYes,
+procedure := common.VotingProcedure{
+    Vote:   common.GovVoteYes,
     Anchor: nil,
 }
 
@@ -144,9 +139,9 @@ The same voter can vote on several different actions:
 
 ```go
 apollob, err = apollob.
-    AddVote(voter, action1, Governance.VotingProcedure{Vote: Governance.VoteYes}).
-    AddVote(voter, action2, Governance.VotingProcedure{Vote: Governance.VoteNo}).
-    AddVote(voter, action3, Governance.VotingProcedure{Vote: Governance.VoteAbstain}).
+    AddVote(voter, action1, common.VotingProcedure{Vote: common.GovVoteYes}).
+    AddVote(voter, action2, common.VotingProcedure{Vote: common.GovVoteNo}).
+    AddVote(voter, action3, common.VotingProcedure{Vote: common.GovVoteAbstain}).
     AddInputAddressFromBech32(myAddr).
     AddLoadedUTxOs(utxos...).
     PayToAddressBech32(myAddr, 10_000_000).
@@ -158,11 +153,11 @@ All three votes are stored under the single voter entry in the transaction's vot
 ### Vote with a rationale anchor
 
 ```go
-import "github.com/Salvionied/apollo/serialization/Certificate"
+import "github.com/blinklabs-io/gouroboros/ledger/common"
 
-procedure := Governance.VotingProcedure{
-    Vote: Governance.VoteNo,
-    Anchor: &Certificate.Anchor{
+procedure := common.VotingProcedure{
+    Vote: common.GovVoteNo,
+    Anchor: &common.GovAnchor{
         Url:      "https://example.com/vote-rationale.json",
         DataHash: rationaleDocHash,
     },
@@ -179,14 +174,14 @@ apollob, err = apollob.
 ### Constitutional committee member voting with hot key
 
 ```go
-voter := Governance.Voter{
-    Role: Governance.ConstitutionalCommitteeKeyHash,
-    Hash: serialization.ConstrainedBytes{Payload: ccHotKeyHash},
+voter := common.Voter{
+    Type: common.VoterTypeConstitutionalCommitteeHotKeyHash,
+    Hash: ccHotKeyHash,
 }
 
 apollob, err = apollob.
-    AddVote(voter, actionId, Governance.VotingProcedure{
-        Vote: Governance.VoteYes,
+    AddVote(voter, actionId, common.VotingProcedure{
+        Vote: common.GovVoteYes,
     }).
     AddInputAddressFromBech32(myAddr).
     AddLoadedUTxOs(utxos...).
@@ -201,14 +196,14 @@ Use the **hot** key hash here — the cold key authorized this hot key via `Auth
 SPOs vote on no-confidence, hard fork, and a few other action types. The hash is the pool's cold key hash:
 
 ```go
-voter := Governance.Voter{
-    Role: Governance.StakePoolOperator,
-    Hash: serialization.ConstrainedBytes{Payload: poolColdKeyHash},
+voter := common.Voter{
+    Type: common.VoterTypeStakingPoolKeyHash,
+    Hash: poolColdKeyHash,
 }
 
 apollob, err = apollob.
-    AddVote(voter, actionId, Governance.VotingProcedure{
-        Vote: Governance.VoteYes,
+    AddVote(voter, actionId, common.VotingProcedure{
+        Vote: common.GovVoteYes,
     }).
     AddInputAddressFromBech32(myAddr).
     AddLoadedUTxOs(utxos...).
@@ -222,8 +217,8 @@ apollob, err = apollob.
 
 ```go
 apollob = apollob.
-    AddVote(voter, actionId, Governance.VotingProcedure{Vote: Governance.VoteYes}).
-    AddVote(voter, actionId, Governance.VotingProcedure{Vote: Governance.VoteNo})
+    AddVote(voter, actionId, common.VotingProcedure{Vote: common.GovVoteYes}).
+    AddVote(voter, actionId, common.VotingProcedure{Vote: common.GovVoteNo})
 // The transaction sends only one vote: VoteNo.
 ```
 
@@ -234,7 +229,7 @@ apollob = apollob.
   - `TestAddMultipleVotes` ([`governance_test.go`](../../governance_test.go)) — same voter on two different actions grouped under one voter entry.
   - `TestVotingAndProposalFieldsNilByDefault` ([`governance_test.go`](../../governance_test.go)) — voting procedures are `nil` until `AddVote` is called.
 - **Voting procedure data structures verified by tests**:
-  - `TestVoterRoundTrip`, `TestGovActionIdRoundTrip`, `TestVotingProcedureRoundTrip`, `TestVotingProceduresRoundTrip` ([`serialization/Governance/Governance_test.go`](../../serialization/Governance/Governance_test.go)).
+  - `TestVoterRoundTrip`, `TestGovActionIdRoundTrip`, `TestVotingProcedureRoundTrip`, `TestVotingProceduresRoundTrip` ([`governance_test.go`](../../governance_test.go)).
   - `TestVotingProceduresAdd` — append a new voter and a second vote for an existing voter.
   - `TestVotingProceduresAddReplacesDuplicateAction` — confirms (voter, action) deduplication.
   - `TestVotingProceduresMarshalCBORCanonicalOrder` — outer and inner map keys emitted in canonical CBOR order, required for deterministic transaction hashing.

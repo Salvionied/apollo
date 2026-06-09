@@ -16,53 +16,60 @@ import (
     "encoding/hex"
     "fmt"
 
-    "github.com/fxamacker/cbor/v2"
-    "github.com/Salvionied/apollo"
-    "github.com/Salvionied/apollo/txBuilding/Backend/BlockFrostChainContext"
-    "github.com/Salvionied/apollo/constants"
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+
+    apollo "github.com/Salvionied/apollo/v2"
+    "github.com/Salvionied/apollo/v2/backend/blockfrost"
 )
 
 func main() {
-    bfc, err := BlockFrostChainContext.NewBlockfrostChainContext(constants.BLOCKFROST_BASE_URL_PREVIEW, int(constants.PREVIEW), "blockfrost_api_key")
+    bfc := blockfrost.NewBlockFrostChainContext(
+        "https://cardano-mainnet.blockfrost.io/api/v0",
+        1,
+        "your_blockfrost_project_id",
+    )
+
+    mnemonic := "your mnemonic here"
+    a := apollo.New(bfc)
+    a, err = a.SetWalletFromMnemonic(mnemonic)
     if err != nil {
         panic(err)
     }
 
-    cc := apollo.NewEmptyBackend()
-    SEED := "your mnemonic here"
-    apollob := apollo.New(&cc)
-    apollob, err = apollob.SetWalletFromMnemonic(SEED, constants.PREVIEW)
+    utxos, err := bfc.Utxos(a.GetWallet().Address())
     if err != nil {
         panic(err)
     }
-    apollob, err = apollob.SetWalletAsChangeAddress()
+
+    receiver, err := common.NewAddress("addr1...")
     if err != nil {
         panic(err)
     }
-    utxos, err := bfc.Utxos(*apollob.GetWallet().GetAddress())
-    if err != nil {
-        panic(err)
-    }
-    apollob, err = apollob.AddLoadedUTxOs(utxos...).PayToAddressBech32("your address here", 1_000_000).
+
+    a, err = a.AddLoadedUTxOs(utxos...).
+        PayToAddress(receiver, 1_000_000).
         Complete()
     if err != nil {
         panic(err)
     }
-    apollob = apollob.Sign()
-    tx := apollob.GetTx()
-    cborred, err := cbor.Marshal(tx)
+
+    a, err = a.Sign()
     if err != nil {
         panic(err)
     }
-    fmt.Println(hex.EncodeToString(cborred))
-    tx_id, err := bfc.SubmitTx(*tx)
+
+    txCbor, err := a.GetTxCbor()
     if err != nil {
-		panic(err)
-	}
-    fmt.Println(hex.EncodeToString(tx_id.Payload))
+        panic(err)
+    }
+    fmt.Println(hex.EncodeToString(txCbor))
 
+    txId, err := a.Submit()
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(hex.EncodeToString(txId.Bytes()))
 }
-
 ```
 If you have any questions or requests feel free to drop into this discord and ask :) https://discord.gg/MH4CmJcg49
 

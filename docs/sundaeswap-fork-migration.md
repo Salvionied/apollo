@@ -2,7 +2,7 @@
 
 This guide covers the changes needed when switching from
 `github.com/SundaeSwap-finance/apollo` back to
-`github.com/Salvionied/apollo`.
+`github.com/Salvionied/apollo/v2`.
 
 Both codebases share the same lineage. The upstream master has incorporated
 most of the SundaeSwap fork's improvements (error returns, PlutusV3, cost
@@ -21,17 +21,19 @@ import "github.com/SundaeSwap-finance/apollo"
 import "github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
 
 // After (upstream)
-import "github.com/Salvionied/apollo"
-import "github.com/Salvionied/apollo/serialization/PlutusData"
+import "github.com/Salvionied/apollo/v2"
+import "github.com/Salvionied/apollo/v2/serialization/PlutusData"
 ```
 
 A global find-and-replace handles this:
 
 ```bash
 find . -name '*.go' -exec sed -i \
-  's|github.com/SundaeSwap-finance/apollo|github.com/Salvionied/apollo|g' {} +
+  's|github.com/SundaeSwap-finance/apollo|github.com/Salvionied/apollo/v2|g' {} +
 go mod tidy
 ```
+
+Run `go mod tidy` after the import rewrite to refresh module requirements.
 
 The fork depended on `github.com/SundaeSwap-finance/kugo` and
 `github.com/SundaeSwap-finance/ogmigo/v6`. Upstream uses
@@ -195,21 +197,26 @@ keys, you may need to adjust.
 
 ### 3.7 Additional Error Returns on ChainContext Methods
 
-Upstream has expanded error returns on additional `ChainContext` methods
-that the fork may not have changed:
+Apollo v2 uses the `backend.ChainContext` interface from `backend/base.go`.
+Custom implementations must use these method names and signatures:
 
 ```go
-// Upstream adds error returns to:
-GetProtocolParams() (ProtocolParameters, error) // fork may not return error
-GetGenesisParams() (GenesisParameters, error)
-Epoch() (int, error)
-MaxTxFee() (int, error)
-LastBlockSlot() (int, error)
-GetContractCbor(string) (string, error)
+ProtocolParams() (backend.ProtocolParameters, error)
+GenesisParams() (backend.GenesisParameters, error)
+NetworkId() uint8
+CurrentEpoch() (uint64, error)
+MaxTxFee() (uint64, error)
+Tip() (uint64, error)
+Utxos(address common.Address) ([]common.Utxo, error)
+SubmitTx(txCbor []byte) (common.Blake2b256, error)
+EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error)
+UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
+ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)
 ```
 
-**Migration:** If you implement `ChainContext`, add error returns to
-these methods.
+**Migration:** Rename old fork methods such as `GetProtocolParams`,
+`GetGenesisParams`, `Epoch`, `LastBlockSlot`, and `GetContractCbor` to the
+v2 interface above, and update integer return types where needed.
 
 ### 3.8 `ProtocolParameters.MinFeeReferenceScripts`
 
@@ -240,7 +247,7 @@ does not ship this file on master. If you were importing from
 
 | Fork | Upstream |
 |------|----------|
-| `go 1.23.0` | `go 1.25` |
+| `go 1.23.0` | `go 1.25.8` |
 | `github.com/SundaeSwap-finance/kugo v1.3.0` | Different kugo dependency |
 | `github.com/SundaeSwap-finance/ogmigo/v6 v6.1.0` | Different ogmigo dependency |
 | `golang.org/x/exp` (removed) | Also removed |
@@ -253,15 +260,15 @@ Run `go mod tidy` after switching imports.
 ## 6. Migration Checklist
 
 1. **Find-and-replace** all `github.com/SundaeSwap-finance/apollo`
-   imports to `github.com/Salvionied/apollo`
+   imports to `github.com/Salvionied/apollo/v2`
 2. **Split** `AddReferenceScriptV1/V2/V3(txHash, index)` calls into
    `AddReferenceInput(txHash, index).AddReferenceScriptV1/V2/V3()`
 3. **Update** `UtxoFromRef` / `GetUtxoFromRef` callers to expect
    `*UTxO.UTxO` instead of `UTxO.UTxO`
 4. **Update** any custom `ChainContext` implementations to match the
-   expanded interface (error returns on `GetProtocolParams`,
-   `GetGenesisParams`, `Epoch`, `MaxTxFee`, `LastBlockSlot`,
-   `GetContractCbor`)
+   v2 `backend.ChainContext` interface (`ProtocolParams`, `GenesisParams`,
+   `NetworkId`, `CurrentEpoch`, `MaxTxFee`, `Tip`, `Utxos`, `SubmitTx`,
+   `EvaluateTx`, `UtxoByRef`, `ScriptCbor`)
 5. **Replace** `ScriptRef` struct usage with the new `[]byte`-based
    `ScriptRef` and its `NewV1/V2/V3ScriptRef` constructors
 6. **Run** `go mod tidy` to resolve dependency changes

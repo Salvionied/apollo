@@ -39,13 +39,13 @@ Each page includes method signatures, behavior, side-by-side Apollo + CLI exampl
 | `conway governance committee hot-key-authorization-certificate` | `AuthorizeCommitteeHotKey(cold, hot)` |
 | `conway governance committee cold-key-resignation-certificate` | `ResignCommitteeColdKey(cold, anchor)` |
 | `conway governance vote create` | `AddVote(voter, actionId, procedure)` |
-| `conway governance action create-info` | `AddProposal(...)` with `Governance.InfoAction{}` |
-| `conway governance action create-no-confidence` | `AddProposal(...)` with `Governance.NoConfidence{...}` |
-| `conway governance action create-hardfork` | `AddProposal(...)` with `Governance.HardForkInitiation{...}` |
-| `conway governance action create-protocol-parameters-update` | `AddProposal(...)` with `Governance.ParameterChange{...}` |
-| `conway governance action create-treasury-withdrawal` | `AddProposal(...)` with `Governance.TreasuryWithdrawals{...}` |
-| `conway governance action update-committee` | `AddProposal(...)` with `Governance.UpdateCommittee{...}` |
-| `conway governance action create-constitution` | `AddProposal(...)` with `Governance.NewConstitution{...}` |
+| `conway governance action create-info` | `AddProposal(...)` with `common.InfoGovAction{}` |
+| `conway governance action create-no-confidence` | `AddProposal(...)` with `common.NoConfidenceGovAction{...}` |
+| `conway governance action create-hardfork` | `AddProposal(...)` with `common.HardForkInitiationGovAction{...}` |
+| `conway governance action create-protocol-parameters-update` | `AddProposal(...)` with `conway.ConwayParameterChangeGovAction{...}` |
+| `conway governance action create-treasury-withdrawal` | `AddProposal(...)` with `common.TreasuryWithdrawalGovAction{...}` |
+| `conway governance action update-committee` | `AddProposal(...)` with `common.UpdateCommitteeGovAction{...}` |
+| `conway governance action create-constitution` | `AddProposal(...)` with `common.NewConstitutionGovAction{...}` |
 | `transaction build --treasury-donation` | `AddTreasuryDonation(coin)` |
 | `transaction build --current-treasury-value` | `SetCurrentTreasuryValue(coin)` |
 
@@ -55,44 +55,46 @@ A single transaction can combine multiple governance operations. The example bel
 
 ```go
 import (
-    "github.com/Salvionied/apollo"
-    "github.com/Salvionied/apollo/serialization"
-    "github.com/Salvionied/apollo/serialization/Certificate"
-    "github.com/Salvionied/apollo/serialization/Governance"
+    apollo "github.com/Salvionied/apollo/v2"
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    "github.com/blinklabs-io/gouroboros/ledger/conway"
 )
 
-drepCred := Certificate.Credential{
-    Code: 0,
-    Hash: serialization.ConstrainedBytes{Payload: drepKeyHash},
+drepCred := common.Credential{
+    CredType:   common.CredentialTypeAddrKeyHash,
+    Credential: drepKeyHash,
 }
 
-voter := Governance.Voter{
-    Role: Governance.DRepKeyHash,
-    Hash: serialization.ConstrainedBytes{Payload: drepKeyHash},
+voter := common.Voter{
+    Type: common.VoterTypeDRepKeyHash,
+    Hash: drepKeyHash,
 }
 
-actionId := Governance.GovActionId{
-    TransactionHash: existingActionTxHash,
-    GovActionIndex:  0,
+actionId := common.GovActionId{
+    TransactionId: existingActionTxHash,
+    GovActionIdx:  0,
 }
 
-procedure := Governance.VotingProcedure{
-    Vote:   Governance.VoteYes,
+procedure := common.VotingProcedure{
+    Vote:   common.GovVoteYes,
     Anchor: nil,
 }
 
-proposal := Governance.ProposalProcedure{
-    Deposit:       100_000_000_000, // 100k ADA per Conway protocol params
-    RewardAccount: rewardAccountBytes,
-    Action:        Governance.InfoAction{},
-    Anchor: Certificate.Anchor{
+proposal := conway.ConwayProposalProcedure{
+    PPDeposit:       100_000_000_000, // 100k ADA per Conway protocol params
+    PPRewardAccount: rewardAccount,
+    PPGovAction: conway.ConwayGovAction{
+        Type:   uint(common.GovActionTypeInfo),
+        Action: &common.InfoGovAction{Type: uint(common.GovActionTypeInfo)},
+    },
+    PPAnchor: common.GovAnchor{
         Url:      "https://example.com/proposal.json",
         DataHash: proposalDocHash,
     },
 }
 
-apollob, err := apollob.
-    RegisterDRep(drepCred, 500_000_000, &Certificate.Anchor{
+builder, err := apollo.New(chainContext).
+    RegisterDRep(drepCred, 500_000_000, &common.GovAnchor{
         Url:      "https://example.com/drep.json",
         DataHash: drepDocHash,
     }).

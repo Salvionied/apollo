@@ -1,59 +1,76 @@
 # Plutus V3 Reference Inputs
 
-This document focuses on the management of Plutus V3 reference inputs within the Apollo transaction building library, specifically detailing the `AddReferenceInputV3` function in [`ApolloBuilder.go`](ApolloBuilder.go).
+This document covers the management of reference inputs in Apollo v2. Reference inputs allow scripts to inspect the contents of UTxOs without consuming them.
 
-## Adding Plutus V3 Reference Inputs
+## Unified Reference Inputs
 
-The `AddReferenceInputV3` function is used to add a transaction input as a reference input for Plutus V3 scripts. Reference inputs are a key feature of Plutus V3, allowing scripts to inspect the contents of UTxOs without consuming them. This is particularly useful for on-chain governance, oracle data, or any scenario where a script needs to read state without altering it. This is most often used to add a reference to a V3 script that was added on-chain in a previous TX.
+In Apollo v2, there is a single `AddReferenceInput` method for all script versions. The previous `AddReferenceInputV3` method has been removed - all reference inputs are handled identically regardless of script version.
 
 ```go
-func (b *Apollo) AddReferenceInputV3(txHash string, index int) *Apollo
+func (a *Apollo) AddReferenceInput(txHash string, index int) (*Apollo, error)
 ```
 
 **Parameters:**
 
-- `txHash string`: The hexadecimal string of the transaction hash of the UTxO to be used as a reference input.
+- `txHash string`: The hexadecimal string of the transaction hash containing the UTxO to reference.
 - `index int`: The output index of the UTxO within the transaction.
-
-**Functionality:**
-
-This function appends the specified transaction input to the `referenceInputsV3` slice within the `Apollo` builder. It also includes logic to prevent duplicate reference inputs from being added.
 
 **Example Usage:**
 
 ```go
 import (
- "fmt"
- "encoding/hex"
- "github.com/Salvionied/apollo/ApolloBuilder"
- "github.com/Salvionied/apollo/serialization/TransactionInput"
+    apollo "github.com/Salvionied/apollo/v2"
+    "github.com/Salvionied/apollo/v2/backend/blockfrost"
+    "github.com/Salvionied/apollo/v2/constants"
 )
 
 func main() {
- builder := ApolloBuilder.NewApolloBuilder()
+    cc := blockfrost.NewBlockFrostChainContext(
+        constants.BlockfrostBaseUrlPreview, 0, "your-project-id",
+    )
+    a := apollo.New(cc)
 
- // Assume you have a transaction hash and output index for a UTxO
- // that you want to use as a reference input.
- txHash := "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
- outputIndex := 0
+    // Add a reference input (works for V1, V2, and V3 script references)
+    txHash := "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    a, err := a.AddReferenceInput(txHash, 0)
+    if err != nil {
+        // handle error
+    }
 
- // Add the reference input
- builder.AddReferenceInputV3(txHash, outputIndex)
-
- fmt.Printf("Reference input added: %s#%d\n", txHash, outputIndex)
-
- // You can add multiple reference inputs
- txHash2 := "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
- outputIndex2 := 1
- builder.AddReferenceInputV3(txHash2, outputIndex2)
- fmt.Printf("Reference input added: %s#%d\n", txHash2, outputIndex2)
-
- // The reference inputs will be included in the transaction body when BuildTxBody is called.
- // For example:
- // txBody, err := builder.BuildTxBody()
- // if err != nil {
- //     fmt.Printf("Error building transaction body: %v\n", err)
- //     return
- // }
- // fmt.Printf("Transaction Body Reference Inputs: %+v\n", txBody.ReferenceInputs)
+    // Add multiple reference inputs
+    txHash2 := "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
+    a, err = a.AddReferenceInput(txHash2, 1)
+    if err != nil {
+        // handle error
+    }
 }
+```
+
+## How Reference Inputs Work
+
+Reference inputs are included in the transaction body's `TxReferenceInputs` field. They allow Plutus scripts to read UTxO data (including inline datums, reference scripts, and values) without spending the UTxO.
+
+Common use cases:
+- Reading oracle data from a UTxO
+- Referencing a script stored on-chain (avoiding the need to include the full script in the witness set)
+- Inspecting governance or protocol state
+
+## Reference Scripts on Outputs
+
+To store a script as a reference script in a transaction output (so it can be referenced later), use `PayToAddressWithReferenceScript`:
+
+```go
+scriptBytes, err := hex.DecodeString("58...")
+if err != nil {
+    log.Fatal(err)
+}
+v3Script := common.PlutusV3Script(scriptBytes)
+
+// Store the script on-chain as a reference script
+a, err = a.PayToAddressWithReferenceScript(addr, 2_000_000, v3Script)
+if err != nil {
+    // handle error
+}
+```
+
+The script type is detected automatically. Version-specific convenience methods are also available: `PayToAddressWithV1ReferenceScript`, `PayToAddressWithV2ReferenceScript`, and `PayToAddressWithV3ReferenceScript`.

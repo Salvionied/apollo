@@ -4,8 +4,8 @@ This section documents how to attach **Plutus datums** (hash or inline) and **re
 
 ## Table of Contents
 
-- [Pay-to-Contract and Datums](pay_to_contract_and_datums.md) — `PayToContract`, `PayToContractAsHash`, `AddDatum`, `AttachDatum`; datum hash vs inline; examples and caveats
-- [Reference Script Output Attachments](reference_script_output_attachments.md) — `PayToAddressWithV1/V2/V3ReferenceScript`, `PayToContractWithV1/V2/V3ReferenceScript`; examples and caveats
+- [Pay-to-Contract and Datums](pay_to_contract_and_datums.md) — `PayToContract`, `PayToContractWithDatumHash`, `PayToContractAsHash`, `AddDatum`, `AttachDatum`; datum hash vs inline; examples and caveats
+- [Reference Script Output Attachments](reference_script_output_attachments.md) — `PayToAddressWithReferenceScript` (unified) and `PayToAddressWithV1/V2/V3ReferenceScript` (convenience), `PayToContractWithReferenceScript` and version-specific variants; examples and caveats
 
 ## Terminology
 
@@ -18,8 +18,8 @@ This section documents how to attach **Plutus datums** (hash or inline) and **re
 
 | Cardano CLI (10.14.0.0)                              | Apollo method / pattern                                                               | Parity                             |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------- |
-| `--tx-out-datum-hash` / `-file` / `-value`           | `PayToContract(addr, datum, lovelace, false)` (+ manual file/JSON parse if needed)    | Full (manual parse for file/value) |
-| `--tx-out-datum-embed-`* / `--tx-out-inline-datum-*` | `PayToContract(addr, datum, lovelace, true)`                                          | Full (manual parse for file/value) |
+| `--tx-out-datum-hash` / `-file` / `-value`           | `PayToContractWithDatumHash(addr, datum, lovelace)` or `PayToContractAsHash(addr, hash, lovelace)` | Full (manual parse for file/value) |
+| `--tx-out-datum-embed-`* / `--tx-out-inline-datum-*` | `PayToContract(addr, datum, lovelace)`                                                | Full (manual parse for file/value) |
 | `--tx-out-reference-script-file` (V1/V2/V3)          | `PayToAddressWithV1/V2/V3ReferenceScript`, `PayToContractWithV1/V2/V3ReferenceScript` | Full                               |
 
 
