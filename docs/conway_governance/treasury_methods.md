@@ -1,14 +1,14 @@
 # Treasury Methods
 
-This page documents the **treasury donation** fields added in the Conway era: `SetCurrentTreasuryValue`, `AddTreasuryDonation`. Implementation: [`ApolloBuilder.go`](../../ApolloBuilder.go), [`serialization/TransactionBody/TransactionBody.go`](../../serialization/TransactionBody/TransactionBody.go) (fields 21 and 22).
+This page documents the **treasury donation** fields added in the Conway era: `SetCurrentTreasuryValue`, `AddTreasuryDonation`. Implementation: [`apollo.go`](../../apollo.go), `github.com/blinklabs-io/gouroboros/ledger/conway` (fields 21 and 22).
 
 These two fields let any user **donate ADA directly to the treasury** as part of a regular transaction — independently of governance proposals. Both are optional. When used together, they pin the donation against a specific treasury value to prevent races; when omitted, the transaction body fields are zero (the default, omitted from CBOR via `omitempty`).
 
 ## Method signatures
 
 ```go
-func (b *Apollo) SetCurrentTreasuryValue(value int64) *Apollo
-func (b *Apollo) AddTreasuryDonation(amount int64) *Apollo
+func (a *Apollo) SetCurrentTreasuryValue(value int64) *Apollo
+func (a *Apollo) AddTreasuryDonation(amount int64) *Apollo
 ```
 
 Both are chainable. `AddTreasuryDonation` accumulates across calls — calling it twice with `5_000_000` and `2_500_000` produces a single donation of `7_500_000`.
@@ -103,7 +103,7 @@ The node accepts the transaction as long as inputs cover outputs + fee + donatio
   - `TestSetCurrentTreasuryValueNegative` — negative value causes `Complete()` to return an error.
   - `TestAddTreasuryDonationNegative` — negative donation causes `Complete()` to return an error.
   - `TestAddTreasuryDonationOverflow` — `int64` overflow is detected and reported as an error.
-- **TransactionBody CBOR encoding** verified by tests in [`serialization/TransactionBody/TransactionBody_test.go`](../../serialization/TransactionBody/TransactionBody_test.go), including overflow-safe `uint64 → int64` conversion on unmarshal (rejects values greater than `math.MaxInt64`).
+- **TransactionBody CBOR encoding** verified by tests in [`governance_test.go`](../../governance_test.go), including overflow-safe `uint64 → int64` conversion on unmarshal (rejects values greater than `math.MaxInt64`).
 
 ## Caveats and validation
 

@@ -1,92 +1,87 @@
 # Plutus V3 Script Management
 
-This document details the `PlutusV3Script` type and its associated methods within the Apollo library, primarily found in [`serialization/PlutusData/PlutusData.go`](serialization/PlutusData/PlutusData.go).
+This document details how Plutus V3 scripts are managed in Apollo v2. Script types are defined in gouroboros at `github.com/blinklabs-io/gouroboros/ledger/common`.
 
 ## `PlutusV3Script` Type
 
-The `PlutusV3Script` type represents a Plutus V3 script as a byte slice.
+The `PlutusV3Script` type is defined in gouroboros and implements the `common.Script` interface.
 
 ```go
+// From gouroboros/ledger/common
 type PlutusV3Script []byte
 ```
 
-## `Hash()` Method
-
-The `Hash()` method computes the script hash for a `PlutusV3Script`. This hash is crucial for identifying the script on the Cardano blockchain.
+All Plutus script types (`PlutusV1Script`, `PlutusV2Script`, `PlutusV3Script`) implement the `common.Script` interface:
 
 ```go
-func (ps3 PlutusV3Script) Hash() (serialization.ScriptHash, error)
+type Script interface {
+    isScript()
+    Hash() ScriptHash
+    RawScriptBytes() []byte
+}
+```
+
+## Attaching Scripts
+
+Apollo v2 provides a single `AttachScript` method that accepts any `common.Script` implementation. The script version is detected automatically via Go's type system. Duplicate scripts (by hash) are ignored.
+
+```go
+func (a *Apollo) AttachScript(script common.Script) *Apollo
 ```
 
 **Example Usage:**
 
 ```go
 import (
- "fmt"
- "encoding/hex"
- "github.com/Salvionied/apollo/serialization/PlutusData"
+    "encoding/hex"
+
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    apollo "github.com/Salvionied/apollo/v2"
+    "github.com/Salvionied/apollo/v2/backend/blockfrost"
+    "github.com/Salvionied/apollo/v2/constants"
 )
 
 func main() {
- plutusV3ScriptBytes, _ := hex.DecodeString("58...") // Replace with actual Plutus V3 script bytes
- plutusV3Script := PlutusData.PlutusV3Script(plutusV3ScriptBytes)
+    cc := blockfrost.NewBlockFrostChainContext(
+        constants.BlockfrostBaseUrlPreview, 0, "your-project-id",
+    )
+    scriptBytes, _ := hex.DecodeString("58...") // Compiled Plutus V3 script
+    v3Script := common.PlutusV3Script(scriptBytes)
 
- scriptHash, err := plutusV3Script.Hash()
- if err != nil {
-  fmt.Printf("Error hashing script: %v\n", err)
-  return
- }
- fmt.Printf("Plutus V3 Script Hash: %s\n", hex.EncodeToString(scriptHash[:]))
+    a := apollo.New(cc)
+    a.AttachScript(v3Script)
+
+    // Works the same for V1 and V2 scripts:
+    // a.AttachScript(v1Script)
+    // a.AttachScript(v2Script)
 }
 ```
 
-## `ToAddress()` Method
+## Script Hashing
 
-The `ToAddress()` method converts a `PlutusV3Script` into a Cardano address. This is used to derive a script address for a Plutus V3 script.
+The `Hash()` method on any script type returns a `ScriptHash` (alias for `Blake2b224`):
 
 ```go
-func (ps3 *PlutusV3Script) ToAddress(
- stakingCredential []byte,
- networkId byte,
-) (serialization.Address, error)
+scriptBytes, _ := hex.DecodeString("58...")
+v3Script := common.PlutusV3Script(scriptBytes)
+
+hash := v3Script.Hash() // returns common.ScriptHash (common.Blake2b224)
+fmt.Printf("Script hash: %s\n", hash.String())
 ```
 
-**Parameters:**
+## Script References
 
-- `stakingCredential []byte`: The staking credential (e.g., stake key hash) to be included in the address. Can be `nil` for base addresses without a staking part.
-- `networkId byte`: The network identifier (e.g., `0x00` for testnet, `0x01` for mainnet).
-
-**Example Usage:**
+To attach a script as a reference script on a transaction output, use `NewScriptRef`:
 
 ```go
-import (
- "fmt"
- "encoding/hex"
- "github.com/Salvionied/apollo/serialization/PlutusData"
- "github.com/Salvionied/apollo/serialization/Address"
-)
-
-func main() {
- plutusV3ScriptBytes, _ := hex.DecodeString("58...") // Replace with actual Plutus V3 script bytes
- plutusV3Script := PlutusData.PlutusV3Script(plutusV3ScriptBytes)
-
- // Example: Creating a script address with a staking credential on testnet
- stakingCredential, _ := hex.DecodeString("...") // Replace with actual staking credential hash
- networkId := byte(0x00) // Testnet
-
- scriptAddress, err := plutusV3Script.ToAddress(stakingCredential, networkId)
- if err != nil {
-  fmt.Printf("Error creating script address: %v\n", err)
-  return
- }
- fmt.Printf("Plutus V3 Script Address: %s\n", scriptAddress.String())
-
- // Example: Creating a script address without a staking credential (base address) on mainnet
- networkId = byte(0x01) // Mainnet
- scriptAddressNoStake, err := plutusV3Script.ToAddress(nil, networkId)
- if err != nil {
-  fmt.Printf("Error creating script address without stake: %v\n", err)
-  return
- }
- fmt.Printf("Plutus V3 Script Address (no stake): %s\n", scriptAddressNoStake.String())
+ref, err := apollo.NewScriptRef(v3Script) // auto-detects V3
+if err != nil {
+    // handle error
 }
+```
+
+This works for all script types - the reference script type is determined automatically:
+- `PlutusV1Script` -> type 1
+- `PlutusV2Script` -> type 2
+- `PlutusV3Script` -> type 3
+- `NativeScript` -> type 0

@@ -1,54 +1,79 @@
 # Delegate Stake Methods
 
-This page documents **stake pool delegation** and **stake+vote delegation**: `DelegateStake`*, `DelegateStakeAndVote*`. Implementation: `[ApolloBuilder.go](../../ApolloBuilder.go)`, `[serialization/Certificate/Certificate.go](../../serialization/Certificate/Certificate.go)`.
+This page documents **stake pool delegation** and **stake+vote delegation**: `DelegateStake*`, `DelegateStakeAndVote*`. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go).
 
 ## Purpose and method signatures
 
-### DelegateStake / DelegateStakeFromAddress / DelegateStakeFromBech32
+### DelegateStake (unified)
 
 ```go
-func (b *Apollo) DelegateStake(stakeCredential *Certificate.Credential, poolKeyHash serialization.PubKeyHash) (*Apollo, error)
-func (b *Apollo) DelegateStakeFromAddress(address Address.Address, poolKeyHash serialization.PubKeyHash) (*Apollo, error)
-func (b *Apollo) DelegateStakeFromBech32(address string, poolKeyHash serialization.PubKeyHash) (*Apollo, error)
+func (a *Apollo) DelegateStake(credOrAddr any, poolHash common.Blake2b224) (*Apollo, error)
 ```
 
-If `stakeCredential` is `nil`, it is taken from the wallet. `poolKeyHash` is the pool’s cold key hash (28 bytes). Appends a `StakeDelegation` certificate.
+`credOrAddr` can be: `*common.Credential`, `common.Credential`, `common.Address`, `string` (bech32), or `nil` (uses wallet). Appends a `StakeDelegation` certificate.
 
-### DelegateStakeAndVote / DelegateStakeAndVoteFromAddress / DelegateStakeAndVoteFromBech32
+### DelegateStakeFromAddress / DelegateStakeFromBech32
 
 ```go
-func (b *Apollo) DelegateStakeAndVote(stakeCredential *Certificate.Credential, poolKeyHash serialization.PubKeyHash, drep *Certificate.Drep) (*Apollo, error)
-// ... FromAddress(address, poolKeyHash, drep), FromBech32(bech32, poolKeyHash, drep)
+func (a *Apollo) DelegateStakeFromAddress(addr common.Address, poolHash common.Blake2b224) (*Apollo, error)
+func (a *Apollo) DelegateStakeFromBech32(bech32 string, poolHash common.Blake2b224) (*Apollo, error)
+```
+
+Type-safe convenience methods that delegate to `DelegateStake`.
+
+### DelegateStakeAndVote (unified)
+
+```go
+func (a *Apollo) DelegateStakeAndVote(credOrAddr any, poolHash common.Blake2b224, drep common.Drep) (*Apollo, error)
 ```
 
 Appends a `StakeVoteDelegCert` (kind 10): delegates both stake (to pool) and vote (to DRep) in one certificate.
 
+### DelegateStakeAndVoteFromAddress / DelegateStakeAndVoteFromBech32
+
+```go
+func (a *Apollo) DelegateStakeAndVoteFromAddress(addr common.Address, poolHash common.Blake2b224, drep common.Drep) (*Apollo, error)
+func (a *Apollo) DelegateStakeAndVoteFromBech32(bech32 string, poolHash common.Blake2b224, drep common.Drep) (*Apollo, error)
+```
+
 ## Inputs and constraints
 
-- `poolKeyHash`: 28-byte cold key hash of the target stake pool.
-- `drep`: `Certificate.Drep` (Code + optional Credential); build it for the target DRep.
+- `poolHash`: 28-byte cold key hash (`common.Blake2b224`) of the target stake pool.
+- `drep`: `common.Drep` with Code (0 = key hash, 1 = script hash, or special values) and optional Credential.
 
 ## Cardano CLI equivalence (10.14.0.0)
 
-| CLI                                    | Apollo                                               |
-| -------------------------------------- | ---------------------------------------------------- |
-| `stake-address delegation-certificate` | `DelegateStake(cred, poolKeyHash)` etc.              |
-| Stake + vote delegation (one cert)     | `DelegateStakeAndVote(cred, poolKeyHash, drep)` etc. |
+| CLI                                    | Apollo                                                               |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `stake-address delegation-certificate` | `DelegateStake(cred, poolHash)` / `DelegateStakeFromAddress(addr, poolHash)` / `DelegateStakeFromBech32(bech32, poolHash)` |
+| Stake + vote delegation (one cert)     | `DelegateStakeAndVote(cred, poolHash, drep)` etc.                    |
 
 ## Examples
 
-### Stake pool delegation
-
-**Apollo:**
+### Stake pool delegation (using wallet credential)
 
 ```go
-var poolKeyHash serialization.PubKeyHash
-apollob, err = apollob.
-    DelegateStake(nil, poolKeyHash).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+import (
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    apollo "github.com/Salvionied/apollo/v2"
+)
+
+var poolHash common.Blake2b224
+a := apollo.New(cc)
+a.SetWallet(wallet)
+a, err := a.DelegateStake(nil, poolHash)
+if err != nil {
+    panic(err)
+}
+a.AddLoadedUTxOs(utxos...)
+a.PayToAddress(myAddr, 10_000_000)
+tx, err := a.Complete()
+```
+
+### Delegate from bech32 address
+
+```go
+a, err = a.DelegateStakeFromBech32("stake1u...", poolHash)
 ```
 
 **Cardano CLI:**
@@ -58,19 +83,15 @@ cardano-cli stake-address delegation-certificate --stake-verification-key-file s
 cardano-cli transaction build --certificate-file deleg.cert ...
 ```
 
-### Stake and vote (one cert)
-
-**Apollo:**
+### Stake and vote delegation (one cert)
 
 ```go
-drep := &Certificate.Drep{Code: 0, Credential: &serialization.ConstrainedBytes{Payload: drepKeyHash}}
-apollob, err = apollob.DelegateStakeAndVote(nil, poolKeyHash, drep)
+drep := common.Drep{Type: 0, Hash: drepKeyHash}
+a, err = a.DelegateStakeAndVote(nil, poolHash, drep)
 ```
-
-## Evidence
-
-- **Implementation-only**. Certificate round-trips: `TestStakeDelegationRoundTrip`, `TestStakeVoteDelegCertRoundTrip` in `Certificate_test.go`.
 
 ## Caveats and validation
 
-- Pool key hash must be the correct cold key hash. DRep must match node expectations. Validate on preprod/mainnet with small amounts.
+- Pool key hash must be the correct cold key hash. DRep must match node expectations.
+- All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.
+- Validate on preprod/mainnet with small amounts.

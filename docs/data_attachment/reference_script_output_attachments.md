@@ -1,98 +1,114 @@
 # Reference Script Output Attachments
 
-This page documents attaching **reference scripts** (Plutus V1, V2, or V3) to transaction outputs: `PayToAddressWithV1/V2/V3ReferenceScript` and `PayToContractWithV1/V2/V3ReferenceScript`. Implementation: `[ApolloBuilder.go](../../ApolloBuilder.go)`; script ref types: `[serialization/PlutusData/PlutusData.go](../../serialization/PlutusData/PlutusData.go)`; outputs: `[serialization/TransactionOutput/TransactionOutput.go](../../serialization/TransactionOutput/TransactionOutput.go)`.
+This page documents attaching **reference scripts** (Plutus V1, V2, V3, or Native) to transaction outputs. Apollo v2 provides both a **unified** method that auto-detects the script version and **version-specific** convenience methods. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go), [`helpers.go`](../../helpers.go).
 
 ## Purpose and method signatures
 
-### Pay-to-address with reference script
+### Unified: PayToAddressWithReferenceScript
 
 ```go
-func (b *Apollo) PayToAddressWithV1ReferenceScript(address Address.Address, lovelace int, script PlutusData.PlutusV1Script, units ...Unit) *Apollo
-func (b *Apollo) PayToAddressWithV2ReferenceScript(address Address.Address, lovelace int, script PlutusData.PlutusV2Script, units ...Unit) *Apollo
-func (b *Apollo) PayToAddressWithV3ReferenceScript(address Address.Address, lovelace int, script PlutusData.PlutusV3Script, units ...Unit) *Apollo
+func (a *Apollo) PayToAddressWithReferenceScript(addr common.Address, lovelace int64, script common.Script, units ...Unit) (*Apollo, error)
 ```
 
-### Pay-to-contract with reference script (and optional datum)
+Auto-detects the script type (V1, V2, V3, Native) and creates the appropriate `ScriptRef`.
+
+### Version-specific: PayToAddressWithV1/V2/V3ReferenceScript
 
 ```go
-func (b *Apollo) PayToContractWithV1ReferenceScript(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, script PlutusData.PlutusV1Script, units ...Unit) *Apollo
-func (b *Apollo) PayToContractWithV2ReferenceScript(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, script PlutusData.PlutusV2Script, units ...Unit) *Apollo
-func (b *Apollo) PayToContractWithV3ReferenceScript(contractAddress Address.Address, pd *PlutusData.PlutusData, lovelace int, isInline bool, script PlutusData.PlutusV3Script, units ...Unit) *Apollo
+func (a *Apollo) PayToAddressWithV1ReferenceScript(addr common.Address, lovelace int64, script common.PlutusV1Script, units ...Unit) (*Apollo, error)
+func (a *Apollo) PayToAddressWithV2ReferenceScript(addr common.Address, lovelace int64, script common.PlutusV2Script, units ...Unit) (*Apollo, error)
+func (a *Apollo) PayToAddressWithV3ReferenceScript(addr common.Address, lovelace int64, script common.PlutusV3Script, units ...Unit) (*Apollo, error)
 ```
 
-Pay-to-contract methods use the same datum rules as `PayToContract` (inline vs hash; datum added to witness set when not inline). Internally they use `payToContractWithScriptRef`.
+Type-safe wrappers that delegate to the unified method.
+
+### Unified: PayToContractWithReferenceScript
+
+```go
+func (a *Apollo) PayToContractWithReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.Script, units ...Unit) (*Apollo, error)
+```
+
+Creates a payment to a script address with an **inline datum** and a reference script.
+
+### Version-specific: PayToContractWithV1/V2/V3ReferenceScript
+
+```go
+func (a *Apollo) PayToContractWithV1ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV1Script, units ...Unit) (*Apollo, error)
+func (a *Apollo) PayToContractWithV2ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV2Script, units ...Unit) (*Apollo, error)
+func (a *Apollo) PayToContractWithV3ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV3Script, units ...Unit) (*Apollo, error)
+```
+
+Type-safe wrappers with inline datum. These delegate to the unified `PayToContractWithReferenceScript` method.
 
 ## Inputs and constraints
 
-- Script is passed as bytes: `PlutusV1Script(scriptBytes)`, `PlutusV2Script(scriptBytes)`, or `PlutusV3Script(scriptBytes)`. Loading from a file and optional CBOR decode is the application’s responsibility.
+- Script is passed as `common.PlutusV1Script`, `common.PlutusV2Script`, `common.PlutusV3Script`, or `common.NativeScript` (all from gouroboros). Loading from a file and optional CBOR decode is the application's responsibility.
 - Outputs with a reference script are always built as post-Alonzo so that `ScriptRef` is present.
 
 ## Behavior details
 
-- Reference scripts are stored in the output’s `ScriptRef` field (post-Alonzo). `PlutusData.NewV1ScriptRef`, `NewV2ScriptRef`, `NewV3ScriptRef` wrap script bytes into a `ScriptRef` (CBOR tag 24).
-- Round-trip and `GetScriptRef` are tested in `serialization/TransactionOutput/TransactionOutput_test.go` (`TestScriptRefCborRoundTrip`, `TestTransactionOutputWithScriptRef`, `TestCloneWithScriptRef`).
+- Reference scripts are stored in the output's `ScriptRef` field (post-Alonzo). `NewScriptRef(script)` wraps the script into a `common.ScriptRef` with the appropriate type code (0=Native, 1=V1, 2=V2, 3=V3).
+- The unified method auto-detects the script version via Go type assertion.
+- Duplicate scripts attached via `AttachScript` are automatically deduplicated by hash.
 
 ## Cardano CLI equivalence (10.14.0.0)
 
-| CLI flag                                                                 | Apollo method                                                                                            |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `--tx-out ADDRESS+AMOUNT` and `--tx-out-reference-script-file FILE` (V1) | `PayToAddressWithV1ReferenceScript(addr, lovelace, script)` or `PayToContractWithV1ReferenceScript(...)` |
-| Same for V2                                                              | `PayToAddressWithV2ReferenceScript` / `PayToContractWithV2ReferenceScript`                               |
-| Same for V3                                                              | `PayToAddressWithV3ReferenceScript` / `PayToContractWithV3ReferenceScript`                               |
+| CLI flag                                                                  | Apollo method                                                                                                     |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--tx-out ADDRESS+AMOUNT` and `--tx-out-reference-script-file FILE` (V1)  | `PayToAddressWithV1ReferenceScript(addr, lovelace, script)` or `PayToAddressWithReferenceScript(addr, lovelace, v1Script)` |
+| Same for V2                                                               | `PayToAddressWithV2ReferenceScript` / `PayToAddressWithReferenceScript`                                           |
+| Same for V3                                                               | `PayToAddressWithV3ReferenceScript` / `PayToAddressWithReferenceScript`                                           |
+| With datum + reference script                                             | `PayToContractWithReferenceScript(addr, &datum, lovelace, script)` or version-specific variant                    |
 
-**Parity:** Full; script file loading is the application’s responsibility.
+**Parity:** Full; script file loading is the application's responsibility.
 
 ## Examples
 
-### Pay to address with V2 reference script
-
-**Apollo:**
+### Pay to address with V2 reference script (version-specific)
 
 ```go
-SC_CBOR := "5901ec01000032323232323232323232322........855d11"
-decoded_sc_cbor, err := hex.DecodeString(SC_CBOR)
-    if err != nil {
-        t.Error(err)
-    }
-script := PlutusData.PlutusV2Script(decoded_sc_cbor)
-apollob := apollo.New(&cc)
-apollob = apollob.
-    PayToAddressWithV2ReferenceScript(decoded_addr, 5_000_000, script).
-    SetChangeAddress(decoded_addr).
-    AddLoadedUTxOs(utxos...)
-built, err := apollob.Complete()
+import (
+    "encoding/hex"
+    "log"
+
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    apollo "github.com/Salvionied/apollo/v2"
+)
+
+scriptHex := "5901ec01000032323232323232323232322........855d11"
+scriptBytes, err := hex.DecodeString(scriptHex)
+if err != nil {
+    log.Fatal(err)
+}
+script := common.PlutusV2Script(scriptBytes)
+
+a := apollo.New(cc)
+a, err = a.PayToAddressWithV2ReferenceScript(addr, 5_000_000, script)
+if err != nil {
+    log.Fatal(err)
+}
+a.SetChangeAddress(changeAddr).AddLoadedUTxOs(utxos...)
+tx, err := a.Complete()
 ```
 
-**Cardano CLI:**
+### Pay to address with auto-detected script (unified)
 
-```bash
-cardano-cli transaction build \
-    --tx-out "$ADDRESS+5000000" \
-    --tx-out-reference-script-file plutus_sc.json \
-    ...
+```go
+// Works with any script type
+a, err = a.PayToAddressWithReferenceScript(addr, 5_000_000, script)
 ```
 
 ### Pay to contract with inline datum and V2 reference script
 
-**Apollo:**
+```go
+datum := common.Datum{} // your Plutus data
+a, err = a.PayToContractWithV2ReferenceScript(contractAddr, &datum, 5_000_000, script)
+```
+
+Or using the unified method:
 
 ```go
-datum := PlutusData.PlutusData{
-    TagNr:          0,
-    PlutusDataType: PlutusData.PlutusBytes,
-    Value:          []byte("Hello, World!"),
-}
-SC_CBOR := "5901ec01000032323232323232323232322........855d11"
-decoded_sc_cbor, err := hex.DecodeString(SC_CBOR)
-   if err != nil {
-        t.Error(err)
-   }
-script := PlutusData.PlutusV2Script(decoded_sc_cbor)
-apollob = apollob.
-    PayToContractWithV2ReferenceScript(decoded_addr, &datum, 5_000_000, true, script).
-    SetChangeAddress(decoded_addr).
-    AddLoadedUTxOs(utxos...)
-built, err := apollob.Complete()
+a, err = a.PayToContractWithReferenceScript(contractAddr, &datum, 5_000_000, script)
 ```
 
 **Cardano CLI:**
@@ -105,12 +121,7 @@ cardano-cli transaction build \
     ...
 ```
 
-V1 and V3 follow the same pattern with the corresponding method and script type.
-
-## Evidence
-
-- **Verified by tests:** `TestPayToAddressWithV1ReferenceScript`, `TestPayToAddressWithV2ReferenceScript`, `TestPayToAddressWithV3ReferenceScript`; `TestPayToContractWithV1ReferenceScript`, `TestPayToContractWithV2ReferenceScript`, `TestPayToContractWithV2ReferenceScriptDatumHash`, `TestPayToContractWithV3ReferenceScript` in `ApolloBuilder_test.go`.
-
 ## Caveats and validation
 
-- Reference script **file** handling (read from disk, optional CBOR decode) is not part of Apollo; pass in the script as `PlutusV1Script`, `PlutusV2Script`, or `PlutusV3Script` (byte slices).
+- Reference script **file** handling (read from disk, optional CBOR decode) is not part of Apollo; pass in the script as the appropriate gouroboros type.
+- All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.

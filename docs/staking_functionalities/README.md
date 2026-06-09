@@ -17,7 +17,7 @@ Each page includes method signatures, behavior, side-by-side Apollo + CLI exampl
 
 | Area | Apollo support | Notes |
 |------|----------------|-------|
-| Stake key derivation | Yes | Via `SetWalletFromMnemonic`; wallet has `StakeVerificationKey` / `StakeSigningKey` |
+| Stake key derivation | Yes | Via `SetWalletFromMnemonic` or `NewBursaWallet`; wallet has `StakePubKeyHash()` |
 | Stake credential from address/wallet | Yes | `GetStakeCredentialFromAddress`, `GetStakeCredentialFromWallet` |
 | Stake registration | Yes | `RegisterStake`, `RegisterStakeFromAddress`, `RegisterStakeFromBech32` |
 | Stake deregistration | Yes | `DeregisterStake`, `DeregisterStakeFromAddress`, `DeregisterStakeFromBech32` |
@@ -25,7 +25,7 @@ Each page includes method signatures, behavior, side-by-side Apollo + CLI exampl
 | Register + delegate (combined cert) | Yes | `RegisterAndDelegateStake`, etc. |
 | Vote (DRep) delegation | Yes | `DelegateVote`, `RegisterAndDelegateVote`, etc. |
 | Stake + vote combined | Yes | `DelegateStakeAndVote`, `RegisterAndDelegateStakeAndVote`, etc. |
-| Withdrawals | Yes | `AddWithdrawal(address, amount, redeemerData)` |
+| Withdrawals | Yes | `AddWithdrawal(address, amount, redeemer, exUnits)` |
 | Deposit handling | Yes | `STAKE_DEPOSIT` (2 ADA) applied/refunded in `Complete()` |
 
 ## CLI-to-Apollo Mapping Index
@@ -36,7 +36,7 @@ Each page includes method signatures, behavior, side-by-side Apollo + CLI exampl
 | `stake-address registration-certificate` | `RegisterStake` / `RegisterStakeFromAddress` / `RegisterStakeFromBech32` |
 | `stake-address deregistration-certificate` | `DeregisterStake` / `DeregisterStakeFromAddress` / `DeregisterStakeFromBech32` |
 | `stake-address delegation-certificate` | `DelegateStake` / `DelegateStakeFromAddress` / `DelegateStakeFromBech32` |
-| `transaction build --withdrawal` | `AddWithdrawal(address, amount, redeemerData)` |
+| `transaction build --withdrawal` | `AddWithdrawal(address, amount, redeemer, exUnits)` |
 
 Combined certificates (register+delegate, vote, stake+vote) are documented in the corresponding method-family pages above.
 

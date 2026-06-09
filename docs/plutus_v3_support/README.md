@@ -1,6 +1,12 @@
 # Plutus V3 Support in Apollo
 
-This documentation provides a comprehensive overview of Plutus V3 support within the Apollo transaction building library. It details all Plutus V3-related features, functions, and components, including transaction building elements, script interaction mechanisms, and new or modified data structures.
+This documentation provides a comprehensive overview of Plutus V3 support within the Apollo v2 transaction building library. Apollo v2 uses [gouroboros](https://github.com/blinklabs-io/gouroboros) types natively, providing full Plutus V3 support through a unified script API.
+
+## Key Changes in v2
+
+- **Unified script API**: A single `AttachScript` method handles all script types (V1, V2, V3, and NativeScript) with automatic type detection
+- **Unified reference inputs**: A single `AddReferenceInput` method works for all script versions
+- **gouroboros types**: All Plutus types come from `github.com/blinklabs-io/gouroboros/ledger/common`
 
 ## Table of Contents
 

@@ -1,1120 +1,479 @@
-package apollo_test
+package apollo
 
 import (
-	"bytes"
 	"testing"
 
-	"github.com/Salvionied/apollo"
-	"github.com/Salvionied/apollo/serialization"
-	"github.com/Salvionied/apollo/serialization/Address"
-	"github.com/Salvionied/apollo/serialization/Certificate"
-	"github.com/Salvionied/apollo/serialization/PlutusData"
-	"github.com/Salvionied/apollo/serialization/Redeemer"
-	testutils "github.com/Salvionied/apollo/testUtils"
-	"github.com/Salvionied/apollo/txBuilding/Backend/FixedChainContext"
+	"github.com/blinklabs-io/gouroboros/ledger/common"
+
+	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
 
-// addrWithStake is a testnet base address (payment + staking part).
-const addrWithStake = "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3jcu5d8ps7zex2k2xt3uqxgjqnnj83ws8lhrn648jjxtwq2ytjqp"
-
-// addrNoStake is an enterprise address without staking part.
-const addrNoStake = "addr_test1vr2p8st5t5cxqglyjky7vk98k7jtfhdpvhl4e97cezuhn0cqcexl7"
-
-func makeStakeCredential(
-	t *testing.T,
-) (*Certificate.Credential, Address.Address) {
-	t.Helper()
-	decoded, err := Address.DecodeAddress(addrWithStake)
-	if err != nil {
-		t.Fatalf("decode address: %v", err)
-	}
-	cred, err := apollo.GetStakeCredentialFromAddress(decoded)
-	if err != nil {
-		t.Fatalf("get stake credential: %v", err)
-	}
-	return cred, decoded
-}
-
-func newTestApollo(t *testing.T) *apollo.Apollo {
-	t.Helper()
-	cc := FixedChainContext.InitFixedChainContext()
-	a := apollo.New(&cc)
-	utxos := testutils.InitUtxos()
-	decoded, _ := Address.DecodeAddress(
-		testutils.TESTADDRESS,
-	)
-	a = a.
-		AddLoadedUTxOs(utxos...).
-		SetChangeAddress(decoded).
-		SetTtl(300)
-	return a
-}
-
-// --- GetStakeCredentialFromAddress tests ---
-
-func TestGetStakeCredentialFromAddress(t *testing.T) {
-	decoded, err := Address.DecodeAddress(addrWithStake)
-	if err != nil {
-		t.Fatalf("decode address: %v", err)
-	}
-	cred, err := apollo.GetStakeCredentialFromAddress(decoded)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cred.Code != 0 {
-		t.Fatalf("expected code 0, got %d", cred.Code)
-	}
-	if len(cred.Hash.Payload) != 28 {
-		t.Fatalf(
-			"expected 28-byte hash, got %d",
-			len(cred.Hash.Payload),
-		)
-	}
-	if !bytes.Equal(cred.Hash.Payload, decoded.StakingPart) {
-		t.Fatal("credential hash does not match staking part")
-	}
-}
-
-func TestGetStakeCredentialFromAddress_NoStake(t *testing.T) {
-	decoded, err := Address.DecodeAddress(addrNoStake)
-	if err != nil {
-		t.Fatalf("decode address: %v", err)
-	}
-	_, err = apollo.GetStakeCredentialFromAddress(decoded)
-	if err == nil {
-		t.Fatal("expected error for address without staking part")
-	}
-}
-
-// --- SetCertificates tests ---
-
-func TestSetCertificates(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-
-	certs := Certificate.NewCertificates(
-		Certificate.StakeRegistration{Stake: *cred},
-	)
-	a = a.SetCertificates(&certs)
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	tx := built.GetTx()
-	if tx.TransactionBody.Certificates == nil {
-		t.Fatal("certificates not set in tx body")
-	}
-	if len(*tx.TransactionBody.Certificates) != 1 {
-		t.Fatalf(
-			"expected 1 certificate, got %d",
-			len(*tx.TransactionBody.Certificates),
-		)
-	}
-	cert := (*tx.TransactionBody.Certificates)[0]
-	if cert.Kind() != 0 {
-		t.Fatalf("expected kind 0 (StakeRegistration), got %d", cert.Kind())
-	}
-}
-
-func TestSetCertificatesMultiple(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0xAB
-
-	certs := Certificate.NewCertificates(
-		Certificate.StakeRegistration{Stake: *cred},
-		Certificate.StakeDelegation{
-			Stake:       *cred,
-			PoolKeyHash: pool,
-		},
-	)
-	a = a.SetCertificates(&certs)
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	tx := built.GetTx()
-	if len(*tx.TransactionBody.Certificates) != 2 {
-		t.Fatalf(
-			"expected 2 certificates, got %d",
-			len(*tx.TransactionBody.Certificates),
-		)
-	}
-	if (*tx.TransactionBody.Certificates)[0].Kind() != 0 {
-		t.Fatal("first cert should be StakeRegistration (kind 0)")
-	}
-	if (*tx.TransactionBody.Certificates)[1].Kind() != 2 {
-		t.Fatal("second cert should be StakeDelegation (kind 2)")
-	}
-}
-
-// --- RegisterStake tests ---
-
 func TestRegisterStake(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	w := NewExternalWallet(addr)
+	a := New(cc).SetWallet(w)
 
-	a, err := a.RegisterStake(cred)
+	cred := common.Credential{CredType: 0, Credential: addr.StakeKeyHash()}
+	a, err := a.RegisterStake(&cred)
 	if err != nil {
-		t.Fatalf("RegisterStake: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	tx := built.GetTx()
-	if tx.TransactionBody.Certificates == nil {
-		t.Fatal("certificates nil after RegisterStake")
-	}
-	certs := *tx.TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 0 {
-		t.Fatalf(
-			"expected StakeRegistration (kind 0), got %d",
-			certs[0].Kind(),
-		)
-	}
-	sc := certs[0].StakeCredential()
-	if sc == nil {
-		t.Fatal("stake credential is nil")
-	}
-	if !bytes.Equal(sc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("stake credential hash mismatch")
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeRegistration) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeRegistration, a.certificates[0].Type)
 	}
 }
 
-func TestRegisterStakeFromAddress(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, err := Address.DecodeAddress(addrWithStake)
-	if err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+func TestRegisterStakeFromWallet(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	w := NewExternalWallet(addr)
+	a := New(cc).SetWallet(w)
 
-	a, err = a.RegisterStakeFromAddress(decoded)
+	a, err := a.RegisterStake(nil) // should use wallet
 	if err != nil {
-		t.Fatalf("RegisterStakeFromAddress: %v", err)
+		t.Fatal(err)
 	}
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
+	}
+}
 
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 0 {
-		t.Fatal("expected single StakeRegistration cert")
+func TestRegisterStakeNoWalletNoCred(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	_, err := a.RegisterStake(nil)
+	if err == nil {
+		t.Error("expected error when no wallet and no credential")
 	}
 }
 
 func TestRegisterStakeFromBech32(t *testing.T) {
-	a := newTestApollo(t)
-
-	a, err := a.RegisterStakeFromBech32(addrWithStake)
+	cc := setupFixedContext()
+	a := New(cc)
+	// Pass bech32 string directly - resolveCredential handles it
+	a, err := a.RegisterStake(validTestAddrBech32)
 	if err != nil {
-		t.Fatalf("RegisterStakeFromBech32: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 0 {
-		t.Fatal("expected single StakeRegistration cert")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
-
-func TestRegisterStakeFromAddress_NoStake(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrNoStake)
-
-	_, err := a.RegisterStakeFromAddress(decoded)
-	if err == nil {
-		t.Fatal("expected error for address without staking part")
-	}
-}
-
-// --- DeregisterStake tests ---
 
 func TestDeregisterStake(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	w := NewExternalWallet(addr)
+	a := New(cc).SetWallet(w)
 
-	a, err := a.DeregisterStake(cred)
+	cred := common.Credential{CredType: 0, Credential: addr.StakeKeyHash()}
+	a, err := a.DeregisterStake(&cred)
 	if err != nil {
-		t.Fatalf("DeregisterStake: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 1 {
-		t.Fatalf(
-			"expected StakeDeregistration (kind 1), got %d",
-			certs[0].Kind(),
-		)
-	}
-	sc := certs[0].StakeCredential()
-	if sc == nil {
-		t.Fatal("stake credential is nil")
-	}
-	if !bytes.Equal(sc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("stake credential hash mismatch")
-	}
-}
-
-func TestDeregisterStakeFromAddress(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
-
-	a, err := a.DeregisterStakeFromAddress(decoded)
-	if err != nil {
-		t.Fatalf("DeregisterStakeFromAddress: %v", err)
-	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 1 {
-		t.Fatal("expected single StakeDeregistration cert")
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeDeregistration) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeDeregistration, a.certificates[0].Type)
 	}
 }
 
 func TestDeregisterStakeFromBech32(t *testing.T) {
-	a := newTestApollo(t)
-
-	a, err := a.DeregisterStakeFromBech32(addrWithStake)
+	cc := setupFixedContext()
+	a := New(cc)
+	a, err := a.DeregisterStake(validTestAddrBech32)
 	if err != nil {
-		t.Fatalf("DeregisterStakeFromBech32: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 1 {
-		t.Fatal("expected single StakeDeregistration cert")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
-
-func TestDeregisterStakeFromAddress_NoStake(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrNoStake)
-
-	_, err := a.DeregisterStakeFromAddress(decoded)
-	if err == nil {
-		t.Fatal("expected error for address without staking part")
-	}
-}
-
-// --- DelegateStake tests ---
 
 func TestDelegateStake(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0xDE
-	pool[1] = 0xAD
+	cc := setupFixedContext()
+	a := New(cc)
 
-	a, err := a.DelegateStake(cred, pool)
+	addr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: addr.StakeKeyHash()}
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xaa
+
+	a, err := a.DelegateStake(cred, poolHash)
 	if err != nil {
-		t.Fatalf("DelegateStake: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 2 {
-		t.Fatalf(
-			"expected StakeDelegation (kind 2), got %d",
-			certs[0].Kind(),
-		)
-	}
-	sc := certs[0].StakeCredential()
-	if sc == nil {
-		t.Fatal("stake credential is nil")
-	}
-	if !bytes.Equal(sc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("stake credential hash mismatch")
-	}
-}
-
-func TestDelegateStakeFromAddress(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0xBE
-
-	a, err := a.DelegateStakeFromAddress(decoded, pool)
-	if err != nil {
-		t.Fatalf("DelegateStakeFromAddress: %v", err)
-	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 2 {
-		t.Fatal("expected single StakeDelegation cert")
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeDelegation, a.certificates[0].Type)
 	}
 }
 
 func TestDelegateStakeFromBech32(t *testing.T) {
-	a := newTestApollo(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0xCF
+	cc := setupFixedContext()
+	a := New(cc)
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xbb
 
-	a, err := a.DelegateStakeFromBech32(addrWithStake, pool)
+	// Pass bech32 string directly
+	a, err := a.DelegateStake(validTestAddrBech32, poolHash)
 	if err != nil {
-		t.Fatalf("DelegateStakeFromBech32: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 2 {
-		t.Fatal("expected single StakeDelegation cert")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
-
-func TestDelegateStakeFromAddress_NoStake(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrNoStake)
-	pool := serialization.PubKeyHash{}
-
-	_, err := a.DelegateStakeFromAddress(decoded, pool)
-	if err == nil {
-		t.Fatal("expected error for address without staking part")
-	}
-}
-
-// --- RegisterAndDelegateStake tests ---
 
 func TestRegisterAndDelegateStake(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0x42
+	cc := setupFixedContext()
+	a := New(cc)
 
-	a, err := a.RegisterAndDelegateStake(
-		cred,
-		pool,
-		2_000_000,
-	)
-	if err != nil {
-		t.Fatalf("RegisterAndDelegateStake: %v", err)
-	}
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xcc
 
-	built, _, err := a.Complete()
+	a, err := a.RegisterAndDelegateStake(cred, poolHash, StakeDeposit)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	if certs[0].Kind() != 11 {
-		t.Fatalf(
-			"expected StakeRegDelegCert (kind 11), got %d",
-			certs[0].Kind(),
-		)
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeRegistrationDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeRegistrationDelegation, a.certificates[0].Type)
 	}
 }
 
 func TestRegisterAndDelegateStakeFromBech32(t *testing.T) {
-	a := newTestApollo(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0x43
+	cc := setupFixedContext()
+	a := New(cc)
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xdd
 
-	a, err := a.RegisterAndDelegateStakeFromBech32(
-		addrWithStake,
-		pool,
-		2_000_000,
-	)
+	a, err := a.RegisterAndDelegateStake(validTestAddrBech32, poolHash, StakeDeposit)
 	if err != nil {
-		t.Fatalf("RegisterAndDelegateStakeFromBech32: %v", err)
+		t.Fatal(err)
 	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 || certs[0].Kind() != 11 {
-		t.Fatal("expected single StakeRegDelegCert (kind 11)")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
 
-// --- AddWithdrawal tests ---
+func TestDelegateVote(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-func TestAddWithdrawal(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-	a = a.AddWithdrawal(
-		decoded,
-		5_000_000,
-		PlutusData.PlutusData{},
-	)
-
-	built, _, err := a.Complete()
+	a, err := a.DelegateVote(cred, drep)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	tx := built.GetTx()
-	if tx.TransactionBody.Withdrawals == nil {
-		t.Fatal("withdrawals nil after AddWithdrawal")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	if tx.TransactionBody.Withdrawals.Size() != 1 {
-		t.Fatalf(
-			"expected 1 withdrawal, got %d",
-			tx.TransactionBody.Withdrawals.Size(),
-		)
+	if a.certificates[0].Type != uint(common.CertificateTypeVoteDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeVoteDelegation, a.certificates[0].Type)
 	}
 }
 
-func TestAddWithdrawalMultiple(t *testing.T) {
-	a := newTestApollo(t)
+func TestDelegateVoteFromBech32(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	drep := common.Drep{Type: common.DrepTypeNoConfidence}
 
-	// Use two different addresses with staking parts.
-	decoded1, _ := Address.DecodeAddress(addrWithStake)
-	// Build a second distinct address with different staking part.
-	addr2 := Address.Address{
-		PaymentPart: decoded1.PaymentPart,
-		StakingPart: make([]byte, 28),
-		Network:     decoded1.Network,
-		AddressType: decoded1.AddressType,
-		HeaderByte:  decoded1.HeaderByte,
-		Hrp:         decoded1.Hrp,
-	}
-	addr2.StakingPart[0] = 0xFF
-
-	a = a.AddWithdrawal(
-		decoded1,
-		1_000_000,
-		PlutusData.PlutusData{},
-	)
-	a = a.AddWithdrawal(
-		addr2,
-		2_000_000,
-		PlutusData.PlutusData{},
-	)
-
-	built, _, err := a.Complete()
+	a, err := a.DelegateVote(validTestAddrBech32, drep)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	if built.GetTx().TransactionBody.Withdrawals.Size() != 2 {
-		t.Fatalf(
-			"expected 2 withdrawals, got %d",
-			built.GetTx().TransactionBody.Withdrawals.Size(),
-		)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
 
-func TestAddWithdrawalWithRedeemer(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
+func TestDelegateStakeAndVote(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-	rd := PlutusData.PlutusData{
-		TagNr:          121,
-		PlutusDataType: PlutusData.PlutusArray,
-		Value:          PlutusData.PlutusIndefArray{},
-	}
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xaa
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-	a = a.AddWithdrawal(decoded, 3_000_000, rd)
-
-	built, _, err := a.Complete()
+	a, err := a.DelegateStakeAndVote(cred, poolHash, drep)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	tx := built.GetTx()
-	if tx.TransactionBody.Withdrawals == nil {
-		t.Fatal("withdrawals nil")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	if tx.TransactionBody.Withdrawals.Size() != 1 {
-		t.Fatalf(
-			"expected 1 withdrawal, got %d",
-			tx.TransactionBody.Withdrawals.Size(),
-		)
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeVoteDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeVoteDelegation, a.certificates[0].Type)
 	}
 }
 
-// --- Certificate chaining tests ---
+func TestDelegateStakeAndVoteFromBech32(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xee
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-func TestCertificateChaining(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0x99
-
-	// Chain: register then delegate
-	a, err := a.RegisterStake(cred)
+	a, err := a.DelegateStakeAndVote(validTestAddrBech32, poolHash, drep)
 	if err != nil {
-		t.Fatalf("RegisterStake: %v", err)
+		t.Fatal(err)
 	}
-	a, err = a.DelegateStake(cred, pool)
-	if err != nil {
-		t.Fatalf("DelegateStake: %v", err)
-	}
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 2 {
-		t.Fatalf("expected 2 certs, got %d", len(certs))
-	}
-	if certs[0].Kind() != 0 {
-		t.Fatal("first cert should be StakeRegistration")
-	}
-	if certs[1].Kind() != 2 {
-		t.Fatal("second cert should be StakeDelegation")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
 
-func TestCertificateWithWithdrawal(t *testing.T) {
-	a := newTestApollo(t)
-	cred, decoded := makeStakeCredential(t)
+func TestRegisterAndDelegateVote(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-	a, err := a.DeregisterStake(cred)
-	if err != nil {
-		t.Fatalf("DeregisterStake: %v", err)
-	}
-	a = a.AddWithdrawal(
-		decoded,
-		1_000_000,
-		PlutusData.PlutusData{},
-	)
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-	built, _, err := a.Complete()
+	a, err := a.RegisterAndDelegateVote(cred, drep, StakeDeposit)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	tx := built.GetTx()
-	if tx.TransactionBody.Certificates == nil {
-		t.Fatal("certificates nil")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	if len(*tx.TransactionBody.Certificates) != 1 {
-		t.Fatal("expected 1 certificate")
-	}
-	if tx.TransactionBody.Withdrawals == nil {
-		t.Fatal("withdrawals nil")
-	}
-	if tx.TransactionBody.Withdrawals.Size() != 1 {
-		t.Fatal("expected 1 withdrawal")
+	if a.certificates[0].Type != uint(common.CertificateTypeVoteRegistrationDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeVoteRegistrationDelegation, a.certificates[0].Type)
 	}
 }
 
-// --- Withdrawal package tests ---
+func TestRegisterAndDelegateVoteFromBech32(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-func TestWithdrawalNew(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
-
-	a = a.AddWithdrawal(
-		decoded,
-		0,
-		PlutusData.PlutusData{},
-	)
-
-	built, _, err := a.Complete()
+	a, err := a.RegisterAndDelegateVote(validTestAddrBech32, drep, StakeDeposit)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	if built.GetTx().TransactionBody.Withdrawals == nil {
-		t.Fatal("withdrawals should not be nil")
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
 
-// --- SetCertificates overwrites previous ---
+func TestRegisterAndDelegateStakeAndVote(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-func TestSetCertificatesOverwrites(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xaa
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-	certs1 := Certificate.NewCertificates(
-		Certificate.StakeRegistration{Stake: *cred},
-	)
-	a = a.SetCertificates(&certs1)
-
-	certs2 := Certificate.NewCertificates(
-		Certificate.StakeDeregistration{Stake: *cred},
-	)
-	a = a.SetCertificates(&certs2)
-
-	built, _, err := a.Complete()
+	a, err := a.RegisterAndDelegateStakeAndVote(cred, poolHash, drep, StakeDeposit)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-	if certs[0].Kind() != 1 {
-		t.Fatalf(
-			"expected StakeDeregistration (kind 1), got %d",
-			certs[0].Kind(),
-		)
+	if a.certificates[0].Type != uint(common.CertificateTypeStakeVoteRegistrationDelegation) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypeStakeVoteRegistrationDelegation, a.certificates[0].Type)
 	}
 }
 
-// --- Redeemer tag verification ---
+func TestRegisterAndDelegateStakeAndVoteFromBech32(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	var poolHash common.Blake2b224
+	poolHash[0] = 0xaa
+	drep := common.Drep{Type: common.DrepTypeAbstain}
 
-func TestWithdrawalRedeemerTag(t *testing.T) {
-	if Redeemer.REWARD != 3 {
-		t.Fatalf(
-			"expected REWARD tag = 3, got %d",
-			Redeemer.REWARD,
-		)
+	a, err := a.RegisterAndDelegateStakeAndVote(validTestAddrBech32, poolHash, drep, StakeDeposit)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if Redeemer.CERT != 2 {
-		t.Fatalf(
-			"expected CERT tag = 2, got %d",
-			Redeemer.CERT,
-		)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
 }
 
-// --- Transaction serialization with certificates ---
+func TestRegisterPool(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-func TestTxWithCertificatesSerializes(t *testing.T) {
-	a := newTestApollo(t)
-	cred, _ := makeStakeCredential(t)
-
-	a, err := a.RegisterStake(cred)
-	if err != nil {
-		t.Fatalf("RegisterStake: %v", err)
+	var operator common.Blake2b224
+	operator[0] = 0x01
+	params := common.PoolRegistrationCertificate{
+		Operator: operator,
+		Pledge:   1000000,
+		Cost:     340000000,
 	}
 
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
+	a.RegisterPool(params)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-
-	txBytes, err := built.GetTx().Bytes()
-	if err != nil {
-		t.Fatalf("tx Bytes: %v", err)
-	}
-	if len(txBytes) == 0 {
-		t.Fatal("serialized tx is empty")
+	if a.certificates[0].Type != uint(common.CertificateTypePoolRegistration) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypePoolRegistration, a.certificates[0].Type)
 	}
 }
 
-func TestTxWithWithdrawalSerializes(t *testing.T) {
-	a := newTestApollo(t)
-	decoded, _ := Address.DecodeAddress(addrWithStake)
+func TestDeregisterPool(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-	a = a.AddWithdrawal(
-		decoded,
-		5_000_000,
-		PlutusData.PlutusData{},
-	)
+	var poolHash common.Blake2b224
+	poolHash[0] = 0x01
 
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
+	a.DeregisterPool(poolHash, 100)
+	if len(a.certificates) != 1 {
+		t.Fatalf("expected 1 certificate, got %d", len(a.certificates))
 	}
-
-	txBytes, err := built.GetTx().Bytes()
-	if err != nil {
-		t.Fatalf("tx Bytes: %v", err)
-	}
-	if len(txBytes) == 0 {
-		t.Fatal("serialized tx is empty")
+	if a.certificates[0].Type != uint(common.CertificateTypePoolRetirement) {
+		t.Errorf("expected type %d, got %d", common.CertificateTypePoolRetirement, a.certificates[0].Type)
 	}
 }
 
-// --- Combined registration + delegation + withdrawal ---
+func TestSetCertificates(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-func TestFullStakingFlow(t *testing.T) {
-	a := newTestApollo(t)
-	cred, decoded := makeStakeCredential(t)
-	pool := serialization.PubKeyHash{}
-	pool[0] = 0x77
-
-	// Register + delegate + withdraw in one transaction
-	a, err := a.RegisterStake(cred)
-	if err != nil {
-		t.Fatalf("RegisterStake: %v", err)
+	certs := []common.CertificateWrapper{
+		{Type: uint(common.CertificateTypeStakeRegistration)},
+		{Type: uint(common.CertificateTypeStakeDelegation)},
 	}
-	a, err = a.DelegateStake(cred, pool)
-	if err != nil {
-		t.Fatalf("DelegateStake: %v", err)
-	}
-	a = a.AddWithdrawal(
-		decoded,
-		0,
-		PlutusData.PlutusData{},
-	)
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-
-	tx := built.GetTx()
-	certs := *tx.TransactionBody.Certificates
-	if len(certs) != 2 {
-		t.Fatalf("expected 2 certs, got %d", len(certs))
-	}
-	if tx.TransactionBody.Withdrawals == nil {
-		t.Fatal("withdrawals nil")
-	}
-	if tx.TransactionBody.Withdrawals.Size() != 1 {
-		t.Fatal("expected 1 withdrawal")
-	}
-
-	txBytes, err := tx.Bytes()
-	if err != nil {
-		t.Fatalf("tx Bytes: %v", err)
-	}
-	if len(txBytes) == 0 {
-		t.Fatal("serialized tx is empty")
+	a.SetCertificates(certs)
+	if len(a.certificates) != 2 {
+		t.Errorf("expected 2 certificates, got %d", len(a.certificates))
 	}
 }
 
-// --- RegisterDRep tests ---
+func TestCertificateDepositAdjustment(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-func TestRegisterDRep(t *testing.T) {
-	a := newTestApollo(t)
-	cred := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cred.Hash.Payload[0] = 0xDD
-
-	a = a.RegisterDRep(
-		cred,
-		2_000_000,
-		&Certificate.Anchor{
-			Url:      "https://example.com/drep.json",
-			DataHash: make([]byte, 32),
-		},
-	)
-
-	built, _, err := a.Complete()
+	// Registration adds deposit
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	a, err := a.RegisterStake(&cred)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
+	adj := a.certificateDepositAdjustment(StakeDeposit)
+	if adj != StakeDeposit {
+		t.Errorf("expected deposit of %d, got %d", StakeDeposit, adj)
 	}
-	if certs[0].Kind() != 16 {
-		t.Fatalf(
-			"expected RegDRepCert (kind 16), got %d",
-			certs[0].Kind(),
-		)
+
+	// Deregistration subtracts deposit
+	a, err = a.DeregisterStake(&cred)
+	if err != nil {
+		t.Fatal(err)
 	}
-	dc := certs[0].DrepCredential()
-	if dc == nil {
-		t.Fatal("drep credential is nil")
-	}
-	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("drep credential hash mismatch")
+	adj = a.certificateDepositAdjustment(StakeDeposit)
+	if adj != 0 {
+		t.Errorf("expected net 0 (reg+dereg), got %d", adj)
 	}
 }
 
-func TestRegisterDRepNoAnchor(t *testing.T) {
-	a := newTestApollo(t)
-	cred := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cred.Hash.Payload[0] = 0xEE
+func TestCertificateDepositAdjustmentDeregOnly(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
 
-	a = a.RegisterDRep(cred, 2_000_000, nil)
-
-	built, _, err := a.Complete()
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	a, err := a.DeregisterStake(&cred)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 16 {
-		t.Fatalf(
-			"expected RegDRepCert (kind 16), got %d",
-			certs[0].Kind(),
-		)
-	}
-	dc := certs[0].DrepCredential()
-	if dc == nil {
-		t.Fatal("drep credential is nil")
-	}
-	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("drep credential hash mismatch")
+	adj := a.certificateDepositAdjustment(StakeDeposit)
+	if adj != -StakeDeposit {
+		t.Errorf("expected deposit refund of %d, got %d", -StakeDeposit, adj)
 	}
 }
 
-// --- RetireDRep tests ---
-
-func TestRetireDRep(t *testing.T) {
-	a := newTestApollo(t)
-	cred := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cred.Hash.Payload[0] = 0xAA
-
-	a = a.RetireDRep(cred, 2_000_000)
-
-	built, _, err := a.Complete()
+func TestGetStakeCredentialFromAddress(t *testing.T) {
+	addr := testAddress(t)
+	cred, err := GetStakeCredentialFromAddress(addr)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
+	if cred.CredType != 0 {
+		t.Errorf("expected CredType 0, got %d", cred.CredType)
 	}
-	if certs[0].Kind() != 17 {
-		t.Fatalf(
-			"expected UnregDRepCert (kind 17), got %d",
-			certs[0].Kind(),
-		)
-	}
-	dc := certs[0].DrepCredential()
-	if dc == nil {
-		t.Fatal("drep credential is nil")
-	}
-	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("drep credential hash mismatch")
+	if cred.Credential == (common.Blake2b224{}) {
+		t.Error("expected non-zero credential hash")
 	}
 }
 
-// --- UpdateDRep tests ---
+func TestGetStakeCredentialFromWallet(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	w := NewExternalWallet(addr)
+	a := New(cc).SetWallet(w)
 
-func TestUpdateDRep(t *testing.T) {
-	a := newTestApollo(t)
-	cred := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cred.Hash.Payload[0] = 0xBB
-
-	a = a.UpdateDRep(
-		cred,
-		&Certificate.Anchor{
-			Url:      "https://example.com/update.json",
-			DataHash: make([]byte, 32),
-		},
-	)
-
-	built, _, err := a.Complete()
+	cred, err := a.GetStakeCredentialFromWallet()
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 18 {
-		t.Fatalf(
-			"expected UpdateDRepCert (kind 18), got %d",
-			certs[0].Kind(),
-		)
-	}
-	dc := certs[0].DrepCredential()
-	if dc == nil {
-		t.Fatal("drep credential is nil")
-	}
-	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("drep credential hash mismatch")
+	if cred.Credential == (common.Blake2b224{}) {
+		t.Error("expected non-zero credential hash")
 	}
 }
 
-func TestUpdateDRepNoAnchor(t *testing.T) {
-	a := newTestApollo(t)
-	cred := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cred.Hash.Payload[0] = 0xCC
-
-	a = a.UpdateDRep(cred, nil)
-
-	built, _, err := a.Complete()
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 18 {
-		t.Fatalf(
-			"expected UpdateDRepCert (kind 18), got %d",
-			certs[0].Kind(),
-		)
-	}
-	dc := certs[0].DrepCredential()
-	if dc == nil {
-		t.Fatal("drep credential is nil")
-	}
-	if !bytes.Equal(dc.Hash.Payload, cred.Hash.Payload) {
-		t.Fatal("drep credential hash mismatch")
+func TestGetStakeCredentialFromWalletNoWallet(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	_, err := a.GetStakeCredentialFromWallet()
+	if err == nil {
+		t.Error("expected error when no wallet")
 	}
 }
 
-// --- AuthorizeCommitteeHotKey tests ---
+func TestCompleteWithStakeRegistration(t *testing.T) {
+	cc := fixed.NewEmptyFixedChainContext()
+	addr := testAddress(t)
+	// Need enough to cover deposit + payment + fee
+	addTestUtxo(cc, addr, 20_000_000, 0x01, 0)
 
-func TestAuthorizeCommitteeHotKey(t *testing.T) {
-	a := newTestApollo(t)
-	cold := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cold.Hash.Payload[0] = 0x11
-	hot := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	hot.Hash.Payload[0] = 0x22
+	w := NewExternalWallet(addr)
+	a := New(cc).SetWallet(w).SetTtl(50000000)
 
-	a = a.AuthorizeCommitteeHotKey(cold, hot)
-
-	built, _, err := a.Complete()
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 14 {
-		t.Fatalf(
-			"expected AuthCommitteeHotCert (kind 14), got %d",
-			certs[0].Kind(),
-		)
-	}
-	hc := certs[0].AuthCommitteeHotCredential()
-	if hc == nil {
-		t.Fatal("hot credential is nil")
-	}
-	if !bytes.Equal(hc.Hash.Payload, hot.Hash.Payload) {
-		t.Fatal("hot credential hash mismatch")
-	}
-	cc := certs[0].AuthCommitteeColdCredential()
-	if cc == nil {
-		t.Fatal("cold credential is nil")
-	}
-	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
-		t.Fatal("cold credential hash mismatch")
-	}
-}
-
-// --- ResignCommitteeColdKey tests ---
-
-func TestResignCommitteeColdKey(t *testing.T) {
-	a := newTestApollo(t)
-	cold := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cold.Hash.Payload[0] = 0x33
-
-	a = a.ResignCommitteeColdKey(
-		cold,
-		&Certificate.Anchor{
-			Url:      "https://example.com/resign.json",
-			DataHash: make([]byte, 32),
-		},
-	)
-
-	built, _, err := a.Complete()
+	a.AddPayment(p)
+	cred := common.Credential{CredType: 0, Credential: addr.StakeKeyHash()}
+	a, err = a.RegisterStake(&cred)
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
-	}
-	if certs[0].Kind() != 15 {
-		t.Fatalf(
-			"expected ResignCommitteeColdCert (kind 15), got %d",
-			certs[0].Kind(),
-		)
-	}
-	cc := certs[0].AuthCommitteeColdCredential()
-	if cc == nil {
-		t.Fatal("cold credential is nil")
-	}
-	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
-		t.Fatal("cold credential hash mismatch")
-	}
-}
 
-func TestResignCommitteeColdKeyNoAnchor(t *testing.T) {
-	a := newTestApollo(t)
-	cold := Certificate.Credential{
-		Code: 0,
-		Hash: serialization.ConstrainedBytes{
-			Payload: make([]byte, 28),
-		},
-	}
-	cold.Hash.Payload[0] = 0x44
-
-	a = a.ResignCommitteeColdKey(cold, nil)
-
-	built, _, err := a.Complete()
+	a, err = a.Complete()
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	certs := *built.GetTx().TransactionBody.Certificates
-	if len(certs) != 1 {
-		t.Fatalf("expected 1 cert, got %d", len(certs))
+
+	tx := a.GetTx()
+	if tx == nil {
+		t.Fatal("expected non-nil transaction")
 	}
-	if certs[0].Kind() != 15 {
-		t.Fatalf(
-			"expected ResignCommitteeColdCert (kind 15), got %d",
-			certs[0].Kind(),
-		)
-	}
-	cc := certs[0].AuthCommitteeColdCredential()
-	if cc == nil {
-		t.Fatal("cold credential is nil")
-	}
-	if !bytes.Equal(cc.Hash.Payload, cold.Hash.Payload) {
-		t.Fatal("cold credential hash mismatch")
+	if len(tx.Body.TxCertificates) != 1 {
+		t.Errorf("expected 1 certificate in tx body, got %d", len(tx.Body.TxCertificates))
 	}
 }

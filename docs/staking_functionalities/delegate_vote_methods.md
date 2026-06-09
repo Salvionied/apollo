@@ -1,59 +1,80 @@
 # Delegate Vote Methods
 
-This page documents **vote (DRep) delegation**: `DelegateVote*`. Certificate types: [`serialization/Certificate/Certificate.go`](../../serialization/Certificate/Certificate.go) (`Drep`, `VoteDelegCert`); builder: [`ApolloBuilder.go`](../../ApolloBuilder.go).
+This page documents **vote (DRep) delegation**: `DelegateVote*`. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go).
 
 ## DRep type
 
-`Certificate.Drep`:
+`common.Drep` (from gouroboros):
 
-- `Code`: 0 = key hash, 1 = script hash, or special values for “always abstain” / “no confidence.”
-- `Credential`: optional key or script hash (nil for abstain/no-confidence).
+- `Type`: 0 = key hash, 1 = script hash, or special values for "always abstain" / "no confidence."
+- `Hash`: optional key or script hash (zero for abstain/no-confidence).
 
 Build a `Drep` and pass it into the delegation methods.
 
 ## Purpose and method signatures
 
+### DelegateVote (unified)
+
 ```go
-func (b *Apollo) DelegateVote(stakeCredential *Certificate.Credential, drep *Certificate.Drep) (*Apollo, error)
-func (b *Apollo) DelegateVoteFromAddress(address Address.Address, drep *Certificate.Drep) (*Apollo, error)
-func (b *Apollo) DelegateVoteFromBech32(address string, drep *Certificate.Drep) (*Apollo, error)
+func (a *Apollo) DelegateVote(credOrAddr any, drep common.Drep) (*Apollo, error)
 ```
 
-If `stakeCredential` is `nil`, it is taken from the wallet. Appends a `VoteDelegCert` certificate (vote-only; stake key may already be registered).
+`credOrAddr` can be: `*common.Credential`, `common.Credential`, `common.Address`, `string` (bech32), or `nil` (uses wallet). Appends a `VoteDelegCert` certificate (vote-only; stake key may already be registered).
+
+### DelegateVoteFromAddress / DelegateVoteFromBech32
+
+```go
+func (a *Apollo) DelegateVoteFromAddress(addr common.Address, drep common.Drep) (*Apollo, error)
+func (a *Apollo) DelegateVoteFromBech32(bech32 string, drep common.Drep) (*Apollo, error)
+```
+
+Type-safe convenience methods that delegate to `DelegateVote`.
 
 ## Inputs and constraints
 
 - DRep key/script hash and special codes must match what the node expects.
+- The unified method accepts any of the listed types; the `FromAddress`/`FromBech32` variants provide compile-time type safety.
 
 ## Cardano CLI equivalence (10.14.0.0)
 
-| CLI | Apollo |
-|-----|--------|
-| Vote delegation cert | `DelegateVote(cred, drep)` / `DelegateVoteFromAddress(addr, drep)` / `DelegateVoteFromBech32(bech32, drep)` |
+| CLI                    | Apollo                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Vote delegation cert   | `DelegateVote(cred, drep)` / `DelegateVoteFromAddress(addr, drep)` / `DelegateVoteFromBech32(bech32, drep)` |
 
 ## Example
 
-**Apollo:**
+### Vote delegation (using wallet credential)
 
 ```go
-drep := &Certificate.Drep{
-    Code:       0,
-    Credential: &serialization.ConstrainedBytes{Payload: drepKeyHash},
+import (
+    "github.com/blinklabs-io/gouroboros/ledger/common"
+    apollo "github.com/Salvionied/apollo/v2"
+)
+
+drep := common.Drep{
+    Type: 0,
+    Hash: drepKeyHash,
 }
-apollob, err = apollob.
-    DelegateVote(nil, drep).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+a := apollo.New(cc)
+a.SetWallet(wallet)
+a, err := a.DelegateVote(nil, drep)
+if err != nil {
+    panic(err)
+}
+a.AddLoadedUTxOs(utxos...)
+a.PayToAddress(myAddr, 10_000_000)
+tx, err := a.Complete()
+```
+
+### Delegate vote from bech32 address
+
+```go
+a, err = a.DelegateVoteFromBech32("stake1u...", drep)
 ```
 
 **Cardano CLI:** Vote delegation certificate in `transaction build`.
 
-## Evidence
-
-- **Implementation-only**. Vote-only cert shape in `Certificate.go`; related round-trips for combined certs in `Certificate_test.go`.
-
 ## Caveats and validation
 
 - No ApolloBuilder-level integration tests for vote delegation. Validate on preprod/mainnet with small amounts.
+- All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.
