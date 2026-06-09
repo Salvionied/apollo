@@ -345,7 +345,7 @@ func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint3
 	}
 
 	for _, raw := range txUtxos.Outputs {
-		if uint32(raw.OutputIndex) == index {
+		if int64(raw.OutputIndex) == int64(index) {
 			addr, err := common.NewAddress(raw.Address)
 			if err != nil {
 				return nil, err
@@ -406,12 +406,32 @@ type bfProtocolParams struct {
 }
 
 func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error) {
+	maxBlockSize, err := backend.BoundedInt(p.MaxBlockSize, "max_block_size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxTxSize, err := backend.BoundedInt(p.MaxTxSize, "max_tx_size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxBlockHeaderSize, err := backend.BoundedInt(p.MaxBlockHeaderSize, "max_block_header_size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	collateralPercent, err := backend.BoundedInt(p.CollateralPercent, "collateral_percent")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxCollateralInputs, err := backend.BoundedInt(p.MaxCollateralIn, "max_collateral_inputs")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
 	pp := backend.ProtocolParameters{
 		MinFeeConstant:      p.MinFeeB,
 		MinFeeCoefficient:   p.MinFeeA,
-		MaxBlockSize:        int(p.MaxBlockSize),
-		MaxTxSize:           int(p.MaxTxSize),
-		MaxBlockHeaderSize:  int(p.MaxBlockHeaderSize),
+		MaxBlockSize:        maxBlockSize,
+		MaxTxSize:           maxTxSize,
+		MaxBlockHeaderSize:  maxBlockHeaderSize,
 		KeyDeposits:         p.KeyDeposit,
 		PoolDeposits:        p.PoolDeposit,
 		MinPoolCost:         p.MinPoolCost,
@@ -422,8 +442,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		MaxBlockExMem:       p.MaxBlockExMem,
 		MaxBlockExSteps:     p.MaxBlockExSteps,
 		MaxValSize:          p.MaxValSize,
-		CollateralPercent:   int(p.CollateralPercent),
-		MaxCollateralInputs: int(p.MaxCollateralIn),
+		CollateralPercent:   collateralPercent,
+		MaxCollateralInputs: maxCollateralInputs,
 		CoinsPerUtxoByte:    p.CoinsPerUtxoSize,
 	}
 

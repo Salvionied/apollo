@@ -443,8 +443,10 @@ func sharedValueToUtxo(txId common.Blake2b256, outputIndex uint32, value shared.
 		OutputIndex: outputIndex,
 	}
 
+	// Require int64 range (not just uint64) to match the other backends and
+	// keep downstream signed lovelace arithmetic safe.
 	lovelaceBig := value.AdaLovelace().BigInt()
-	if lovelaceBig.Sign() < 0 || !lovelaceBig.IsUint64() {
+	if lovelaceBig.Sign() < 0 || !lovelaceBig.IsInt64() {
 		return common.Utxo{}, fmt.Errorf("invalid lovelace quantity %s", lovelaceBig.String())
 	}
 	lovelace := lovelaceBig.Uint64()

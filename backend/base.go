@@ -77,14 +77,34 @@ type ProtocolParameters struct {
 }
 
 // CoinsPerUtxoByteValue returns the coins per UTxO byte value parsed from the string field.
+// Negative or absurdly large values (which would corrupt min-UTxO math downstream)
+// fall back to the protocol default.
 func (p ProtocolParameters) CoinsPerUtxoByteValue() int64 {
 	if p.CoinsPerUtxoByte != "" {
 		v, err := strconv.ParseInt(p.CoinsPerUtxoByte, 10, 64)
-		if err == nil {
+		if err == nil && v >= 0 && v <= 1_000_000_000 {
 			return v
 		}
 	}
 	return 4310 // default fallback
+}
+
+// BoundedInt converts an API-supplied int64 to int, rejecting negative values
+// and values that would not fit in 32 bits.
+func BoundedInt(v int64, name string) (int, error) {
+	if v < 0 || v > math.MaxInt32 {
+		return 0, fmt.Errorf("%s out of range: %d", name, v)
+	}
+	return int(v), nil
+}
+
+// BoundedIntFromUint64 converts an API-supplied uint64 to int, rejecting
+// values that would not fit in 32 bits.
+func BoundedIntFromUint64(v uint64, name string) (int, error) {
+	if v > math.MaxInt32 {
+		return 0, fmt.Errorf("%s out of range: %d", name, v)
+	}
+	return int(v), nil
 }
 
 // AddressAmount represents a unit and quantity from API responses.
@@ -174,5 +194,14 @@ func ComputeMaxTxFee(pp ProtocolParameters) (uint64, error) {
 		return 0, fmt.Errorf("invalid protocol parameters: MaxTxSize=%d, MinFeeCoefficient=%d, MinFeeConstant=%d",
 			pp.MaxTxSize, pp.MinFeeCoefficient, pp.MinFeeConstant)
 	}
-	return uint64(pp.MaxTxSize)*uint64(pp.MinFeeCoefficient) + uint64(pp.MinFeeConstant), nil //nolint:gosec // validated non-negative above
+	size := uint64(pp.MaxTxSize)          //nolint:gosec // validated non-negative above
+	coeff := uint64(pp.MinFeeCoefficient) //nolint:gosec // validated non-negative above
+	constant := uint64(pp.MinFeeConstant) //nolint:gosec // validated non-negative above
+	// Bound the result to MaxInt64 so callers can safely use it in signed
+	// arithmetic; values that large indicate corrupt protocol parameters.
+	if size != 0 && coeff > (math.MaxInt64-constant)/size {
+		return 0, fmt.Errorf("max tx fee overflows: MaxTxSize=%d, MinFeeCoefficient=%d, MinFeeConstant=%d",
+			pp.MaxTxSize, pp.MinFeeCoefficient, pp.MinFeeConstant)
+	}
+	return size*coeff + constant, nil
 }

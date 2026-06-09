@@ -73,12 +73,33 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid step price: %w", err)
 	}
 
+	maxBlockSize, err := backend.BoundedInt(data.MaxBlockBodySize.Bytes, "max block body size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxTxSize, err := backend.BoundedInt(data.MaxTransactionSize.Bytes, "max transaction size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxBlockHeaderSize, err := backend.BoundedInt(data.MaxBlockHeaderSize.Bytes, "max block header size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	collateralPercent, err := backend.BoundedInt(data.CollateralPercentage, "collateral percentage")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxCollateralInputs, err := backend.BoundedInt(data.MaxCollateralInputs, "max collateral inputs")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+
 	pp := backend.ProtocolParameters{
 		MinFeeCoefficient:   data.MinFeeCoefficient,
 		MinFeeConstant:      data.MinFeeConstant.LovelaceAmount.Lovelace,
-		MaxBlockSize:        int(data.MaxBlockBodySize.Bytes),
-		MaxTxSize:           int(data.MaxTransactionSize.Bytes),
-		MaxBlockHeaderSize:  int(data.MaxBlockHeaderSize.Bytes),
+		MaxBlockSize:        maxBlockSize,
+		MaxTxSize:           maxTxSize,
+		MaxBlockHeaderSize:  maxBlockHeaderSize,
 		KeyDeposits:         strconv.FormatInt(data.StakeCredentialDeposit.LovelaceAmount.Lovelace, 10),
 		PoolDeposits:        strconv.FormatInt(data.StakePoolDeposit.LovelaceAmount.Lovelace, 10),
 		MinPoolCost:         strconv.FormatInt(data.MinStakePoolCost.LovelaceAmount.Lovelace, 10),
@@ -87,8 +108,8 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 		MaxBlockExMem:       strconv.FormatInt(data.MaxExecutionUnitsPerBlock.Memory, 10),
 		MaxBlockExSteps:     strconv.FormatInt(data.MaxExecutionUnitsPerBlock.Steps, 10),
 		MaxValSize:          strconv.FormatInt(data.MaxValueSize.Bytes, 10),
-		CollateralPercent:   int(data.CollateralPercentage),
-		MaxCollateralInputs: int(data.MaxCollateralInputs),
+		CollateralPercent:   collateralPercent,
+		MaxCollateralInputs: maxCollateralInputs,
 		CoinsPerUtxoByte:    strconv.FormatInt(data.MinUtxoDepositCoefficient, 10),
 		PriceMem:            priceMem,
 		PriceStep:           priceStep,
@@ -111,6 +132,12 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 				f, ok := c.(float64)
 				if !ok {
 					return backend.ProtocolParameters{}, fmt.Errorf("cost model %q element %d: expected float64, got %T", key, i, c)
+				}
+				// Reject non-integral or out-of-int64-range values rather than
+				// silently truncating (out-of-range float-to-int conversion is
+				// implementation-defined in Go).
+				if f != math.Trunc(f) || f < math.MinInt64 || f >= math.MaxInt64 {
+					return backend.ProtocolParameters{}, fmt.Errorf("cost model %q element %d: value %v is not a valid int64", key, i, f)
 				}
 				int64Costs = append(int64Costs, int64(f))
 			}

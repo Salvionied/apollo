@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -245,6 +246,9 @@ func (a *Apollo) AddReferenceInput(txHash string, index int) (*Apollo, error) {
 // Mint adds tokens to mint. If redeemer is provided, sets up script minting.
 // When exUnits is nil, execution units will be estimated automatically.
 func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits) *Apollo {
+	// Redeemer indexes bind to mint policies in byte-wise sorted order; mixed-case
+	// hex would sort differently as a string than as bytes, misbinding redeemers.
+	unit.PolicyId = strings.ToLower(unit.PolicyId)
 	a.mint = append(a.mint, unit)
 	if redeemer != nil {
 		eu := common.ExUnits{}
@@ -1121,7 +1125,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if feeErr != nil {
 		return a, fmt.Errorf("failed to compute max tx fee for coin selection: %w", feeErr)
 	}
-	prelimFee := int64(maxFee) //nolint:gosec // MaxTxFee fits in int64
+	if maxFee > math.MaxInt64 {
+		return a, fmt.Errorf("max tx fee out of range: %d", maxFee)
+	}
+	prelimFee := int64(maxFee)
 	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee)))
 	if err != nil {
 		return a, fmt.Errorf("selection target overflow: %w", err)
@@ -1230,7 +1237,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			if err != nil {
 				return a, fmt.Errorf("failed to compute min UTxO for change output: %w", err)
 			}
-			if int64(changeValue.Coin) >= minChange {
+			if minChange < 0 {
+				return a, fmt.Errorf("invalid min UTxO for change output: %d", minChange)
+			}
+			if changeValue.Coin >= uint64(minChange) {
 				outputs = append(outputs, changeOutput)
 			} else if changeValue.HasAssets() {
 				// Change has assets but insufficient ADA for min UTxO.
@@ -1572,8 +1582,13 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 			totalMem += rv.ExUnits.Memory
 			totalSteps += rv.ExUnits.Steps
 		}
-		exUnitFee := int64(math.Ceil(float64(pp.PriceMem)*float64(totalMem) + float64(pp.PriceStep)*float64(totalSteps)))
-		fee += exUnitFee
+		exUnitFeeFloat := math.Ceil(float64(pp.PriceMem)*float64(totalMem) + float64(pp.PriceStep)*float64(totalSteps))
+		// Out-of-range float-to-int conversion is implementation-defined; reject
+		// rather than sign a transaction with a corrupted fee. NaN fails this check too.
+		if !(exUnitFeeFloat >= 0 && exUnitFeeFloat < float64(math.MaxInt64)) {
+			return 0, errors.New("execution unit fee out of range")
+		}
+		fee += int64(exUnitFeeFloat)
 	}
 
 	return fee, nil
@@ -1628,8 +1643,8 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	// Update redeemers with evaluated ExUnits + buffer
 	for evalKey, evalUnits := range evalResult {
 		bufferedUnits := common.ExUnits{
-			Memory: int64(float64(evalUnits.Memory) * (1 + ExMemoryBuffer)),
-			Steps:  int64(float64(evalUnits.Steps) * (1 + ExStepBuffer)),
+			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
+			Steps:  bufferExUnits(evalUnits.Steps, 1+ExStepBuffer),
 		}
 		switch evalKey.Tag {
 		case common.RedeemerTagSpend:
@@ -1665,6 +1680,21 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	}
 
 	return nil
+}
+
+// bufferExUnits scales evaluated execution units by a safety factor, saturating
+// at MaxInt64. Out-of-range float-to-int conversion is implementation-defined in
+// Go, so an unguarded conversion of a huge backend-supplied value could wrap
+// negative and corrupt the fee calculation.
+func bufferExUnits(v int64, factor float64) int64 {
+	if v <= 0 {
+		return 0
+	}
+	f := float64(v) * factor
+	if f >= float64(math.MaxInt64) {
+		return math.MaxInt64
+	}
+	return int64(f)
 }
 
 func (a *Apollo) buildBody(
@@ -2137,8 +2167,9 @@ func (a *Apollo) setCollateral() error {
 	if a.collateralAmount > 0 {
 		minCollateral = a.collateralAmount
 	} else if pp, err := a.Context.ProtocolParams(); err == nil {
-		if maxFee, err := a.Context.MaxTxFee(); err == nil && pp.CollateralPercent > 0 {
-			computed := int64(maxFee) * int64(pp.CollateralPercent) / 100
+		if maxFee, err := a.Context.MaxTxFee(); err == nil && pp.CollateralPercent > 0 &&
+			maxFee <= math.MaxInt64/uint64(pp.CollateralPercent) {
+			computed := int64(maxFee) * int64(pp.CollateralPercent) / 100 //nolint:gosec // bounded above
 			if computed > 0 {
 				minCollateral = computed
 			}

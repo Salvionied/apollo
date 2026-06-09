@@ -3,6 +3,7 @@ package apollo
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -132,9 +133,12 @@ func NewPayment(receiver string, lovelace int64, units []Unit) (*Payment, error)
 // It returns an error if a native-asset quantity exceeds the int64 range,
 // rather than silently truncating or saturating it to a wrong value.
 func NewPaymentFromValue(receiver common.Address, value Value) (*Payment, error) {
+	if value.Coin > math.MaxInt64 {
+		return nil, fmt.Errorf("lovelace quantity %d exceeds int64 range", value.Coin)
+	}
 	payment := &Payment{
 		Receiver: receiver,
-		Lovelace: int64(value.Coin), //nolint:gosec // ADA supply fits in int64
+		Lovelace: int64(value.Coin),
 	}
 	if value.Assets != nil {
 		for _, policyId := range value.Assets.Policies() {
@@ -161,9 +165,12 @@ func PaymentFromTxOut(txOut *babbage.BabbageTransactionOutput) (*Payment, error)
 	if txOut == nil {
 		return nil, nil
 	}
+	if txOut.OutputAmount.Amount > math.MaxInt64 {
+		return nil, fmt.Errorf("lovelace quantity %d exceeds int64 range", txOut.OutputAmount.Amount)
+	}
 	payment := &Payment{
 		Receiver: txOut.OutputAddress,
-		Lovelace: int64(txOut.OutputAmount.Amount), //nolint:gosec // ADA supply fits in int64
+		Lovelace: int64(txOut.OutputAmount.Amount),
 	}
 	if txOut.OutputAmount.Assets != nil {
 		for _, policyId := range txOut.OutputAmount.Assets.Policies() {

@@ -58,7 +58,7 @@ func marshalValue(val reflect.Value) (data.PlutusData, error) {
 		if field.Name == "_" {
 			containerType = field.Tag.Get("plutusType")
 			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-				c, err := strconv.ParseUint(constrStr, 10, 64)
+				c, err := strconv.ParseUint(constrStr, 10, 32)
 				if err != nil {
 					return nil, fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
 				}
@@ -428,7 +428,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		field := typ.Field(i)
 		if field.Name == "_" {
 			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-				c, err := strconv.ParseUint(constrStr, 10, 64)
+				c, err := strconv.ParseUint(constrStr, 10, 32)
 				if err != nil {
 					return fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
 				}
@@ -492,7 +492,7 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 		field := typ.Field(i)
 		if field.Name == "_" {
 			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-				c, err := strconv.ParseUint(constrStr, 10, 64)
+				c, err := strconv.ParseUint(constrStr, 10, 32)
 				if err != nil {
 					return fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
 				}

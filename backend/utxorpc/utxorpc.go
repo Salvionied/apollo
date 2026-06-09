@@ -124,16 +124,37 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 		return backend.ProtocolParameters{}, errors.New("no cardano params in response")
 	}
 
+	maxBlockSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockBodySize(), "max block body size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxTxSize, err := backend.BoundedIntFromUint64(params.GetMaxTxSize(), "max tx size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxBlockHeaderSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockHeaderSize(), "max block header size")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	collateralPercent, err := backend.BoundedIntFromUint64(params.GetCollateralPercentage(), "collateral percentage")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	maxCollateralInputs, err := backend.BoundedIntFromUint64(params.GetMaxCollateralInputs(), "max collateral inputs")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+
 	pp := backend.ProtocolParameters{
 		MinFeeCoefficient:   bigIntToInt64(params.GetMinFeeCoefficient()),
 		MinFeeConstant:      bigIntToInt64(params.GetMinFeeConstant()),
-		MaxBlockSize:        int(params.GetMaxBlockBodySize()),
-		MaxTxSize:           int(params.GetMaxTxSize()),
-		MaxBlockHeaderSize:  int(params.GetMaxBlockHeaderSize()),
+		MaxBlockSize:        maxBlockSize,
+		MaxTxSize:           maxTxSize,
+		MaxBlockHeaderSize:  maxBlockHeaderSize,
 		CoinsPerUtxoByte:    bigIntToString(params.GetCoinsPerUtxoByte()),
 		MaxValSize:          strconv.FormatUint(params.GetMaxValueSize(), 10),
-		CollateralPercent:   int(params.GetCollateralPercentage()),
-		MaxCollateralInputs: int(params.GetMaxCollateralInputs()),
+		CollateralPercent:   collateralPercent,
+		MaxCollateralInputs: maxCollateralInputs,
 		KeyDeposits:         bigIntToString(params.GetStakeKeyDeposit()),
 		PoolDeposits:        bigIntToString(params.GetPoolDeposit()),
 	}
