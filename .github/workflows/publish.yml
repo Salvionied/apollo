@@ -36,7 +36,13 @@ jobs:
             } catch (error) {
               core.setFailed(error.message);
             }
-
-      # This updates the documentation on pkg.go.dev and the latest version available via the Go module proxy
+  # This updates the documentation on pkg.go.dev and the latest version available
+  # via the Go module proxy. Kept in a separate job with no permissions so the
+  # third-party action never runs alongside a write-capable GITHUB_TOKEN.
+  pull-module-proxy:
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    permissions: {}
+    steps:
       - name: Pull new module version
         uses: andrewslotin/go-proxy-pull-action@00af8a5a49c844d6dde0bbbc116b72d8fd7ae97c # v1.5.0

@@ -1,9 +1,11 @@
 package apollo
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/blinklabs-io/bursa/bip32"
@@ -193,6 +195,40 @@ func SubMultiAsset(m *common.MultiAsset[common.MultiAssetTypeOutput], other *com
 	negAssets := common.NewMultiAsset[common.MultiAssetTypeOutput](negData)
 	m.Add(&negAssets)
 	return nil
+}
+
+// normalizeChangeAssets validates and prunes a change-output MultiAsset.
+// A negative quantity means the inputs do not cover a requested burn, which
+// is an error; zero quantities are pruned because Conway-era output values
+// require positive asset amounts. Returns nil if no assets remain.
+func normalizeChangeAssets(m *common.MultiAsset[common.MultiAssetTypeOutput]) (*common.MultiAsset[common.MultiAssetTypeOutput], error) {
+	if m == nil {
+		return nil, nil
+	}
+	data := make(map[common.Blake2b224]map[cbor.ByteString]common.MultiAssetTypeOutput)
+	for _, policyId := range m.Policies() {
+		for _, assetName := range m.Assets(policyId) {
+			qty := m.Asset(policyId, assetName)
+			if qty == nil || qty.Sign() == 0 {
+				continue
+			}
+			if qty.Sign() < 0 {
+				return nil, fmt.Errorf(
+					"insufficient assets in inputs to cover burn: policy %s asset %x short by %s",
+					policyId.String(), assetName, new(big.Int).Neg(qty).String(),
+				)
+			}
+			if data[policyId] == nil {
+				data[policyId] = make(map[cbor.ByteString]common.MultiAssetTypeOutput)
+			}
+			data[policyId][cbor.NewByteString(assetName)] = new(big.Int).Set(qty)
+		}
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	result := common.NewMultiAsset[common.MultiAssetTypeOutput](data)
+	return &result, nil
 }
 
 // subtractAssetsSaturating subtracts UTxO assets from required assets, clamping to zero.
@@ -424,6 +460,13 @@ func NewVkeyWitnessFromSkey(
 			Signature: ed25519.Sign(edKey, txBodyHash.Bytes()),
 		}, nil
 	case ed25519.PrivateKeySize:
+		// Verify the embedded public-key half matches the seed before signing.
+		// Signing with a mismatched public key allows private-scalar recovery
+		// from two signatures over the same message.
+		expected := ed25519.NewKeyFromSeed(skey[:ed25519.SeedSize])
+		if !bytes.Equal(expected[ed25519.SeedSize:], skey[ed25519.SeedSize:]) {
+			return common.VkeyWitness{}, errors.New("signing key public-key half does not match its seed")
+		}
 		edKey := ed25519.PrivateKey(skey)
 		pubKey, ok := edKey.Public().(ed25519.PublicKey)
 		if !ok {
@@ -528,12 +571,18 @@ func OutputCborSize(output *babbage.BabbageTransactionOutput) (int, error) {
 
 // MinLovelacePostAlonzo calculates the minimum lovelace required for a transaction output.
 func MinLovelacePostAlonzo(output *babbage.BabbageTransactionOutput, coinsPerUtxoByte int64) (int64, error) {
+	if coinsPerUtxoByte <= 0 {
+		return 0, fmt.Errorf("invalid coins_per_utxo_byte protocol parameter: %d", coinsPerUtxoByte)
+	}
 	outputSize, err := OutputCborSize(output)
 	if err != nil {
 		return 0, err
 	}
-	minLovelace := coinsPerUtxoByte * int64(outputSize+160)
-	return minLovelace, nil
+	sizeFactor := int64(outputSize + 160)
+	if coinsPerUtxoByte > math.MaxInt64/sizeFactor {
+		return 0, fmt.Errorf("minimum lovelace calculation overflows: coins_per_utxo_byte=%d output_size=%d", coinsPerUtxoByte, outputSize)
+	}
+	return coinsPerUtxoByte * sizeFactor, nil
 }
 
 // --- ScriptRef Constructors ---

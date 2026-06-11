@@ -111,7 +111,7 @@ func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error
 
 	var utxos []common.Utxo
 	for _, match := range matches {
-		utxo, err := matchToUtxo(match, address)
+		utxo, err := matchToUtxo(ctx, match, address, o.kupo)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse UTxO match: %w", err)
 		}
@@ -149,11 +149,25 @@ func (o *OgmiosChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]c
 	if err != nil {
 		return nil, err
 	}
+	return evaluateResponseToExUnits(resp)
+}
+
+// evaluateResponseToExUnits converts an ogmigo EvaluateTxResponse into a
+// redeemer ExUnits map. A response with zero evaluation results is an error:
+// returning an empty map with a nil error would let callers silently keep
+// zero execution budgets for their redeemers.
+func evaluateResponseToExUnits(resp *ogmigo.EvaluateTxResponse) (map[common.RedeemerKey]common.ExUnits, error) {
+	if resp == nil {
+		return nil, errors.New("empty evaluate response")
+	}
 	if resp.Error != nil {
 		return nil, fmt.Errorf("evaluate tx error: %s", resp.Error.Message)
 	}
+	if len(resp.ExUnits) == 0 {
+		return nil, errors.New("script evaluation returned no results")
+	}
 
-	result := make(map[common.RedeemerKey]common.ExUnits)
+	result := make(map[common.RedeemerKey]common.ExUnits, len(resp.ExUnits))
 	for _, eu := range resp.ExUnits {
 		tag, err := backend.ParseRedeemerTag(eu.Validator.Purpose)
 		if err != nil {
@@ -339,7 +353,13 @@ func (g *ogmiosGenesisConfig) toGenesisParams() backend.GenesisParameters {
 	}
 }
 
-func matchToUtxo(match kugo.Match, address common.Address) (common.Utxo, error) {
+// datumFetcher resolves a datum's CBOR (hex-encoded) by its hash. It is
+// implemented by *kugo.Client via the Kupo /v1/datums/{hash} endpoint.
+type datumFetcher interface {
+	Datum(ctx context.Context, datumHash string) (string, error)
+}
+
+func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, datums datumFetcher) (common.Utxo, error) {
 	hashBytes, err := hex.DecodeString(match.TransactionID)
 	if err != nil {
 		return common.Utxo{}, err
@@ -364,18 +384,32 @@ func matchToUtxo(match kugo.Match, address common.Address) (common.Utxo, error) 
 		return common.Utxo{}, fmt.Errorf("unexpected UTxO output type: %T", utxo.Output)
 	}
 
-	// Set datum option from kupo match data.
+	// Set datum option from kupo match data. Kupo only returns the datum hash
+	// in matches; its datum_type discriminator says whether the on-chain
+	// output carried an inline datum or just the hash.
 	if match.DatumHash != "" {
-		opt, err := parseDatumOption(match.DatumHash)
-		if err != nil {
-			return common.Utxo{}, fmt.Errorf("failed to parse datum option: %w", err)
+		switch match.DatumType {
+		case "inline":
+			opt, err := fetchInlineDatumOption(ctx, datums, match.DatumHash)
+			if err != nil {
+				return common.Utxo{}, err
+			}
+			output.DatumOption = opt
+		case "hash":
+			opt, err := parseDatumOption(match.DatumHash)
+			if err != nil {
+				return common.Utxo{}, fmt.Errorf("failed to parse datum option: %w", err)
+			}
+			output.DatumOption = opt
+		default:
+			return common.Utxo{}, fmt.Errorf("unsupported kupo datum type %q for datum hash %s", match.DatumType, match.DatumHash)
 		}
-		output.DatumOption = opt
 	}
 
-	// Set script reference from kupo match data.
+	// Set script reference from kupo match data, verifying the script bytes
+	// against the script hash claimed by kupo.
 	if match.Script.Script != "" {
-		ref, err := kupoScriptToScriptRef(match.Script)
+		ref, err := kupoScriptToScriptRef(match.Script, match.ScriptHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to parse script ref: %w", err)
 		}
@@ -383,6 +417,41 @@ func matchToUtxo(match kugo.Match, address common.Address) (common.Utxo, error) 
 	}
 
 	return utxo, nil
+}
+
+// fetchInlineDatumOption fetches the inline datum bytes for the given datum
+// hash from Kupo and builds an inline datum option. The fetched bytes are
+// verified against the datum hash before use; a mismatch fails closed.
+func fetchInlineDatumOption(ctx context.Context, datums datumFetcher, datumHashHex string) (*babbage.BabbageTransactionOutputDatumOption, error) {
+	if datums == nil {
+		return nil, fmt.Errorf("kupo client required to resolve inline datum %s", datumHashHex)
+	}
+	expectedBytes, err := hex.DecodeString(datumHashHex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datum hash hex %q: %w", datumHashHex, err)
+	}
+	if len(expectedBytes) != common.Blake2b256Size {
+		return nil, fmt.Errorf("invalid datum hash length: expected %d bytes, got %d", common.Blake2b256Size, len(expectedBytes))
+	}
+	var expected common.Blake2b256
+	copy(expected[:], expectedBytes)
+
+	datumCborHex, err := datums.Datum(ctx, datumHashHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch inline datum %s: %w", datumHashHex, err)
+	}
+	if datumCborHex == "" {
+		return nil, fmt.Errorf("kupo returned no datum for inline datum hash %s", datumHashHex)
+	}
+	datumBytes, err := hex.DecodeString(datumCborHex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid inline datum CBOR hex %q: %w", datumCborHex, err)
+	}
+	if computed := common.Blake2b256Hash(datumBytes); computed != expected {
+		return nil, fmt.Errorf("inline datum hash mismatch for %s: fetched datum hashes to %s",
+			datumHashHex, hex.EncodeToString(computed.Bytes()))
+	}
+	return parseInlineDatumCbor(datumCborHex)
 }
 
 func ogmiosUtxoToCommon(raw shared.Utxo, addr common.Address) (common.Utxo, error) {
@@ -546,41 +615,36 @@ func parseInlineDatumCbor(datumCborHex string) (*babbage.BabbageTransactionOutpu
 	return &opt, nil
 }
 
-// kupoScriptToScriptRef converts a kugo Script to a common.ScriptRef.
-func kupoScriptToScriptRef(script kugo.Script) (*common.ScriptRef, error) {
+// kupoScriptToScriptRef converts a kugo Script to a common.ScriptRef. When
+// kupo supplies the script hash (expectedHashHex non-empty), the script bytes
+// are verified against it rather than trusted as-is.
+func kupoScriptToScriptRef(script kugo.Script, expectedHashHex string) (*common.ScriptRef, error) {
 	scriptBytes, err := hex.DecodeString(script.Script)
 	if err != nil {
 		return nil, fmt.Errorf("invalid script hex %q: %w", script.Script, err)
 	}
 
 	var scriptType uint
-	var commonScript common.Script
 	switch script.Language {
 	case kugo.ScriptLanguageNative:
-		var ns common.NativeScript
-		if _, err := cbor.Decode(scriptBytes, &ns); err != nil {
-			return nil, fmt.Errorf("failed to decode native script: %w", err)
-		}
 		scriptType = common.ScriptRefTypeNativeScript
-		commonScript = ns
 	case kugo.ScriptLanguagePlutusV1:
-		commonScript = common.PlutusV1Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV1
 	case kugo.ScriptLanguagePlutusV2:
-		commonScript = common.PlutusV2Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV2
 	case kugo.ScriptLanguagePlutusV3:
-		commonScript = common.PlutusV3Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV3
 	default:
 		return nil, fmt.Errorf("unsupported kupo script language: %d", script.Language)
 	}
 
-	return &common.ScriptRef{Type: scriptType, Script: commonScript}, nil
+	return backend.ScriptRefFromBytes(scriptType, scriptBytes, expectedHashHex)
 }
 
 // ogmiosScriptToScriptRef converts an Ogmios script JSON to a common.ScriptRef.
 // Ogmios v6 uses: {"language": "plutus:v1"|"plutus:v2"|"plutus:v3"|"native", "cbor": "hex"}
+// Ogmios does not include the script hash in UTxO responses, so no hash
+// verification is possible here.
 func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, error) {
 	var raw struct {
 		Language string `json:"language"`
@@ -600,27 +664,18 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 	}
 
 	var scriptType uint
-	var commonScript common.Script
 	switch raw.Language {
 	case "native":
-		var ns common.NativeScript
-		if _, err := cbor.Decode(scriptBytes, &ns); err != nil {
-			return nil, fmt.Errorf("failed to decode native script: %w", err)
-		}
 		scriptType = common.ScriptRefTypeNativeScript
-		commonScript = ns
 	case "plutus:v1":
-		commonScript = common.PlutusV1Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV1
 	case "plutus:v2":
-		commonScript = common.PlutusV2Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV2
 	case "plutus:v3":
-		commonScript = common.PlutusV3Script(scriptBytes)
 		scriptType = common.ScriptRefTypePlutusV3
 	default:
 		return nil, fmt.Errorf("unsupported ogmios script language %q", raw.Language)
 	}
 
-	return &common.ScriptRef{Type: scriptType, Script: commonScript}, nil
+	return backend.ScriptRefFromBytes(scriptType, scriptBytes, "")
 }

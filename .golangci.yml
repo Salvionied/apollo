@@ -1,11 +1,12 @@
 version: "2"
 run:
   issues-exit-code: 1
-  tests: false
+  tests: true
 linters:
   enable:
     - bodyclose
     - fatcontext
+    - gosec
     - perfsprint
     - prealloc
   disable:
@@ -22,6 +23,13 @@ linters:
       - third_party$
       - builtin$
       - examples$
+    rules:
+      # Weak-randomness and hardcoded-credential findings are acceptable in
+      # test fixtures; production code is still fully checked.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G(101|404)"
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

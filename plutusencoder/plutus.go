@@ -523,12 +523,20 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 		return fmt.Errorf("expected Constr with tag %d wrapping Map, got bare Map", expectedConstr)
 	}
 
-	// Build a lookup from key name to PlutusData
-	keyMap := make(map[string]data.PlutusData)
-	for _, pair := range mapData.Pairs {
-		if bs, ok := pair[0].(*data.ByteString); ok {
-			keyMap[string(bs.Inner)] = pair[1]
+	// Build a lookup from key name to PlutusData. Keys must be ByteStrings
+	// (the only key type produced by marshalMap) and must be unique. Anything
+	// else is rejected so that untrusted datums cannot shadow or hide keys.
+	keyMap := make(map[string]data.PlutusData, len(mapData.Pairs))
+	for i, pair := range mapData.Pairs {
+		bs, ok := pair[0].(*data.ByteString)
+		if !ok {
+			return fmt.Errorf("map pair %d: expected ByteString key, got %T", i, pair[0])
 		}
+		mapKey := string(bs.Inner)
+		if _, dup := keyMap[mapKey]; dup {
+			return fmt.Errorf("map pair %d: duplicate key %q", i, mapKey)
+		}
+		keyMap[mapKey] = pair[1]
 	}
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -544,7 +552,15 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 
 		value, exists := keyMap[keyName]
 		if !exists {
-			continue
+			optional, err := isOptionalField(field)
+			if err != nil {
+				return err
+			}
+			if optional {
+				// Optional field absent from the map: leave the zero value.
+				continue
+			}
+			return fmt.Errorf("missing required map key %q for field %s of struct %s", keyName, field.Name, typ.Name())
 		}
 
 		fieldVal := val.Field(i)
@@ -553,6 +569,23 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 		}
 	}
 	return nil
+}
+
+// isOptionalField reports whether a struct field is marked optional via the
+// `plutusOptional:"true"` tag. Optional fields may be absent from an input
+// map and are left at their zero value. Tag values are parsed with
+// strconv.ParseBool; an invalid value is an error rather than being silently
+// treated as required.
+func isOptionalField(field reflect.StructField) (bool, error) {
+	tagVal := field.Tag.Get("plutusOptional")
+	if tagVal == "" {
+		return false, nil
+	}
+	optional, err := strconv.ParseBool(tagVal)
+	if err != nil {
+		return false, fmt.Errorf("invalid plutusOptional tag %q on field %s: %w", tagVal, field.Name, err)
+	}
+	return optional, nil
 }
 
 func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {

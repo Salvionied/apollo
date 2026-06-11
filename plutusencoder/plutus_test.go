@@ -2,6 +2,7 @@ package plutusencoder
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -553,6 +554,137 @@ func TestMarshalIndefVsDefEncoding(t *testing.T) {
 	indefStr := indefPd.String()
 	if defStr == indefStr {
 		t.Logf("warning: String() representations are equal; if plutigo merges them, verify CBOR bytes differ")
+	}
+}
+
+// optionalMapDatum mirrors MapDatum but marks Value as optional.
+type optionalMapDatum struct {
+	_     struct{} `plutusType:"Map"`
+	Name  string   `plutusType:"StringBytes" plutusKey:"name"`
+	Value int64    `plutusType:"Int" plutusKey:"value" plutusOptional:"true"`
+}
+
+func TestUnmarshalMapMissingRequiredKey(t *testing.T) {
+	// MapDatum requires both "name" and "value"; omit "value".
+	pd := data.NewMap([][2]data.PlutusData{
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("test"))},
+	})
+	var decoded MapDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err == nil {
+		t.Fatal("expected error for missing required map key")
+	}
+	if got := err.Error(); !strings.Contains(got, "value") || !strings.Contains(got, "missing required map key") {
+		t.Errorf("expected descriptive missing-key error mentioning \"value\", got: %s", got)
+	}
+}
+
+func TestUnmarshalMapOptionalFieldMissing(t *testing.T) {
+	// "value" is tagged plutusOptional:"true", so omitting it must succeed
+	// and leave the field at its zero value.
+	pd := data.NewMap([][2]data.PlutusData{
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("test"))},
+	})
+	var decoded optionalMapDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err != nil {
+		t.Fatalf("expected no error for missing optional key, got: %v", err)
+	}
+	if decoded.Name != "test" {
+		t.Errorf("expected 'test', got '%s'", decoded.Name)
+	}
+	if decoded.Value != 0 {
+		t.Errorf("expected zero value for missing optional field, got %d", decoded.Value)
+	}
+}
+
+func TestUnmarshalMapNonByteStringKey(t *testing.T) {
+	// An Integer key must be rejected, not silently dropped.
+	pd := data.NewMap([][2]data.PlutusData{
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("test"))},
+		{data.NewInteger(big.NewInt(7)), data.NewInteger(big.NewInt(99))},
+	})
+	var decoded MapDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err == nil {
+		t.Fatal("expected error for non-ByteString map key")
+	}
+	if got := err.Error(); !strings.Contains(got, "expected ByteString key") {
+		t.Errorf("expected descriptive non-ByteString-key error, got: %s", got)
+	}
+}
+
+func TestUnmarshalMapDuplicateKey(t *testing.T) {
+	// Duplicate keys allow shadowing and must be rejected.
+	pd := data.NewMap([][2]data.PlutusData{
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("real"))},
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("shadow"))},
+		{data.NewByteString([]byte("value")), data.NewInteger(big.NewInt(99))},
+	})
+	var decoded MapDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err == nil {
+		t.Fatal("expected error for duplicate map key")
+	}
+	if got := err.Error(); !strings.Contains(got, "duplicate key") {
+		t.Errorf("expected descriptive duplicate-key error, got: %s", got)
+	}
+}
+
+func TestUnmarshalMapInvalidOptionalTag(t *testing.T) {
+	type badOptionalDatum struct {
+		_     struct{} `plutusType:"Map"`
+		Value int64    `plutusType:"Int" plutusKey:"value" plutusOptional:"yes"`
+	}
+	// Key absent, so the optional tag is consulted; "yes" is not a valid bool.
+	pd := data.NewMap(nil)
+	var decoded badOptionalDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err == nil {
+		t.Fatal("expected error for invalid plutusOptional tag value")
+	}
+	if got := err.Error(); !strings.Contains(got, "plutusOptional") {
+		t.Errorf("expected descriptive invalid-tag error, got: %s", got)
+	}
+}
+
+func TestUnmarshalMapExtraKeysIgnored(t *testing.T) {
+	// Unknown ByteString keys remain allowed for forward compatibility.
+	pd := data.NewMap([][2]data.PlutusData{
+		{data.NewByteString([]byte("name")), data.NewByteString([]byte("test"))},
+		{data.NewByteString([]byte("value")), data.NewInteger(big.NewInt(99))},
+		{data.NewByteString([]byte("future")), data.NewInteger(big.NewInt(1))},
+	})
+	var decoded MapDatum
+	err := UnmarshalPlutus(pd, &decoded)
+	if err != nil {
+		t.Fatalf("expected extra ByteString keys to be ignored, got: %v", err)
+	}
+	if decoded.Name != "test" || decoded.Value != 99 {
+		t.Errorf("expected {test, 99}, got {%s, %d}", decoded.Name, decoded.Value)
+	}
+}
+
+func TestRoundTripOptionalMapDatum(t *testing.T) {
+	// A well-formed map with all keys present still round-trips, including
+	// structs that carry optional tags.
+	original := optionalMapDatum{Name: "test", Value: 99}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded optionalMapDatum
+	err = UnmarshalPlutus(pd, &decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Name != "test" {
+		t.Errorf("expected 'test', got '%s'", decoded.Name)
+	}
+	if decoded.Value != 99 {
+		t.Errorf("expected 99, got %d", decoded.Value)
 	}
 }
 

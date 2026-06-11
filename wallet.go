@@ -38,9 +38,27 @@ func NewBursaWallet(mnemonic string, opts ...bursa.WalletOption) (*BursaWallet, 
 // NewBursaWalletWithPassphrase creates a new wallet from a mnemonic and passphrase.
 // The passphrase is used for BIP39 key derivation.
 func NewBursaWalletWithPassphrase(mnemonic string, passphrase string, opts ...bursa.WalletOption) (*BursaWallet, error) {
-	// Create bursa wallet to get the address.
-	// Append WithPassword last so the address derivation always uses the same passphrase
-	// as key derivation, even if caller passes a conflicting WithPassword in opts.
+	// Resolve the effective bursa configuration so signing keys are derived
+	// with the same passphrase and indices as the address.
+	cfg := &bursa.WalletConfig{Network: "mainnet"}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	if cfg.Password != "" && passphrase != "" && cfg.Password != passphrase {
+		return nil, errors.New("conflicting passphrases: bursa.WithPassword option does not match the passphrase argument")
+	}
+	if passphrase == "" {
+		passphrase = cfg.Password
+	}
+	// bursa derives the payment address credentials from the address index,
+	// so payment/stake indices that differ from it would yield signing keys
+	// that do not control the wallet address.
+	if cfg.PaymentID != cfg.AddressID || cfg.StakeID != cfg.AddressID {
+		return nil, errors.New("bursa derives the wallet address from WithAddressID; conflicting WithPaymentID/WithStakeID values are not supported")
+	}
+
+	// Append WithPassword last so the address derivation always uses the same
+	// passphrase as key derivation.
 	allOpts := append(append([]bursa.WalletOption{}, opts...), bursa.WithPassword(passphrase))
 	w, err := bursa.NewWallet(mnemonic, allOpts...)
 	if err != nil {
@@ -52,22 +70,31 @@ func NewBursaWalletWithPassphrase(mnemonic string, passphrase string, opts ...bu
 		return nil, fmt.Errorf("failed to parse wallet address: %w", err)
 	}
 
-	// Derive keys directly for signing
+	// Derive keys directly for signing, using the same indices bursa used for
+	// the address (account index, then address index for both credentials).
 	rootKey, err := bursa.GetRootKeyFromMnemonic(mnemonic, passphrase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive root key: %w", err)
 	}
-	accountKey, err := bursa.GetAccountKey(rootKey, 0)
+	accountKey, err := bursa.GetAccountKey(rootKey, cfg.AccountID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive account key: %w", err)
 	}
-	paymentKey, err := bursa.GetPaymentKey(accountKey, 0)
+	paymentKey, err := bursa.GetPaymentKey(accountKey, cfg.AddressID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive payment key: %w", err)
 	}
-	stakeKey, err := bursa.GetStakeKey(accountKey, 0)
+	stakeKey, err := bursa.GetStakeKey(accountKey, cfg.AddressID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive stake key: %w", err)
+	}
+
+	// Fail closed if the derived keys do not control the wallet address.
+	if common.Blake2b224Hash(paymentKey.Public().PublicKey()) != addr.PaymentKeyHash() {
+		return nil, errors.New("derived payment key does not match the wallet address payment credential")
+	}
+	if common.Blake2b224Hash(stakeKey.Public().PublicKey()) != addr.StakeKeyHash() {
+		return nil, errors.New("derived stake key does not match the wallet address stake credential")
 	}
 
 	return &BursaWallet{
@@ -114,12 +141,14 @@ func (w *BursaWallet) Mnemonic() string {
 }
 
 // String returns a safe string representation that does not expose key material.
-func (w *BursaWallet) String() string {
+// Value receiver so the redaction also applies to dereferenced values
+// (e.g. fmt.Sprintf("%+v", *w)), which would otherwise dump the mnemonic.
+func (w BursaWallet) String() string {
 	return fmt.Sprintf("BursaWallet{address: %s}", w.address.String())
 }
 
 // GoString implements fmt.GoStringer to prevent key material from leaking via %#v.
-func (w *BursaWallet) GoString() string {
+func (w BursaWallet) GoString() string {
 	return w.String()
 }
 
@@ -130,11 +159,16 @@ type KeyPairWallet struct {
 }
 
 // NewKeyPairWallet creates a wallet from a BIP32 extended private key and address.
-func NewKeyPairWallet(addr common.Address, key bip32.XPrv) *KeyPairWallet {
+// The key must be a 96-byte BIP32-Ed25519 extended private key; bursa's bip32
+// primitives panic on other lengths, so this is validated up front.
+func NewKeyPairWallet(addr common.Address, key bip32.XPrv) (*KeyPairWallet, error) {
+	if len(key) != 96 {
+		return nil, fmt.Errorf("invalid BIP32 extended private key length: expected 96 bytes, got %d", len(key))
+	}
 	return &KeyPairWallet{
 		address:    addr,
 		privateKey: key,
-	}
+	}, nil
 }
 
 func (w *KeyPairWallet) Address() common.Address {
@@ -159,12 +193,14 @@ func (w *KeyPairWallet) StakePubKeyHash() common.Blake2b224 {
 }
 
 // String returns a safe string representation that does not expose key material.
-func (w *KeyPairWallet) String() string {
+// Value receiver so the redaction also applies to dereferenced values
+// (e.g. fmt.Sprintf("%+v", *w)), which would otherwise dump the private key.
+func (w KeyPairWallet) String() string {
 	return fmt.Sprintf("KeyPairWallet{address: %s}", w.address.String())
 }
 
 // GoString implements fmt.GoStringer to prevent key material from leaking via %#v.
-func (w *KeyPairWallet) GoString() string {
+func (w KeyPairWallet) GoString() string {
 	return w.String()
 }
 

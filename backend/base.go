@@ -187,6 +187,49 @@ func ParseFraction(s string) (float64, error) {
 	return val, nil
 }
 
+// ScriptRefFromBytes builds a common.ScriptRef of the given script ref type
+// from raw script bytes. Native scripts are decoded from their CBOR
+// representation. When expectedHashHex is non-empty, the script hash is
+// recomputed for the claimed language and compared against it, failing closed
+// if a provider returns script bytes (or a language) that do not match the
+// hash it claims for them. An empty expectedHashHex skips verification for
+// providers that do not supply a script hash.
+func ScriptRefFromBytes(scriptType uint, scriptBytes []byte, expectedHashHex string) (*common.ScriptRef, error) {
+	var script common.Script
+	switch scriptType {
+	case common.ScriptRefTypeNativeScript:
+		var native common.NativeScript
+		if _, err := cbor.Decode(scriptBytes, &native); err != nil {
+			return nil, fmt.Errorf("failed to decode native script: %w", err)
+		}
+		script = native
+	case common.ScriptRefTypePlutusV1:
+		script = common.PlutusV1Script(scriptBytes)
+	case common.ScriptRefTypePlutusV2:
+		script = common.PlutusV2Script(scriptBytes)
+	case common.ScriptRefTypePlutusV3:
+		script = common.PlutusV3Script(scriptBytes)
+	default:
+		return nil, fmt.Errorf("unsupported script ref type %d", scriptType)
+	}
+	if expectedHashHex != "" {
+		expectedBytes, err := hex.DecodeString(expectedHashHex)
+		if err != nil {
+			return nil, fmt.Errorf("invalid script hash hex %q: %w", expectedHashHex, err)
+		}
+		if len(expectedBytes) != common.Blake2b224Size {
+			return nil, fmt.Errorf("invalid script hash length: expected %d bytes, got %d", common.Blake2b224Size, len(expectedBytes))
+		}
+		var expected common.Blake2b224
+		copy(expected[:], expectedBytes)
+		if computed := script.Hash(); computed != expected {
+			return nil, fmt.Errorf("reference script hash mismatch: computed %s, provider claimed %s",
+				hex.EncodeToString(computed.Bytes()), expectedHashHex)
+		}
+	}
+	return &common.ScriptRef{Type: scriptType, Script: script}, nil
+}
+
 // ComputeMaxTxFee computes the maximum transaction fee from protocol parameters,
 // validating that all values are non-negative before the calculation.
 func ComputeMaxTxFee(pp ProtocolParameters) (uint64, error) {

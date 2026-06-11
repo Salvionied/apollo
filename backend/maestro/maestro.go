@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -47,10 +48,24 @@ func networkString(networkId uint8) string {
 	return "preprod"
 }
 
+// supportedMaestroNetworks are the networks the Maestro API serves
+// (https://{network}.gomaestro-api.org/v1).
+var supportedMaestroNetworks = map[string]bool{
+	"mainnet": true,
+	"preprod": true,
+	"preview": true,
+}
+
 // NewMaestroChainContextWithNetwork creates a Maestro chain context with an explicit network name.
 // Use this for testnet variants like "preview" where the network ID alone (0) is ambiguous.
+// The network must be one of "mainnet", "preprod" or "preview": the Maestro SDK
+// interpolates it into the API hostname, so arbitrary values are rejected.
 func NewMaestroChainContextWithNetwork(networkId uint8, projectId string, network string) (*MaestroChainContext, error) {
-	client := maestroClient.NewClient(projectId, network)
+	normalized := strings.ToLower(network)
+	if !supportedMaestroNetworks[normalized] {
+		return nil, fmt.Errorf("unsupported maestro network %q: must be one of mainnet, preprod, preview", network)
+	}
+	client := maestroClient.NewClient(projectId, normalized)
 	return &MaestroChainContext{
 		client:    client,
 		networkId: networkId,
@@ -222,14 +237,21 @@ func (m *MaestroChainContext) Utxos(address common.Address) ([]common.Utxo, erro
 }
 
 func (m *MaestroChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
-	txHex := hex.EncodeToString(txCbor)
-	resp, err := m.client.SubmitTx(txHex)
+	// The Maestro SDK's Client.SubmitTx posts to a corrupted URL
+	// ("/submitmodels.BasicResponse{}/tx") and can never work. Use
+	// TxManagerSubmit instead, which posts the hex-encoded transaction
+	// CBOR to the documented POST /txmanager submit endpoint.
+	txCborHex := hex.EncodeToString(txCbor)
+	txHash, err := m.client.TxManagerSubmit(txCborHex)
 	if err != nil {
-		return common.Blake2b256{}, err
+		return common.Blake2b256{}, fmt.Errorf("maestro tx submission failed: %w", err)
 	}
-	hashBytes, err := hex.DecodeString(resp.Data)
+	// The endpoint returns the tx hash as a plain-text body; tolerate JSON
+	// string quoting and surrounding whitespace.
+	txHash = strings.Trim(strings.TrimSpace(txHash), `"`)
+	hashBytes, err := hex.DecodeString(txHash)
 	if err != nil {
-		return common.Blake2b256{}, err
+		return common.Blake2b256{}, fmt.Errorf("invalid tx hash %q in submit response: %w", txHash, err)
 	}
 	if len(hashBytes) != common.Blake2b256Size {
 		return common.Blake2b256{}, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
@@ -245,9 +267,19 @@ func (m *MaestroChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]
 	if err != nil {
 		return nil, err
 	}
+	return evaluationsToExUnits(evalResp)
+}
 
-	result := make(map[common.RedeemerKey]common.ExUnits)
-	for _, eval := range evalResp {
+// evaluationsToExUnits converts a Maestro evaluate response into a redeemer
+// ExUnits map. A response with zero evaluation results is an error: returning
+// an empty map with a nil error would let callers silently keep zero
+// execution budgets for their redeemers.
+func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerKey]common.ExUnits, error) {
+	if len(evals) == 0 {
+		return nil, errors.New("script evaluation returned no results")
+	}
+	result := make(map[common.RedeemerKey]common.ExUnits, len(evals))
+	for _, eval := range evals {
 		if eval.RedeemerIndex < 0 {
 			return nil, fmt.Errorf("negative redeemer index: %d", eval.RedeemerIndex)
 		}
@@ -358,8 +390,17 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 	// Map datum to output's DatumOption.
 	// Maestro returns the datum field as a JSON object with keys "type", "hash",
 	// "bytes", "json". When unmarshaled into `any` it becomes map[string]interface{}.
+	// The "type" discriminator is "hash" or "inline"; Maestro can include
+	// resolved datum "bytes" even for type "hash" outputs, so the datum kind
+	// must be decided by "type", not by the presence of "bytes".
 	if datumMap, ok := raw.Datum.(map[string]any); ok {
-		if datumCborHex, ok := datumMap["bytes"].(string); ok && datumCborHex != "" {
+		datumType, _ := datumMap["type"].(string)
+		switch datumType {
+		case "inline":
+			datumCborHex, _ := datumMap["bytes"].(string)
+			if datumCborHex == "" {
+				return common.Utxo{}, errors.New("inline datum is missing its CBOR bytes")
+			}
 			// Inline datum: "bytes" field contains the CBOR hex of the datum.
 			datumBytes, err := hex.DecodeString(datumCborHex)
 			if err != nil {
@@ -374,7 +415,11 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 				return common.Utxo{}, fmt.Errorf("failed to unmarshal inline datum option: %w", err)
 			}
 			output.DatumOption = &opt
-		} else if hashHex, ok := datumMap["hash"].(string); ok && hashHex != "" {
+		case "hash":
+			hashHex, _ := datumMap["hash"].(string)
+			if hashHex == "" {
+				return common.Utxo{}, errors.New("hash datum is missing its hash")
+			}
 			// Datum hash reference only.
 			hashBytes, err := hex.DecodeString(hashHex)
 			if err != nil {
@@ -394,16 +439,19 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 				return common.Utxo{}, fmt.Errorf("failed to unmarshal datum option: %w", err)
 			}
 			output.DatumOption = &opt
+		default:
+			return common.Utxo{}, fmt.Errorf("unsupported maestro datum type %q", datumType)
 		}
 	}
 
-	// Parse reference script if present.
+	// Parse reference script if present, verifying the script bytes against
+	// the script hash claimed by Maestro.
 	if raw.ReferenceScript.Bytes != "" {
 		scriptBytes, err := hex.DecodeString(raw.ReferenceScript.Bytes)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("invalid reference script hex: %w", err)
 		}
-		ref, err := maestroScriptRef(raw.ReferenceScript.Type, scriptBytes)
+		ref, err := maestroScriptRef(raw.ReferenceScript.Type, scriptBytes, raw.ReferenceScript.Hash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to parse reference script: %w", err)
 		}
@@ -416,24 +464,24 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 	}, nil
 }
 
-// maestroScriptRef builds a ScriptRef from the Maestro script type and CBOR bytes.
-func maestroScriptRef(scriptType string, scriptCbor []byte) (*common.ScriptRef, error) {
+// maestroScriptRef builds a ScriptRef from the Maestro script type and CBOR
+// bytes. When Maestro supplies the script hash (expectedHashHex non-empty),
+// the script bytes are verified against it rather than trusted as-is.
+func maestroScriptRef(scriptType string, scriptCbor []byte, expectedHashHex string) (*common.ScriptRef, error) {
+	var refType uint
 	switch scriptType {
 	case "native":
-		var native common.NativeScript
-		if _, err := cbor.Decode(scriptCbor, &native); err != nil {
-			return nil, fmt.Errorf("failed to decode native script: %w", err)
-		}
-		return &common.ScriptRef{Type: common.ScriptRefTypeNativeScript, Script: native}, nil
+		refType = common.ScriptRefTypeNativeScript
 	case "plutusv1":
-		return &common.ScriptRef{Type: common.ScriptRefTypePlutusV1, Script: common.PlutusV1Script(scriptCbor)}, nil
+		refType = common.ScriptRefTypePlutusV1
 	case "plutusv2":
-		return &common.ScriptRef{Type: common.ScriptRefTypePlutusV2, Script: common.PlutusV2Script(scriptCbor)}, nil
+		refType = common.ScriptRefTypePlutusV2
 	case "plutusv3":
-		return &common.ScriptRef{Type: common.ScriptRefTypePlutusV3, Script: common.PlutusV3Script(scriptCbor)}, nil
+		refType = common.ScriptRefTypePlutusV3
 	default:
 		return nil, fmt.Errorf("unknown script type %q", scriptType)
 	}
+	return backend.ScriptRefFromBytes(refType, scriptCbor, expectedHashHex)
 }
 
 // maestroCostModelKey translates Maestro cost model keys to the canonical form
