@@ -71,6 +71,34 @@ func main() {
     fmt.Println(hex.EncodeToString(txId.Bytes()))
 }
 ```
+## Coin Selection
+
+Apollo selects transaction inputs with **MACS** (Multi-Asset Coin Selection,
+[IEEE Blockchain 2023](https://doi.org/10.1109/Blockchain60715.2023.00029)) by
+default. MACS prioritizes UTxOs by value and closeness to the pool's average,
+covering each asset in the target directly. Compared to the legacy
+largest-first strategy it selects far fewer inputs on multi-asset targets
+(15 vs 785 in our 1k-UTxO benchmark), produces much smaller change, and sweeps
+dust UTxOs so they don't accumulate in your wallet.
+
+The algorithm is pluggable via the `CoinSelector` interface:
+
+```go
+// Default: MACS with dust sweeping (UTxOs under 1 ADA, max 2 per tx)
+a := apollo.New(bfc)
+
+// Legacy largest-first behavior
+a = a.SetCoinSelector(&apollo.LargestFirstSelector{})
+
+// MACS without dust sweeping, or with custom limits
+a = a.SetCoinSelector(&apollo.MACSSelector{})
+a = a.SetCoinSelector(&apollo.MACSSelector{DustThreshold: 2_000_000, MaxDustInputs: 4})
+```
+
+Benchmarks live in `coinselection_bench_test.go`
+(`go test -bench BenchmarkCoinSelection`), and the design notes with full
+results are in `docs/design/2026-06-11-macs-coin-selection-design.md`.
+
 If you have any questions or requests feel free to drop into this discord and ask :) https://discord.gg/MH4CmJcg49
 
 By:

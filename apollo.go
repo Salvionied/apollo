@@ -69,6 +69,7 @@ type Apollo struct {
 	changeAddress      *common.Address
 	estimateExUnits    bool
 	forceFee           bool
+	coinSelector       CoinSelector
 	err                error
 }
 
@@ -191,6 +192,13 @@ func (a *Apollo) SetFee(fee int64) *Apollo {
 // SetFeePadding adds additional fee padding.
 func (a *Apollo) SetFeePadding(padding int64) *Apollo {
 	a.FeePadding = padding
+	return a
+}
+
+// SetCoinSelector sets the coin selection algorithm used by Complete to
+// choose inputs. When unset, the package default selector is used.
+func (a *Apollo) SetCoinSelector(selector CoinSelector) *Apollo {
+	a.coinSelector = selector
 	return a
 }
 
@@ -1554,52 +1562,26 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			subtractAssetsSaturating(remaining.Assets, currentInput.Assets)
 		}
 	}
-	sorted := SortUtxos(a.utxos)
-	var selected []common.Utxo
-	var selectedRefs []string
 
-	for _, utxo := range sorted {
-		ref := utxoRef(utxo)
-		if a.isUsed(ref) {
-			continue
-		}
-
-		amt := utxo.Output.Amount()
-		// Amounts come from a remote backend; reject anything outside the
-		// uint64 lovelace range (big.Int.Uint64 is undefined out of range).
-		if amt == nil || !amt.IsUint64() {
-			return nil, fmt.Errorf("UTxO %s has an invalid lovelace amount", ref)
-		}
-
-		selected = append(selected, utxo)
-		selectedRefs = append(selectedRefs, ref)
-
-		if remaining.Coin <= amt.Uint64() {
-			remaining.Coin = 0
-		} else {
-			remaining.Coin -= amt.Uint64()
-		}
-
-		// Subtract assets from remaining
-		if remaining.Assets != nil && utxo.Output.Assets() != nil {
-			subtractAssetsSaturating(remaining.Assets, utxo.Output.Assets())
-		}
-
-		if remaining.Coin == 0 && !remaining.HasAssets() {
-			// Commit to usedUtxos only on success
-			for _, r := range selectedRefs {
-				a.markUsed(r)
-			}
-			return selected, nil
+	available := make([]common.Utxo, 0, len(a.utxos))
+	for _, utxo := range a.utxos {
+		if !a.isUsed(utxoRef(utxo)) {
+			available = append(available, utxo)
 		}
 	}
 
-	if remaining.Coin > 0 || remaining.HasAssets() {
-		return nil, errors.New("insufficient UTxOs to cover required value")
+	selector := a.coinSelector
+	if selector == nil {
+		selector = defaultCoinSelector
 	}
+	selected, err := selector.Select(available, remaining)
+	if err != nil {
+		return nil, err
+	}
+
 	// Commit to usedUtxos only on success
-	for _, r := range selectedRefs {
-		a.markUsed(r)
+	for _, utxo := range selected {
+		a.markUsed(utxoRef(utxo))
 	}
 	return selected, nil
 }
