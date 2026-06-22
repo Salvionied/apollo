@@ -21,7 +21,18 @@ type ChainContext interface {
 	Tip() (uint64, error)
 	Utxos(address common.Address) ([]common.Utxo, error)
 	SubmitTx(txCbor []byte) (common.Blake2b256, error)
-	EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error)
+	// EvaluateTx evaluates the scripts in a transaction and returns the
+	// execution units required by each redeemer. additionalUtxos is a set of
+	// resolved UTxOs supplied to the evaluator (e.g. spending inputs that are
+	// not yet confirmed on-chain, such as off-chain or chained inputs), so that
+	// script execution-unit estimation can resolve inputs the backend cannot
+	// see on-chain. Backends that support additionalUtxos (ogmios, blockfrost)
+	// forward them to the evaluator; backends that do not (maestro, utxorpc)
+	// IGNORE additionalUtxos and can only evaluate transactions whose inputs are
+	// already visible on-chain; they do NOT support evaluation of off-chain or
+	// chained inputs. Passing a non-empty additionalUtxos to such a backend is
+	// not an error, but those UTxOs will not be considered.
+	EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
 	UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
 	ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)
 }

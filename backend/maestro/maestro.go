@@ -261,8 +261,20 @@ func (m *MaestroChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 	return result, nil
 }
 
-func (m *MaestroChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+func (m *MaestroChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	txHex := hex.EncodeToString(txCbor)
+	// The Maestro SDK exposes additional UTxOs as a variadic []string
+	// (models.EvaluateTx.AdditionalUtxos), but Maestro's REST
+	// /transactions/evaluate additional_utxos field actually expects an array of
+	// objects (tx ref + resolved output CBOR), which the []string SDK type
+	// cannot represent. Rather than ship a guessed wire format, the resolved
+	// UTxOs are IGNORED: this backend can only evaluate transactions whose
+	// inputs are already visible on-chain to Maestro and does NOT support
+	// evaluating off-chain or chained inputs. This is not an error (the caller
+	// always passes the spending inputs), but additionalUtxos has no effect.
+	// TODO: Maestro additional_utxos string encoding not yet wired (SDK type
+	// mismatch); wire it once the SDK accepts the documented object shape.
+	_ = additionalUtxos
 	evalResp, err := m.client.EvaluateTx(txHex)
 	if err != nil {
 		return nil, err
