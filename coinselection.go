@@ -40,6 +40,30 @@ func (s *LargestFirstSelector) Select(available []common.Utxo, target Value) ([]
 		return nil, nil
 	}
 	sorted := SortUtxos(available)
+	// Stabilize ordering for equal-amount UTxOs to preserve deterministic selection.
+	for i := 0; i < len(sorted); {
+		hasAssets := sorted[i].Output.Assets() != nil
+		amt := sorted[i].Output.Amount()
+		j := i + 1
+		for j < len(sorted) {
+			if (sorted[j].Output.Assets() != nil) != hasAssets {
+				break
+			}
+			amtJ := sorted[j].Output.Amount()
+			if (amt == nil) != (amtJ == nil) {
+				break
+			}
+			if amt != nil && amtJ != nil && amt.Cmp(amtJ) != 0 {
+				break
+			}
+			j++
+		}
+		if j-i > 1 {
+			stable := SortInputs(sorted[i:j])
+			copy(sorted[i:j], stable)
+		}
+		i = j
+	}
 	var selected []common.Utxo
 	for _, utxo := range sorted {
 		amt := utxo.Output.Amount()
