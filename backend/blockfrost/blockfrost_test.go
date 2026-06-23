@@ -297,3 +297,34 @@ func TestAddressUTxOToUtxoRejectsOutputIndexOverflow(t *testing.T) {
 		t.Fatal("expected output index overflow error")
 	}
 }
+
+// TestProtocolParamsParsesRefScriptCostPerByte verifies that the BlockFrost
+// min_fee_ref_script_cost_per_byte field is parsed into MinFeeRefScriptCostPerByte
+// and surfaced via RefScriptFeePerByte(), so the Conway reference-script fee is
+// actually charged (not silently zero) when BlockFrost supplies the price.
+func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
+	const body = `{
+		"min_fee_a": 44,
+		"min_fee_b": 155381,
+		"max_tx_size": 16384,
+		"coins_per_utxo_size": "4310",
+		"collateral_percent": 150,
+		"max_collateral_inputs": 3,
+		"min_fee_ref_script_cost_per_byte": 15
+	}`
+
+	var raw bfProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pp.MinFeeRefScriptCostPerByte; got != 15 {
+		t.Fatalf("MinFeeRefScriptCostPerByte = %v, want 15", got)
+	}
+	if got := pp.RefScriptFeePerByte(); got != 15 {
+		t.Fatalf("RefScriptFeePerByte() = %v, want 15", got)
+	}
+}

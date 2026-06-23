@@ -1592,8 +1592,18 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 		return 0, err
 	}
 
-	// Build a dummy transaction to estimate size
-	body, err := a.buildBody(inputs, outputs, 0)
+	// Build a dummy transaction to estimate size. The fee field (body key 2) is
+	// `omitempty`, so a zero fee is dropped entirely and a non-trivial fee is
+	// encoded as a multi-byte integer. Sizing against a zero fee therefore
+	// undercounts the body by the width of the real fee field (up to ~5 bytes),
+	// producing a fee that is a few hundred lovelace short and a FeeTooSmallUTxO
+	// rejection. Use a placeholder fee whose CBOR width matches (or exceeds) the
+	// final fee so the size — and thus the fee — is not underestimated.
+	placeholderFee, feeErr := a.Context.MaxTxFee()
+	if feeErr != nil || placeholderFee == 0 {
+		placeholderFee = 2_000_000
+	}
+	body, err := a.buildBody(inputs, outputs, placeholderFee)
 	if err != nil {
 		return 0, err
 	}
@@ -1653,15 +1663,111 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 		fee += int64(exUnitFeeFloat)
 	}
 
+	// Add the Conway tiered reference-script fee. Scripts attached (via
+	// script_ref) to the outputs of the transaction's spending inputs AND
+	// reference inputs are priced per byte on a growing tier (native scripts
+	// included, not only Plutus). The ledger counts the union of regular and
+	// reference inputs regardless of whether the transaction executes scripts,
+	// so omitting it produces FeeTooSmallUTxO. The fee is naturally zero when no
+	// referenced UTxO carries a script.
+	refScriptSize, err := a.totalReferenceScriptSize(inputs)
+	if err != nil {
+		return 0, err
+	}
+	if refScriptSize > 0 {
+		// The transaction uses reference scripts, so the ledger charges the
+		// tiered reference-script fee. If the backend did not supply the base
+		// price, charging zero would silently underprice the transaction and
+		// produce a FeeTooSmallUTxO rejection at submission; fail loudly instead.
+		refFeePerByte := pp.RefScriptFeePerByte()
+		if refFeePerByte <= 0 {
+			return 0, fmt.Errorf(
+				"transaction uses %d bytes of reference scripts but the protocol parameters provide no reference-script price (min_fee_ref_script_cost_per_byte); cannot compute a correct minimum fee",
+				refScriptSize,
+			)
+		}
+		fee += backend.TierRefScriptFee(
+			refScriptSize,
+			refFeePerByte,
+			pp.RefScriptSizeIncrement(),
+			pp.RefScriptMultiplier(),
+		)
+	}
+
 	return fee, nil
+}
+
+// totalReferenceScriptSize resolves the combined byte size of all reference
+// scripts that the ledger prices into the reference-script fee. The ledger
+// counts the size of every script attached (via script_ref) to the outputs of
+// the transaction's spending inputs AND its reference inputs, including native
+// scripts (not only Plutus), so any non-nil script is sized. Duplicate input
+// references are de-duplicated (matching the ledger), but distinct outputs that
+// happen to carry identical scripts are each counted.
+//
+// Spending inputs are already resolved by the caller. Reference inputs are
+// resolved against the chain context; an undercounted size silently underprices
+// the fee and gets the tx rejected, so a reference input that fails to resolve
+// is a hard error.
+func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
+	seen := make(map[string]struct{})
+	total := 0
+
+	addScript := func(script common.Script) {
+		if script == nil {
+			return
+		}
+		total += len(script.RawScriptBytes())
+	}
+
+	// Spending inputs already resolved by the caller carry their outputs.
+	for _, utxo := range inputs {
+		ref := utxoRef(utxo)
+		if _, ok := seen[ref]; ok {
+			continue
+		}
+		seen[ref] = struct{}{}
+		addScript(utxo.Output.ScriptRef())
+	}
+
+	// Reference inputs must be resolved against the chain context.
+	for _, refInput := range a.referenceInputs {
+		ref := hex.EncodeToString(refInput.TxId.Bytes()) + "#" + strconv.Itoa(int(refInput.OutputIndex))
+		if _, ok := seen[ref]; ok {
+			continue
+		}
+		seen[ref] = struct{}{}
+		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
+		if err != nil {
+			return 0, fmt.Errorf(
+				"failed to resolve reference input %s for reference-script fee: %w",
+				ref, err,
+			)
+		}
+		if utxo == nil {
+			return 0, fmt.Errorf("reference input %s not found for reference-script fee", ref)
+		}
+		addScript(utxo.Output.ScriptRef())
+	}
+
+	return total, nil
 }
 
 // estimateExecutionUnits builds a preliminary transaction and evaluates it
 // against the chain to get actual execution units for script redeemers.
 // The returned ExUnits include a buffer for safety.
 func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) error {
-	// Build preliminary tx with current (possibly zero) ExUnits
-	body, err := a.buildBody(inputs, outputs, 0)
+	// Build preliminary tx with current (possibly zero) ExUnits. The fee field
+	// is `omitempty`, so a zero fee is dropped from the CBOR and the body has no
+	// fee (key 2). Strict evaluators (Ogmios, and Blockfrost which proxies it)
+	// reject such a body with "field fee with key 2, not decoded". Use a
+	// non-zero placeholder fee so the field is always present; its value does
+	// not affect script evaluation.
+	placeholderFee, feeErr := a.Context.MaxTxFee()
+	if feeErr != nil || placeholderFee == 0 {
+		placeholderFee = 2_000_000
+	}
+	body, err := a.buildBody(inputs, outputs, placeholderFee)
 	if err != nil {
 		return fmt.Errorf("failed to build preliminary tx body: %w", err)
 	}

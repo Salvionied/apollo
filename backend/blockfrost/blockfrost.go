@@ -520,6 +520,10 @@ type bfProtocolParams struct {
 	MaxCollateralIn    int64           `json:"max_collateral_inputs"`
 	CoinsPerUtxoSize   string          `json:"coins_per_utxo_size"`
 	CostModels         json.RawMessage `json:"cost_models"`
+	// BlockFrost exposes the Conway reference-script base price under this flat
+	// key (lovelace per byte for the first tier); it does not return the
+	// structured min_fee_reference_scripts_{base,range,multiplier} triple.
+	MinFeeRefScriptCostPerByte float64 `json:"min_fee_ref_script_cost_per_byte"`
 }
 
 func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error) {
@@ -544,24 +548,25 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		return backend.ProtocolParameters{}, err
 	}
 	pp := backend.ProtocolParameters{
-		MinFeeConstant:      p.MinFeeB,
-		MinFeeCoefficient:   p.MinFeeA,
-		MaxBlockSize:        maxBlockSize,
-		MaxTxSize:           maxTxSize,
-		MaxBlockHeaderSize:  maxBlockHeaderSize,
-		KeyDeposits:         p.KeyDeposit,
-		PoolDeposits:        p.PoolDeposit,
-		MinPoolCost:         p.MinPoolCost,
-		PriceMem:            p.PriceMem,
-		PriceStep:           p.PriceStep,
-		MaxTxExMem:          p.MaxTxExMem,
-		MaxTxExSteps:        p.MaxTxExSteps,
-		MaxBlockExMem:       p.MaxBlockExMem,
-		MaxBlockExSteps:     p.MaxBlockExSteps,
-		MaxValSize:          p.MaxValSize,
-		CollateralPercent:   collateralPercent,
-		MaxCollateralInputs: maxCollateralInputs,
-		CoinsPerUtxoByte:    p.CoinsPerUtxoSize,
+		MinFeeConstant:             p.MinFeeB,
+		MinFeeCoefficient:          p.MinFeeA,
+		MaxBlockSize:               maxBlockSize,
+		MaxTxSize:                  maxTxSize,
+		MaxBlockHeaderSize:         maxBlockHeaderSize,
+		KeyDeposits:                p.KeyDeposit,
+		PoolDeposits:               p.PoolDeposit,
+		MinPoolCost:                p.MinPoolCost,
+		PriceMem:                   p.PriceMem,
+		PriceStep:                  p.PriceStep,
+		MaxTxExMem:                 p.MaxTxExMem,
+		MaxTxExSteps:               p.MaxTxExSteps,
+		MaxBlockExMem:              p.MaxBlockExMem,
+		MaxBlockExSteps:            p.MaxBlockExSteps,
+		MaxValSize:                 p.MaxValSize,
+		CollateralPercent:          collateralPercent,
+		MaxCollateralInputs:        maxCollateralInputs,
+		CoinsPerUtxoByte:           p.CoinsPerUtxoSize,
+		MinFeeRefScriptCostPerByte: p.MinFeeRefScriptCostPerByte,
 	}
 
 	// Parse cost models from BlockFrost JSON.

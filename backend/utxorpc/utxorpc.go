@@ -178,6 +178,12 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 		}
 	}
 
+	// Conway reference-script base price (lovelace per byte for the first tier),
+	// exposed as a rational number.
+	if refCost := params.GetMinFeeScriptRefCostPerByte(); refCost != nil && refCost.GetDenominator() != 0 {
+		pp.MinFeeRefScriptCostPerByte = float64(refCost.GetNumerator()) / float64(refCost.GetDenominator())
+	}
+
 	// Parse cost models from UTxO RPC protobuf response.
 	// Keys match ComputeScriptDataHash expectations: "PlutusV1", "PlutusV2", "PlutusV3".
 	if cm := params.GetCostModels(); cm != nil {
