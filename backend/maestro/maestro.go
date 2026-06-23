@@ -1,11 +1,15 @@
 package maestro
 
 import (
+	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -25,6 +29,11 @@ import (
 type MaestroChainContext struct {
 	client    *maestroClient.Client
 	networkId uint8
+	// apiKey is retained alongside the SDK client because the SDK keeps its
+	// own copy unexported. EvaluateTx with additional UTxOs issues a raw POST
+	// (the SDK's additional_utxos field is []string and cannot carry the
+	// object-shaped entries Maestro requires) and needs the key for auth.
+	apiKey string
 }
 
 // NewMaestroChainContext creates a new Maestro chain context.
@@ -34,6 +43,7 @@ func NewMaestroChainContext(networkId uint8, projectId string) (*MaestroChainCon
 	return &MaestroChainContext{
 		client:    client,
 		networkId: networkId,
+		apiKey:    projectId,
 	}, nil
 }
 
@@ -69,6 +79,7 @@ func NewMaestroChainContextWithNetwork(networkId uint8, projectId string, networ
 	return &MaestroChainContext{
 		client:    client,
 		networkId: networkId,
+		apiKey:    projectId,
 	}, nil
 }
 
@@ -261,25 +272,127 @@ func (m *MaestroChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 	return result, nil
 }
 
+// EvaluateTx evaluates the script execution budgets for a transaction. When
+// additionalUtxos is empty it uses the Maestro SDK's EvaluateTx, which posts the
+// bare tx CBOR. When resolved UTxOs are supplied (e.g. off-chain or chained
+// inputs not yet visible to Maestro) it issues a raw POST to
+// /transactions/evaluate with the documented object-shaped additional_utxos
+// field. The SDK's own additional_utxos type is []string and cannot represent
+// the required {tx_hash, index, txout_cbor} entries, so the request is built
+// here against the SDK client's base URL and API key.
 func (m *MaestroChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	txHex := hex.EncodeToString(txCbor)
-	// The Maestro SDK exposes additional UTxOs as a variadic []string
-	// (models.EvaluateTx.AdditionalUtxos), but Maestro's REST
-	// /transactions/evaluate additional_utxos field actually expects an array of
-	// objects (tx ref + resolved output CBOR), which the []string SDK type
-	// cannot represent. Rather than ship a guessed wire format, the resolved
-	// UTxOs are IGNORED: this backend can only evaluate transactions whose
-	// inputs are already visible on-chain to Maestro and does NOT support
-	// evaluating off-chain or chained inputs. This is not an error (the caller
-	// always passes the spending inputs), but additionalUtxos has no effect.
-	// TODO: Maestro additional_utxos string encoding not yet wired (SDK type
-	// mismatch); wire it once the SDK accepts the documented object shape.
-	_ = additionalUtxos
-	evalResp, err := m.client.EvaluateTx(txHex)
+
+	if len(additionalUtxos) == 0 {
+		evalResp, err := m.client.EvaluateTx(txHex)
+		if err != nil {
+			return nil, err
+		}
+		return evaluationsToExUnits(evalResp)
+	}
+
+	reqBody, err := buildEvaluateRequest(txHex, additionalUtxos)
+	if err != nil {
+		return nil, err
+	}
+	evalResp, err := m.postEvaluate(reqBody)
 	if err != nil {
 		return nil, err
 	}
 	return evaluationsToExUnits(evalResp)
+}
+
+// maestroAdditionalUtxo is a single additional_utxos entry: a transaction
+// reference plus the hex-encoded CBOR of the resolved output.
+type maestroAdditionalUtxo struct {
+	TxHash    string `json:"tx_hash"`
+	Index     int    `json:"index"`
+	TxoutCbor string `json:"txout_cbor"`
+}
+
+// maestroEvaluateRequest is the JSON body for POST /transactions/evaluate.
+type maestroEvaluateRequest struct {
+	Cbor            string                  `json:"cbor"`
+	AdditionalUtxos []maestroAdditionalUtxo `json:"additional_utxos"`
+}
+
+// buildEvaluateRequest marshals the evaluate request body, encoding each
+// resolved UTxO into its {tx_hash, index, txout_cbor} entry.
+func buildEvaluateRequest(txHex string, additionalUtxos []common.Utxo) ([]byte, error) {
+	items := make([]maestroAdditionalUtxo, 0, len(additionalUtxos))
+	for _, utxo := range additionalUtxos {
+		item, err := maestroAdditionalUtxoFromUtxo(utxo)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	req := maestroEvaluateRequest{
+		Cbor:            txHex,
+		AdditionalUtxos: items,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal evaluate request: %w", err)
+	}
+	return body, nil
+}
+
+// maestroAdditionalUtxoFromUtxo builds an additional_utxos entry from a resolved
+// gouroboros UTxO. txout_cbor is the CBOR encoding of the resolved output; it is
+// produced via cbor.Encode (the output's MarshalCBOR) rather than the cached
+// Cbor() bytes so outputs built in memory are encoded correctly.
+func maestroAdditionalUtxoFromUtxo(utxo common.Utxo) (maestroAdditionalUtxo, error) {
+	if utxo.Output == nil {
+		return maestroAdditionalUtxo{}, errors.New("additional UTxO is missing its resolved output")
+	}
+	if utxo.Id == nil {
+		return maestroAdditionalUtxo{}, errors.New("additional UTxO is missing its input reference")
+	}
+	txoutCbor, err := cbor.Encode(utxo.Output)
+	if err != nil {
+		return maestroAdditionalUtxo{}, fmt.Errorf("failed to encode resolved output CBOR: %w", err)
+	}
+	return maestroAdditionalUtxo{
+		TxHash:    hex.EncodeToString(utxo.Id.Id().Bytes()),
+		Index:     int(utxo.Id.Index()),
+		TxoutCbor: hex.EncodeToString(txoutCbor),
+	}, nil
+}
+
+// postEvaluate issues a raw POST to /transactions/evaluate, reusing the SDK
+// client's base URL, API key and HTTP client, and decodes the response with the
+// same shape the SDK uses.
+func (m *MaestroChainContext) postEvaluate(body []byte) (models.EvaluateTxResponse, error) {
+	url := m.client.BaseUrl + "/transactions/evaluate"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("api-key", m.apiKey)
+
+	httpClient := m.client.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("maestro evaluate failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+
+	var evalResp models.EvaluateTxResponse
+	if err := json.NewDecoder(resp.Body).Decode(&evalResp); err != nil {
+		return nil, fmt.Errorf("failed to decode evaluate response: %w", err)
+	}
+	return evalResp, nil
 }
 
 // evaluationsToExUnits converts a Maestro evaluate response into a redeemer
