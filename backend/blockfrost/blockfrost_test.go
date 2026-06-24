@@ -423,12 +423,12 @@ func TestBuildEvalUtxosRequestShape(t *testing.T) {
 	if _, ok := txOut["address"]; !ok {
 		t.Fatal("txOut missing address")
 	}
-	// datumHash / datum must be absent (omitempty) for a script-only output.
+	// datum_hash / datum must be absent (omitempty) for a script-only output.
 	if _, ok := txOut["datumHash"]; ok {
-		t.Fatal("txOut should not contain datumHash")
+		t.Fatal("txOut should not contain camelCase datumHash")
 	}
 	if _, ok := txOut["datum_hash"]; ok {
-		t.Fatal("txOut should not contain snake_case datum_hash")
+		t.Fatal("txOut should not contain datum_hash")
 	}
 	if _, ok := txOut["datum"]; ok {
 		t.Fatal("txOut should not contain datum")
@@ -500,20 +500,20 @@ func TestBuildEvalUtxosRequestHashOnlyDatum(t *testing.T) {
 	}
 	txOut := decodeSingleTxOut(t, body)
 
-	// The hash-only datum must surface under camelCase "datumHash" and there
+	// The hash-only datum must surface under snake_case "datum_hash" and there
 	// must be no inline "datum".
 	var datumHashField string
-	if err := json.Unmarshal(txOut["datumHash"], &datumHashField); err != nil {
-		t.Fatalf("datumHash field: %v", err)
+	if err := json.Unmarshal(txOut["datum_hash"], &datumHashField); err != nil {
+		t.Fatalf("datum_hash field: %v", err)
 	}
 	if datumHashField != strings.Repeat("cd", 32) {
-		t.Fatalf("datumHash = %q, want %q", datumHashField, strings.Repeat("cd", 32))
+		t.Fatalf("datum_hash = %q, want %q", datumHashField, strings.Repeat("cd", 32))
 	}
 	if _, ok := txOut["datum"]; ok {
 		t.Fatal("hash-only datum must not emit inline datum")
 	}
-	if _, ok := txOut["datum_hash"]; ok {
-		t.Fatal("must not emit snake_case datum_hash")
+	if _, ok := txOut["datumHash"]; ok {
+		t.Fatal("must not emit camelCase datumHash")
 	}
 }
 
@@ -549,7 +549,7 @@ func TestBuildEvalUtxosRequestInlineDatum(t *testing.T) {
 	txOut := decodeSingleTxOut(t, body)
 
 	// An inline datum must surface under "datum" as the datum CBOR hex, and not
-	// as "datumHash".
+	// as "datum_hash".
 	var datumField string
 	if err := json.Unmarshal(txOut["datum"], &datumField); err != nil {
 		t.Fatalf("datum field: %v", err)
@@ -558,7 +558,10 @@ func TestBuildEvalUtxosRequestInlineDatum(t *testing.T) {
 		t.Fatalf("datum = %q, want %q", datumField, hex.EncodeToString(innerDatumCbor))
 	}
 	if _, ok := txOut["datumHash"]; ok {
-		t.Fatal("inline datum must not emit datumHash")
+		t.Fatal("inline datum must not emit camelCase datumHash")
+	}
+	if _, ok := txOut["datum_hash"]; ok {
+		t.Fatal("inline datum must not emit datum_hash")
 	}
 }
 

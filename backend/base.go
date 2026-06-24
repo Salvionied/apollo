@@ -27,12 +27,12 @@ type ChainContext interface {
 	// resolved UTxOs supplied to the evaluator (e.g. spending inputs that are
 	// not yet confirmed on-chain, such as off-chain or chained inputs), so that
 	// script execution-unit estimation can resolve inputs the backend cannot
-	// see on-chain. Backends that support additionalUtxos (ogmios, blockfrost)
-	// forward them to the evaluator; backends that do not (maestro, utxorpc)
-	// IGNORE additionalUtxos and can only evaluate transactions whose inputs are
-	// already visible on-chain; they do NOT support evaluation of off-chain or
-	// chained inputs. Passing a non-empty additionalUtxos to such a backend is
-	// not an error, but those UTxOs will not be considered.
+	// see on-chain. Ogmios, Blockfrost, and Maestro forward/respect
+	// additionalUtxos. UTxO RPC currently ignores additionalUtxos and can only
+	// evaluate transactions whose inputs are already visible on-chain; it does
+	// NOT support evaluation of off-chain or chained inputs. Passing non-empty
+	// additionalUtxos to such a backend is not an error, but those UTxOs will
+	// not be considered.
 	EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
 	UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
 	ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)

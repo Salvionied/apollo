@@ -650,15 +650,13 @@ func (b *BlockFrostChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byt
 
 // --- BlockFrost evaluate-with-utxos request types ---
 //
-// /utils/txs/evaluate/utxos proxies Ogmios, so the additionalUtxoSet uses the
-// Ogmios-v5 [txIn, txOut] schema (confirmed by the v5 EvaluationResult
-// response shape this endpoint returns). The value is {coins, assets}; a bare
-// datum hash is "datumHash"; reference scripts are
-// {"plutus:v1"|"plutus:v2"|"plutus:v3": "<base16 script>"}.
-// Schema source: Ogmios local-tx-submission docs/changelog (datumHash key,
-// plutus:vN script labels, base16 script encoding) cross-checked against
-// cardano-transaction-lib (Plutonomicon/cardano-transaction-lib@72e4504) and
-// the production value/coins/assets casing in cardano-connector-go.
+// /utils/txs/evaluate/utxos accepts resolved additional UTxOs as [txIn, txOut]
+// pairs. The value is {coins, assets}; a bare datum hash is "datum_hash";
+// reference scripts are
+// {"plutus:v1"|"plutus:v2"|"plutus:v3"|"plutus:v4": "<base16 script>"}.
+// Schema source: Blockfrost /utils/txs/evaluate/utxos OpenAPI schema
+// (datum_hash key) cross-checked against the production value/coins/assets
+// casing in cardano-connector-go.
 
 type bfEvalRequest struct {
 	Cbor              string                 `json:"cbor"`
@@ -690,9 +688,9 @@ type bfScriptRef struct {
 type bfTxOut struct {
 	Address string  `json:"address"`
 	Value   bfValue `json:"value"`
-	// DatumHash uses the Ogmios-v5 camelCase key "datumHash" (a bare datum
-	// hash digest); inline datums go under "datum".
-	DatumHash *string      `json:"datumHash,omitempty"`
+	// DatumHash uses Blockfrost's snake_case key "datum_hash" for a bare datum
+	// hash digest; inline datums go under "datum".
+	DatumHash *string      `json:"datum_hash,omitempty"`
 	Datum     *string      `json:"datum,omitempty"`
 	ScriptRef *bfScriptRef `json:"script,omitempty"`
 }

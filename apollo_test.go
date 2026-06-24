@@ -1168,6 +1168,59 @@ func TestCompleteErrorsOnRefScriptWithoutPrice(t *testing.T) {
 	}
 }
 
+func TestCompleteReservesReferenceScriptFeeForCoinSelection(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 5_000_000, 0x01, 0)
+	addTestUtxo(cc, addr, 5_000_000, 0x02, 0)
+
+	hashHex := "eeff000000000000000000000000000000000000000000000000000000000000"
+	hashBytes, err := hex.DecodeString(hashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refTxHash common.Blake2b256
+	copy(refTxHash[:], hashBytes)
+	cc.AddUtxoByRef(common.Utxo{
+		Id: shelley.ShelleyTransactionInput{TxId: refTxHash, OutputIndex: 0},
+		Output: &babbage.BabbageTransactionOutput{
+			OutputAddress: addr,
+			OutputAmount:  mary.MaryTransactionOutputValue{Amount: 2_000_000},
+			TxOutScriptRef: &common.ScriptRef{
+				Type:   common.ScriptRefTypePlutusV2,
+				Script: common.PlutusV2Script(bytes.Repeat([]byte{0x42}, 60_000)),
+			},
+		},
+	})
+
+	p, err := NewPayment(validTestAddrBech32, 4_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AddPayment(p)
+	a, err = a.AddReferenceInput(hashHex, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.Complete(); err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+	inputRefs := bodyInputRefs(t, a)
+	if len(inputRefs) != 2 {
+		t.Fatalf("expected both wallet UTxOs to be selected, got %v", inputRefs)
+	}
+	maxFee, err := cc.MaxTxFee()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.tx.Body.TxFee <= maxFee {
+		t.Fatalf("expected final fee %d to exceed size-only max fee %d", a.tx.Body.TxFee, maxFee)
+	}
+}
+
 // --- AddVerificationKeyWitness ---
 
 func TestAddVerificationKeyWitnessNoTx(t *testing.T) {
@@ -2000,7 +2053,7 @@ func TestExplicitCollateralAmountLeavingDustRejected(t *testing.T) {
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
 		AddCollateral(coll).
-		SetCollateralAmount(collLovelace - 1).
+		SetCollateralAmount(collLovelace-1).
 		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
 	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {
