@@ -1762,3 +1762,61 @@ func TestMaxCollateralInputsEnforced(t *testing.T) {
 		t.Fatal("expected too-many-collateral-inputs error")
 	}
 }
+
+// TestManualScriptAddressCollateralRejected verifies that caller-pinned
+// (AddCollateral) collateral at a script address is rejected by
+// validateCollateral, matching the ledger requirement that collateral be
+// vkey-locked.
+func TestManualScriptAddressCollateralRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		AddCollateral(scriptAddressUtxo(t, 0x02, 10_000_000)).
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected script-address collateral to be rejected")
+	}
+}
+
+// TestExplicitCollateralAmountBelowRequiredRejected verifies that an explicit
+// SetCollateralAmount below ceil(fee * collateralPercent / 100) is reported as
+// an error rather than building a ledger-invalid transaction.
+func TestExplicitCollateralAmountBelowRequiredRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+	addTestUtxo(cc, addr, 10_000_000, 0x02, 0)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		SetCollateralAmount(1). // far below ceil(fee * collateralPercent / 100)
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected insufficient explicit collateral error")
+	}
+}

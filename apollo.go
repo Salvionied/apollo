@@ -1205,6 +1205,12 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if err != nil {
 		if a.releaseCollateralForOverlap() {
 			selectedUtxos, err = a.selectCoins(selectionTarget, totalInput)
+			if err != nil {
+				// The overlap retry also failed. Restore the collateral
+				// reservation and clear the overlap flag so a subsequent
+				// Complete() on this builder starts from consistent state.
+				a.restoreCollateralReservation()
+			}
 		}
 		if err != nil {
 			return a, fmt.Errorf("coin selection failed: %w", err)
@@ -1379,6 +1385,13 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		if a.Fee > 0 {
 			converged = true
 			break
+		}
+		// Size the collateral against the current fee BEFORE re-estimating, so
+		// the fee accounts for the final collateral total/return footprint in
+		// the body. A collateral_return that only materializes after sizing
+		// would otherwise grow the tx past the frozen estimate.
+		if err := a.finalizeCollateral(fee); err != nil {
+			return a, err
 		}
 		newFee, err := a.estimateFee(allInputUtxos, outputs)
 		if err != nil {
@@ -2420,15 +2433,29 @@ func (a *Apollo) setCollateral() error {
 		}
 	}
 
-	// First pass: prefer a pure-lovelace UTxO (no assets).
-	for _, utxo := range candidates {
+	// First pass: prefer a pure-lovelace UTxO (no assets). Among eligible
+	// candidates, choose the SMALLEST: reserving the smallest dedicated
+	// collateral leaves the larger UTxOs available to coin selection, which
+	// minimizes the chance the reservation starves spending and forces an
+	// overlap. (On starvation Complete() still falls back to overlap.)
+	var bestIdx = -1
+	var bestLovelace int64
+	for i, utxo := range candidates {
 		if a.isUsed(utxoRef(utxo)) {
 			continue
 		}
-		if collateralEligible(utxo, true) {
-			selectCollateral(utxo)
-			return nil
+		if !collateralEligible(utxo, true) {
+			continue
 		}
+		lovelace := utxo.Output.Amount().Int64()
+		if bestIdx == -1 || lovelace < bestLovelace {
+			bestIdx = i
+			bestLovelace = lovelace
+		}
+	}
+	if bestIdx != -1 {
+		selectCollateral(candidates[bestIdx])
+		return nil
 	}
 	// Second pass: a UTxO that may carry assets.
 	for _, utxo := range candidates {
@@ -2461,6 +2488,19 @@ func (a *Apollo) releaseCollateralForOverlap() bool {
 	return true
 }
 
+// restoreCollateralReservation reverses releaseCollateralForOverlap: it re-marks
+// the released collateral UTxO as used and clears the overlap flag. It is called
+// when the overlap retry still fails, so the builder is left in the same state
+// it had before the release and a subsequent Complete() is not skewed by a
+// half-applied overlap.
+func (a *Apollo) restoreCollateralReservation() {
+	if a.collateralOverlapRef == "" {
+		return
+	}
+	a.markUsed(a.collateralOverlapRef)
+	a.collateralOverlapRef = ""
+}
+
 // finalizeCollateral recomputes the total collateral and the collateral-return
 // output from the final transaction fee. The ledger requires
 //
@@ -2480,7 +2520,7 @@ func (a *Apollo) releaseCollateralForOverlap() bool {
 // inputs (AddCollateral) or an explicit amount (SetCollateralAmount), the
 // sizing is intentional and left untouched.
 func (a *Apollo) finalizeCollateral(fee int64) error {
-	if len(a.collaterals) == 0 || !a.collateralAutoSelected || a.collateralAmount > 0 {
+	if len(a.collaterals) == 0 {
 		return nil
 	}
 	pp, err := a.Context.ProtocolParams()
@@ -2496,6 +2536,21 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 	// Ceil division: ceil(fee * percent / 100).
 	required := (fee*int64(pp.CollateralPercent) + 99) / 100
 	if required <= 0 {
+		return nil
+	}
+
+	// Caller-pinned sizing (explicit SetCollateralAmount, or a fully manual
+	// AddCollateral with an explicit total_collateral) is not rewritten - the
+	// caller asked for a specific value. But it is still ledger-validated: an
+	// explicit total below the required minimum would build an invalid tx, so
+	// surface that as a clear error instead of silently shipping it.
+	if !a.collateralAutoSelected || a.collateralAmount > 0 {
+		if a.totalCollateral > 0 && a.totalCollateral < required {
+			return fmt.Errorf(
+				"insufficient collateral: total_collateral %d is below the required %d (ceil(fee %d * %d%%))",
+				a.totalCollateral, required, fee, pp.CollateralPercent,
+			)
+		}
 		return nil
 	}
 
@@ -2609,6 +2664,16 @@ func (a *Apollo) validateCollateral() error {
 			return fmt.Errorf("duplicate collateral input %s", ref)
 		}
 		seen[ref] = struct{}{}
+		// Collateral must be vkey-locked: the ledger rejects collateral at a
+		// script address. Auto-selection already filters on this, but
+		// caller-pinned collateral (AddCollateral) is validated here so a
+		// script-address UTxO never reaches the body.
+		if out := collateral.Output; out != nil {
+			if addr := out.Address(); addr.Type() != common.AddressTypeKeyKey &&
+				addr.Type() != common.AddressTypeKeyNone {
+				return fmt.Errorf("collateral input %s is not vkey-locked (script-address collateral is rejected by the ledger)", ref)
+			}
+		}
 	}
 	// Enforce the protocol max on collateral inputs when known.
 	if pp, err := a.Context.ProtocolParams(); err == nil && pp.MaxCollateralInputs > 0 &&
