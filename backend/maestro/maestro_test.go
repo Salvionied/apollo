@@ -3,13 +3,18 @@ package maestro
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/blinklabs-io/gouroboros/cbor"
+	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/mary"
+	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/maestro-org/go-sdk/models"
 )
 
@@ -225,6 +230,233 @@ func TestSubmitTxPostsCborToTxManager(t *testing.T) {
 	}
 	if !bytes.Equal(txHash.Bytes(), wantHash) {
 		t.Fatalf("tx hash = %x, want %x", txHash.Bytes(), wantHash)
+	}
+}
+
+func TestBuildEvaluateRequest(t *testing.T) {
+	var txId common.Blake2b256
+	idBytes, err := hex.DecodeString(testTxHashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy(txId[:], idBytes)
+
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1000000},
+	}
+	utxo := common.Utxo{
+		Id: shelley.ShelleyTransactionInput{
+			TxId:        txId,
+			OutputIndex: 3,
+		},
+		Output: &output,
+	}
+
+	txHex := hex.EncodeToString([]byte{0x84, 0xa3, 0x00})
+	body, err := buildEvaluateRequest(txHex, []common.Utxo{utxo})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var req maestroEvaluateRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatalf("request body is not valid JSON: %v", err)
+	}
+	if req.Cbor != txHex {
+		t.Fatalf("cbor = %q, want %q", req.Cbor, txHex)
+	}
+	if len(req.AdditionalUtxos) != 1 {
+		t.Fatalf("expected 1 additional UTxO, got %d", len(req.AdditionalUtxos))
+	}
+	got := req.AdditionalUtxos[0]
+	if got.TxHash != testTxHashHex {
+		t.Fatalf("tx_hash = %q, want %q", got.TxHash, testTxHashHex)
+	}
+	if got.Index != 3 {
+		t.Fatalf("index = %d, want 3", got.Index)
+	}
+
+	wantCbor, err := cbor.Encode(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TxoutCbor != hex.EncodeToString(wantCbor) {
+		t.Fatalf("txout_cbor = %q, want %q", got.TxoutCbor, hex.EncodeToString(wantCbor))
+	}
+	// The encoded output CBOR must round-trip back to a valid Babbage output.
+	rawCbor, err := hex.DecodeString(got.TxoutCbor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded babbage.BabbageTransactionOutput
+	if _, err := cbor.Decode(rawCbor, &decoded); err != nil {
+		t.Fatalf("txout_cbor does not decode as a Babbage output: %v", err)
+	}
+	if decoded.Amount().Uint64() != 1000000 {
+		t.Fatalf("decoded amount = %d, want 1000000", decoded.Amount().Uint64())
+	}
+}
+
+func TestBuildEvaluateRequestRejectsMissingOutput(t *testing.T) {
+	var txId common.Blake2b256
+	utxo := common.Utxo{
+		Id: shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 0},
+	}
+	if _, err := buildEvaluateRequest("00", []common.Utxo{utxo}); err == nil {
+		t.Fatal("expected error for UTxO missing its resolved output")
+	}
+}
+
+func TestEvaluateTxWithAdditionalUtxosPostsObjectShape(t *testing.T) {
+	var txId common.Blake2b256
+	idBytes, _ := hex.DecodeString(testTxHashHex)
+	copy(txId[:], idBytes)
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 2000000},
+	}
+	utxo := common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 1},
+		Output: &output,
+	}
+
+	var gotPath, gotContentType, gotApiKey string
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		gotApiKey = r.Header.Get("api-key")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("failed to read request body: %v", err)
+		}
+		gotBody = body
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"ex_units":{"mem":1700,"steps":476468},"redeemer_index":0,"redeemer_tag":"spend"}]`))
+	}))
+	defer server.Close()
+
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.client.BaseUrl = server.URL
+
+	result, err := ctx.EvaluateTx([]byte{0x84, 0xa3, 0x00}, []common.Utxo{utxo})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if gotPath != "/transactions/evaluate" {
+		t.Fatalf("path = %q, want /transactions/evaluate", gotPath)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", gotContentType)
+	}
+	if gotApiKey != "project-id" {
+		t.Fatalf("api-key = %q, want project-id", gotApiKey)
+	}
+	var req maestroEvaluateRequest
+	if err := json.Unmarshal(gotBody, &req); err != nil {
+		t.Fatalf("posted body is not valid JSON: %v", err)
+	}
+	if len(req.AdditionalUtxos) != 1 || req.AdditionalUtxos[0].TxHash != testTxHashHex {
+		t.Fatalf("unexpected additional_utxos in posted body: %+v", req.AdditionalUtxos)
+	}
+	spendKey := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[spendKey]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected spend budget %+v", eu)
+	}
+}
+
+func TestEvaluateTxEmptyAdditionalUtxosUsesSdkPath(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		utxos []common.Utxo
+	}{
+		{"nil", nil},
+		{"empty", []common.Utxo{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			var gotBody []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("failed to read request body: %v", err)
+				}
+				gotBody = body
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[{"ex_units":{"mem":10,"steps":20},"redeemer_index":0,"redeemer_tag":"spend"}]`))
+			}))
+			defer server.Close()
+
+			ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx.client.BaseUrl = server.URL
+
+			result, err := ctx.EvaluateTx([]byte{0x84}, tc.utxos)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The SDK EvaluateTx posts to /transactions/evaluate as well, so the
+			// path alone does not distinguish the two code paths. The SDK body
+			// serializes additional_utxos from a nil []string, which encodes as
+			// JSON null; the raw object-shaped path would instead emit an array.
+			// Asserting null proves the empty/nil slice took the SDK fallback.
+			if gotPath != "/transactions/evaluate" {
+				t.Fatalf("path = %q, want /transactions/evaluate", gotPath)
+			}
+			var sdkBody struct {
+				Cbor            string          `json:"cbor"`
+				AdditionalUtxos json.RawMessage `json:"additional_utxos"`
+			}
+			if err := json.Unmarshal(gotBody, &sdkBody); err != nil {
+				t.Fatalf("posted body is not valid JSON: %v", err)
+			}
+			if sdkBody.Cbor != "84" {
+				t.Fatalf("cbor = %q, want 84", sdkBody.Cbor)
+			}
+			if string(sdkBody.AdditionalUtxos) != "null" {
+				t.Fatalf("additional_utxos = %s, want null (SDK fallback path)", sdkBody.AdditionalUtxos)
+			}
+			spendKey := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+			if eu := result[spendKey]; eu.Memory != 10 || eu.Steps != 20 {
+				t.Fatalf("unexpected spend budget %+v", eu)
+			}
+		})
+	}
+}
+
+func TestEvaluateTxWithAdditionalUtxosPropagatesHTTPError(t *testing.T) {
+	var txId common.Blake2b256
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1000000},
+	}
+	utxo := common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 0},
+		Output: &output,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"bad request"}`))
+	}))
+	defer server.Close()
+
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.client.BaseUrl = server.URL
+
+	if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{utxo}); err == nil {
+		t.Fatal("expected error for non-200 evaluate response")
 	}
 }
 

@@ -291,7 +291,23 @@ func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, err
 	return result, nil
 }
 
-func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	// When resolved UTxOs are supplied (e.g. inputs not yet confirmed
+	// on-chain), the bare /utils/txs/evaluate endpoint (cbor body) cannot carry
+	// them. Switch to /utils/txs/evaluate/utxos with a JSON body that includes
+	// the additional UTxO set.
+	if len(additionalUtxos) > 0 {
+		reqBody, err := buildEvalUtxosRequest(txCbor, additionalUtxos)
+		if err != nil {
+			return nil, err
+		}
+		data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
+		if err != nil {
+			return nil, err
+		}
+		return parseEvaluateTxResponse(data)
+	}
+
 	// BlockFrost expects the transaction CBOR hex-encoded in the request body
 	// (with Content-Type application/cbor), not the raw CBOR bytes.
 	body := strings.NewReader(hex.EncodeToString(txCbor))
@@ -300,6 +316,141 @@ func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerK
 		return nil, err
 	}
 	return parseEvaluateTxResponse(data)
+}
+
+// buildEvalUtxosRequest marshals the JSON body for the
+// /utils/txs/evaluate/utxos endpoint: the hex tx CBOR plus the resolved
+// additional UTxO set as [txIn, txOut] pairs.
+func buildEvalUtxosRequest(txCbor []byte, additionalUtxos []common.Utxo) ([]byte, error) {
+	items := make([]bfAdditionalUtxoItem, 0, len(additionalUtxos))
+	for _, utxo := range additionalUtxos {
+		item, err := bfAdditionalUtxoItemFromUtxo(utxo)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	req := bfEvalRequest{
+		Cbor:              hex.EncodeToString(txCbor),
+		AdditionalUtxoSet: items,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal evaluate request: %w", err)
+	}
+	return body, nil
+}
+
+// bfAdditionalUtxoItemFromUtxo builds a single [txIn, txOut] additional-UTxO
+// entry from a resolved gouroboros UTxO.
+func bfAdditionalUtxoItemFromUtxo(utxo common.Utxo) (bfAdditionalUtxoItem, error) {
+	out := utxo.Output
+
+	txIn := bfTxIn{
+		TxId:  hex.EncodeToString(utxo.Id.Id().Bytes()),
+		Index: int(utxo.Id.Index()),
+	}
+
+	coins, err := bigIntToInt64(out.Amount())
+	if err != nil {
+		return bfAdditionalUtxoItem{}, fmt.Errorf("invalid lovelace amount: %w", err)
+	}
+	val := bfValue{Coins: coins}
+	if assets := out.Assets(); assets != nil {
+		assetMap := make(map[string]int64)
+		for _, policyId := range assets.Policies() {
+			policyHex := hex.EncodeToString(policyId.Bytes())
+			for _, assetName := range assets.Assets(policyId) {
+				// Asset key is policyHex for the empty asset name, otherwise
+				// policyHex + "." + assetNameHex.
+				key := policyHex
+				if len(assetName) > 0 {
+					key = policyHex + "." + hex.EncodeToString(assetName)
+				}
+				qty, err := bigIntToInt64(assets.Asset(policyId, assetName))
+				if err != nil {
+					return bfAdditionalUtxoItem{}, fmt.Errorf("invalid asset quantity for %s: %w", key, err)
+				}
+				assetMap[key] = qty
+			}
+		}
+		if len(assetMap) > 0 {
+			val.Assets = assetMap
+		}
+	}
+
+	txOut := bfTxOut{
+		Address: out.Address().String(),
+		Value:   val,
+	}
+
+	// Inline datum CBOR hex goes in Datum; a bare datum hash goes in DatumHash.
+	if datum := out.Datum(); datum != nil {
+		datumCbor, err := datum.MarshalCBOR()
+		if err != nil {
+			return bfAdditionalUtxoItem{}, fmt.Errorf("failed to encode inline datum: %w", err)
+		}
+		datumHex := hex.EncodeToString(datumCbor)
+		txOut.Datum = &datumHex
+	} else if datumHash := out.DatumHash(); datumHash != nil {
+		datumHashHex := hex.EncodeToString(datumHash.Bytes())
+		txOut.DatumHash = &datumHashHex
+	}
+
+	// Reference script, tagged by Plutus language version.
+	if script := out.ScriptRef(); script != nil {
+		ref, err := bfScriptRefFromScript(script)
+		if err != nil {
+			return bfAdditionalUtxoItem{}, err
+		}
+		txOut.ScriptRef = ref
+	}
+
+	return bfAdditionalUtxoItem{txIn, txOut}, nil
+}
+
+// bfScriptRefFromScript encodes a reference script into the Ogmios-v5 TxOut
+// "script" wire shape used by /utils/txs/evaluate/utxos:
+// {"plutus:v1"|"plutus:v2"|"plutus:v3"|"plutus:v4": "<base16 serialised script>"}.
+// The Plutus language version is detected from the concrete script type, and
+// the value is the on-chain serialised Plutus script (base16), matching the
+// Ogmios encoding consumed by ogmiosScriptToScriptRef on read.
+//
+// Schema source: Ogmios local-tx-submission TxOut schema (scripts labelled
+// "plutus:v1"/"plutus:v2"/"plutus:v3"/"plutus:v4", serialised Plutus scripts as base16),
+// cross-checked against cardano-transaction-lib's encodeScriptRef
+// (Plutonomicon/cardano-transaction-lib@72e4504). Native reference scripts in
+// the additional UTxO set are not supported (their JSON encoding is undefined
+// in that schema), so they are rejected rather than mislabelled.
+func bfScriptRefFromScript(script common.Script) (*bfScriptRef, error) {
+	scriptHex := hex.EncodeToString(script.RawScriptBytes())
+	ref := &bfScriptRef{}
+	switch script.(type) {
+	case common.PlutusV1Script:
+		ref.PlutusV1 = &scriptHex
+	case common.PlutusV2Script:
+		ref.PlutusV2 = &scriptHex
+	case common.PlutusV3Script:
+		ref.PlutusV3 = &scriptHex
+	case common.PlutusV4Script:
+		ref.PlutusV4 = &scriptHex
+	default:
+		return nil, fmt.Errorf("unsupported script type %T in additional UTxO: only Plutus v1/v2/v3/v4 reference scripts can be encoded for /utils/txs/evaluate/utxos", script)
+	}
+	return ref, nil
+}
+
+// bigIntToInt64 converts a big.Int quantity to int64, rejecting values that do
+// not fit rather than silently truncating (the Ogmios-v5 value schema used by
+// /utils/txs/evaluate/utxos encodes coins/assets as JSON integers).
+func bigIntToInt64(v *big.Int) (int64, error) {
+	if v == nil {
+		return 0, nil
+	}
+	if !v.IsInt64() {
+		return 0, fmt.Errorf("quantity %s does not fit in int64", v.String())
+	}
+	return v.Int64(), nil
 }
 
 // jsonValuePresent reports whether a raw JSON field was present and not null.
@@ -495,6 +646,55 @@ func (b *BlockFrostChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byt
 		return nil, fmt.Errorf("invalid script CBOR hex: %w", err)
 	}
 	return scriptCbor, nil
+}
+
+// --- BlockFrost evaluate-with-utxos request types ---
+//
+// /utils/txs/evaluate/utxos proxies Ogmios, so the additionalUtxoSet uses the
+// Ogmios-v5 [txIn, txOut] schema (confirmed by the v5 EvaluationResult
+// response shape this endpoint returns). The value is {coins, assets}; a bare
+// datum hash is "datumHash"; reference scripts are
+// {"plutus:v1"|"plutus:v2"|"plutus:v3": "<base16 script>"}.
+// Schema source: Ogmios local-tx-submission docs/changelog (datumHash key,
+// plutus:vN script labels, base16 script encoding) cross-checked against
+// cardano-transaction-lib (Plutonomicon/cardano-transaction-lib@72e4504) and
+// the production value/coins/assets casing in cardano-connector-go.
+
+type bfEvalRequest struct {
+	Cbor              string                 `json:"cbor"`
+	AdditionalUtxoSet []bfAdditionalUtxoItem `json:"additionalUtxoSet"`
+}
+
+// bfAdditionalUtxoItem is a [txIn, txOut] pair.
+type bfAdditionalUtxoItem [2]any
+
+type bfTxIn struct {
+	TxId  string `json:"txId"`
+	Index int    `json:"index"`
+}
+
+type bfValue struct {
+	Coins int64 `json:"coins"`
+	// Assets key is the policy ID hex for the empty asset name, otherwise
+	// policyHex + "." + assetNameHex.
+	Assets map[string]int64 `json:"assets,omitempty"`
+}
+
+type bfScriptRef struct {
+	PlutusV1 *string `json:"plutus:v1,omitempty"`
+	PlutusV2 *string `json:"plutus:v2,omitempty"`
+	PlutusV3 *string `json:"plutus:v3,omitempty"`
+	PlutusV4 *string `json:"plutus:v4,omitempty"`
+}
+
+type bfTxOut struct {
+	Address string  `json:"address"`
+	Value   bfValue `json:"value"`
+	// DatumHash uses the Ogmios-v5 camelCase key "datumHash" (a bare datum
+	// hash digest); inline datums go under "datum".
+	DatumHash *string      `json:"datumHash,omitempty"`
+	Datum     *string      `json:"datum,omitempty"`
+	ScriptRef *bfScriptRef `json:"script,omitempty"`
 }
 
 // --- BlockFrost response types ---

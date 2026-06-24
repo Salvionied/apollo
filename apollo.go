@@ -1803,7 +1803,7 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 		return fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
-	evalResult, err := a.Context.EvaluateTx(txBytes)
+	evalResult, err := a.Context.EvaluateTx(txBytes, inputs)
 	if err != nil {
 		return fmt.Errorf("EvaluateTx failed: %w", err)
 	}

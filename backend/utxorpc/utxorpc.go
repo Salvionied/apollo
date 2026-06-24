@@ -295,7 +295,14 @@ func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 	return result, nil
 }
 
-func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+// EvaluateTx evaluates the scripts in a transaction. The additionalUtxos
+// argument is IGNORED: the utxorpc EvalTx schema (submit.EvalTxRequest) carries
+// only the raw transaction CBOR and has no field for additional/resolved
+// UTxOs. This backend can therefore only evaluate transactions whose inputs
+// are already visible on-chain to the provider and does NOT support evaluating
+// off-chain or chained inputs. Passing a non-empty additionalUtxos is not an
+// error, but those UTxOs have no effect.
+func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	req := connect.NewRequest(&submit.EvalTxRequest{
 		Tx: &submit.AnyChainTx{
 			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
