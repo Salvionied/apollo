@@ -68,23 +68,23 @@ type Apollo struct {
 	// Only auto-selected collateral is resized by finalizeCollateral(), so
 	// caller-pinned collateral is never silently rewritten.
 	collateralAutoSelected bool
-	nativescripts      []common.NativeScript
-	usedUtxos          map[string]bool
-	wallet             Wallet
-	certificates       []common.CertificateWrapper
-	withdrawals        map[string]withdrawalEntry
-	auxiliaryData      *auxData
-	votingProcedures   common.VotingProcedures
-	proposalProcedures []conway.ConwayProposalProcedure
-	currentTreasury    int64
-	treasuryDonation   int64
-	collateralAmount   int64
-	scriptHashes       []string
-	changeAddress      *common.Address
-	estimateExUnits    bool
-	forceFee           bool
-	coinSelector       CoinSelector
-	err                error
+	nativescripts          []common.NativeScript
+	usedUtxos              map[string]bool
+	wallet                 Wallet
+	certificates           []common.CertificateWrapper
+	withdrawals            map[string]withdrawalEntry
+	auxiliaryData          *auxData
+	votingProcedures       common.VotingProcedures
+	proposalProcedures     []conway.ConwayProposalProcedure
+	currentTreasury        int64
+	treasuryDonation       int64
+	collateralAmount       int64
+	scriptHashes           []string
+	changeAddress          *common.Address
+	estimateExUnits        bool
+	forceFee               bool
+	coinSelector           CoinSelector
+	err                    error
 }
 
 type redeemerEntry struct {
@@ -941,26 +941,26 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 // Clone returns a deep copy of this Apollo builder.
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
-		Context:            a.Context,
-		isEstimateRequired: a.isEstimateRequired,
-		Fee:                a.Fee,
-		FeePadding:         a.FeePadding,
-		forceFee:           a.forceFee,
-		Ttl:                a.Ttl,
-		ValidityStart:      a.ValidityStart,
-		totalCollateral:      a.totalCollateral,
+		Context:                a.Context,
+		isEstimateRequired:     a.isEstimateRequired,
+		Fee:                    a.Fee,
+		FeePadding:             a.FeePadding,
+		forceFee:               a.forceFee,
+		Ttl:                    a.Ttl,
+		ValidityStart:          a.ValidityStart,
+		totalCollateral:        a.totalCollateral,
 		collateralAmount:       a.collateralAmount,
 		collateralOverlapRef:   a.collateralOverlapRef,
 		collateralAutoSelected: a.collateralAutoSelected,
 		currentTreasury:        a.currentTreasury,
-		treasuryDonation:   a.treasuryDonation,
-		estimateExUnits:    a.estimateExUnits,
-		wallet:             a.wallet,
-		err:                a.err,
-		redeemers:          make(map[string]redeemerEntry),
-		stakeRedeemers:     make(map[string]redeemerEntry),
-		mintRedeemers:      make(map[string]redeemerEntry),
-		withdrawals:        make(map[string]withdrawalEntry),
+		treasuryDonation:       a.treasuryDonation,
+		estimateExUnits:        a.estimateExUnits,
+		wallet:                 a.wallet,
+		err:                    a.err,
+		redeemers:              make(map[string]redeemerEntry),
+		stakeRedeemers:         make(map[string]redeemerEntry),
+		mintRedeemers:          make(map[string]redeemerEntry),
+		withdrawals:            make(map[string]withdrawalEntry),
 	}
 	for _, p := range a.payments {
 		if pp, ok := p.(*Payment); ok {
@@ -1169,7 +1169,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	// Estimate a preliminary fee for coin selection so we don't under-select.
-	// Use max fee as a conservative upper bound.
+	// MaxTxFee covers the size-based fee only; Conway reference-script fees are
+	// charged separately, so reserve the known reference-input / pinned-input
+	// surcharge before coin selection.
 	maxFee, feeErr := a.Context.MaxTxFee()
 	if feeErr != nil {
 		return a, fmt.Errorf("failed to compute max tx fee for coin selection: %w", feeErr)
@@ -1178,6 +1180,14 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, fmt.Errorf("max tx fee out of range: %d", maxFee)
 	}
 	prelimFee := int64(maxFee)
+	refScriptFeeReserve, err := a.referenceScriptFee(a.preselectedUtxos)
+	if err != nil {
+		return a, fmt.Errorf("failed to compute reference-script fee reserve for coin selection: %w", err)
+	}
+	if refScriptFeeReserve > math.MaxInt64-prelimFee {
+		return a, fmt.Errorf("preliminary fee overflows int64: max fee=%d reference script fee=%d", prelimFee, refScriptFeeReserve)
+	}
+	prelimFee += refScriptFeeReserve
 	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee)))
 	if err != nil {
 		return a, fmt.Errorf("selection target overflow: %w", err)
@@ -1711,38 +1721,70 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 		fee += int64(exUnitFeeFloat)
 	}
 
-	// Add the Conway tiered reference-script fee. Scripts attached (via
-	// script_ref) to the outputs of the transaction's spending inputs AND
-	// reference inputs are priced per byte on a growing tier (native scripts
-	// included, not only Plutus). The ledger counts the union of regular and
-	// reference inputs regardless of whether the transaction executes scripts,
-	// so omitting it produces FeeTooSmallUTxO. The fee is naturally zero when no
-	// referenced UTxO carries a script.
+	// Add the Conway tiered reference-script fee.
+	refScriptFee, err := a.referenceScriptFeeWithParams(inputs, pp)
+	if err != nil {
+		return 0, err
+	}
+	if refScriptFee > math.MaxInt64-fee {
+		return 0, fmt.Errorf("fee overflows int64: base fee=%d reference script fee=%d", fee, refScriptFee)
+	}
+	fee += refScriptFee
+
+	return fee, nil
+}
+
+func (a *Apollo) referenceScriptFee(inputs []common.Utxo) (int64, error) {
 	refScriptSize, err := a.totalReferenceScriptSize(inputs)
 	if err != nil {
 		return 0, err
 	}
-	if refScriptSize > 0 {
-		// The transaction uses reference scripts, so the ledger charges the
-		// tiered reference-script fee. If the backend did not supply the base
-		// price, charging zero would silently underprice the transaction and
-		// produce a FeeTooSmallUTxO rejection at submission; fail loudly instead.
-		refFeePerByte := pp.RefScriptFeePerByte()
-		if refFeePerByte <= 0 {
-			return 0, fmt.Errorf(
-				"transaction uses %d bytes of reference scripts but the protocol parameters provide no reference-script price (min_fee_ref_script_cost_per_byte); cannot compute a correct minimum fee",
-				refScriptSize,
-			)
-		}
-		fee += backend.TierRefScriptFee(
+	if refScriptSize == 0 {
+		return 0, nil
+	}
+	pp, err := a.Context.ProtocolParams()
+	if err != nil {
+		return 0, err
+	}
+	return referenceScriptFeeForSize(refScriptSize, pp)
+}
+
+// referenceScriptFeeWithParams computes the Conway tiered reference-script fee.
+// Scripts attached (via script_ref) to the outputs of the transaction's spending
+// inputs AND reference inputs are priced per byte on a growing tier (native
+// scripts included, not only Plutus). The ledger counts the union of regular and
+// reference inputs regardless of whether the transaction executes scripts, so
+// omitting it produces FeeTooSmallUTxO. The fee is naturally zero when no
+// referenced UTxO carries a script.
+func (a *Apollo) referenceScriptFeeWithParams(inputs []common.Utxo, pp backend.ProtocolParameters) (int64, error) {
+	refScriptSize, err := a.totalReferenceScriptSize(inputs)
+	if err != nil {
+		return 0, err
+	}
+	return referenceScriptFeeForSize(refScriptSize, pp)
+}
+
+func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters) (int64, error) {
+	if refScriptSize == 0 {
+		return 0, nil
+	}
+	// The transaction uses reference scripts, so the ledger charges the tiered
+	// reference-script fee. If the backend did not supply the base price, charging
+	// zero would silently underprice the transaction and produce a FeeTooSmallUTxO
+	// rejection at submission; fail loudly instead.
+	refFeePerByte := pp.RefScriptFeePerByte()
+	if refFeePerByte <= 0 {
+		return 0, fmt.Errorf(
+			"transaction uses %d bytes of reference scripts but the protocol parameters provide no reference-script price (min_fee_ref_script_cost_per_byte); cannot compute a correct minimum fee",
 			refScriptSize,
-			refFeePerByte,
-			pp.RefScriptSizeIncrement(),
-			pp.RefScriptMultiplier(),
 		)
 	}
-
-	return fee, nil
+	return backend.TierRefScriptFee(
+		refScriptSize,
+		refFeePerByte,
+		pp.RefScriptSizeIncrement(),
+		pp.RefScriptMultiplier(),
+	), nil
 }
 
 // totalReferenceScriptSize resolves the combined byte size of all reference
