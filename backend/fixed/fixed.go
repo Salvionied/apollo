@@ -111,7 +111,7 @@ func (f *FixedChainContext) SubmitTx(_ []byte) (common.Blake2b256, error) {
 	return common.Blake2b256{}, errors.New("cannot submit tx with fixed chain context")
 }
 
-func (f *FixedChainContext) EvaluateTx(_ []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+func (f *FixedChainContext) EvaluateTx(_ []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	return nil, errors.New("cannot evaluate tx with fixed chain context")
 }
 

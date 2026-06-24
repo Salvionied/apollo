@@ -119,8 +119,8 @@ func (c *CachedChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) 
 	return c.inner.SubmitTx(txCbor)
 }
 
-func (c *CachedChainContext) EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
-	return c.inner.EvaluateTx(txCbor)
+func (c *CachedChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	return c.inner.EvaluateTx(txCbor, additionalUtxos)
 }
 
 func (c *CachedChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
