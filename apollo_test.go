@@ -1820,3 +1820,81 @@ func TestExplicitCollateralAmountBelowRequiredRejected(t *testing.T) {
 		t.Fatal("expected insufficient explicit collateral error")
 	}
 }
+
+// TestExplicitCollateralAmountEmittedInBody verifies that an explicit
+// SetCollateralAmount combined with a caller-pinned AddCollateral actually
+// emits total_collateral (body key 18) equal to the requested amount, with a
+// collateral return for the remainder.
+func TestExplicitCollateralAmountEmittedInBody(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	var collHash common.Blake2b256
+	collHash[0] = 0x02
+	coll := makeTestUtxo(t, collHash, 0, 10_000_000)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	const wantAmount = 5_000_000
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		AddCollateral(coll).
+		SetCollateralAmount(wantAmount).
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+	if a.tx.Body.TxTotalCollateral != wantAmount {
+		t.Fatalf("total_collateral = %d, want %d", a.tx.Body.TxTotalCollateral, wantAmount)
+	}
+	if a.tx.Body.TxCollateralReturn == nil {
+		t.Fatal("expected a collateral return for the remainder")
+	}
+	gotReturn := a.tx.Body.TxCollateralReturn.Amount()
+	wantReturn := big.NewInt(10_000_000 - wantAmount)
+	if gotReturn == nil || gotReturn.Cmp(wantReturn) != 0 {
+		t.Fatalf("collateral_return = %v, want %v", gotReturn, wantReturn)
+	}
+}
+
+// TestManualAssetCollateralRejected verifies that fully manual collateral
+// carrying native assets (with no collateral return) is rejected, because the
+// implicit full-input collateral path cannot return the assets on failure.
+func TestManualAssetCollateralRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	var collHash common.Blake2b256
+	collHash[0] = 0x02
+	coll := makeAssetTestUtxo(t, collHash, 0, 10_000_000, testMultiAsset(1, "token", 1))
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		AddCollateral(coll).
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected manual asset-bearing collateral to be rejected")
+	}
+}

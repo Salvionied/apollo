@@ -1428,6 +1428,32 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
+	// Guard the non-converged escape: if the loop exhausted its iterations the
+	// fee was frozen before collateral was finalized against it, so the final
+	// collateral footprint could nudge the real min fee above the frozen value.
+	// Re-estimate once against the finalized body; if it is higher, raise the
+	// fee, rebuild outputs and re-finalize collateral so the body is consistent.
+	if !a.forceFee && a.Fee == 0 {
+		checkFee, err := a.estimateFee(allInputUtxos, outputs)
+		if err != nil {
+			return a, fmt.Errorf("final fee verification failed: %w", err)
+		}
+		checkFee += a.FeePadding
+		if checkFee < 0 {
+			checkFee = 0
+		}
+		if checkFee > fee {
+			fee = checkFee
+			outputs, err = buildOutputsWithChange(fee)
+			if err != nil {
+				return a, err
+			}
+			if err := a.finalizeCollateral(fee); err != nil {
+				return a, err
+			}
+		}
+	}
+
 	// Build transaction body
 	body, err := a.buildBody(allInputUtxos, outputs, uint64(fee))
 	if err != nil {
@@ -2433,29 +2459,18 @@ func (a *Apollo) setCollateral() error {
 		}
 	}
 
-	// First pass: prefer a pure-lovelace UTxO (no assets). Among eligible
-	// candidates, choose the SMALLEST: reserving the smallest dedicated
-	// collateral leaves the larger UTxOs available to coin selection, which
-	// minimizes the chance the reservation starves spending and forces an
-	// overlap. (On starvation Complete() still falls back to overlap.)
-	var bestIdx = -1
-	var bestLovelace int64
-	for i, utxo := range candidates {
+	// First pass: prefer a pure-lovelace UTxO (no assets). Selection keeps the
+	// first-eligible candidate so a multi-UTxO wallet produces the same tx shape
+	// as before this change; the overlap fallback in Complete() handles the case
+	// where reserving a dedicated collateral starves coin selection.
+	for _, utxo := range candidates {
 		if a.isUsed(utxoRef(utxo)) {
 			continue
 		}
-		if !collateralEligible(utxo, true) {
-			continue
+		if collateralEligible(utxo, true) {
+			selectCollateral(utxo)
+			return nil
 		}
-		lovelace := utxo.Output.Amount().Int64()
-		if bestIdx == -1 || lovelace < bestLovelace {
-			bestIdx = i
-			bestLovelace = lovelace
-		}
-	}
-	if bestIdx != -1 {
-		selectCollateral(candidates[bestIdx])
-		return nil
 	}
 	// Second pass: a UTxO that may carry assets.
 	for _, utxo := range candidates {
@@ -2501,24 +2516,32 @@ func (a *Apollo) restoreCollateralReservation() {
 	a.collateralOverlapRef = ""
 }
 
-// finalizeCollateral recomputes the total collateral and the collateral-return
-// output from the final transaction fee. The ledger requires
+// finalizeCollateral sizes and validates the total collateral and the
+// collateral-return output against the final transaction fee. The ledger
+// requires
 //
 //	totalCollateral >= ceil(fee * collateralPercent / 100)
 //
 // computed against the ACTUAL fee. setCollateral() only had a preliminary
 // (max-by-size) fee available, so its sizing is stale once coin selection and
-// fee estimation have run. We keep the collateral UTxO(s) it selected and only
-// resize the total and the return here.
+// fee estimation have run.
 //
 // The computation uses the collateral inputs' value ALONE: on phase-2 script
 // failure only the collateral is consumed, so collateral_return = (collateral
 // input ADA - total_collateral) plus all native assets on the collateral. This
 // never touches the success-path input/output/fee balance.
 //
-// Only auto-selected collateral is resized. If the caller pinned the collateral
-// inputs (AddCollateral) or an explicit amount (SetCollateralAmount), the
-// sizing is intentional and left untouched.
+// Three modes:
+//   - auto-selected, no explicit amount: total/return are (re)computed from the
+//     final fee.
+//   - explicit SetCollateralAmount: total_collateral is pinned to the requested
+//     amount (raised to the ledger minimum if the caller asked for too little is
+//     rejected rather than silently bumped), and the return is recomputed so the
+//     requested amount is actually emitted in the body.
+//   - fully manual AddCollateral with no amount: the sizing is left to the
+//     ledger's implicit "all collateral inputs" rule, but it is still validated
+//     so an under-funded or asset-stranding collateral set is rejected locally
+//     rather than built into an invalid tx.
 func (a *Apollo) finalizeCollateral(fee int64) error {
 	if len(a.collaterals) == 0 {
 		return nil
@@ -2539,23 +2562,8 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 		return nil
 	}
 
-	// Caller-pinned sizing (explicit SetCollateralAmount, or a fully manual
-	// AddCollateral with an explicit total_collateral) is not rewritten - the
-	// caller asked for a specific value. But it is still ledger-validated: an
-	// explicit total below the required minimum would build an invalid tx, so
-	// surface that as a clear error instead of silently shipping it.
-	if !a.collateralAutoSelected || a.collateralAmount > 0 {
-		if a.totalCollateral > 0 && a.totalCollateral < required {
-			return fmt.Errorf(
-				"insufficient collateral: total_collateral %d is below the required %d (ceil(fee %d * %d%%))",
-				a.totalCollateral, required, fee, pp.CollateralPercent,
-			)
-		}
-		return nil
-	}
-
-	// Sum the lovelace and assets across the selected collateral inputs so the
-	// collateral return can carry the remainder (and any tokens) forward.
+	// Sum the lovelace and assets across the collateral inputs so the collateral
+	// return can carry the remainder (and any tokens) forward.
 	var totalLovelace int64
 	var collateralAssets *common.MultiAsset[common.MultiAssetTypeOutput]
 	hasAssets := false
@@ -2581,9 +2589,44 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 
 	if required > totalLovelace {
 		return fmt.Errorf(
-			"insufficient collateral: need %d lovelace (ceil(fee %d * %d%%)), selected collateral holds %d",
+			"insufficient collateral: need %d lovelace (ceil(fee %d * %d%%)), collateral inputs hold %d",
 			required, fee, pp.CollateralPercent, totalLovelace,
 		)
+	}
+
+	// Fully manual collateral with no explicit amount: the caller pinned the
+	// inputs and did not ask for a specific total_collateral, so leave the body
+	// untouched (the ledger consumes the whole collateral set on failure). Still
+	// validate: the implicit collateral cannot carry assets forward without a
+	// collateral return, so asset-bearing manual collateral must be rejected.
+	if !a.collateralAutoSelected && a.collateralAmount == 0 {
+		if hasAssets {
+			return errors.New(
+				"manual collateral carries native assets but no collateral return is set; " +
+					"set a collateral amount/return or use ADA-only collateral",
+			)
+		}
+		return nil
+	}
+
+	// Explicit SetCollateralAmount: honor the requested total_collateral (it must
+	// still meet the ledger minimum and fit within the collateral inputs). This
+	// raises the effective total above `required` when the caller wants a larger
+	// margin; a request below the minimum is rejected rather than silently bumped.
+	if a.collateralAmount > 0 {
+		if a.collateralAmount < required {
+			return fmt.Errorf(
+				"insufficient collateral: requested amount %d is below the required %d (ceil(fee %d * %d%%))",
+				a.collateralAmount, required, fee, pp.CollateralPercent,
+			)
+		}
+		if a.collateralAmount > totalLovelace {
+			return fmt.Errorf(
+				"requested collateral amount %d exceeds collateral inputs %d",
+				a.collateralAmount, totalLovelace,
+			)
+		}
+		required = a.collateralAmount
 	}
 
 	remainder := totalLovelace - required
