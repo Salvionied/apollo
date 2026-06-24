@@ -1428,32 +1428,6 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
-	// Guard the non-converged escape: if the loop exhausted its iterations the
-	// fee was frozen before collateral was finalized against it, so the final
-	// collateral footprint could nudge the real min fee above the frozen value.
-	// Re-estimate once against the finalized body; if it is higher, raise the
-	// fee, rebuild outputs and re-finalize collateral so the body is consistent.
-	if !a.forceFee && a.Fee == 0 {
-		checkFee, err := a.estimateFee(allInputUtxos, outputs)
-		if err != nil {
-			return a, fmt.Errorf("final fee verification failed: %w", err)
-		}
-		checkFee += a.FeePadding
-		if checkFee < 0 {
-			checkFee = 0
-		}
-		if checkFee > fee {
-			fee = checkFee
-			outputs, err = buildOutputsWithChange(fee)
-			if err != nil {
-				return a, err
-			}
-			if err := a.finalizeCollateral(fee); err != nil {
-				return a, err
-			}
-		}
-	}
-
 	// Build transaction body
 	body, err := a.buildBody(allInputUtxos, outputs, uint64(fee))
 	if err != nil {
@@ -2675,7 +2649,17 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 			a.collateralReturn = &ret
 			return nil
 		}
-		// Dust remainder: absorb into total_collateral, no return.
+		// Dust remainder below min-ADA. For an explicitly requested amount we may
+		// not silently raise total_collateral (that would forfeit the dust on
+		// failure and exceed what the caller asked for); reject instead. Only the
+		// auto-sized path is free to absorb the dust into total_collateral.
+		if a.collateralAmount > 0 {
+			return fmt.Errorf(
+				"requested collateral amount %d leaves a %d lovelace return below the %d min-ADA; choose an amount that leaves no return or at least min-ADA",
+				required, remainder, minReturn,
+			)
+		}
+		// Auto-sized dust remainder: absorb into total_collateral, no return.
 		a.totalCollateral = totalLovelace
 		a.collateralReturn = nil
 		return nil

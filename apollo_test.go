@@ -1898,3 +1898,39 @@ func TestManualAssetCollateralRejected(t *testing.T) {
 		t.Fatal("expected manual asset-bearing collateral to be rejected")
 	}
 }
+
+// TestExplicitCollateralAmountLeavingDustRejected verifies that an explicit
+// collateral amount that would leave a sub-min-ADA collateral return is
+// rejected rather than silently raising total_collateral (which would forfeit
+// the dust on phase-2 failure and exceed the requested amount).
+func TestExplicitCollateralAmountLeavingDustRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	const collLovelace = 10_000_000
+	var collHash common.Blake2b256
+	collHash[0] = 0x02
+	coll := makeTestUtxo(t, collHash, 0, collLovelace)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	// Request an amount that leaves only 1 lovelace of return, far below min-ADA.
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		AddCollateral(coll).
+		SetCollateralAmount(collLovelace - 1).
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected dust collateral return to be rejected for an explicit amount")
+	}
+}
