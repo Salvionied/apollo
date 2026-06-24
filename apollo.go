@@ -54,6 +54,20 @@ type Apollo struct {
 	totalCollateral    int64
 	referenceInputs    []shelley.ShelleyTransactionInput
 	collateralReturn   *babbage.BabbageTransactionOutput
+	// collateralOverlapRef holds the ref of an auto-selected collateral UTxO
+	// that is also allowed to serve as a regular spending input. It is set only
+	// when no dedicated (separate) collateral UTxO was available, so wallets
+	// with a single UTxO can still build script transactions. The Cardano ledger
+	// permits this overlap because collateral is consumed only on phase-2 script
+	// failure and regular inputs only on success - the two paths are mutually
+	// exclusive. When empty, collateral is reserved out of the coin-selection
+	// pool as usual.
+	collateralOverlapRef string
+	// collateralAutoSelected is true when setCollateral() chose the collateral
+	// inputs itself (rather than the caller pinning them via AddCollateral).
+	// Only auto-selected collateral is resized by finalizeCollateral(), so
+	// caller-pinned collateral is never silently rewritten.
+	collateralAutoSelected bool
 	nativescripts      []common.NativeScript
 	usedUtxos          map[string]bool
 	wallet             Wallet
@@ -934,9 +948,11 @@ func (a *Apollo) Clone() *Apollo {
 		forceFee:           a.forceFee,
 		Ttl:                a.Ttl,
 		ValidityStart:      a.ValidityStart,
-		totalCollateral:    a.totalCollateral,
-		collateralAmount:   a.collateralAmount,
-		currentTreasury:    a.currentTreasury,
+		totalCollateral:      a.totalCollateral,
+		collateralAmount:       a.collateralAmount,
+		collateralOverlapRef:   a.collateralOverlapRef,
+		collateralAutoSelected: a.collateralAutoSelected,
+		currentTreasury:        a.currentTreasury,
 		treasuryDonation:   a.treasuryDonation,
 		estimateExUnits:    a.estimateExUnits,
 		wallet:             a.wallet,
@@ -1180,10 +1196,25 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 	}
 
-	// Coin selection
+	// Coin selection. setCollateral() reserves an auto-selected collateral UTxO
+	// out of the pool so multi-UTxO wallets keep a separate collateral and an
+	// unchanged tx shape. If that reservation starves selection (e.g. a wallet
+	// with a single UTxO), release the collateral for overlap - the ledger lets
+	// one UTxO be both a spending input and collateral - and retry once.
 	selectedUtxos, err := a.selectCoins(selectionTarget, totalInput)
 	if err != nil {
-		return a, fmt.Errorf("coin selection failed: %w", err)
+		if a.releaseCollateralForOverlap() {
+			selectedUtxos, err = a.selectCoins(selectionTarget, totalInput)
+			if err != nil {
+				// The overlap retry also failed. Restore the collateral
+				// reservation and clear the overlap flag so a subsequent
+				// Complete() on this builder starts from consistent state.
+				a.restoreCollateralReservation()
+			}
+		}
+		if err != nil {
+			return a, fmt.Errorf("coin selection failed: %w", err)
+		}
 	}
 
 	// Build inputs (explicit allocation to avoid slice aliasing)
@@ -1191,7 +1222,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	allInputUtxos = append(allInputUtxos, a.preselectedUtxos...)
 	allInputUtxos = append(allInputUtxos, selectedUtxos...)
 	allInputUtxos = SortInputs(allInputUtxos)
-	if err := a.validateCollateralDistinctFromInputs(allInputUtxos); err != nil {
+	if err := a.validateCollateral(); err != nil {
 		return a, err
 	}
 
@@ -1355,6 +1386,13 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			converged = true
 			break
 		}
+		// Size the collateral against the current fee BEFORE re-estimating, so
+		// the fee accounts for the final collateral total/return footprint in
+		// the body. A collateral_return that only materializes after sizing
+		// would otherwise grow the tx past the frozen estimate.
+		if err := a.finalizeCollateral(fee); err != nil {
+			return a, err
+		}
 		newFee, err := a.estimateFee(allInputUtxos, outputs)
 		if err != nil {
 			return a, fmt.Errorf("fee re-estimation failed: %w", err)
@@ -1378,6 +1416,16 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		if err != nil {
 			return a, err
 		}
+	}
+
+	// Recompute total collateral and the collateral return from the FINAL fee.
+	// setCollateral() runs before coin selection and fee estimation, so it can
+	// only size collateral from a preliminary (max-by-size) fee. The ledger
+	// requires total collateral >= ceil(fee * collateralPercent / 100) against
+	// the ACTUAL fee, so a stale preliminary value triggers
+	// InsufficientCollateral. Resize here now that the fee is final.
+	if err := a.finalizeCollateral(fee); err != nil {
+		return a, err
 	}
 
 	// Build transaction body
@@ -2355,7 +2403,14 @@ func (a *Apollo) isUsed(ref string) bool {
 		}
 	}
 	for _, utxo := range a.collaterals {
-		if utxoRef(utxo) == ref {
+		// A collateral UTxO flagged for overlap is intentionally left available
+		// to coin selection so it can ALSO be picked as a regular spending input
+		// (see collateralOverlapRef). Treat it as not-used here.
+		cref := utxoRef(utxo)
+		if cref == a.collateralOverlapRef {
+			continue
+		}
+		if cref == ref {
 			return true
 		}
 	}
@@ -2390,6 +2445,19 @@ func (a *Apollo) hasScripts() bool {
 }
 
 // setCollateral auto-selects collateral from UTxOs if needed.
+//
+// Selection prefers a SEPARATE eligible vkey UTxO that is reserved out of the
+// coin-selection pool (the common multi-UTxO case, where the tx shape is
+// unchanged). When no dedicated UTxO is free, it falls back to a UTxO that may
+// ALSO be used as a regular spending input: the candidate is recorded in
+// collateralOverlapRef and is NOT reserved, so coin selection can still pick
+// it. This lets a wallet with a single UTxO build a script transaction. The
+// ledger permits the overlap because collateral is consumed only on phase-2
+// script failure and regular inputs only on success.
+//
+// totalCollateral and collateralReturn are sized here from a preliminary
+// (max-by-size) fee; finalizeCollateral() resizes them once the final fee is
+// known.
 func (a *Apollo) setCollateral() error {
 	if len(a.collaterals) > 0 || !a.hasScripts() {
 		return nil
@@ -2418,80 +2486,307 @@ func (a *Apollo) setCollateral() error {
 		candidates = loaded
 	}
 
-	// First pass: prefer pure-lovelace UTxOs (no assets)
-	for _, utxo := range candidates {
-		ref := utxoRef(utxo)
-		if a.isUsed(ref) {
-			continue
-		}
-		if utxo.Output.Assets() != nil {
-			continue
+	// collateralEligible reports whether a UTxO can back collateral: it must be
+	// vkey-locked (never a script address), hold a representable lovelace amount
+	// of at least minCollateral, and -- if it carries native assets -- leave a
+	// positive ADA remainder so the assets can be returned via collateral_return.
+	collateralEligible := func(utxo common.Utxo, requirePureLovelace bool) bool {
+		assets := utxo.Output.Assets()
+		if requirePureLovelace && assets != nil {
+			return false
 		}
 		addr := utxo.Output.Address()
 		if addr.Type() != common.AddressTypeKeyKey && addr.Type() != common.AddressTypeKeyNone {
-			continue
+			return false
 		}
 		amt := utxo.Output.Amount()
 		if amt == nil || !amt.IsInt64() {
-			continue
+			return false
 		}
 		lovelace := amt.Int64()
 		if lovelace < minCollateral {
-			continue
+			return false
 		}
+		// An asset-bearing UTxO needs a positive remainder to carry the assets
+		// forward in the collateral return.
+		if assets != nil && lovelace-minCollateral == 0 {
+			return false
+		}
+		return true
+	}
+
+	// selectCollateral records the chosen UTxO as collateral, reserves it out of
+	// the coin-selection pool (markUsed), and sizes the preliminary total and
+	// return. The reservation is provisional: if coin selection cannot then meet
+	// its target (a wallet with no other UTxO to spare), Complete() releases it
+	// for overlap via releaseCollateralForOverlap().
+	selectCollateral := func(utxo common.Utxo) {
+		ref := utxoRef(utxo)
 		a.collaterals = append(a.collaterals, utxo)
+		a.collateralAutoSelected = true
 		a.markUsed(ref)
 		a.totalCollateral = minCollateral
-		remainder := lovelace - minCollateral
-		if remainder > 0 {
-			returnVal := Value{Coin: uint64(remainder)}
-			ret := NewBabbageOutput(a.getChangeAddress(), returnVal, nil, nil)
-			a.collateralReturn = &ret
-		}
-		return nil
-	}
-	// Fallback: allow UTxOs with some assets
-	for _, utxo := range candidates {
-		ref := utxoRef(utxo)
-		if a.isUsed(ref) {
-			continue
-		}
-		addr := utxo.Output.Address()
-		if addr.Type() != common.AddressTypeKeyKey && addr.Type() != common.AddressTypeKeyNone {
-			continue
-		}
-		amt := utxo.Output.Amount()
-		if amt == nil || !amt.IsInt64() {
-			continue
-		}
-		lovelace := amt.Int64()
-		if lovelace < minCollateral {
-			continue
-		}
+		lovelace := utxo.Output.Amount().Int64()
 		remainder := lovelace - minCollateral
 		assets := utxo.Output.Assets()
-		if remainder == 0 && assets != nil {
-			// We can't select an asset-bearing collateral UTxO unless we can
-			// produce a collateral return that carries those assets forward.
-			continue
-		}
-		a.collaterals = append(a.collaterals, utxo)
-		a.markUsed(ref)
-		a.totalCollateral = minCollateral
-		if remainder > 0 {
-			returnVal := Value{Coin: uint64(remainder)}
+		if remainder > 0 || assets != nil {
+			returnVal := Value{Coin: uint64(remainder)} //nolint:gosec // remainder >= 0 (eligibility checked)
 			if assets != nil {
 				returnVal.Assets = CloneMultiAsset(assets)
 			}
 			ret := NewBabbageOutput(a.getChangeAddress(), returnVal, nil, nil)
 			a.collateralReturn = &ret
 		}
-		return nil
+	}
+
+	// First pass: prefer a pure-lovelace UTxO (no assets). Selection keeps the
+	// first-eligible candidate so a multi-UTxO wallet produces the same tx shape
+	// as before this change; the overlap fallback in Complete() handles the case
+	// where reserving a dedicated collateral starves coin selection.
+	for _, utxo := range candidates {
+		if a.isUsed(utxoRef(utxo)) {
+			continue
+		}
+		if collateralEligible(utxo, true) {
+			selectCollateral(utxo)
+			return nil
+		}
+	}
+	// Second pass: a UTxO that may carry assets.
+	for _, utxo := range candidates {
+		if a.isUsed(utxoRef(utxo)) {
+			continue
+		}
+		if collateralEligible(utxo, false) {
+			selectCollateral(utxo)
+			return nil
+		}
 	}
 	return errors.New("script transaction requires collateral, but no eligible collateral UTxO was found")
 }
 
-func (a *Apollo) validateCollateralDistinctFromInputs(inputs []common.Utxo) error {
+// releaseCollateralForOverlap un-reserves an auto-selected collateral UTxO so
+// coin selection can also pick it as a regular spending input. The ledger
+// permits a UTxO to be both a spending input and collateral because the two are
+// consumed on mutually exclusive paths (success vs phase-2 script failure).
+//
+// It only acts on a single auto-selected collateral input that has not already
+// been flagged for overlap, and reports whether anything was released so the
+// caller knows a retry is worthwhile. Caller-pinned collateral is never touched.
+func (a *Apollo) releaseCollateralForOverlap() bool {
+	if !a.collateralAutoSelected || a.collateralOverlapRef != "" || len(a.collaterals) != 1 {
+		return false
+	}
+	ref := utxoRef(a.collaterals[0])
+	delete(a.usedUtxos, ref)
+	a.collateralOverlapRef = ref
+	return true
+}
+
+// restoreCollateralReservation reverses releaseCollateralForOverlap: it re-marks
+// the released collateral UTxO as used and clears the overlap flag. It is called
+// when the overlap retry still fails, so the builder is left in the same state
+// it had before the release and a subsequent Complete() is not skewed by a
+// half-applied overlap.
+func (a *Apollo) restoreCollateralReservation() {
+	if a.collateralOverlapRef == "" {
+		return
+	}
+	a.markUsed(a.collateralOverlapRef)
+	a.collateralOverlapRef = ""
+}
+
+// finalizeCollateral sizes and validates the total collateral and the
+// collateral-return output against the final transaction fee. The ledger
+// requires
+//
+//	totalCollateral >= ceil(fee * collateralPercent / 100)
+//
+// computed against the ACTUAL fee. setCollateral() only had a preliminary
+// (max-by-size) fee available, so its sizing is stale once coin selection and
+// fee estimation have run.
+//
+// The computation uses the collateral inputs' value ALONE: on phase-2 script
+// failure only the collateral is consumed, so collateral_return = (collateral
+// input ADA - total_collateral) plus all native assets on the collateral. This
+// never touches the success-path input/output/fee balance.
+//
+// Three modes:
+//   - auto-selected, no explicit amount: total/return are (re)computed from the
+//     final fee.
+//   - explicit SetCollateralAmount: total_collateral is pinned to the requested
+//     amount (raised to the ledger minimum if the caller asked for too little is
+//     rejected rather than silently bumped), and the return is recomputed so the
+//     requested amount is actually emitted in the body.
+//   - fully manual AddCollateral with no amount: the sizing is left to the
+//     ledger's implicit "all collateral inputs" rule, but it is still validated
+//     so an under-funded or asset-stranding collateral set is rejected locally
+//     rather than built into an invalid tx.
+func (a *Apollo) finalizeCollateral(fee int64) error {
+	if len(a.collaterals) == 0 {
+		return nil
+	}
+	pp, err := a.Context.ProtocolParams()
+	if err != nil {
+		return fmt.Errorf("failed to get protocol params for collateral sizing: %w", err)
+	}
+	if pp.CollateralPercent <= 0 || fee <= 0 {
+		return nil
+	}
+	if fee > (math.MaxInt64-99)/int64(pp.CollateralPercent) {
+		return fmt.Errorf("collateral sizing overflows: fee=%d collateralPercent=%d", fee, pp.CollateralPercent)
+	}
+	// Ceil division: ceil(fee * percent / 100).
+	required := (fee*int64(pp.CollateralPercent) + 99) / 100
+	if required <= 0 {
+		return nil
+	}
+
+	// Sum the lovelace and assets across the collateral inputs so the collateral
+	// return can carry the remainder (and any tokens) forward.
+	var totalLovelace int64
+	var collateralAssets *common.MultiAsset[common.MultiAssetTypeOutput]
+	hasAssets := false
+	for _, utxo := range a.collaterals {
+		amt := utxo.Output.Amount()
+		if amt == nil || !amt.IsInt64() {
+			return fmt.Errorf("collateral UTxO %s has an invalid lovelace amount", utxoRef(utxo))
+		}
+		sum := totalLovelace + amt.Int64()
+		if sum < totalLovelace {
+			return errors.New("collateral lovelace total overflows int64")
+		}
+		totalLovelace = sum
+		if assets := utxo.Output.Assets(); assets != nil {
+			hasAssets = true
+			if collateralAssets == nil {
+				collateralAssets = CloneMultiAsset(assets)
+			} else {
+				collateralAssets.Add(assets)
+			}
+		}
+	}
+
+	if required > totalLovelace {
+		return fmt.Errorf(
+			"insufficient collateral: need %d lovelace (ceil(fee %d * %d%%)), collateral inputs hold %d",
+			required, fee, pp.CollateralPercent, totalLovelace,
+		)
+	}
+
+	// Fully manual collateral with no explicit amount: the caller pinned the
+	// inputs and did not ask for a specific total_collateral, so leave the body
+	// untouched (the ledger consumes the whole collateral set on failure). Still
+	// validate: the implicit collateral cannot carry assets forward without a
+	// collateral return, so asset-bearing manual collateral must be rejected.
+	if !a.collateralAutoSelected && a.collateralAmount == 0 {
+		if hasAssets {
+			return errors.New(
+				"manual collateral carries native assets but no collateral return is set; " +
+					"set a collateral amount/return or use ADA-only collateral",
+			)
+		}
+		return nil
+	}
+
+	// Explicit SetCollateralAmount: honor the requested total_collateral (it must
+	// still meet the ledger minimum and fit within the collateral inputs). This
+	// raises the effective total above `required` when the caller wants a larger
+	// margin; a request below the minimum is rejected rather than silently bumped.
+	if a.collateralAmount > 0 {
+		if a.collateralAmount < required {
+			return fmt.Errorf(
+				"insufficient collateral: requested amount %d is below the required %d (ceil(fee %d * %d%%))",
+				a.collateralAmount, required, fee, pp.CollateralPercent,
+			)
+		}
+		if a.collateralAmount > totalLovelace {
+			return fmt.Errorf(
+				"requested collateral amount %d exceeds collateral inputs %d",
+				a.collateralAmount, totalLovelace,
+			)
+		}
+		required = a.collateralAmount
+	}
+
+	remainder := totalLovelace - required
+
+	// Asset-bearing collateral mandates a collateral_return to carry the tokens
+	// forward, and that return must meet min-ADA. If the ADA remainder cannot
+	// cover min-ADA, lowering total_collateral to free more ADA could break the
+	// >= required invariant, so report a clear error rather than build an
+	// invalid transaction.
+	if hasAssets {
+		returnVal := Value{Coin: uint64(remainder), Assets: collateralAssets} //nolint:gosec // remainder >= 0
+		ret := NewBabbageOutput(a.getChangeAddress(), returnVal, nil, nil)
+		minReturn, mErr := MinLovelacePostAlonzo(&ret, pp.CoinsPerUtxoByteValue())
+		if mErr != nil {
+			return fmt.Errorf("failed to compute min UTxO for collateral return: %w", mErr)
+		}
+		if minReturn < 0 {
+			return fmt.Errorf("invalid min UTxO for collateral return: %d", minReturn)
+		}
+		if remainder < minReturn {
+			return fmt.Errorf(
+				"collateral return for native assets needs %d lovelace but only %d is available after total collateral %d; supply a larger or additional collateral UTxO",
+				minReturn, remainder, required,
+			)
+		}
+		a.totalCollateral = required
+		a.collateralReturn = &ret
+		return nil
+	}
+
+	// ADA-only collateral. If the remainder is too small to form a valid return
+	// output (below min-ADA), absorb it into total_collateral and omit the
+	// return rather than emit a sub-min-ADA output.
+	if remainder > 0 {
+		returnVal := Value{Coin: uint64(remainder)} //nolint:gosec // remainder > 0
+		ret := NewBabbageOutput(a.getChangeAddress(), returnVal, nil, nil)
+		minReturn, mErr := MinLovelacePostAlonzo(&ret, pp.CoinsPerUtxoByteValue())
+		if mErr != nil {
+			return fmt.Errorf("failed to compute min UTxO for collateral return: %w", mErr)
+		}
+		if minReturn < 0 {
+			return fmt.Errorf("invalid min UTxO for collateral return: %d", minReturn)
+		}
+		if remainder >= minReturn {
+			a.totalCollateral = required
+			a.collateralReturn = &ret
+			return nil
+		}
+		// Dust remainder below min-ADA. For an explicitly requested amount we may
+		// not silently raise total_collateral (that would forfeit the dust on
+		// failure and exceed what the caller asked for); reject instead. Only the
+		// auto-sized path is free to absorb the dust into total_collateral.
+		if a.collateralAmount > 0 {
+			return fmt.Errorf(
+				"requested collateral amount %d leaves a %d lovelace return below the %d min-ADA; choose an amount that leaves no return or at least min-ADA",
+				required, remainder, minReturn,
+			)
+		}
+		// Auto-sized dust remainder: absorb into total_collateral, no return.
+		a.totalCollateral = totalLovelace
+		a.collateralReturn = nil
+		return nil
+	}
+
+	// Exact match: total collateral consumes the whole input, no return.
+	a.totalCollateral = required
+	a.collateralReturn = nil
+	return nil
+}
+
+// validateCollateral checks the collateral input set against the ledger rules
+// that apollo can enforce locally: no duplicate collateral inputs and no more
+// than MaxCollateralInputs of them.
+//
+// It deliberately does NOT reject a UTxO that is also a regular spending input.
+// The Cardano ledger permits that overlap because collateral is consumed only
+// on phase-2 script failure and regular inputs only on success; the two paths
+// are mutually exclusive. This matches mesh, lucid, and lucid-evolution and
+// lets a single-UTxO wallet build a script transaction.
+func (a *Apollo) validateCollateral() error {
 	if len(a.collaterals) == 0 {
 		return nil
 	}
@@ -2502,12 +2797,24 @@ func (a *Apollo) validateCollateralDistinctFromInputs(inputs []common.Utxo) erro
 			return fmt.Errorf("duplicate collateral input %s", ref)
 		}
 		seen[ref] = struct{}{}
-	}
-	for _, input := range inputs {
-		ref := utxoRef(input)
-		if _, ok := seen[ref]; ok {
-			return fmt.Errorf("utxo %s cannot be used as both input and collateral", ref)
+		// Collateral must be vkey-locked: the ledger rejects collateral at a
+		// script address. Auto-selection already filters on this, but
+		// caller-pinned collateral (AddCollateral) is validated here so a
+		// script-address UTxO never reaches the body.
+		if out := collateral.Output; out != nil {
+			if addr := out.Address(); addr.Type() != common.AddressTypeKeyKey &&
+				addr.Type() != common.AddressTypeKeyNone {
+				return fmt.Errorf("collateral input %s is not vkey-locked (script-address collateral is rejected by the ledger)", ref)
+			}
 		}
+	}
+	// Enforce the protocol max on collateral inputs when known.
+	if pp, err := a.Context.ProtocolParams(); err == nil && pp.MaxCollateralInputs > 0 &&
+		len(a.collaterals) > pp.MaxCollateralInputs {
+		return fmt.Errorf(
+			"too many collateral inputs: %d exceeds protocol maximum of %d",
+			len(a.collaterals), pp.MaxCollateralInputs,
+		)
 	}
 	return nil
 }
