@@ -1058,6 +1058,26 @@ func TestCompleteWithReferenceInputs(t *testing.T) {
 	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
 
 	hashHex := "aabb000000000000000000000000000000000000000000000000000000000000"
+	// Register the reference-input UTxOs so they resolve during fee estimation.
+	// They carry no reference script, so they contribute nothing to the
+	// reference-script fee; this only makes them resolvable (an unresolvable
+	// reference input is an invalid transaction on-chain).
+	hashBytes, err := hex.DecodeString(hashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refTxHash common.Blake2b256
+	copy(refTxHash[:], hashBytes)
+	for _, idx := range []uint32{0, 1} {
+		cc.AddUtxoByRef(common.Utxo{
+			Id: shelley.ShelleyTransactionInput{TxId: refTxHash, OutputIndex: idx},
+			Output: &babbage.BabbageTransactionOutput{
+				OutputAddress: addr,
+				OutputAmount:  mary.MaryTransactionOutputValue{Amount: 5_000_000},
+			},
+		})
+	}
+
 	w := NewExternalWallet(addr)
 	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {
@@ -1088,6 +1108,63 @@ func TestCompleteWithReferenceInputs(t *testing.T) {
 	refInputs := tx.Body.TxReferenceInputs.Items()
 	if len(refInputs) != 2 {
 		t.Errorf("expected 2 reference inputs, got %d", len(refInputs))
+	}
+}
+
+// TestCompleteErrorsOnRefScriptWithoutPrice verifies that a transaction which
+// references a UTxO carrying a reference script fails fast when the protocol
+// parameters provide no reference-script price, rather than silently building
+// an underpriced transaction that the ledger would reject with FeeTooSmallUTxO.
+func TestCompleteErrorsOnRefScriptWithoutPrice(t *testing.T) {
+	// Fixed context whose params deliberately omit the reference-script price.
+	pp := backend.ProtocolParameters{
+		MinFeeConstant:      155381,
+		MinFeeCoefficient:   44,
+		MaxTxSize:           16384,
+		CoinsPerUtxoByte:    "4310",
+		CollateralPercent:   150,
+		MaxCollateralInputs: 3,
+		MaxValSize:          "5000",
+		KeyDeposits:         "2000000",
+		PoolDeposits:        "500000000",
+	}
+	cc := fixed.NewFixedChainContext(pp, backend.GenesisParameters{NetworkMagic: 1}, 0)
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+
+	// Register a reference UTxO carrying a Plutus reference script.
+	hashHex := "ccdd000000000000000000000000000000000000000000000000000000000000"
+	hashBytes, err := hex.DecodeString(hashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refTxHash common.Blake2b256
+	copy(refTxHash[:], hashBytes)
+	cc.AddUtxoByRef(common.Utxo{
+		Id: shelley.ShelleyTransactionInput{TxId: refTxHash, OutputIndex: 0},
+		Output: &babbage.BabbageTransactionOutput{
+			OutputAddress: addr,
+			OutputAmount:  mary.MaryTransactionOutputValue{Amount: 5_000_000},
+			TxOutScriptRef: &common.ScriptRef{
+				Type:   common.ScriptRefTypePlutusV2,
+				Script: common.PlutusV2Script{0x01, 0x02, 0x03, 0x04},
+			},
+		},
+	})
+
+	w := NewExternalWallet(addr)
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(cc).SetWallet(w).AddPayment(p).SetTtl(50000000)
+	a, err = a.AddReferenceInput(hashHex, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected error when reference script present but no ref-script price in params")
 	}
 }
 

@@ -1,7 +1,9 @@
 package fixed
 
 import (
+	"encoding/hex"
 	"errors"
+	"strconv"
 	"sync"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -17,6 +19,7 @@ type FixedChainContext struct {
 	networkId      uint8
 	mu             sync.RWMutex
 	utxos          map[string][]common.Utxo // keyed by address string
+	utxosByRef     map[string]common.Utxo   // keyed by "txid#index"
 }
 
 // NewFixedChainContext creates a new FixedChainContext with the given protocol parameters.
@@ -26,25 +29,28 @@ func NewFixedChainContext(pp backend.ProtocolParameters, gp backend.GenesisParam
 		genesisParams:  gp,
 		networkId:      networkId,
 		utxos:          make(map[string][]common.Utxo),
+		utxosByRef:     make(map[string]common.Utxo),
 	}
 }
 
 // NewEmptyFixedChainContext creates a FixedChainContext with default preprod parameters.
 func NewEmptyFixedChainContext() *FixedChainContext {
 	pp := backend.ProtocolParameters{
-		MinFeeConstant:    155381,
-		MinFeeCoefficient: 44,
-		MaxTxSize:         16384,
-		CoinsPerUtxoByte:  "4310",
-		CollateralPercent: 150,
+		MinFeeConstant:      155381,
+		MinFeeCoefficient:   44,
+		MaxTxSize:           16384,
+		CoinsPerUtxoByte:    "4310",
+		CollateralPercent:   150,
 		MaxCollateralInputs: 3,
-		MaxValSize:        "5000",
-		PriceMem:          0.0577,
-		PriceStep:         0.0000721,
-		MaxTxExMem:        "14000000",
-		MaxTxExSteps:      "10000000000",
-		KeyDeposits:       "2000000",
-		PoolDeposits:      "500000000",
+		MaxValSize:          "5000",
+		PriceMem:            0.0577,
+		PriceStep:           0.0000721,
+		MaxTxExMem:          "14000000",
+		MaxTxExSteps:        "10000000000",
+		KeyDeposits:         "2000000",
+		PoolDeposits:        "500000000",
+		// Conway reference-script base price (lovelace per byte), current value.
+		MinFeeRefScriptCostPerByte: 15,
 	}
 	gp := backend.GenesisParameters{
 		NetworkMagic: 1,
@@ -52,12 +58,28 @@ func NewEmptyFixedChainContext() *FixedChainContext {
 	return NewFixedChainContext(pp, gp, 0)
 }
 
-// AddUtxo adds a UTxO to the fixed context for the given address.
+// AddUtxo adds a UTxO to the fixed context for the given address. It is also
+// registered for resolution by reference (UtxoByRef), so it can be used as a
+// reference input.
 func (f *FixedChainContext) AddUtxo(addr common.Address, utxo common.Utxo) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := addr.String()
 	f.utxos[key] = append(f.utxos[key], utxo)
+	f.utxosByRef[utxoRefKey(utxo.Id.Id(), utxo.Id.Index())] = utxo
+}
+
+// AddUtxoByRef registers a UTxO for resolution by reference (UtxoByRef) only,
+// without adding it to any address's spendable UTxO set. Useful for reference
+// inputs, which are read but not spent.
+func (f *FixedChainContext) AddUtxoByRef(utxo common.Utxo) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.utxosByRef[utxoRefKey(utxo.Id.Id(), utxo.Id.Index())] = utxo
+}
+
+func utxoRefKey(txHash common.Blake2b256, index uint32) string {
+	return hex.EncodeToString(txHash.Bytes()) + "#" + strconv.Itoa(int(index))
 }
 
 func (f *FixedChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
@@ -115,8 +137,14 @@ func (f *FixedChainContext) EvaluateTx(_ []byte, _ []common.Utxo) (map[common.Re
 	return nil, errors.New("cannot evaluate tx with fixed chain context")
 }
 
-func (f *FixedChainContext) UtxoByRef(_ common.Blake2b256, _ uint32) (*common.Utxo, error) {
-	return nil, errors.New("not implemented in fixed chain context")
+func (f *FixedChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if utxo, ok := f.utxosByRef[utxoRefKey(txHash, index)]; ok {
+		u := utxo
+		return &u, nil
+	}
+	return nil, errors.New("utxo not found in fixed chain context")
 }
 
 func (f *FixedChainContext) ScriptCbor(_ common.Blake2b224) ([]byte, error) {

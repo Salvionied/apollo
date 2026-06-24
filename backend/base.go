@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -85,6 +86,103 @@ type ProtocolParameters struct {
 	MinFeeReferenceScriptsRange      int                `json:"min_fee_reference_scripts_range"`
 	MinFeeReferenceScriptsBase       int                `json:"min_fee_reference_scripts_base"`
 	MinFeeReferenceScriptsMultiplier int                `json:"min_fee_reference_scripts_multiplier"`
+	// MinFeeRefScriptCostPerByte is the BlockFrost/ledger flat name for the
+	// reference-script base price (lovelace per byte for the first tier). Some
+	// providers (e.g. BlockFrost) expose only this field and not the structured
+	// MinFeeReferenceScripts{Base,Range,Multiplier} triple. RefScriptFeePerByte()
+	// reconciles the two representations.
+	MinFeeRefScriptCostPerByte float64 `json:"min_fee_ref_script_cost_per_byte"`
+}
+
+// Conway reference-script fee tier constants. The ledger prices reference
+// scripts on a growing tier: the first SizeIncrement bytes cost the base
+// price per byte, and each subsequent tier of SizeIncrement bytes is priced
+// at the previous tier's price multiplied by Multiplier. These two values are
+// ledger constants (not surfaced by every provider), so they are defaulted
+// when a provider does not supply them.
+const (
+	DefaultRefScriptSizeIncrement = 25600
+	DefaultRefScriptMultiplier    = 1.2
+)
+
+// RefScriptFeePerByte returns the base reference-script price (lovelace per
+// byte for the first tier), preferring the structured MinFeeReferenceScriptsBase
+// when present and falling back to the flat MinFeeRefScriptCostPerByte.
+func (p ProtocolParameters) RefScriptFeePerByte() float64 {
+	if p.MinFeeReferenceScriptsBase > 0 {
+		return float64(p.MinFeeReferenceScriptsBase)
+	}
+	return p.MinFeeRefScriptCostPerByte
+}
+
+// RefScriptSizeIncrement returns the per-tier size increment, defaulting to the
+// Conway ledger constant when a provider does not supply it.
+func (p ProtocolParameters) RefScriptSizeIncrement() int {
+	if p.MinFeeReferenceScriptsRange > 0 {
+		return p.MinFeeReferenceScriptsRange
+	}
+	return DefaultRefScriptSizeIncrement
+}
+
+// RefScriptMultiplier returns the per-tier price multiplier, defaulting to the
+// Conway ledger constant when a provider does not supply it.
+func (p ProtocolParameters) RefScriptMultiplier() float64 {
+	if p.MinFeeReferenceScriptsMultiplier > 0 {
+		return float64(p.MinFeeReferenceScriptsMultiplier)
+	}
+	return DefaultRefScriptMultiplier
+}
+
+// TierRefScriptFee computes the Conway tiered reference-script fee for a total
+// reference-script byte size, matching the ledger's tierRefScriptFee function:
+//
+//	go acc curTierPrice n
+//	  | n < sizeIncrement = floor(acc + n*curTierPrice)
+//	  | otherwise         = go (acc + sizeIncrement*curTierPrice)
+//	                           (curTierPrice*multiplier) (n - sizeIncrement)
+//
+// with the first-tier price = baseFeePerByte. A zero base price yields a zero
+// fee (pre-Conway / provider that does not charge for reference scripts).
+//
+// The accumulation uses exact rational arithmetic and floors once at the end,
+// matching the ledger (which accumulates a Rational and applies floor). Using
+// float64 here would let the repeated multiplier product (1.2 is not exactly
+// representable in binary floating point) drift across an integer boundary on
+// multi-tier reference scripts, producing a fee 1 lovelace below the ledger
+// minimum and a FeeTooSmall rejection.
+func TierRefScriptFee(totalRefScriptSize int, baseFeePerByte float64, sizeIncrement int, multiplier float64) int64 {
+	if totalRefScriptSize <= 0 || baseFeePerByte <= 0 {
+		return 0
+	}
+	if sizeIncrement <= 0 {
+		sizeIncrement = DefaultRefScriptSizeIncrement
+	}
+	if multiplier <= 0 {
+		multiplier = DefaultRefScriptMultiplier
+	}
+	// Exact rationals. baseFeePerByte is an integer lovelace/byte in practice
+	// (15 at current params); the multiplier is the ledger constant 6/5. Recover
+	// it exactly from the float (1.2 -> 1200/1000 -> 6/5) so there is no drift.
+	base := new(big.Rat).SetFloat64(baseFeePerByte)
+	if base == nil { // NaN/Inf guard
+		return 0
+	}
+	m := big.NewRat(int64(math.Round(multiplier*1000)), 1000)
+	acc := new(big.Rat)
+	price := new(big.Rat).Set(base)
+	incr := new(big.Rat).SetInt64(int64(sizeIncrement))
+	n := totalRefScriptSize
+	for n >= sizeIncrement {
+		acc.Add(acc, new(big.Rat).Mul(incr, price))
+		price.Mul(price, m)
+		n -= sizeIncrement
+	}
+	if n > 0 {
+		acc.Add(acc, new(big.Rat).Mul(new(big.Rat).SetInt64(int64(n)), price))
+	}
+	// floor(acc): acc is non-negative, so integer division of num/denom truncates
+	// toward zero, i.e. floors.
+	return new(big.Int).Quo(acc.Num(), acc.Denom()).Int64()
 }
 
 // CoinsPerUtxoByteValue returns the coins per UTxO byte value parsed from the string field.

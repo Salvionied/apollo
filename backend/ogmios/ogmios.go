@@ -375,6 +375,15 @@ type ogmiosProtocolParams struct {
 	MaxBlockExUnits    ogmiosExUnits   `json:"maxExecutionUnitsPerBlock"`
 	MinUtxoDeposit     int64           `json:"minUtxoDepositCoefficient"`
 	CostModels         json.RawMessage `json:"plutusCostModels"`
+	// Ogmios v6 exposes Conway reference-script pricing as a structured object
+	// {base, range, multiplier}; base is the lovelace-per-byte first-tier price.
+	MinFeeReferenceScripts *ogmiosRefScripts `json:"minFeeReferenceScripts"`
+}
+
+type ogmiosRefScripts struct {
+	Base       float64 `json:"base"`
+	Range      int     `json:"range"`
+	Multiplier float64 `json:"multiplier"`
 }
 
 type ogmiosLovelace struct {
@@ -424,6 +433,17 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 		CollateralPercent:   p.CollateralPercent,
 		MaxCollateralInputs: p.MaxCollateral,
 		CoinsPerUtxoByte:    strconv.FormatInt(p.MinUtxoDeposit, 10),
+	}
+
+	if p.MinFeeReferenceScripts != nil {
+		// Only the base price (lovelace per byte) is provider-specific; the
+		// per-tier size increment and multiplier are the Conway ledger constants
+		// (25600 and 6/5). The multiplier is fractional (1.2), so it cannot be
+		// stored in the integer MinFeeReferenceScriptsMultiplier field without
+		// truncating to 1 and undercharging every tier after the first; we
+		// therefore leave it (and the increment) to RefScriptMultiplier() /
+		// RefScriptSizeIncrement() defaults.
+		pp.MinFeeRefScriptCostPerByte = p.MinFeeReferenceScripts.Base
 	}
 
 	// Parse cost models from Ogmios JSON.
