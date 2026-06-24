@@ -1234,22 +1234,10 @@ func TestCompleteDoesNotReuseCollateralAsInput(t *testing.T) {
 func TestCompleteFailsWhenScriptTxHasNoEligibleCollateral(t *testing.T) {
 	cc := setupFixedContext()
 	addr := testAddress(t)
-	var txHash common.Blake2b256
-	txHash[0] = 0x01
-	output := babbage.BabbageTransactionOutput{
-		OutputAddress: addr,
-		OutputAmount: mary.MaryTransactionOutputValue{
-			Amount: 10_000_000,
-			Assets: testMultiAsset(1, "token", 1),
-		},
-	}
-	cc.AddUtxo(addr, common.Utxo{
-		Id: shelley.ShelleyTransactionInput{
-			TxId:        txHash,
-			OutputIndex: 0,
-		},
-		Output: &output,
-	})
+	// The only UTxO is at a SCRIPT address: it can never back collateral
+	// (collateral must be vkey-locked) and there is no other UTxO to fall back
+	// to, so collateral selection must fail.
+	cc.AddUtxo(addr, scriptAddressUtxo(t, 0x01, 10_000_000))
 
 	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
@@ -1483,5 +1471,294 @@ func TestResolveCredentialInvalidBech32(t *testing.T) {
 	_, err := a.RegisterStake("not-a-valid-address")
 	if err == nil {
 		t.Error("expected error for invalid bech32")
+	}
+}
+
+// --- Collateral input / spending input overlap ---
+
+// bodyInputRefs collects the regular spending input refs from a built tx body.
+func bodyInputRefs(t *testing.T, a *Apollo) []string {
+	t.Helper()
+	items := a.tx.Body.TxInputs.Items()
+	refs := make([]string, 0, len(items))
+	for _, in := range items {
+		refs = append(refs, hex.EncodeToString(in.TxId.Bytes())+"#"+strconv.Itoa(int(in.OutputIndex)))
+	}
+	return refs
+}
+
+// bodyCollateralRefs collects the collateral input refs from a built tx body.
+func bodyCollateralRefs(t *testing.T, a *Apollo) []string {
+	t.Helper()
+	items := a.tx.Body.TxCollateral.Items()
+	refs := make([]string, 0, len(items))
+	for _, in := range items {
+		refs = append(refs, hex.EncodeToString(in.TxId.Bytes())+"#"+strconv.Itoa(int(in.OutputIndex)))
+	}
+	return refs
+}
+
+// scriptAddressUtxo builds a UTxO locked at a script payment address (type
+// AddressTypeScriptKey), used to verify script-address collateral is rejected.
+func scriptAddressUtxo(t *testing.T, txHashByte byte, lovelace uint64) common.Utxo {
+	t.Helper()
+	var raw [57]byte
+	raw[0] = byte(common.AddressTypeScriptKey) << 4 // network 0, script payment credential
+	raw[1] = 0xCC                                   // script hash bytes
+	raw[29] = 0xDD                                  // stake key hash
+	addr, err := common.NewAddressFromBytes(raw[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txHash common.Blake2b256
+	txHash[0] = txHashByte
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: addr,
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: lovelace},
+	}
+	return common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txHash, OutputIndex: 0},
+		Output: &output,
+	}
+}
+
+// TestSingleUtxoIsBothInputAndCollateral verifies that a wallet with a single
+// vkey UTxO can build a Plutus script transaction where that UTxO is used as
+// BOTH a regular spending input and the collateral input.
+func TestSingleUtxoIsBothInputAndCollateral(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	const utxoLovelace = 20_000_000
+	addTestUtxo(cc, addr, utxoLovelace, 0x01, 0)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	if len(a.collaterals) != 1 {
+		t.Fatalf("expected 1 collateral, got %d", len(a.collaterals))
+	}
+	collRef := utxoRef(a.collaterals[0])
+
+	inputRefs := bodyInputRefs(t, a)
+	collRefs := bodyCollateralRefs(t, a)
+
+	// The same UTxO ref must appear in both inputs and collateral.
+	if len(collRefs) != 1 || collRefs[0] != collRef {
+		t.Fatalf("collateral ref mismatch: body collateral %v, want [%s]", collRefs, collRef)
+	}
+	count := 0
+	for _, r := range inputRefs {
+		if r == collRef {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("overlapped UTxO must appear exactly once in inputs, found %d times in %v", count, inputRefs)
+	}
+
+	// total_collateral >= ceil(fee * collateralPercent / 100) and <= input ADA.
+	pp, _ := cc.ProtocolParams()
+	fee := a.tx.Body.TxFee
+	required := (fee*uint64(pp.CollateralPercent) + 99) / 100 //nolint:gosec // CollateralPercent is a positive protocol parameter
+	totalColl := a.tx.Body.TxTotalCollateral
+	if totalColl < required {
+		t.Fatalf("total_collateral %d below required %d (fee %d)", totalColl, required, fee)
+	}
+	if totalColl > utxoLovelace {
+		t.Fatalf("total_collateral %d exceeds collateral input ADA %d", totalColl, utxoLovelace)
+	}
+
+	// collateral_return = collateral_input_value - total_collateral (ADA-only here).
+	if a.tx.Body.TxCollateralReturn == nil {
+		t.Fatal("expected a collateral return for the ADA remainder")
+	}
+	gotReturn := a.tx.Body.TxCollateralReturn.Amount()
+	wantReturn := new(big.Int).SetUint64(utxoLovelace - totalColl)
+	if gotReturn == nil || gotReturn.Cmp(wantReturn) != 0 {
+		t.Fatalf("collateral_return = %v, want %v", gotReturn, wantReturn)
+	}
+
+	// Success-path balance must EXCLUDE collateral accounting:
+	// sum(inputs) == sum(outputs) + fee. The wallet has a single UTxO, so the
+	// only spending input is that UTxO. Collateral return / total collateral
+	// must not appear in this equation.
+	if len(inputRefs) != 1 || inputRefs[0] != collRef {
+		t.Fatalf("expected exactly the single UTxO as input, got %v", inputRefs)
+	}
+	inSum := new(big.Int).SetUint64(utxoLovelace)
+	outSum := new(big.Int)
+	for i := range a.tx.Body.TxOutputs {
+		amt := a.tx.Body.TxOutputs[i].Amount()
+		if amt == nil {
+			t.Fatalf("output %d has nil amount", i)
+		}
+		outSum.Add(outSum, amt)
+	}
+	outPlusFee := new(big.Int).Add(outSum, new(big.Int).SetUint64(fee))
+	if inSum.Cmp(outPlusFee) != 0 {
+		t.Fatalf("success-path balance broken: inputs %s != outputs+fee %s (fee %d)", inSum, outPlusFee, fee)
+	}
+}
+
+// TestTwoUtxoWalletPicksSeparateCollateral verifies the regression case: a
+// wallet with two vkey UTxOs still reserves a SEPARATE ADA-only collateral and
+// does not overlap, keeping the transaction shape identical to before.
+func TestTwoUtxoWalletPicksSeparateCollateral(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+	addTestUtxo(cc, addr, 5_000_000, 0x02, 0)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	if a.collateralOverlapRef != "" {
+		t.Fatalf("expected no overlap for a multi-UTxO wallet, got overlap ref %s", a.collateralOverlapRef)
+	}
+	if len(a.collaterals) != 1 {
+		t.Fatalf("expected 1 collateral, got %d", len(a.collaterals))
+	}
+	collRef := utxoRef(a.collaterals[0])
+	for _, r := range bodyInputRefs(t, a) {
+		if r == collRef {
+			t.Fatalf("collateral %s was reused as a regular input on a multi-UTxO wallet", collRef)
+		}
+	}
+}
+
+// TestScriptAddressCollateralRejected verifies an auto-selected collateral is
+// never taken from a script address: only vkey-locked UTxOs are eligible.
+func TestScriptAddressCollateralRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	// Only available UTxO is at a script address.
+	cc.AddUtxo(addr, scriptAddressUtxo(t, 0x01, 20_000_000))
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected error: script-address UTxO must not be eligible as collateral")
+	}
+}
+
+// TestDuplicateCollateralRejected verifies that adding the same UTxO twice as
+// collateral is rejected by validateCollateral.
+func TestDuplicateCollateralRejected(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	var collHash common.Blake2b256
+	collHash[0] = 0x02
+	coll := makeTestUtxo(t, collHash, 0, 10_000_000)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		AddCollateral(coll).
+		AddCollateral(coll). // duplicate
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected duplicate collateral error")
+	}
+}
+
+// TestMaxCollateralInputsEnforced verifies that exceeding MaxCollateralInputs
+// is rejected.
+func TestMaxCollateralInputsEnforced(t *testing.T) {
+	pp := backend.ProtocolParameters{
+		MinFeeConstant:      155381,
+		MinFeeCoefficient:   44,
+		MaxTxSize:           16384,
+		CoinsPerUtxoByte:    "4310",
+		CollateralPercent:   150,
+		MaxCollateralInputs: 2, // small cap for the test
+		MaxValSize:          "5000",
+		PriceMem:            0.0577,
+		PriceStep:           0.0000721,
+		MaxTxExMem:          "14000000",
+		MaxTxExSteps:        "10000000000",
+		KeyDeposits:         "2000000",
+		PoolDeposits:        "500000000",
+	}
+	gp := backend.GenesisParameters{NetworkMagic: 1}
+	cc := fixed.NewFixedChainContext(pp, gp, 0)
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x01, 0)
+
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
+
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(script).
+		DisableExecutionUnitsEstimation().
+		Mint(unit, &datum, &common.ExUnits{Memory: 1, Steps: 1})
+	// Three caller-pinned collateral inputs exceed the cap of 2.
+	for i := byte(2); i <= 4; i++ {
+		var h common.Blake2b256
+		h[0] = i
+		a.AddCollateral(makeTestUtxo(t, h, 0, 6_000_000))
+	}
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AddPayment(payment)
+	if _, err := a.Complete(); err == nil {
+		t.Fatal("expected too-many-collateral-inputs error")
 	}
 }
