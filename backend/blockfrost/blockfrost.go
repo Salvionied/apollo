@@ -653,7 +653,7 @@ func (b *BlockFrostChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byt
 // /utils/txs/evaluate/utxos accepts resolved additional UTxOs as [txIn, txOut]
 // pairs. The value is {coins, assets}; a bare datum hash is "datum_hash";
 // reference scripts are
-// {"plutus:v1"|"plutus:v2"|"plutus:v3": "<base16 script>"}.
+// {"plutus:v1"|"plutus:v2"|"plutus:v3"|"plutus:v4": "<base16 script>"}.
 // Schema source: Blockfrost /utils/txs/evaluate/utxos OpenAPI schema
 // (datum_hash key) cross-checked against the production value/coins/assets
 // casing in cardano-connector-go.

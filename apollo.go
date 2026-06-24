@@ -1188,7 +1188,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, fmt.Errorf("preliminary fee overflows int64: max fee=%d reference script fee=%d", prelimFee, refScriptFeeReserve)
 	}
 	prelimFee += refScriptFeeReserve
-	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee)))
+	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee))) //nolint:gosec // maxFee is bounded above and refScriptFeeReserve overflow is checked above
 	if err != nil {
 		return a, fmt.Errorf("selection target overflow: %w", err)
 	}
