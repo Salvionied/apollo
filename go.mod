@@ -7,8 +7,8 @@ require (
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/bursa v0.16.0
-	github.com/blinklabs-io/gouroboros v0.183.0
-	github.com/blinklabs-io/plutigo v0.1.15
+	github.com/blinklabs-io/gouroboros v0.186.2
+	github.com/blinklabs-io/plutigo v0.1.16
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.0.4
@@ -38,10 +38,10 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
