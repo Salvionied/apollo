@@ -605,15 +605,27 @@ func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint3
 		return nil, err
 	}
 
+	// Blockfrost GET /txs/{hash}/utxos returns the tx id only at the top level
+	// ("hash"). Output objects omit tx_hash (unlike /addresses/{addr}/utxos).
+	// hydrateUtxo/toUtxo require TxHash, so fill it from the request hash (or
+	// the response top-level hash) before parsing.
 	var txUtxos struct {
+		Hash    string          `json:"hash"`
 		Outputs []bfAddressUTxO `json:"outputs"`
 	}
 	if err := json.Unmarshal(data, &txUtxos); err != nil {
 		return nil, err
 	}
+	fallbackHash := hashHex
+	if txUtxos.Hash != "" {
+		fallbackHash = txUtxos.Hash
+	}
 
 	for _, raw := range txUtxos.Outputs {
 		if int64(raw.OutputIndex) == int64(index) {
+			if raw.TxHash == "" {
+				raw.TxHash = fallbackHash
+			}
 			addr, err := common.NewAddress(raw.Address)
 			if err != nil {
 				return nil, err
