@@ -535,3 +535,85 @@ func TestSignMessage64ByteKey(t *testing.T) {
 		t.Errorf("expected 64-byte signature, got %d", len(sig))
 	}
 }
+
+func TestComputeScriptDataHashOmitsEmptyDatums(t *testing.T) {
+	redeemerKey := common.RedeemerKey{Tag: common.RedeemerTagMint, Index: 0}
+	redeemerVal := common.RedeemerValue{
+		ExUnits: common.ExUnits{Memory: 1000, Steps: 2000},
+	}
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		redeemerKey: redeemerVal,
+	}
+	costs := map[string][]int64{
+		"PlutusV3": {1, 2, 3, 4, 5},
+	}
+
+	got, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected hash")
+	}
+
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{2: {}},
+		map[uint][]int64{2: costs["PlutusV3"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ledger preimage: redeemers || (no datums) || lang views.
+	want := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+
+	// Pre-fix Apollo behavior encoded an empty datum array and must not match.
+	emptyDatums, err := cbor.Encode([]common.Datum{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), emptyDatums...), langViews...))
+	if *got == legacy {
+		t.Fatal("hash unexpectedly matches empty-datums preimage")
+	}
+}
+
+func TestComputeScriptDataHashIncludesNonEmptyDatums(t *testing.T) {
+	redeemerKey := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		redeemerKey: {ExUnits: common.ExUnits{Memory: 1, Steps: 2}},
+	}
+	datums := []common.Datum{{}}
+	costs := map[string][]int64{"PlutusV2": {9, 8, 7}}
+
+	got, err := ComputeScriptDataHash(redeemers, datums, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	datumBytes, err := cbor.Encode(datums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{1: {}},
+		map[uint][]int64{1: costs["PlutusV2"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), datumBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+}
+
