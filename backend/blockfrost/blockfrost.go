@@ -291,25 +291,64 @@ func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, err
 	return result, nil
 }
 
+// evaluateSimpleRetries / evaluateSimpleRetryWait cover Blockfrost evaluate
+// indexing lag right after a tx is confirmed (common when chaining mint/update
+// onto a just-confirmed script UTxO). The hosted /evaluate/utxos fallback is
+// unsafe for asset-bearing additional UTxOs (Ogmios jsonwsp base16/base64
+// faults), so retrying the simple endpoint is preferred.
+//
+// These are package-level vars so tests can shrink the backoff without sleeping
+// for the production intervals.
+var (
+	evaluateSimpleRetries   = 6
+	evaluateSimpleRetryWait = 2 * time.Second
+)
+
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	// Prefer /utils/txs/evaluate (hex body). Apollo always passes spending
 	// inputs as additionalUtxos even when they are already on-chain; posting
 	// them to /utils/txs/evaluate/utxos re-encodes inline datums and reference
-	// scripts into a large JSON body. Hosted Blockfrost→Ogmios has returned
-	// jsonwsp faults ("failed to decode payload from base64 or base16") for
-	// that path on script-spend txs, while the same txs evaluate successfully
-	// via the bare endpoint which resolves inputs from chain state.
+	// scripts into a large JSON body. Hosted Blockfrost→Ogmios rejects that
+	// path for additional UTxOs that include native assets (jsonwsp fault:
+	// "failed to decode payload from base64 or base16"), while the same txs
+	// evaluate successfully via the bare endpoint once inputs are visible.
 	//
-	// Fall back to /evaluate/utxos only when the simple path reports missing
-	// inputs (UTxOs not yet visible on-chain).
-	result, err := b.evaluateTxSimple(txCbor)
-	if err == nil {
-		return result, nil
+	// On missing-input failures, retry the simple endpoint (indexing lag)
+	// before falling back to /evaluate/utxos, and only fall back when the
+	// additional set has no native assets.
+	var lastErr error
+	for attempt := 1; attempt <= evaluateSimpleRetries; attempt++ {
+		result, err := b.evaluateTxSimple(txCbor)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !isMissingInputsEvalError(err) {
+			return nil, err
+		}
+		if attempt < evaluateSimpleRetries {
+			time.Sleep(evaluateSimpleRetryWait)
+		}
 	}
-	if len(additionalUtxos) == 0 || !isMissingInputsEvalError(err) {
-		return nil, err
+	if len(additionalUtxos) == 0 || additionalUtxosContainNativeAssets(additionalUtxos) {
+		return nil, lastErr
 	}
 	return b.evaluateTxWithAdditionalUtxos(txCbor, additionalUtxos)
+}
+
+// additionalUtxosContainNativeAssets reports whether any resolved UTxO carries
+// a multi-asset balance. Hosted Blockfrost /evaluate/utxos currently faults on
+// those entries, so they must not be used as an evaluate fallback.
+func additionalUtxosContainNativeAssets(utxos []common.Utxo) bool {
+	for _, utxo := range utxos {
+		if utxo.Output == nil {
+			continue
+		}
+		if assets := utxo.Output.Assets(); assets != nil && len(assets.Policies()) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // evaluateTxSimple POSTs hex-encoded transaction CBOR to /utils/txs/evaluate.
@@ -516,15 +555,28 @@ func jsonValuePresent(raw json.RawMessage) bool {
 // BlockFrost proxies Ogmios, so the payload may be either the legacy Ogmios v5
 // jsonwsp shape ({"result":{"EvaluationResult":{...}}}) or the Ogmios v6 shape
 // ({"result":[{"validator":...,"budget":...}, ...]}, with failures reported as
-// a top-level {"error":{...}} object). Any other shape, and any response with
+// a top-level {"error":{...}} object). Hosted Blockfrost also sometimes returns
+// a bare Ogmios v5 jsonwsp/fault object. Any other shape, and any response with
 // zero evaluation results, is an error.
 func parseEvaluateTxResponse(data []byte) (map[common.RedeemerKey]common.ExUnits, error) {
 	var envelope struct {
+		Type   string          `json:"type"`
 		Result json.RawMessage `json:"result"`
 		Error  json.RawMessage `json:"error"`
+		Fault  json.RawMessage `json:"fault"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return nil, fmt.Errorf("failed to parse evaluate response: %w", err)
+	}
+	if envelope.Type == "jsonwsp/fault" || jsonValuePresent(envelope.Fault) {
+		var fault struct {
+			Code   string `json:"code"`
+			String string `json:"string"`
+		}
+		if err := json.Unmarshal(envelope.Fault, &fault); err == nil && fault.String != "" {
+			return nil, fmt.Errorf("ogmios evaluate fault (%s): %s", fault.Code, fault.String)
+		}
+		return nil, fmt.Errorf("ogmios evaluate fault: %s", evalErrorSnippet(data))
 	}
 	if jsonValuePresent(envelope.Error) {
 		var ogmiosErr struct {

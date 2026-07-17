@@ -649,6 +649,12 @@ func TestEvaluateTxPrefersSimpleEndpointWhenAdditionalUtxosProvided(t *testing.T
 }
 
 func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
+	prevRetries, prevWait := evaluateSimpleRetries, evaluateSimpleRetryWait
+	evaluateSimpleRetries, evaluateSimpleRetryWait = 2, 0
+	defer func() {
+		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
+	}()
+
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
@@ -665,13 +671,23 @@ func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
 	defer server.Close()
 
 	ctx := NewBlockFrostChainContext(server.URL, 0, "")
-	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
+	// ADA-only additional UTxO: fallback to /evaluate/utxos is allowed.
+	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleAdaOnlyUtxo(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPaths := []string{"/api/v0/utils/txs/evaluate", "/api/v0/utils/txs/evaluate/utxos"}
-	if len(paths) != 2 || paths[0] != wantPaths[0] || paths[1] != wantPaths[1] {
+	wantPaths := []string{
+		"/api/v0/utils/txs/evaluate",
+		"/api/v0/utils/txs/evaluate",
+		"/api/v0/utils/txs/evaluate/utxos",
+	}
+	if len(paths) != len(wantPaths) {
 		t.Fatalf("paths = %v, want %v", paths, wantPaths)
+	}
+	for i := range wantPaths {
+		if paths[i] != wantPaths[i] {
+			t.Fatalf("paths = %v, want %v", paths, wantPaths)
+		}
 	}
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
@@ -679,12 +695,85 @@ func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
 	}
 }
 
+func TestEvaluateTxRetriesSimpleWhenAdditionalUtxosHaveAssets(t *testing.T) {
+	prevRetries, prevWait := evaluateSimpleRetries, evaluateSimpleRetryWait
+	evaluateSimpleRetries, evaluateSimpleRetryWait = 3, 0
+	defer func() {
+		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
+	}()
+
+	var paths []string
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
+			t.Errorf("unexpected path %q; asset-bearing UTxOs must not use /evaluate/utxos", r.URL.Path)
+			return
+		}
+		attempts++
+		if attempts < 3 {
+			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("simple attempts = %d, want 3", attempts)
+	}
+	for _, p := range paths {
+		if p != "/api/v0/utils/txs/evaluate" {
+			t.Fatalf("paths = %v, want only simple evaluate", paths)
+		}
+	}
+	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestParseEvaluateTxResponseOgmiosFault(t *testing.T) {
+	data := []byte(`{"type":"jsonwsp/fault","version":"1.0","servicename":"ogmios",` +
+		`"fault":{"code":"client","string":"Invalid request: failed to decode payload from base64 or base16."}}`)
+	_, err := parseEvaluateTxResponse(data)
+	if err == nil {
+		t.Fatal("expected fault error")
+	}
+	if !strings.Contains(err.Error(), "failed to decode payload") {
+		t.Fatalf("error should include fault string, got: %v", err)
+	}
+}
+
 func TestIsMissingInputsEvalError(t *testing.T) {
 	if !isMissingInputsEvalError(errors.New(`script evaluation failed: {"UnknownInputs":[]}`)) {
 		t.Fatal("expected UnknownInputs to match")
 	}
-	if isMissingInputsEvalError(errors.New(`unrecognized evaluate response: failed to decode payload from base64 or base16`)) {
+	if isMissingInputsEvalError(errors.New(`ogmios evaluate fault (client): failed to decode payload from base64 or base16`)) {
 		t.Fatal("decode fault must not trigger utxos fallback")
+	}
+}
+
+// sampleAdaOnlyUtxo builds a resolved ADA-only UTxO suitable for the
+// /evaluate/utxos fallback path (no native assets).
+func sampleAdaOnlyUtxo(t *testing.T) common.Utxo {
+	t.Helper()
+	var txId common.Blake2b256
+	for i := range txId {
+		txId[i] = 0x44
+	}
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 2_000_000},
+	}
+	return common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 0},
+		Output: &output,
 	}
 }
 
