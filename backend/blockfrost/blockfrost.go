@@ -292,30 +292,76 @@ func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, err
 }
 
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
-	// When resolved UTxOs are supplied (e.g. inputs not yet confirmed
-	// on-chain), the bare /utils/txs/evaluate endpoint (cbor body) cannot carry
-	// them. Switch to /utils/txs/evaluate/utxos with a JSON body that includes
-	// the additional UTxO set.
-	if len(additionalUtxos) > 0 {
-		reqBody, err := buildEvalUtxosRequest(txCbor, additionalUtxos)
-		if err != nil {
-			return nil, err
-		}
-		data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
-		if err != nil {
-			return nil, err
-		}
-		return parseEvaluateTxResponse(data)
+	// Prefer /utils/txs/evaluate (hex body). Apollo always passes spending
+	// inputs as additionalUtxos even when they are already on-chain; posting
+	// them to /utils/txs/evaluate/utxos re-encodes inline datums and reference
+	// scripts into a large JSON body. Hosted Blockfrost→Ogmios has returned
+	// jsonwsp faults ("failed to decode payload from base64 or base16") for
+	// that path on script-spend txs, while the same txs evaluate successfully
+	// via the bare endpoint which resolves inputs from chain state.
+	//
+	// Fall back to /evaluate/utxos only when the simple path reports missing
+	// inputs (UTxOs not yet visible on-chain).
+	result, err := b.evaluateTxSimple(txCbor)
+	if err == nil {
+		return result, nil
 	}
+	if len(additionalUtxos) == 0 || !isMissingInputsEvalError(err) {
+		return nil, err
+	}
+	return b.evaluateTxWithAdditionalUtxos(txCbor, additionalUtxos)
+}
 
-	// BlockFrost expects the transaction CBOR hex-encoded in the request body
-	// (with Content-Type application/cbor), not the raw CBOR bytes.
+// evaluateTxSimple POSTs hex-encoded transaction CBOR to /utils/txs/evaluate.
+// BlockFrost expects the hex string in the body with Content-Type
+// application/cbor (not raw CBOR bytes).
+func (b *BlockFrostChainContext) evaluateTxSimple(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
 	body := strings.NewReader(hex.EncodeToString(txCbor))
 	data, err := b.request("POST", "/utils/txs/evaluate", body, "application/cbor")
 	if err != nil {
 		return nil, err
 	}
 	return parseEvaluateTxResponse(data)
+}
+
+// evaluateTxWithAdditionalUtxos POSTs to /utils/txs/evaluate/utxos with a JSON
+// body carrying the transaction CBOR hex and a resolved additional UTxO set.
+func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxos(
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
+	reqBody, err := buildEvalUtxosRequest(txCbor, additionalUtxos)
+	if err != nil {
+		return nil, err
+	}
+	data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseEvaluateTxResponse(data)
+}
+
+// isMissingInputsEvalError reports whether an EvaluateTx failure indicates the
+// backend could not resolve transaction inputs from chain state (so supplying
+// additionalUtxos may help).
+func isMissingInputsEvalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "unknowninputs"),
+		strings.Contains(s, "unknown inputs"),
+		strings.Contains(s, "unknown_inputs"),
+		strings.Contains(s, "nonexistinginput"),
+		strings.Contains(s, "non-existing input"),
+		strings.Contains(s, "non_existing_input"):
+		return true
+	case strings.Contains(s, "missing") && strings.Contains(s, "input"):
+		return true
+	default:
+		return false
+	}
 }
 
 // buildEvalUtxosRequest marshals the JSON body for the
@@ -385,10 +431,17 @@ func bfAdditionalUtxoItemFromUtxo(utxo common.Utxo) (bfAdditionalUtxoItem, error
 	}
 
 	// Inline datum CBOR hex goes in Datum; a bare datum hash goes in DatumHash.
+	// Prefer the original on-chain CBOR bytes when present so the evaluate
+	// endpoint sees a canonical encoding (MarshalCBOR re-encodes Plutus Data
+	// and can diverge from the ledger bytes).
 	if datum := out.Datum(); datum != nil {
-		datumCbor, err := datum.MarshalCBOR()
-		if err != nil {
-			return bfAdditionalUtxoItem{}, fmt.Errorf("failed to encode inline datum: %w", err)
+		datumCbor := datum.Cbor()
+		if len(datumCbor) == 0 {
+			var err error
+			datumCbor, err = datum.MarshalCBOR()
+			if err != nil {
+				return bfAdditionalUtxoItem{}, fmt.Errorf("failed to encode inline datum: %w", err)
+			}
 		}
 		datumHex := hex.EncodeToString(datumCbor)
 		txOut.Datum = &datumHex

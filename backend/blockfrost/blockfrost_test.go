@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"math/big"
@@ -622,13 +623,13 @@ func TestBuildEvalUtxosRequestRejectsOverflowQuantity(t *testing.T) {
 	}
 }
 
-func TestEvaluateTxWithAdditionalUtxosTargetsUtxosEndpoint(t *testing.T) {
-	var gotPath, gotContentType, gotBody string
+func TestEvaluateTxPrefersSimpleEndpointWhenAdditionalUtxosProvided(t *testing.T) {
+	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotContentType = r.Header.Get("Content-Type")
-		body, _ := io.ReadAll(r.Body)
-		gotBody = string(body)
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
+			t.Errorf("unexpected path %q; simple evaluate should succeed without /evaluate/utxos", r.URL.Path)
+		}
 		_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
 	}))
 	defer server.Close()
@@ -638,23 +639,52 @@ func TestEvaluateTxWithAdditionalUtxosTargetsUtxosEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gotPath != "/api/v0/utils/txs/evaluate/utxos" {
-		t.Fatalf("path = %q, want /api/v0/utils/txs/evaluate/utxos", gotPath)
-	}
-	if gotContentType != "application/json" {
-		t.Fatalf("content-type = %q, want application/json", gotContentType)
-	}
-	// Body must be valid JSON carrying the cbor + additionalUtxoSet keys.
-	var parsed map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(gotBody), &parsed); err != nil {
-		t.Fatalf("request body is not JSON: %v", err)
-	}
-	if _, ok := parsed["additionalUtxoSet"]; !ok {
-		t.Fatal("request body missing additionalUtxoSet")
+	if len(paths) != 1 || paths[0] != "/api/v0/utils/txs/evaluate" {
+		t.Fatalf("paths = %v, want single /api/v0/utils/txs/evaluate", paths)
 	}
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
 		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v0/utils/txs/evaluate":
+			// Mimic Ogmios/Blockfrost reporting unknown inputs on the simple path.
+			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
+		case "/api/v0/utils/txs/evaluate/utxos":
+			_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPaths := []string{"/api/v0/utils/txs/evaluate", "/api/v0/utils/txs/evaluate/utxos"}
+	if len(paths) != 2 || paths[0] != wantPaths[0] || paths[1] != wantPaths[1] {
+		t.Fatalf("paths = %v, want %v", paths, wantPaths)
+	}
+	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestIsMissingInputsEvalError(t *testing.T) {
+	if !isMissingInputsEvalError(errors.New(`script evaluation failed: {"UnknownInputs":[]}`)) {
+		t.Fatal("expected UnknownInputs to match")
+	}
+	if isMissingInputsEvalError(errors.New(`unrecognized evaluate response: failed to decode payload from base64 or base16`)) {
+		t.Fatal("decode fault must not trigger utxos fallback")
 	}
 }
 
