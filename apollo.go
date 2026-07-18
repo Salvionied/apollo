@@ -1317,7 +1317,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			a.applyExecutionUnits(units, allInputUtxos)
 		}
 
-		body, bodyErr := a.buildBody(allInputUtxos, outputs, uint64(fee))
+		if fee < 0 {
+			return a, fmt.Errorf("negative fee: %d", fee)
+		}
+		body, bodyErr := a.buildBody(allInputUtxos, outputs, uint64(fee)) //nolint:gosec // validated non-negative above
 		if bodyErr != nil {
 			return a, bodyErr
 		}

@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -57,7 +58,7 @@ func (c *capturingEvalContext) EvaluateTx(txCbor []byte, additionalUtxos []commo
 		c.assertTx(call, &tx, additionalUtxos)
 	}
 	if c.resultFor == nil {
-		return nil, fmt.Errorf("capturingEvalContext: resultFor not configured")
+		return nil, errors.New("capturingEvalContext: resultFor not configured")
 	}
 	return c.resultFor(call, &tx, additionalUtxos)
 }
@@ -439,7 +440,7 @@ func TestEvaluationDoesNotMutatePaymentsOnFailure(t *testing.T) {
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, _ *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
-			return nil, fmt.Errorf("synthetic evaluator failure")
+			return nil, errors.New("synthetic evaluator failure")
 		},
 	}
 	a := setupMintEvalBuilder(t, cc, 2_000_000, 1)

@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -35,7 +36,7 @@ func (a *Apollo) buildBalancedOutputs(
 	if requestedFee < 0 {
 		return balancedOutputs{}, fmt.Errorf("negative fee: %d", requestedFee)
 	}
-	outputs := make([]babbage.BabbageTransactionOutput, len(baseOutputs))
+	outputs := make([]babbage.BabbageTransactionOutput, len(baseOutputs), len(baseOutputs)+1)
 	copy(outputs, baseOutputs)
 
 	needed, err := ctx.totalRequired.Add(ctx.governanceRequired)
@@ -93,7 +94,7 @@ func (a *Apollo) buildBalancedOutputs(
 		changeOutput = NewBabbageOutput(ctx.changeAddress, change, nil, nil)
 		neededWithChange, addErr := needed.Add(NewSimpleValue(change.Coin))
 		if addErr != nil || !ctx.totalInput.GreaterOrEqual(neededWithChange) {
-			return balancedOutputs{}, fmt.Errorf("insufficient funds for asset change min UTxO")
+			return balancedOutputs{}, errors.New("insufficient funds for asset change min UTxO")
 		}
 	}
 	outputs = append(outputs, changeOutput)
