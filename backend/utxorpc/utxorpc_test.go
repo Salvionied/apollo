@@ -97,3 +97,55 @@ func TestEvalTxResponseToExUnitsConvertsRedeemers(t *testing.T) {
 		t.Fatalf("unexpected mint budget %+v", eu)
 	}
 }
+
+func TestEvalTxResponseToExUnitsAcceptsZeroBasedSpend(t *testing.T) {
+	msg := &submit.EvalTxResponse{
+		Report: &submit.AnyChainEval{
+			Chain: &submit.AnyChainEval_Cardano{
+				Cardano: &cardano.TxEval{
+					Redeemers: []*cardano.Redeemer{
+						{
+							Purpose: cardano.RedeemerPurpose_REDEEMER_PURPOSE_UNSPECIFIED,
+							Index:   0,
+							ExUnits: &cardano.ExUnits{Memory: 1, Steps: 2},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := evalTxResponseToExUnits(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result[common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}]; !ok {
+		t.Fatalf("expected zero-based purpose 0 to map to spend, got %#v", result)
+	}
+}
+
+func TestEvalTxResponseToExUnitsAcceptsZeroBasedMint(t *testing.T) {
+	msg := &submit.EvalTxResponse{
+		Report: &submit.AnyChainEval{
+			Chain: &submit.AnyChainEval_Cardano{
+				Cardano: &cardano.TxEval{
+					Redeemers: []*cardano.Redeemer{
+						{
+							Purpose: cardano.RedeemerPurpose_REDEEMER_PURPOSE_SPEND,
+							Index:   1,
+							ExUnits: &cardano.ExUnits{Memory: 1, Steps: 2},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := evalTxResponseToExUnits(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result[common.RedeemerKey{Tag: common.RedeemerTagMint, Index: 1}]; !ok {
+		t.Fatalf("expected zero-based purpose 1 to map to mint, got %#v", result)
+	}
+}
