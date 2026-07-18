@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -25,6 +26,16 @@ import (
 type UtxoRpcChainContext struct {
 	client    *sdk.UtxorpcClient
 	networkId uint8
+}
+
+// EvaluationError reports deterministic Cardano transaction-evaluation errors
+// returned by the UTxO RPC provider.
+type EvaluationError struct {
+	Messages []string
+}
+
+func (e *EvaluationError) Error() string {
+	return strings.Join(e.Messages, "; ")
 }
 
 // NewUtxoRpcChainContext creates a new UTxO RPC chain context.
@@ -311,7 +322,7 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[co
 	u.client.AddHeadersToRequest(req)
 	resp, err := u.client.EvalTx(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("evaluate transaction: %w", err)
 	}
 	return evalTxResponseToExUnits(resp.Msg)
 }
@@ -332,6 +343,19 @@ func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey
 	if cardanoReport == nil {
 		return nil, errors.New("no cardano evaluation report in response")
 	}
+	if responseErrors := cardanoReport.GetErrors(); len(responseErrors) > 0 {
+		messages := make([]string, 0, len(responseErrors))
+		for _, responseError := range responseErrors {
+			message := strings.TrimSpace(responseError.GetMsg())
+			if message != "" {
+				messages = append(messages, message)
+			}
+		}
+		if len(messages) == 0 {
+			messages = []string{"script evaluation failed without an error message"}
+		}
+		return nil, &EvaluationError{Messages: messages}
+	}
 	result := make(map[common.RedeemerKey]common.ExUnits)
 	for _, redeemer := range cardanoReport.GetRedeemers() {
 		tag, err := utxorpcPurposeToRedeemerTag(redeemer.GetPurpose())
@@ -341,6 +365,9 @@ func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey
 		key := common.RedeemerKey{
 			Tag:   tag,
 			Index: redeemer.GetIndex(),
+		}
+		if _, exists := result[key]; exists {
+			return nil, fmt.Errorf("duplicate redeemer in evaluation report for %d:%d", tag, redeemer.GetIndex())
 		}
 		eu := redeemer.GetExUnits()
 		if eu == nil {
