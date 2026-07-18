@@ -67,24 +67,25 @@ type Apollo struct {
 	// inputs itself (rather than the caller pinning them via AddCollateral).
 	// Only auto-selected collateral is resized by finalizeCollateral(), so
 	// caller-pinned collateral is never silently rewritten.
-	collateralAutoSelected bool
-	nativescripts          []common.NativeScript
-	usedUtxos              map[string]bool
-	wallet                 Wallet
-	certificates           []common.CertificateWrapper
-	withdrawals            map[string]withdrawalEntry
-	auxiliaryData          *auxData
-	votingProcedures       common.VotingProcedures
-	proposalProcedures     []conway.ConwayProposalProcedure
-	currentTreasury        int64
-	treasuryDonation       int64
-	collateralAmount       int64
-	scriptHashes           []string
-	changeAddress          *common.Address
-	estimateExUnits        bool
-	forceFee               bool
-	coinSelector           CoinSelector
-	err                    error
+	collateralAutoSelected     bool
+	nativescripts              []common.NativeScript
+	usedUtxos                  map[string]bool
+	wallet                     Wallet
+	evaluationWitnessProviders []EvaluationWitnessProvider
+	certificates               []common.CertificateWrapper
+	withdrawals                map[string]withdrawalEntry
+	auxiliaryData              *auxData
+	votingProcedures           common.VotingProcedures
+	proposalProcedures         []conway.ConwayProposalProcedure
+	currentTreasury            int64
+	treasuryDonation           int64
+	collateralAmount           int64
+	scriptHashes               []string
+	changeAddress              *common.Address
+	estimateExUnits            bool
+	forceFee                   bool
+	coinSelector               CoinSelector
+	err                        error
 }
 
 type redeemerEntry struct {
@@ -117,6 +118,16 @@ func New(cc backend.ChainContext) *Apollo {
 // SetWallet sets the wallet for the transaction builder.
 func (a *Apollo) SetWallet(w Wallet) *Apollo {
 	a.wallet = w
+	return a
+}
+
+// AddEvaluationWitnessProvider registers an optional source of witnesses for
+// preliminary transaction evaluation. Registered witnesses are never added to
+// the completed transaction.
+func (a *Apollo) AddEvaluationWitnessProvider(provider EvaluationWitnessProvider) *Apollo {
+	if provider != nil {
+		a.evaluationWitnessProviders = append(a.evaluationWitnessProviders, provider)
+	}
 	return a
 }
 
@@ -1863,16 +1874,11 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	}
 	ws := a.buildWitnessSet(inputs)
 
-	// Add fake vkey witnesses for a realistic tx
-	witnessCount := 1 + len(a.requiredSigners)
-	fakeWitnesses := make([]common.VkeyWitness, witnessCount)
-	for i := range fakeWitnesses {
-		fakeWitnesses[i] = common.VkeyWitness{
-			Vkey:      make([]byte, 32),
-			Signature: make([]byte, 64),
-		}
+	witnesses, err := a.evaluationWitnesses(&body)
+	if err != nil {
+		return err
 	}
-	ws.VkeyWitnesses = cbor.NewSetType(fakeWitnesses, true)
+	ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
 
 	prelimTx := conway.ConwayTransaction{
 		Body:       body,
