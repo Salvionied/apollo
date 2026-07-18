@@ -75,9 +75,11 @@ func TestBalancedOutputsRejectsOverflow(t *testing.T) {
 }
 
 func TestBalancedOutputsIncludesWithdrawal(t *testing.T) {
+	// Withdrawals are modeled as additional totalInput before balancing.
 	a := New(setupFixedContext())
+	const withdrawal = uint64(2_000_000)
 	got, err := a.buildBalancedOutputs(nil, 2_000_000, balanceContext{
-		totalInput:    NewSimpleValue(5_000_000),
+		totalInput:    NewSimpleValue(3_000_000 + withdrawal),
 		totalRequired: NewSimpleValue(1_000_000),
 		changeAddress: testAddress(t),
 	})
@@ -86,5 +88,77 @@ func TestBalancedOutputsIncludesWithdrawal(t *testing.T) {
 	}
 	if got.Fee != 2_000_000 || len(got.Outputs) != 1 || got.Outputs[0].OutputAmount.Amount != 2_000_000 {
 		t.Fatalf("withdrawal-derived input did not become balanced change: %#v", got)
+	}
+}
+
+func TestBalancedOutputsIncludesCertificateDeposit(t *testing.T) {
+	// Certificate deposits are part of totalRequired (as Complete() does).
+	a := New(setupFixedContext())
+	const payment, fee, deposit = uint64(1_000_000), int64(2_000_000), uint64(StakeDeposit)
+	got, err := a.buildBalancedOutputs(nil, fee, balanceContext{
+		totalInput:    NewSimpleValue(10_000_000),
+		totalRequired: NewSimpleValue(payment + deposit),
+		stakeDeposit:  StakeDeposit,
+		changeAddress: testAddress(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantChange := 10_000_000 - payment - deposit - uint64(fee)
+	if len(got.Outputs) != 1 || got.Outputs[0].OutputAmount.Amount != wantChange {
+		t.Fatalf("deposit was not reserved from change: got %#v, want change %d", got, wantChange)
+	}
+}
+
+func TestBalancedOutputsIncludesCertificateRefund(t *testing.T) {
+	// Deregistration refunds are part of totalInput (as Complete() does).
+	a := New(setupFixedContext())
+	const payment, fee, refund = uint64(1_000_000), int64(2_000_000), uint64(StakeDeposit)
+	got, err := a.buildBalancedOutputs(nil, fee, balanceContext{
+		totalInput:    NewSimpleValue(5_000_000 + refund),
+		totalRequired: NewSimpleValue(payment),
+		stakeDeposit:  StakeDeposit,
+		changeAddress: testAddress(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantChange := 5_000_000 + refund - payment - uint64(fee)
+	if len(got.Outputs) != 1 || got.Outputs[0].OutputAmount.Amount != wantChange {
+		t.Fatalf("refund was not added to change: got %#v, want change %d", got, wantChange)
+	}
+}
+
+func TestBalancedOutputsIncludesGovernanceValues(t *testing.T) {
+	// Governance must be applied via governanceRequired, not double-counted in
+	// totalRequired (Complete keeps those fields separate).
+	a := New(setupFixedContext())
+	const payment, fee, donation = uint64(1_000_000), int64(2_000_000), uint64(5_000_000)
+	got, err := a.buildBalancedOutputs(nil, fee, balanceContext{
+		totalInput:         NewSimpleValue(20_000_000),
+		totalRequired:      NewSimpleValue(payment),
+		governanceRequired: NewSimpleValue(donation),
+		changeAddress:      testAddress(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantChange := 20_000_000 - payment - donation - uint64(fee)
+	if len(got.Outputs) != 1 || got.Outputs[0].OutputAmount.Amount != wantChange {
+		t.Fatalf("governance was not reserved from change: got %#v, want change %d", got, wantChange)
+	}
+
+	// If governance were also folded into totalRequired, change would under-count.
+	doubleCounted, err := a.buildBalancedOutputs(nil, fee, balanceContext{
+		totalInput:         NewSimpleValue(20_000_000),
+		totalRequired:      NewSimpleValue(payment + donation),
+		governanceRequired: NewSimpleValue(donation),
+		changeAddress:      testAddress(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doubleCounted.Outputs[0].OutputAmount.Amount == wantChange {
+		t.Fatal("governance double-count check failed: separate fields must change the result")
 	}
 }
