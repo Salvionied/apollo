@@ -146,6 +146,51 @@ func TestEvaluationExternalWalletUsesExplicitProvider(t *testing.T) {
 	}
 }
 
+func TestEvaluationExternalWalletMatchingRequiredSignerUsesProvider(t *testing.T) {
+	// Callers may set ExternalWallet as the primary wallet while also requiring
+	// that wallet's payment key hash. Apollo must not call ExternalWallet.SignTxBody;
+	// an EvaluationWitnessProvider must supply the evaluation signature.
+	key := evaluationKey(77)
+	pkh := common.Blake2b224Hash(key.Public().(ed25519.PublicKey))
+	addr, err := common.NewAddressFromParts(6, 0, pkh.Bytes(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addr.PaymentKeyHash() != pkh {
+		t.Fatalf("address payment hash mismatch: got %s want %s", addr.PaymentKeyHash(), pkh)
+	}
+	body := evaluationBody(pkh)
+	provider := signingEvaluationProvider{key: key}
+
+	witnesses, err := New(setupFixedContext()).
+		SetWallet(NewExternalWallet(addr)).
+		AddEvaluationWitnessProvider(provider).
+		evaluationWitnesses(&body)
+	if err != nil {
+		t.Fatalf("ExternalWallet fee-payer required signer should use provider: %v", err)
+	}
+	if len(witnesses) != 1 || common.Blake2b224Hash(witnesses[0].Vkey) != pkh {
+		t.Fatalf("expected provider witness for fee-payer hash, got %#v", witnesses)
+	}
+}
+
+func TestEvaluationExternalWalletMatchingRequiredSignerDoesNotCallSignTxBody(t *testing.T) {
+	addr := testAddress(t)
+	hash := addr.PaymentKeyHash()
+	body := evaluationBody(hash)
+
+	_, err := New(setupFixedContext()).SetWallet(NewExternalWallet(addr)).evaluationWitnesses(&body)
+	if err == nil {
+		t.Fatal("expected missing signer error")
+	}
+	if strings.Contains(err.Error(), "external wallet cannot sign") {
+		t.Fatalf("ExternalWallet must not be asked to sign evaluation txs: %v", err)
+	}
+	if !strings.Contains(err.Error(), hash.String()) {
+		t.Fatalf("expected missing signer %s, got %v", hash, err)
+	}
+}
+
 func TestEvaluationCombinesMultipleProviders(t *testing.T) {
 	firstKey := evaluationKey(31)
 	secondKey := evaluationKey(32)

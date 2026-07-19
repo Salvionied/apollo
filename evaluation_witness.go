@@ -94,14 +94,18 @@ func (a *Apollo) evaluationWitnesses(body *conway.ConwayTransactionBody) ([]comm
 	}
 
 	if a.wallet != nil {
-		paymentHash := a.wallet.PubKeyHash()
-		if _, needed := required[paymentHash]; needed {
-			witness, err := a.wallet.SignTxBody(bodyHash)
-			if err != nil {
-				return nil, fmt.Errorf("sign evaluation tx with primary wallet: %w", err)
-			}
-			if err := addWitnesses([]common.VkeyWitness{witness}); err != nil {
-				return nil, err
+		// ExternalWallet is watch-only and supplies no evaluation witnesses;
+		// callers must register EvaluationWitnessProvider for its required hashes.
+		if _, isExternal := a.wallet.(*ExternalWallet); !isExternal {
+			paymentHash := a.wallet.PubKeyHash()
+			if _, needed := required[paymentHash]; needed {
+				witness, err := a.wallet.SignTxBody(bodyHash)
+				if err != nil {
+					return nil, fmt.Errorf("sign evaluation tx with primary wallet: %w", err)
+				}
+				if err := addWitnesses([]common.VkeyWitness{witness}); err != nil {
+					return nil, err
+				}
 			}
 		}
 
