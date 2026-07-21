@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -17,6 +19,20 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/maestro-org/go-sdk/models"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type errorReader struct {
+	err error
+}
+
+func (r errorReader) Read(_ []byte) (int, error) {
+	return 0, r.err
+}
 
 func testAddress(t *testing.T) common.Address {
 	t.Helper()
@@ -460,12 +476,123 @@ func TestEvaluateTxWithAdditionalUtxosPropagatesHTTPError(t *testing.T) {
 	}
 }
 
+func TestEvaluateTxWithAdditionalUtxosBoundsHTTPErrorResponse(t *testing.T) {
+	var txId common.Blake2b256
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1000000},
+	}
+	utxo := common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 0},
+		Output: &output,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(strings.Repeat("x", maxMaestroEvaluateErrorResponseBytes*2)))
+	}))
+	defer server.Close()
+
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.client.BaseUrl = server.URL
+
+	_, err = ctx.EvaluateTx([]byte{0x84}, []common.Utxo{utxo})
+	if err == nil {
+		t.Fatal("expected error for non-200 evaluate response")
+	}
+	if len(err.Error()) > maxMaestroEvaluateErrorResponseBytes+100 {
+		t.Fatalf("evaluate error length = %d, want at most %d", len(err.Error()), maxMaestroEvaluateErrorResponseBytes+100)
+	}
+}
+
+func TestPostEvaluateReadErrorIncludesStatus(t *testing.T) {
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readErr := errors.New("connection reset")
+	ctx.client.HTTPClient = &http.Client{
+		Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(errorReader{err: readErr}),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	_, err = ctx.postEvaluate([]byte("{}"))
+	if err == nil {
+		t.Fatal("expected read error")
+	}
+	if !errors.Is(err, readErr) {
+		t.Fatalf("error = %v, want wrapped %v", err, readErr)
+	}
+	if !strings.Contains(err.Error(), "status 500") {
+		t.Fatalf("error = %q, want status context", err)
+	}
+}
+
 func TestEvaluationsToExUnitsRejectsZeroResults(t *testing.T) {
 	if _, err := evaluationsToExUnits(nil); err == nil {
 		t.Fatal("expected error for zero evaluation results")
 	}
 	if _, err := evaluationsToExUnits(models.EvaluateTxResponse{}); err == nil {
 		t.Fatal("expected error for zero evaluation results")
+	}
+}
+
+func TestEvaluationsToExUnitsRejectsInvalidResults(t *testing.T) {
+	tests := []struct {
+		name  string
+		evals models.EvaluateTxResponse
+	}{
+		{
+			name: "negative memory",
+			evals: models.EvaluateTxResponse{{
+				RedeemerTag:   "spend",
+				RedeemerIndex: 0,
+				ExUnits:       models.ExecutionUnits{Mem: -1, Steps: 1},
+			}},
+		},
+		{
+			name: "negative steps",
+			evals: models.EvaluateTxResponse{{
+				RedeemerTag:   "spend",
+				RedeemerIndex: 0,
+				ExUnits:       models.ExecutionUnits{Mem: 1, Steps: -1},
+			}},
+		},
+		{
+			name: "duplicate redeemer",
+			evals: models.EvaluateTxResponse{
+				{
+					RedeemerTag:   "spend",
+					RedeemerIndex: 0,
+					ExUnits:       models.ExecutionUnits{Mem: 1, Steps: 1},
+				},
+				{
+					RedeemerTag:   "spend",
+					RedeemerIndex: 0,
+					ExUnits:       models.ExecutionUnits{Mem: 2, Steps: 2},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluationsToExUnits(tt.evals)
+			if err == nil {
+				t.Fatal("expected invalid evaluation result error")
+			}
+			if result != nil {
+				t.Fatalf("result = %#v, want nil on error", result)
+			}
+		})
 	}
 }
 
