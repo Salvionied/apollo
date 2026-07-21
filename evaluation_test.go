@@ -19,20 +19,20 @@ func testRedeemerDatum() common.Datum {
 	return common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
 }
 
-type evalCapture struct {
+type balancedEvalCapture struct {
 	TxCbor []byte
 	Tx     conway.ConwayTransaction
 	Utxos  []common.Utxo
 }
 
-// capturingEvalContext is a FixedChainContext wrapper that records every
+// balancedEvalContext is a FixedChainContext wrapper that records every
 // EvaluateTx call, optionally asserts value conservation, and returns
 // configured ExUnits. It never performs network I/O.
-type capturingEvalContext struct {
+type balancedEvalContext struct {
 	*fixed.FixedChainContext
 	t *testing.T
 
-	calls []evalCapture
+	calls []balancedEvalCapture
 
 	// assertTx is invoked after decoding each EvaluateTx payload.
 	assertTx func(call int, tx *conway.ConwayTransaction, utxos []common.Utxo)
@@ -41,14 +41,14 @@ type capturingEvalContext struct {
 	resultFor func(call int, tx *conway.ConwayTransaction, utxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
 }
 
-func (c *capturingEvalContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+func (c *balancedEvalContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	c.t.Helper()
 	var tx conway.ConwayTransaction
 	if _, err := cbor.Decode(txCbor, &tx); err != nil {
-		return nil, fmt.Errorf("capturingEvalContext: decode EvaluateTx CBOR: %w", err)
+		return nil, fmt.Errorf("balancedEvalContext: decode EvaluateTx CBOR: %w", err)
 	}
 	call := len(c.calls)
-	cap := evalCapture{
+	cap := balancedEvalCapture{
 		TxCbor: append([]byte(nil), txCbor...),
 		Tx:     tx,
 		Utxos:  append([]common.Utxo(nil), additionalUtxos...),
@@ -58,7 +58,7 @@ func (c *capturingEvalContext) EvaluateTx(txCbor []byte, additionalUtxos []commo
 		c.assertTx(call, &tx, additionalUtxos)
 	}
 	if c.resultFor == nil {
-		return nil, errors.New("capturingEvalContext: resultFor not configured")
+		return nil, errors.New("balancedEvalContext: resultFor not configured")
 	}
 	return c.resultFor(call, &tx, additionalUtxos)
 }
@@ -69,7 +69,7 @@ func mintRedeemerUnits(memory, steps int64) map[common.RedeemerKey]common.ExUnit
 	}
 }
 
-func setupMintEvalBuilder(t *testing.T, cc *capturingEvalContext, paymentLovelace int64, mintQty int64) *Apollo {
+func setupMintEvalBuilder(t *testing.T, cc *balancedEvalContext, paymentLovelace int64, mintQty int64) *Apollo {
 	t.Helper()
 	addr := testAddress(t)
 	addTestUtxo(cc.FixedChainContext, addr, 50_000_000, 0x01, 0)
@@ -184,7 +184,7 @@ func assertAssetConservedDraft(t *testing.T, tx *conway.ConwayTransaction, utxos
 }
 
 func TestEstimateExecutionUnitsDraftConservesAda(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		assertTx: func(_ int, tx *conway.ConwayTransaction, utxos []common.Utxo) {
@@ -212,7 +212,7 @@ func TestEstimateExecutionUnitsDraftConservesMintedAssets(t *testing.T) {
 		policy[i] = 0xab
 	}
 	name := []byte("token")
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		assertTx: func(_ int, tx *conway.ConwayTransaction, utxos []common.Utxo) {
@@ -244,7 +244,7 @@ func TestEstimateExecutionUnitsDraftConservesBurnedAssets(t *testing.T) {
 		},
 	)
 
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		assertTx: func(_ int, tx *conway.ConwayTransaction, utxos []common.Utxo) {
@@ -281,7 +281,7 @@ func TestEstimateExecutionUnitsDraftConservesBurnedAssets(t *testing.T) {
 }
 
 func TestEvaluationReRunsWhenChangeOutputAppears(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, tx *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -312,7 +312,7 @@ func TestEvaluationReRunsWhenChangeOutputAppears(t *testing.T) {
 }
 
 func TestEvaluationReRunsWhenFeeChanges(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, tx *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -342,7 +342,7 @@ func TestEvaluationReRunsWhenFeeChanges(t *testing.T) {
 }
 
 func TestEvaluationReRunsWhenCollateralChanges(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, tx *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -372,7 +372,7 @@ func TestEvaluationReRunsWhenCollateralChanges(t *testing.T) {
 }
 
 func TestEvaluationConvergesOnFinalScriptVisibleShape(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		assertTx: func(_ int, tx *conway.ConwayTransaction, utxos []common.Utxo) {
@@ -414,7 +414,7 @@ func TestEvaluationConvergesOnFinalScriptVisibleShape(t *testing.T) {
 }
 
 func TestEvaluationFailsClosedOnShapeCycle(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(call int, _ *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -436,7 +436,7 @@ func TestEvaluationFailsClosedOnShapeCycle(t *testing.T) {
 }
 
 func TestEvaluationDoesNotMutatePaymentsOnFailure(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, _ *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -474,7 +474,7 @@ func TestEvaluationDoesNotMutatePaymentsOnFailure(t *testing.T) {
 }
 
 func TestEvaluationKeepsDeterministicOutputOrder(t *testing.T) {
-	cc := &capturingEvalContext{
+	cc := &balancedEvalContext{
 		FixedChainContext: setupFixedContext(),
 		t:                 t,
 		resultFor: func(_ int, _ *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
