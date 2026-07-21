@@ -2,9 +2,11 @@ package backend
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -36,6 +38,33 @@ type ChainContext interface {
 	EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
 	UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
 	ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)
+}
+
+// ValidateAdditionalUtxo verifies that a resolved UTxO has both pieces needed
+// by backend evaluation APIs. TransactionInput and TransactionOutput are
+// interfaces, so this also rejects typed nil pointers stored in either field.
+func ValidateAdditionalUtxo(utxo common.Utxo) error {
+	if isNilInterface(utxo.Id) {
+		return errors.New("additional UTxO is missing transaction input")
+	}
+	if isNilInterface(utxo.Output) {
+		return errors.New("additional UTxO is missing transaction output")
+	}
+	return nil
+}
+
+func isNilInterface(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	valueOf := reflect.ValueOf(value)
+	switch valueOf.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return valueOf.IsNil()
+	default:
+		return false
+	}
 }
 
 // GenesisParameters holds Cardano genesis configuration values.

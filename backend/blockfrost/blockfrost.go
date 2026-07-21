@@ -305,6 +305,12 @@ var (
 )
 
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	for i, utxo := range additionalUtxos {
+		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("invalid additional UTxO at index %d: %w", i, err)
+		}
+	}
+
 	// Prefer /utils/txs/evaluate (hex body). Apollo always passes spending
 	// inputs as additionalUtxos even when they are already on-chain; posting
 	// them to /utils/txs/evaluate/utxos re-encodes inline datums and reference
@@ -429,6 +435,10 @@ func buildEvalUtxosRequest(txCbor []byte, additionalUtxos []common.Utxo) ([]byte
 // bfAdditionalUtxoItemFromUtxo builds a single [txIn, txOut] additional-UTxO
 // entry from a resolved gouroboros UTxO.
 func bfAdditionalUtxoItemFromUtxo(utxo common.Utxo) (bfAdditionalUtxoItem, error) {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return bfAdditionalUtxoItem{}, err
+	}
+
 	out := utxo.Output
 
 	txIn := bfTxIn{
