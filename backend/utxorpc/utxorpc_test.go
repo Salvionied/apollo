@@ -13,6 +13,8 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
 	submit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
 
 func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) *submit.EvalTxResponse {
@@ -25,6 +27,53 @@ func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) 
 				},
 			},
 		},
+	}
+}
+
+func TestSetReferenceScriptFeePricePreservesFraction(t *testing.T) {
+	var pp backend.ProtocolParameters
+	setReferenceScriptFeePrice(&pp, &cardano.RationalNumber{
+		Numerator:   121,
+		Denominator: 8,
+	})
+
+	if got, want := pp.RefScriptFeePerByteRational(), big.NewRat(121, 8); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, want)
+	}
+}
+
+func TestSetReferenceScriptFeePricePreservesFullProtobufRange(t *testing.T) {
+	const (
+		maxNumerator   = int32(1<<31 - 1)
+		maxDenominator = uint32(1<<32 - 1)
+	)
+
+	var pp backend.ProtocolParameters
+	setReferenceScriptFeePrice(&pp, &cardano.RationalNumber{
+		Numerator:   maxNumerator,
+		Denominator: maxDenominator,
+	})
+
+	want := new(big.Rat).SetFrac(
+		big.NewInt(int64(maxNumerator)),
+		new(big.Int).SetUint64(uint64(maxDenominator)),
+	)
+	if got := pp.RefScriptFeePerByteRational(); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, want)
+	}
+}
+
+func TestSetReferenceScriptFeePriceIgnoresZeroDenominator(t *testing.T) {
+	initial := big.NewRat(121, 8)
+	pp := backend.ProtocolParameters{
+		MinFeeRefScriptCostPerByteRational: initial,
+		MinFeeRefScriptCostPerByte:         15.125,
+	}
+
+	setReferenceScriptFeePrice(&pp, &cardano.RationalNumber{Numerator: 1})
+
+	if got := pp.RefScriptFeePerByteRational(); got.Cmp(initial) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, initial)
 	}
 }
 

@@ -385,6 +385,33 @@ func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
 	if got := pp.RefScriptFeePerByte(); got != 15 {
 		t.Fatalf("RefScriptFeePerByte() = %v, want 15", got)
 	}
+	if got, want := pp.RefScriptFeePerByteRational(), big.NewRat(15, 1); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, want)
+	}
+}
+
+func TestProtocolParamsPreservesFractionalRefScriptCostPerByte(t *testing.T) {
+	const body = `{
+		"min_fee_a": 44,
+		"min_fee_b": 155381,
+		"max_tx_size": 16384,
+		"coins_per_utxo_size": "4310",
+		"collateral_percent": 150,
+		"max_collateral_inputs": 3,
+		"min_fee_ref_script_cost_per_byte": 15.125
+	}`
+
+	var raw bfProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := pp.RefScriptFeePerByteRational(), big.NewRat(121, 8); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, want)
+	}
 }
 
 func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {

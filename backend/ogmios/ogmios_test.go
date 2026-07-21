@@ -19,6 +19,8 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
 
 func testAddress(t *testing.T) common.Address {
@@ -420,5 +422,39 @@ func TestOgmiosScriptRefJSONLanguageDetection(t *testing.T) {
 		if parsed.Language != tc.language {
 			t.Fatalf("language = %q, want %q", parsed.Language, tc.language)
 		}
+	}
+}
+
+func TestProtocolParamsPreserveReferenceScriptFeeParameters(t *testing.T) {
+	const body = `{
+		"scriptExecutionPrices": {"memory": "1/1", "cpu": "1/1"},
+		"minFeeReferenceScripts": {
+			"base": 15.125,
+			"range": 7,
+			"multiplier": 1.2345
+		}
+	}`
+
+	var raw ogmiosProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := pp.RefScriptFeePerByteRational(), big.NewRat(121, 8); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptFeePerByteRational() = %s, want %s", got, want)
+	}
+	if got, want := pp.RefScriptMultiplierRational(), big.NewRat(2469, 2000); got.Cmp(want) != 0 {
+		t.Fatalf("RefScriptMultiplierRational() = %s, want %s", got, want)
+	}
+	if got := pp.RefScriptSizeIncrement(); got != 7 {
+		t.Fatalf("RefScriptSizeIncrement() = %d, want 7", got)
+	}
+
+	want := backend.TierRefScriptFeeRational(53, big.NewRat(121, 8), 7, big.NewRat(2469, 2000))
+	if got := backend.TierRefScriptFeeRational(53, pp.RefScriptFeePerByteRational(), pp.RefScriptSizeIncrement(), pp.RefScriptMultiplierRational()); got != want {
+		t.Fatalf("reference-script fee = %d, want %d", got, want)
 	}
 }

@@ -194,9 +194,7 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 
 	// Conway reference-script base price (lovelace per byte for the first tier),
 	// exposed as a rational number.
-	if refCost := params.GetMinFeeScriptRefCostPerByte(); refCost != nil && refCost.GetDenominator() != 0 {
-		pp.MinFeeRefScriptCostPerByte = float64(refCost.GetNumerator()) / float64(refCost.GetDenominator())
-	}
+	setReferenceScriptFeePrice(&pp, params.GetMinFeeScriptRefCostPerByte())
 
 	// Parse cost models from UTxO RPC protobuf response.
 	// Keys match ComputeScriptDataHash expectations: "PlutusV1", "PlutusV2", "PlutusV3".
@@ -214,6 +212,18 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 	}
 
 	return pp, nil
+}
+
+func setReferenceScriptFeePrice(pp *backend.ProtocolParameters, price *cardano.RationalNumber) {
+	if price == nil || price.GetDenominator() == 0 {
+		return
+	}
+	rational := new(big.Rat).SetFrac(
+		big.NewInt(int64(price.GetNumerator())),
+		new(big.Int).SetUint64(uint64(price.GetDenominator())),
+	)
+	pp.MinFeeRefScriptCostPerByteRational = rational
+	pp.MinFeeRefScriptCostPerByte, _ = rational.Float64()
 }
 
 func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error) {

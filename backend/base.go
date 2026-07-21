@@ -86,11 +86,20 @@ type ProtocolParameters struct {
 	MinFeeReferenceScriptsRange      int                `json:"min_fee_reference_scripts_range"`
 	MinFeeReferenceScriptsBase       int                `json:"min_fee_reference_scripts_base"`
 	MinFeeReferenceScriptsMultiplier int                `json:"min_fee_reference_scripts_multiplier"`
+	// MinFeeRefScriptCostPerByteRational preserves the exact provider-supplied
+	// first-tier reference-script price. It takes precedence over the legacy
+	// float64 field below when computing transaction fees.
+	MinFeeRefScriptCostPerByteRational *big.Rat `json:"-"`
+	// MinFeeReferenceScriptsMultiplierRational preserves the exact
+	// provider-supplied per-tier multiplier. It takes precedence over the
+	// legacy integer field above when computing transaction fees.
+	MinFeeReferenceScriptsMultiplierRational *big.Rat `json:"-"`
 	// MinFeeRefScriptCostPerByte is the BlockFrost/ledger flat name for the
 	// reference-script base price (lovelace per byte for the first tier). Some
 	// providers (e.g. BlockFrost) expose only this field and not the structured
-	// MinFeeReferenceScripts{Base,Range,Multiplier} triple. RefScriptFeePerByte()
-	// reconciles the two representations.
+	// MinFeeReferenceScripts{Base,Range,Multiplier} triple. It is retained for
+	// compatibility; use MinFeeRefScriptCostPerByteRational for fee computation
+	// when a provider supplies a fractional value.
 	MinFeeRefScriptCostPerByte float64 `json:"min_fee_ref_script_cost_per_byte"`
 }
 
@@ -103,16 +112,34 @@ type ProtocolParameters struct {
 const (
 	DefaultRefScriptSizeIncrement = 25600
 	DefaultRefScriptMultiplier    = 1.2
+	defaultRefScriptMultiplierNum = 6
+	defaultRefScriptMultiplierDen = 5
 )
 
 // RefScriptFeePerByte returns the base reference-script price (lovelace per
 // byte for the first tier), preferring the structured MinFeeReferenceScriptsBase
 // when present and falling back to the flat MinFeeRefScriptCostPerByte.
+// It is retained for compatibility; fee computation should use
+// RefScriptFeePerByteRational to avoid precision loss.
 func (p ProtocolParameters) RefScriptFeePerByte() float64 {
-	if p.MinFeeReferenceScriptsBase > 0 {
-		return float64(p.MinFeeReferenceScriptsBase)
+	r := p.RefScriptFeePerByteRational()
+	if r == nil {
+		return 0
 	}
-	return p.MinFeeRefScriptCostPerByte
+	value, _ := r.Float64()
+	return value
+}
+
+// RefScriptFeePerByteRational returns the exact first-tier reference-script
+// price. The returned rational is a copy and may be safely modified by callers.
+func (p ProtocolParameters) RefScriptFeePerByteRational() *big.Rat {
+	if p.MinFeeReferenceScriptsBase > 0 {
+		return big.NewRat(int64(p.MinFeeReferenceScriptsBase), 1)
+	}
+	if p.MinFeeRefScriptCostPerByteRational != nil {
+		return new(big.Rat).Set(p.MinFeeRefScriptCostPerByteRational)
+	}
+	return rationalFromFloat64(p.MinFeeRefScriptCostPerByte)
 }
 
 // RefScriptSizeIncrement returns the per-tier size increment, defaulting to the
@@ -126,11 +153,24 @@ func (p ProtocolParameters) RefScriptSizeIncrement() int {
 
 // RefScriptMultiplier returns the per-tier price multiplier, defaulting to the
 // Conway ledger constant when a provider does not supply it.
+// It is retained for compatibility; fee computation should use
+// RefScriptMultiplierRational to avoid precision loss.
 func (p ProtocolParameters) RefScriptMultiplier() float64 {
-	if p.MinFeeReferenceScriptsMultiplier > 0 {
-		return float64(p.MinFeeReferenceScriptsMultiplier)
+	value, _ := p.RefScriptMultiplierRational().Float64()
+	return value
+}
+
+// RefScriptMultiplierRational returns the exact per-tier reference-script
+// multiplier. The returned rational is a copy and may be safely modified by
+// callers.
+func (p ProtocolParameters) RefScriptMultiplierRational() *big.Rat {
+	if p.MinFeeReferenceScriptsMultiplierRational != nil && p.MinFeeReferenceScriptsMultiplierRational.Sign() > 0 {
+		return new(big.Rat).Set(p.MinFeeReferenceScriptsMultiplierRational)
 	}
-	return DefaultRefScriptMultiplier
+	if p.MinFeeReferenceScriptsMultiplier > 0 {
+		return big.NewRat(int64(p.MinFeeReferenceScriptsMultiplier), 1)
+	}
+	return big.NewRat(defaultRefScriptMultiplierNum, defaultRefScriptMultiplierDen)
 }
 
 // TierRefScriptFee computes the Conway tiered reference-script fee for a total
@@ -144,37 +184,36 @@ func (p ProtocolParameters) RefScriptMultiplier() float64 {
 // with the first-tier price = baseFeePerByte. A zero base price yields a zero
 // fee (pre-Conway / provider that does not charge for reference scripts).
 //
-// The accumulation uses exact rational arithmetic and floors once at the end,
-// matching the ledger (which accumulates a Rational and applies floor). Using
-// float64 here would let the repeated multiplier product (1.2 is not exactly
-// representable in binary floating point) drift across an integer boundary on
-// multi-tier reference scripts, producing a fee 1 lovelace below the ledger
-// minimum and a FeeTooSmall rejection.
+// The float64 arguments are retained for compatibility. New code should use
+// TierRefScriptFeeRational so provider-supplied fractions never pass through a
+// float64. The decimal representation of the legacy floats is converted to an
+// exact rational without quantizing the multiplier.
 func TierRefScriptFee(totalRefScriptSize int, baseFeePerByte float64, sizeIncrement int, multiplier float64) int64 {
-	if totalRefScriptSize <= 0 || baseFeePerByte <= 0 {
+	base := rationalFromFloat64(baseFeePerByte)
+	m := rationalFromFloat64(multiplier)
+	return TierRefScriptFeeRational(totalRefScriptSize, base, sizeIncrement, m)
+}
+
+// TierRefScriptFeeRational computes the Conway tiered reference-script fee
+// using exact provider-supplied rational values. The result is the ledger's
+// floor of the final accumulated rational fee.
+func TierRefScriptFeeRational(totalRefScriptSize int, baseFeePerByte *big.Rat, sizeIncrement int, multiplier *big.Rat) int64 {
+	if totalRefScriptSize <= 0 || baseFeePerByte == nil || baseFeePerByte.Sign() <= 0 {
 		return 0
 	}
 	if sizeIncrement <= 0 {
 		sizeIncrement = DefaultRefScriptSizeIncrement
 	}
-	if multiplier <= 0 {
-		multiplier = DefaultRefScriptMultiplier
+	if multiplier == nil || multiplier.Sign() <= 0 {
+		multiplier = big.NewRat(defaultRefScriptMultiplierNum, defaultRefScriptMultiplierDen)
 	}
-	// Exact rationals. baseFeePerByte is an integer lovelace/byte in practice
-	// (15 at current params); the multiplier is the ledger constant 6/5. Recover
-	// it exactly from the float (1.2 -> 1200/1000 -> 6/5) so there is no drift.
-	base := new(big.Rat).SetFloat64(baseFeePerByte)
-	if base == nil { // NaN/Inf guard
-		return 0
-	}
-	m := big.NewRat(int64(math.Round(multiplier*1000)), 1000)
 	acc := new(big.Rat)
-	price := new(big.Rat).Set(base)
+	price := new(big.Rat).Set(baseFeePerByte)
 	incr := new(big.Rat).SetInt64(int64(sizeIncrement))
 	n := totalRefScriptSize
 	for n >= sizeIncrement {
 		acc.Add(acc, new(big.Rat).Mul(incr, price))
-		price.Mul(price, m)
+		price.Mul(price, multiplier)
 		n -= sizeIncrement
 	}
 	if n > 0 {
@@ -183,6 +222,30 @@ func TierRefScriptFee(totalRefScriptSize int, baseFeePerByte float64, sizeIncrem
 	// floor(acc): acc is non-negative, so integer division of num/denom truncates
 	// toward zero, i.e. floors.
 	return new(big.Int).Quo(acc.Num(), acc.Denom()).Int64()
+}
+
+// ParseRational parses a provider-supplied rational number without passing it
+// through floating point. Decimal and exponent forms accepted by JSON numbers
+// are supported by math/big.
+func ParseRational(s string) (*big.Rat, error) {
+	value, ok := new(big.Rat).SetString(s)
+	if !ok {
+		return nil, fmt.Errorf("invalid rational number %q", s)
+	}
+	return value, nil
+}
+
+func rationalFromFloat64(value float64) *big.Rat {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	// FormatFloat's shortest decimal is the value callers passed to the legacy
+	// API, rather than an arbitrary fixed-precision approximation.
+	rational, ok := new(big.Rat).SetString(strconv.FormatFloat(value, 'g', -1, 64))
+	if !ok {
+		return nil
+	}
+	return rational
 }
 
 // CoinsPerUtxoByteValue returns the coins per UTxO byte value parsed from the string field.

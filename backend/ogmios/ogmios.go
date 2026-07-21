@@ -381,9 +381,9 @@ type ogmiosProtocolParams struct {
 }
 
 type ogmiosRefScripts struct {
-	Base       float64 `json:"base"`
-	Range      int     `json:"range"`
-	Multiplier float64 `json:"multiplier"`
+	Base       json.Number `json:"base"`
+	Range      int         `json:"range"`
+	Multiplier json.Number `json:"multiplier"`
 }
 
 type ogmiosLovelace struct {
@@ -436,14 +436,19 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 	}
 
 	if p.MinFeeReferenceScripts != nil {
-		// Only the base price (lovelace per byte) is provider-specific; the
-		// per-tier size increment and multiplier are the Conway ledger constants
-		// (25600 and 6/5). The multiplier is fractional (1.2), so it cannot be
-		// stored in the integer MinFeeReferenceScriptsMultiplier field without
-		// truncating to 1 and undercharging every tier after the first; we
-		// therefore leave it (and the increment) to RefScriptMultiplier() /
-		// RefScriptSizeIncrement() defaults.
-		pp.MinFeeRefScriptCostPerByte = p.MinFeeReferenceScripts.Base
+		base, err := backend.ParseRational(p.MinFeeReferenceScripts.Base.String())
+		if err != nil {
+			return backend.ProtocolParameters{}, fmt.Errorf("invalid reference-script base price: %w", err)
+		}
+		multiplier, err := backend.ParseRational(p.MinFeeReferenceScripts.Multiplier.String())
+		if err != nil {
+			return backend.ProtocolParameters{}, fmt.Errorf("invalid reference-script multiplier: %w", err)
+		}
+		pp.MinFeeReferenceScriptsRange = p.MinFeeReferenceScripts.Range
+		pp.MinFeeRefScriptCostPerByteRational = base
+		pp.MinFeeReferenceScriptsMultiplierRational = multiplier
+		// Preserve the legacy float fields for callers that read them directly.
+		pp.MinFeeRefScriptCostPerByte, _ = base.Float64()
 	}
 
 	// Parse cost models from Ogmios JSON.

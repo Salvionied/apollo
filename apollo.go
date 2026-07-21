@@ -1701,18 +1701,18 @@ func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters)
 	// reference-script fee. If the backend did not supply the base price, charging
 	// zero would silently underprice the transaction and produce a FeeTooSmallUTxO
 	// rejection at submission; fail loudly instead.
-	refFeePerByte := pp.RefScriptFeePerByte()
-	if refFeePerByte <= 0 {
+	refFeePerByte := pp.RefScriptFeePerByteRational()
+	if refFeePerByte == nil || refFeePerByte.Sign() <= 0 {
 		return 0, fmt.Errorf(
 			"transaction uses %d bytes of reference scripts but the protocol parameters provide no reference-script price (min_fee_ref_script_cost_per_byte); cannot compute a correct minimum fee",
 			refScriptSize,
 		)
 	}
-	return backend.TierRefScriptFee(
+	return backend.TierRefScriptFeeRational(
 		refScriptSize,
 		refFeePerByte,
 		pp.RefScriptSizeIncrement(),
-		pp.RefScriptMultiplier(),
+		pp.RefScriptMultiplierRational(),
 	), nil
 }
 
