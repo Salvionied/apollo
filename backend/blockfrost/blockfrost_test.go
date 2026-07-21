@@ -84,6 +84,59 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 }
 
+func TestUtxoByRefFillsMissingTxHashOnTxUtxosOutputs(t *testing.T) {
+	addr := testAddress(t)
+	const txHashHex = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/txs/"+txHashHex+"/utxos" {
+			http.NotFound(w, r)
+			return
+		}
+		// Mirror Blockfrost /txs/{hash}/utxos: top-level hash only; outputs omit tx_hash.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hash":   txHashHex,
+			"inputs": []any{},
+			"outputs": []map[string]any{
+				{
+					"address":      addr.String(),
+					"amount":       []map[string]string{{"unit": "lovelace", "quantity": "2000000"}},
+					"output_index": 1,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "test-project")
+	hashBytes, err := hex.DecodeString(txHashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txHash common.Blake2b256
+	copy(txHash[:], hashBytes)
+
+	utxo, err := ctx.UtxoByRef(txHash, 1)
+	if err != nil {
+		t.Fatalf("UtxoByRef: %v", err)
+	}
+	if utxo == nil {
+		t.Fatal("expected utxo")
+	}
+	if got := hex.EncodeToString(utxo.Id.Id().Bytes()); got != txHashHex {
+		t.Fatalf("utxo tx id = %s, want %s", got, txHashHex)
+	}
+	if utxo.Id.Index() != 1 {
+		t.Fatalf("utxo index = %d, want 1", utxo.Id.Index())
+	}
+	out, ok := utxo.Output.(*babbage.BabbageTransactionOutput)
+	if !ok {
+		t.Fatalf("unexpected output type %T", utxo.Output)
+	}
+	if out.OutputAmount.Amount != 2_000_000 {
+		t.Fatalf("lovelace = %d, want 2000000", out.OutputAmount.Amount)
+	}
+}
+
 func TestEvaluateTxRejectsRedeemerIndexOverflow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
