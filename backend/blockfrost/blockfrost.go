@@ -291,31 +291,116 @@ func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, err
 	return result, nil
 }
 
-func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
-	// When resolved UTxOs are supplied (e.g. inputs not yet confirmed
-	// on-chain), the bare /utils/txs/evaluate endpoint (cbor body) cannot carry
-	// them. Switch to /utils/txs/evaluate/utxos with a JSON body that includes
-	// the additional UTxO set.
-	if len(additionalUtxos) > 0 {
-		reqBody, err := buildEvalUtxosRequest(txCbor, additionalUtxos)
-		if err != nil {
-			return nil, err
-		}
-		data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
-		if err != nil {
-			return nil, err
-		}
-		return parseEvaluateTxResponse(data)
-	}
+// evaluateSimpleRetries / evaluateSimpleRetryWait cover Blockfrost evaluate
+// indexing lag right after a tx is confirmed (common when chaining mint/update
+// onto a just-confirmed script UTxO). The hosted /evaluate/utxos fallback is
+// unsafe for asset-bearing additional UTxOs (Ogmios jsonwsp base16/base64
+// faults), so retrying the simple endpoint is preferred.
+//
+// These are package-level vars so tests can shrink the backoff without sleeping
+// for the production intervals.
+var (
+	evaluateSimpleRetries   = 6
+	evaluateSimpleRetryWait = 2 * time.Second
+)
 
-	// BlockFrost expects the transaction CBOR hex-encoded in the request body
-	// (with Content-Type application/cbor), not the raw CBOR bytes.
+func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	// Prefer /utils/txs/evaluate (hex body). Apollo always passes spending
+	// inputs as additionalUtxos even when they are already on-chain; posting
+	// them to /utils/txs/evaluate/utxos re-encodes inline datums and reference
+	// scripts into a large JSON body. Hosted Blockfrost→Ogmios rejects that
+	// path for additional UTxOs that include native assets (jsonwsp fault:
+	// "failed to decode payload from base64 or base16"), while the same txs
+	// evaluate successfully via the bare endpoint once inputs are visible.
+	//
+	// On missing-input failures, retry the simple endpoint (indexing lag)
+	// before falling back to /evaluate/utxos, and only fall back when the
+	// additional set has no native assets.
+	var lastErr error
+	for attempt := 1; attempt <= evaluateSimpleRetries; attempt++ {
+		result, err := b.evaluateTxSimple(txCbor)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !isMissingInputsEvalError(err) {
+			return nil, err
+		}
+		if attempt < evaluateSimpleRetries {
+			time.Sleep(evaluateSimpleRetryWait)
+		}
+	}
+	if len(additionalUtxos) == 0 || additionalUtxosContainNativeAssets(additionalUtxos) {
+		return nil, lastErr
+	}
+	return b.evaluateTxWithAdditionalUtxos(txCbor, additionalUtxos)
+}
+
+// additionalUtxosContainNativeAssets reports whether any resolved UTxO carries
+// a multi-asset balance. Hosted Blockfrost /evaluate/utxos currently faults on
+// those entries, so they must not be used as an evaluate fallback.
+func additionalUtxosContainNativeAssets(utxos []common.Utxo) bool {
+	for _, utxo := range utxos {
+		if utxo.Output == nil {
+			continue
+		}
+		if assets := utxo.Output.Assets(); assets != nil && len(assets.Policies()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// evaluateTxSimple POSTs hex-encoded transaction CBOR to /utils/txs/evaluate.
+// BlockFrost expects the hex string in the body with Content-Type
+// application/cbor (not raw CBOR bytes).
+func (b *BlockFrostChainContext) evaluateTxSimple(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
 	body := strings.NewReader(hex.EncodeToString(txCbor))
 	data, err := b.request("POST", "/utils/txs/evaluate", body, "application/cbor")
 	if err != nil {
 		return nil, err
 	}
 	return parseEvaluateTxResponse(data)
+}
+
+// evaluateTxWithAdditionalUtxos POSTs to /utils/txs/evaluate/utxos with a JSON
+// body carrying the transaction CBOR hex and a resolved additional UTxO set.
+func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxos(
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
+	reqBody, err := buildEvalUtxosRequest(txCbor, additionalUtxos)
+	if err != nil {
+		return nil, err
+	}
+	data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseEvaluateTxResponse(data)
+}
+
+// isMissingInputsEvalError reports whether an EvaluateTx failure indicates the
+// backend could not resolve transaction inputs from chain state (so supplying
+// additionalUtxos may help).
+func isMissingInputsEvalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "unknowninputs"),
+		strings.Contains(s, "unknown inputs"),
+		strings.Contains(s, "unknown_inputs"),
+		strings.Contains(s, "nonexistinginput"),
+		strings.Contains(s, "non-existing input"),
+		strings.Contains(s, "non_existing_input"):
+		return true
+	case strings.Contains(s, "missing") && strings.Contains(s, "input"):
+		return true
+	default:
+		return false
+	}
 }
 
 // buildEvalUtxosRequest marshals the JSON body for the
@@ -385,10 +470,17 @@ func bfAdditionalUtxoItemFromUtxo(utxo common.Utxo) (bfAdditionalUtxoItem, error
 	}
 
 	// Inline datum CBOR hex goes in Datum; a bare datum hash goes in DatumHash.
+	// Prefer the original on-chain CBOR bytes when present so the evaluate
+	// endpoint sees a canonical encoding (MarshalCBOR re-encodes Plutus Data
+	// and can diverge from the ledger bytes).
 	if datum := out.Datum(); datum != nil {
-		datumCbor, err := datum.MarshalCBOR()
-		if err != nil {
-			return bfAdditionalUtxoItem{}, fmt.Errorf("failed to encode inline datum: %w", err)
+		datumCbor := datum.Cbor()
+		if len(datumCbor) == 0 {
+			var err error
+			datumCbor, err = datum.MarshalCBOR()
+			if err != nil {
+				return bfAdditionalUtxoItem{}, fmt.Errorf("failed to encode inline datum: %w", err)
+			}
 		}
 		datumHex := hex.EncodeToString(datumCbor)
 		txOut.Datum = &datumHex
@@ -463,15 +555,28 @@ func jsonValuePresent(raw json.RawMessage) bool {
 // BlockFrost proxies Ogmios, so the payload may be either the legacy Ogmios v5
 // jsonwsp shape ({"result":{"EvaluationResult":{...}}}) or the Ogmios v6 shape
 // ({"result":[{"validator":...,"budget":...}, ...]}, with failures reported as
-// a top-level {"error":{...}} object). Any other shape, and any response with
+// a top-level {"error":{...}} object). Hosted Blockfrost also sometimes returns
+// a bare Ogmios v5 jsonwsp/fault object. Any other shape, and any response with
 // zero evaluation results, is an error.
 func parseEvaluateTxResponse(data []byte) (map[common.RedeemerKey]common.ExUnits, error) {
 	var envelope struct {
+		Type   string          `json:"type"`
 		Result json.RawMessage `json:"result"`
 		Error  json.RawMessage `json:"error"`
+		Fault  json.RawMessage `json:"fault"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return nil, fmt.Errorf("failed to parse evaluate response: %w", err)
+	}
+	if envelope.Type == "jsonwsp/fault" || jsonValuePresent(envelope.Fault) {
+		var fault struct {
+			Code   string `json:"code"`
+			String string `json:"string"`
+		}
+		if err := json.Unmarshal(envelope.Fault, &fault); err == nil && fault.String != "" {
+			return nil, fmt.Errorf("ogmios evaluate fault (%s): %s", fault.Code, fault.String)
+		}
+		return nil, fmt.Errorf("ogmios evaluate fault: %s", evalErrorSnippet(data))
 	}
 	if jsonValuePresent(envelope.Error) {
 		var ogmiosErr struct {
@@ -605,15 +710,27 @@ func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint3
 		return nil, err
 	}
 
+	// Blockfrost GET /txs/{hash}/utxos returns the tx id only at the top level
+	// ("hash"). Output objects omit tx_hash (unlike /addresses/{addr}/utxos).
+	// hydrateUtxo/toUtxo require TxHash, so fill it from the request hash (or
+	// the response top-level hash) before parsing.
 	var txUtxos struct {
+		Hash    string          `json:"hash"`
 		Outputs []bfAddressUTxO `json:"outputs"`
 	}
 	if err := json.Unmarshal(data, &txUtxos); err != nil {
 		return nil, err
 	}
+	fallbackHash := hashHex
+	if txUtxos.Hash != "" {
+		fallbackHash = txUtxos.Hash
+	}
 
 	for _, raw := range txUtxos.Outputs {
 		if int64(raw.OutputIndex) == int64(index) {
+			if raw.TxHash == "" {
+				raw.TxHash = fallbackHash
+			}
 			addr, err := common.NewAddress(raw.Address)
 			if err != nil {
 				return nil, err
@@ -718,6 +835,11 @@ type bfProtocolParams struct {
 	MaxCollateralIn    int64           `json:"max_collateral_inputs"`
 	CoinsPerUtxoSize   string          `json:"coins_per_utxo_size"`
 	CostModels         json.RawMessage `json:"cost_models"`
+	// CostModelsRaw is the canonical flat integer array per language. Prefer
+	// this over named cost_models: Blockfrost's keyed/named maps can be
+	// truncated or reordered after Plutus cost-model parameter bumps, which
+	// yields ScriptIntegrityHashMismatch even when EvaluateTx succeeds.
+	CostModelsRaw json.RawMessage `json:"cost_models_raw"`
 	// BlockFrost exposes the Conway reference-script base price under this flat
 	// key (lovelace per byte for the first tier); it does not return the
 	// structured min_fee_reference_scripts_{base,range,multiplier} triple.
@@ -768,12 +890,22 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	}
 
 	// Parse cost models from BlockFrost JSON.
-	// BlockFrost may return cost models as either:
+	// Prefer cost_models_raw (canonical integer arrays). Fall back to
+	// cost_models which may be either:
 	//   - array format:  {"PlutusV1": [205665, 812, ...]}
 	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
 	// Both formats use keys "PlutusV1", "PlutusV2", "PlutusV3" which match
 	// the canonical form expected by ComputeScriptDataHash.
-	if len(p.CostModels) > 0 {
+	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
+		var rawModels map[string][]int64
+		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
+			return pp, fmt.Errorf("failed to parse cost_models_raw: %w", err)
+		}
+		if len(rawModels) > 0 {
+			pp.CostModels = rawModels
+		}
+	}
+	if pp.CostModels == nil && len(p.CostModels) > 0 {
 		var arrayModels map[string][]int64
 		if err := json.Unmarshal(p.CostModels, &arrayModels); err == nil {
 			pp.CostModels = arrayModels

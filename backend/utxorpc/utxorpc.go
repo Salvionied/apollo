@@ -31,6 +31,16 @@ type UtxoRpcChainContext struct {
 	networkId uint8
 }
 
+// EvaluationError reports deterministic Cardano transaction-evaluation errors
+// returned by the UTxO RPC provider.
+type EvaluationError struct {
+	Messages []string
+}
+
+func (e *EvaluationError) Error() string {
+	return strings.Join(e.Messages, "; ")
+}
+
 // NewUtxoRpcChainContext creates a new UTxO RPC chain context.
 func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]string) *UtxoRpcChainContext {
 	opts := []sdk.ClientOption{
@@ -319,7 +329,7 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[co
 	u.client.AddHeadersToRequest(req)
 	resp, err := u.client.EvalTx(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("evaluate transaction: %w", err)
 	}
 	return evalTxResponseToExpectedExUnits(resp.Msg, expected)
 }
@@ -337,6 +347,10 @@ func evalTxResponseToExpectedExUnits(
 	expected map[common.RedeemerKey]struct{},
 ) (map[common.RedeemerKey]common.ExUnits, error) {
 	standard, standardErr := parseEvalTxResponse(msg, utxorpcPurposeToRedeemerTag)
+	var evaluationErr *EvaluationError
+	if errors.As(standardErr, &evaluationErr) {
+		return nil, standardErr
+	}
 	fallback, fallbackErr := parseEvalTxResponse(msg, utxorpcZeroBasedPurposeToRedeemerTag)
 
 	standardMatches := standardErr == nil && sameRedeemerKeySet(standard, expected)
@@ -394,6 +408,19 @@ func parseEvalTxResponse(
 	cardanoReport := report.GetCardano()
 	if cardanoReport == nil {
 		return nil, errors.New("no cardano evaluation report in response")
+	}
+	if responseErrors := cardanoReport.GetErrors(); len(responseErrors) > 0 {
+		messages := make([]string, 0, len(responseErrors))
+		for _, responseError := range responseErrors {
+			message := strings.TrimSpace(responseError.GetMsg())
+			if message != "" {
+				messages = append(messages, message)
+			}
+		}
+		if len(messages) == 0 {
+			messages = []string{"script evaluation failed without an error message"}
+		}
+		return nil, &EvaluationError{Messages: messages}
 	}
 	result := make(map[common.RedeemerKey]common.ExUnits)
 	for _, redeemer := range cardanoReport.GetRedeemers() {

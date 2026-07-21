@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"math/big"
@@ -81,6 +82,59 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 	if _, ok := scriptRef.(common.PlutusV2Script); !ok {
 		t.Fatalf("expected PlutusV2 reference script, got %T", scriptRef)
+	}
+}
+
+func TestUtxoByRefFillsMissingTxHashOnTxUtxosOutputs(t *testing.T) {
+	addr := testAddress(t)
+	const txHashHex = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/txs/"+txHashHex+"/utxos" {
+			http.NotFound(w, r)
+			return
+		}
+		// Mirror Blockfrost /txs/{hash}/utxos: top-level hash only; outputs omit tx_hash.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hash":   txHashHex,
+			"inputs": []any{},
+			"outputs": []map[string]any{
+				{
+					"address":      addr.String(),
+					"amount":       []map[string]string{{"unit": "lovelace", "quantity": "2000000"}},
+					"output_index": 1,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "test-project")
+	hashBytes, err := hex.DecodeString(txHashHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txHash common.Blake2b256
+	copy(txHash[:], hashBytes)
+
+	utxo, err := ctx.UtxoByRef(txHash, 1)
+	if err != nil {
+		t.Fatalf("UtxoByRef: %v", err)
+	}
+	if utxo == nil {
+		t.Fatal("expected utxo")
+	}
+	if got := hex.EncodeToString(utxo.Id.Id().Bytes()); got != txHashHex {
+		t.Fatalf("utxo tx id = %s, want %s", got, txHashHex)
+	}
+	if utxo.Id.Index() != 1 {
+		t.Fatalf("utxo index = %d, want 1", utxo.Id.Index())
+	}
+	out, ok := utxo.Output.(*babbage.BabbageTransactionOutput)
+	if !ok {
+		t.Fatalf("unexpected output type %T", utxo.Output)
+	}
+	if out.OutputAmount.Amount != 2_000_000 {
+		t.Fatalf("lovelace = %d, want 2000000", out.OutputAmount.Amount)
 	}
 }
 
@@ -330,6 +384,63 @@ func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
 	}
 	if got := pp.RefScriptFeePerByte(); got != 15 {
 		t.Fatalf("RefScriptFeePerByte() = %v, want 15", got)
+	}
+}
+
+func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
+	const body = `{
+		"min_fee_a": 44,
+		"min_fee_b": 155381,
+		"max_tx_size": 16384,
+		"coins_per_utxo_size": "4310",
+		"collateral_percent": 150,
+		"max_collateral_inputs": 3,
+		"cost_models": {
+			"PlutusV3": {"addInteger-cpu-arguments-intercept": 1, "addInteger-cpu-arguments-slope": 2}
+		},
+		"cost_models_raw": {
+			"PlutusV3": [100, 200, 300, 400]
+		}
+	}`
+
+	var raw bfProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pp.CostModels["PlutusV3"]
+	if len(got) != 4 || got[0] != 100 || got[3] != 400 {
+		t.Fatalf("expected cost_models_raw values, got %v", got)
+	}
+}
+
+func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
+	const body = `{
+		"min_fee_a": 44,
+		"min_fee_b": 155381,
+		"max_tx_size": 16384,
+		"coins_per_utxo_size": "4310",
+		"collateral_percent": 150,
+		"max_collateral_inputs": 3,
+		"cost_models": {
+			"PlutusV2": [9, 8, 7]
+		}
+	}`
+
+	var raw bfProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pp.CostModels["PlutusV2"]
+	if len(got) != 3 || got[0] != 9 {
+		t.Fatalf("expected named cost_models fallback, got %v", got)
 	}
 }
 
@@ -622,13 +733,13 @@ func TestBuildEvalUtxosRequestRejectsOverflowQuantity(t *testing.T) {
 	}
 }
 
-func TestEvaluateTxWithAdditionalUtxosTargetsUtxosEndpoint(t *testing.T) {
-	var gotPath, gotContentType, gotBody string
+func TestEvaluateTxPrefersSimpleEndpointWhenAdditionalUtxosProvided(t *testing.T) {
+	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotContentType = r.Header.Get("Content-Type")
-		body, _ := io.ReadAll(r.Body)
-		gotBody = string(body)
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
+			t.Errorf("unexpected path %q; simple evaluate should succeed without /evaluate/utxos", r.URL.Path)
+		}
 		_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
 	}))
 	defer server.Close()
@@ -638,23 +749,141 @@ func TestEvaluateTxWithAdditionalUtxosTargetsUtxosEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gotPath != "/api/v0/utils/txs/evaluate/utxos" {
-		t.Fatalf("path = %q, want /api/v0/utils/txs/evaluate/utxos", gotPath)
-	}
-	if gotContentType != "application/json" {
-		t.Fatalf("content-type = %q, want application/json", gotContentType)
-	}
-	// Body must be valid JSON carrying the cbor + additionalUtxoSet keys.
-	var parsed map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(gotBody), &parsed); err != nil {
-		t.Fatalf("request body is not JSON: %v", err)
-	}
-	if _, ok := parsed["additionalUtxoSet"]; !ok {
-		t.Fatal("request body missing additionalUtxoSet")
+	if len(paths) != 1 || paths[0] != "/api/v0/utils/txs/evaluate" {
+		t.Fatalf("paths = %v, want single /api/v0/utils/txs/evaluate", paths)
 	}
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
 		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
+	prevRetries, prevWait := evaluateSimpleRetries, evaluateSimpleRetryWait
+	evaluateSimpleRetries, evaluateSimpleRetryWait = 2, 0
+	defer func() {
+		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
+	}()
+
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v0/utils/txs/evaluate":
+			// Mimic Ogmios/Blockfrost reporting unknown inputs on the simple path.
+			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
+		case "/api/v0/utils/txs/evaluate/utxos":
+			_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	// ADA-only additional UTxO: fallback to /evaluate/utxos is allowed.
+	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleAdaOnlyUtxo(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPaths := []string{
+		"/api/v0/utils/txs/evaluate",
+		"/api/v0/utils/txs/evaluate",
+		"/api/v0/utils/txs/evaluate/utxos",
+	}
+	if len(paths) != len(wantPaths) {
+		t.Fatalf("paths = %v, want %v", paths, wantPaths)
+	}
+	for i := range wantPaths {
+		if paths[i] != wantPaths[i] {
+			t.Fatalf("paths = %v, want %v", paths, wantPaths)
+		}
+	}
+	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestEvaluateTxRetriesSimpleWhenAdditionalUtxosHaveAssets(t *testing.T) {
+	prevRetries, prevWait := evaluateSimpleRetries, evaluateSimpleRetryWait
+	evaluateSimpleRetries, evaluateSimpleRetryWait = 3, 0
+	defer func() {
+		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
+	}()
+
+	var paths []string
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path != "/api/v0/utils/txs/evaluate" {
+			t.Errorf("unexpected path %q; asset-bearing UTxOs must not use /evaluate/utxos", r.URL.Path)
+			return
+		}
+		attempts++
+		if attempts < 3 {
+			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("simple attempts = %d, want 3", attempts)
+	}
+	for _, p := range paths {
+		if p != "/api/v0/utils/txs/evaluate" {
+			t.Fatalf("paths = %v, want only simple evaluate", paths)
+		}
+	}
+	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestParseEvaluateTxResponseOgmiosFault(t *testing.T) {
+	data := []byte(`{"type":"jsonwsp/fault","version":"1.0","servicename":"ogmios",` +
+		`"fault":{"code":"client","string":"Invalid request: failed to decode payload from base64 or base16."}}`)
+	_, err := parseEvaluateTxResponse(data)
+	if err == nil {
+		t.Fatal("expected fault error")
+	}
+	if !strings.Contains(err.Error(), "failed to decode payload") {
+		t.Fatalf("error should include fault string, got: %v", err)
+	}
+}
+
+func TestIsMissingInputsEvalError(t *testing.T) {
+	if !isMissingInputsEvalError(errors.New(`script evaluation failed: {"UnknownInputs":[]}`)) {
+		t.Fatal("expected UnknownInputs to match")
+	}
+	if isMissingInputsEvalError(errors.New(`ogmios evaluate fault (client): failed to decode payload from base64 or base16`)) {
+		t.Fatal("decode fault must not trigger utxos fallback")
+	}
+}
+
+// sampleAdaOnlyUtxo builds a resolved ADA-only UTxO suitable for the
+// /evaluate/utxos fallback path (no native assets).
+func sampleAdaOnlyUtxo(t *testing.T) common.Utxo {
+	t.Helper()
+	var txId common.Blake2b256
+	for i := range txId {
+		txId[i] = 0x44
+	}
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: testAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 2_000_000},
+	}
+	return common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: txId, OutputIndex: 0},
+		Output: &output,
 	}
 }
 

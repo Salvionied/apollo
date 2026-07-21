@@ -490,7 +490,13 @@ func NewVkeyWitnessFromSkey(
 	}
 }
 
-// ComputeScriptDataHash computes the script data hash per the Alonzo spec.
+// ComputeScriptDataHash computes the script data hash per the ledger rules:
+// blake2b-256(redeemers_cbor || datums_cbor || lang_views_cbor).
+//
+// When there are no witness datums, datums_cbor is omitted entirely (Alonzo,
+// Babbage, and Conway). Encoding an empty datum array here produces
+// ScriptIntegrityHashMismatch on submit for mint/spend txs that only carry
+// inline output datums.
 func ComputeScriptDataHash(
 	redeemers map[common.RedeemerKey]common.RedeemerValue,
 	datums []common.Datum,
@@ -505,6 +511,7 @@ func ComputeScriptDataHash(
 	if len(redeemers) > 0 {
 		redeemerBytes, err = cbor.Encode(redeemers)
 	} else {
+		// Empty Conway redeemer map must be 0xa0, not CBOR null.
 		redeemerBytes, err = cbor.Encode(map[common.RedeemerKey]common.RedeemerValue{})
 	}
 	if err != nil {
@@ -514,11 +521,9 @@ func ComputeScriptDataHash(
 	var datumBytes []byte
 	if len(datums) > 0 {
 		datumBytes, err = cbor.Encode(datums)
-	} else {
-		datumBytes, err = cbor.Encode([]common.Datum{})
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode datums: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode datums: %w", err)
+		}
 	}
 
 	// Encode cost models as language views using gouroboros, which
