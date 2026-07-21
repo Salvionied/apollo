@@ -2,6 +2,7 @@ package apollo
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -535,3 +536,193 @@ func TestSignMessage64ByteKey(t *testing.T) {
 		t.Errorf("expected 64-byte signature, got %d", len(sig))
 	}
 }
+
+func TestComputeScriptDataHashOmitsEmptyDatums(t *testing.T) {
+	redeemerKey := common.RedeemerKey{Tag: common.RedeemerTagMint, Index: 0}
+	redeemerVal := common.RedeemerValue{
+		ExUnits: common.ExUnits{Memory: 1000, Steps: 2000},
+	}
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		redeemerKey: redeemerVal,
+	}
+	costs := map[string][]int64{
+		"PlutusV3": {1, 2, 3, 4, 5},
+	}
+
+	got, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected hash")
+	}
+
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{2: {}},
+		map[uint][]int64{2: costs["PlutusV3"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ledger preimage: redeemers || (no datums) || lang views.
+	want := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+
+	// Pre-fix Apollo behavior encoded an empty datum array and must not match.
+	emptyDatums, err := cbor.Encode([]common.Datum{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), emptyDatums...), langViews...))
+	if *got == legacy {
+		t.Fatal("hash unexpectedly matches empty-datums preimage")
+	}
+}
+
+func TestComputeScriptDataHashIncludesNonEmptyDatums(t *testing.T) {
+	redeemerKey := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		redeemerKey: {ExUnits: common.ExUnits{Memory: 1, Steps: 2}},
+	}
+	datums := []common.Datum{{}}
+	costs := map[string][]int64{"PlutusV2": {9, 8, 7}}
+
+	got, err := ComputeScriptDataHash(redeemers, datums, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	datumBytes, err := cbor.Encode(datums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{1: {}},
+		map[uint][]int64{1: costs["PlutusV2"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), datumBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+}
+
+func TestComputeScriptDataHashIncludesWitnessDatums(t *testing.T) {
+	// Alias coverage for the plan-named witness-datum case.
+	TestComputeScriptDataHashIncludesNonEmptyDatums(t)
+}
+
+func TestComputeScriptDataHashInlineDatumIsNotWitnessDatum(t *testing.T) {
+	// Inline output datums are not passed into ComputeScriptDataHash; only
+	// witness datums are. An empty witness-datum slice must omit datums CBOR.
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagMint, Index: 0}: {ExUnits: common.ExUnits{Memory: 10, Steps: 20}},
+	}
+	costs := map[string][]int64{"PlutusV3": {1, 2, 3}}
+	got, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{2: {}},
+		map[uint][]int64{2: costs["PlutusV3"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOmit := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got != wantOmit {
+		t.Fatalf("expected omit-datums preimage, got %x want %x", got.Bytes(), wantOmit.Bytes())
+	}
+}
+
+func TestComputeScriptDataHashPlutusV1LanguageView(t *testing.T) {
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagSpend, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
+	}
+	costs := map[string][]int64{"PlutusV1": {100, 200, 300}}
+	got, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{0: {}},
+		map[uint][]int64{0: costs["PlutusV1"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("PlutusV1 language-view hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+}
+
+func TestComputeScriptDataHashMultipleLanguagesDeterministic(t *testing.T) {
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagMint, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
+	}
+	costs := map[string][]int64{
+		"PlutusV2": {4, 5, 6},
+		"PlutusV3": {7, 8, 9},
+	}
+	got1, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got2, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *got1 != *got2 {
+		t.Fatalf("hash not deterministic across calls: %x vs %x", got1.Bytes(), got2.Bytes())
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{1: {}, 2: {}},
+		map[uint][]int64{1: costs["PlutusV2"], 2: costs["PlutusV3"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got1 != want {
+		t.Fatalf("multi-language hash mismatch:\n got %x\nwant %x", got1.Bytes(), want.Bytes())
+	}
+}
+
+func TestComputeScriptDataHashRejectsUnsupportedLanguage(t *testing.T) {
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagSpend, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
+	}
+	_, err := ComputeScriptDataHash(redeemers, nil, map[string][]int64{"PlutusV9": {1}})
+	if err == nil {
+		t.Fatal("expected error for unsupported language")
+	}
+	if !strings.Contains(err.Error(), "unsupported cost model language") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+

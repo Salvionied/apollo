@@ -718,6 +718,11 @@ type bfProtocolParams struct {
 	MaxCollateralIn    int64           `json:"max_collateral_inputs"`
 	CoinsPerUtxoSize   string          `json:"coins_per_utxo_size"`
 	CostModels         json.RawMessage `json:"cost_models"`
+	// CostModelsRaw is the canonical flat integer array per language. Prefer
+	// this over named cost_models: Blockfrost's keyed/named maps can be
+	// truncated or reordered after Plutus cost-model parameter bumps, which
+	// yields ScriptIntegrityHashMismatch even when EvaluateTx succeeds.
+	CostModelsRaw json.RawMessage `json:"cost_models_raw"`
 	// BlockFrost exposes the Conway reference-script base price under this flat
 	// key (lovelace per byte for the first tier); it does not return the
 	// structured min_fee_reference_scripts_{base,range,multiplier} triple.
@@ -768,12 +773,22 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	}
 
 	// Parse cost models from BlockFrost JSON.
-	// BlockFrost may return cost models as either:
+	// Prefer cost_models_raw (canonical integer arrays). Fall back to
+	// cost_models which may be either:
 	//   - array format:  {"PlutusV1": [205665, 812, ...]}
 	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
 	// Both formats use keys "PlutusV1", "PlutusV2", "PlutusV3" which match
 	// the canonical form expected by ComputeScriptDataHash.
-	if len(p.CostModels) > 0 {
+	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
+		var rawModels map[string][]int64
+		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
+			return pp, fmt.Errorf("failed to parse cost_models_raw: %w", err)
+		}
+		if len(rawModels) > 0 {
+			pp.CostModels = rawModels
+		}
+	}
+	if pp.CostModels == nil && len(p.CostModels) > 0 {
 		var arrayModels map[string][]int64
 		if err := json.Unmarshal(p.CostModels, &arrayModels); err == nil {
 			pp.CostModels = arrayModels
