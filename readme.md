@@ -99,6 +99,31 @@ Benchmarks live in `coinselection_bench_test.go`
 (`go test -bench BenchmarkCoinSelection`), and the design notes with full
 results are in `docs/design/2026-06-11-macs-coin-selection-design.md`.
 
+## Evaluation witnesses
+
+When a script transaction has required signers, Apollo supplies valid,
+evaluation-only witnesses to the execution-unit evaluator. `BursaWallet`
+provides its payment and stake witnesses automatically. Watch-only,
+hardware, and remote wallets can provide the required signatures without
+changing the `Wallet` interface:
+
+```go
+type remoteEvaluationSigner struct{}
+
+func (remoteEvaluationSigner) EvaluationWitnesses(
+    bodyHash common.Blake2b256,
+    required []common.Blake2b224,
+) ([]common.VkeyWitness, error) {
+    // Return valid witnesses for any requested hashes controlled remotely.
+    return nil, nil
+}
+
+a.AddEvaluationWitnessProvider(remoteEvaluationSigner{})
+```
+
+These signatures are used only for `EvaluateTx`; they are not retained in the
+final unsigned transaction.
+
 If you have any questions or requests feel free to drop into this discord and ask :) https://discord.gg/MH4CmJcg49
 
 By:

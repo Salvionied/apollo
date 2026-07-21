@@ -67,24 +67,25 @@ type Apollo struct {
 	// inputs itself (rather than the caller pinning them via AddCollateral).
 	// Only auto-selected collateral is resized by finalizeCollateral(), so
 	// caller-pinned collateral is never silently rewritten.
-	collateralAutoSelected bool
-	nativescripts          []common.NativeScript
-	usedUtxos              map[string]bool
-	wallet                 Wallet
-	certificates           []common.CertificateWrapper
-	withdrawals            map[string]withdrawalEntry
-	auxiliaryData          *auxData
-	votingProcedures       common.VotingProcedures
-	proposalProcedures     []conway.ConwayProposalProcedure
-	currentTreasury        int64
-	treasuryDonation       int64
-	collateralAmount       int64
-	scriptHashes           []string
-	changeAddress          *common.Address
-	estimateExUnits        bool
-	forceFee               bool
-	coinSelector           CoinSelector
-	err                    error
+	collateralAutoSelected     bool
+	nativescripts              []common.NativeScript
+	usedUtxos                  map[string]bool
+	wallet                     Wallet
+	evaluationWitnessProviders []EvaluationWitnessProvider
+	certificates               []common.CertificateWrapper
+	withdrawals                map[string]withdrawalEntry
+	auxiliaryData              *auxData
+	votingProcedures           common.VotingProcedures
+	proposalProcedures         []conway.ConwayProposalProcedure
+	currentTreasury            int64
+	treasuryDonation           int64
+	collateralAmount           int64
+	scriptHashes               []string
+	changeAddress              *common.Address
+	estimateExUnits            bool
+	forceFee                   bool
+	coinSelector               CoinSelector
+	err                        error
 }
 
 type redeemerEntry struct {
@@ -117,6 +118,16 @@ func New(cc backend.ChainContext) *Apollo {
 // SetWallet sets the wallet for the transaction builder.
 func (a *Apollo) SetWallet(w Wallet) *Apollo {
 	a.wallet = w
+	return a
+}
+
+// AddEvaluationWitnessProvider registers an optional source of witnesses for
+// preliminary transaction evaluation. Registered witnesses are never added to
+// the completed transaction.
+func (a *Apollo) AddEvaluationWitnessProvider(provider EvaluationWitnessProvider) *Apollo {
+	if provider != nil {
+		a.evaluationWitnessProviders = append(a.evaluationWitnessProviders, provider)
+	}
 	return a
 }
 
@@ -941,26 +952,27 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 // Clone returns a deep copy of this Apollo builder.
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
-		Context:                a.Context,
-		isEstimateRequired:     a.isEstimateRequired,
-		Fee:                    a.Fee,
-		FeePadding:             a.FeePadding,
-		forceFee:               a.forceFee,
-		Ttl:                    a.Ttl,
-		ValidityStart:          a.ValidityStart,
-		totalCollateral:        a.totalCollateral,
-		collateralAmount:       a.collateralAmount,
-		collateralOverlapRef:   a.collateralOverlapRef,
-		collateralAutoSelected: a.collateralAutoSelected,
-		currentTreasury:        a.currentTreasury,
-		treasuryDonation:       a.treasuryDonation,
-		estimateExUnits:        a.estimateExUnits,
-		wallet:                 a.wallet,
-		err:                    a.err,
-		redeemers:              make(map[string]redeemerEntry),
-		stakeRedeemers:         make(map[string]redeemerEntry),
-		mintRedeemers:          make(map[string]redeemerEntry),
-		withdrawals:            make(map[string]withdrawalEntry),
+		Context:                    a.Context,
+		isEstimateRequired:         a.isEstimateRequired,
+		Fee:                        a.Fee,
+		FeePadding:                 a.FeePadding,
+		forceFee:                   a.forceFee,
+		Ttl:                        a.Ttl,
+		ValidityStart:              a.ValidityStart,
+		totalCollateral:            a.totalCollateral,
+		collateralAmount:           a.collateralAmount,
+		collateralOverlapRef:       a.collateralOverlapRef,
+		collateralAutoSelected:     a.collateralAutoSelected,
+		currentTreasury:            a.currentTreasury,
+		treasuryDonation:           a.treasuryDonation,
+		estimateExUnits:            a.estimateExUnits,
+		wallet:                     a.wallet,
+		evaluationWitnessProviders: append([]EvaluationWitnessProvider(nil), a.evaluationWitnessProviders...),
+		err:                        a.err,
+		redeemers:                  make(map[string]redeemerEntry),
+		stakeRedeemers:             make(map[string]redeemerEntry),
+		mintRedeemers:              make(map[string]redeemerEntry),
+		withdrawals:                make(map[string]withdrawalEntry),
 	}
 	for _, p := range a.payments {
 		if pp, ok := p.(*Payment); ok {
@@ -1782,6 +1794,12 @@ func (a *Apollo) estimateExecutionUnits(
 		return nil, fmt.Errorf("failed to build preliminary tx body: %w", err)
 	}
 	ws := a.buildWitnessSet(inputs)
+
+	witnesses, err := a.evaluationWitnesses(&body)
+	if err != nil {
+		return nil, err
+	}
+	ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
 
 	prelimTx := conway.ConwayTransaction{
 		Body:       body,

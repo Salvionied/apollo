@@ -125,6 +125,30 @@ func (w *BursaWallet) SignTxBody(txBodyHash common.Blake2b256) (common.VkeyWitne
 	}, nil
 }
 
+// EvaluationWitnesses provides payment and stake witnesses required by a
+// preliminary transaction evaluation.
+func (w *BursaWallet) EvaluationWitnesses(
+	txBodyHash common.Blake2b256,
+	requiredSigners []common.Blake2b224,
+) ([]common.VkeyWitness, error) {
+	witnesses := make([]common.VkeyWitness, 0, 2)
+	for _, required := range requiredSigners {
+		switch required {
+		case w.PubKeyHash():
+			witnesses = append(witnesses, common.VkeyWitness{
+				Vkey:      w.paymentKey.Public().PublicKey(),
+				Signature: w.paymentKey.Sign(txBodyHash.Bytes()),
+			})
+		case w.StakePubKeyHash():
+			witnesses = append(witnesses, common.VkeyWitness{
+				Vkey:      w.stakeKey.Public().PublicKey(),
+				Signature: w.stakeKey.Sign(txBodyHash.Bytes()),
+			})
+		}
+	}
+	return witnesses, nil
+}
+
 func (w *BursaWallet) PubKeyHash() common.Blake2b224 {
 	pubKey := w.paymentKey.Public().PublicKey()
 	return common.Blake2b224Hash(pubKey)
