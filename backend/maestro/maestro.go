@@ -36,6 +36,11 @@ type MaestroChainContext struct {
 	apiKey string
 }
 
+// Capabilities reports the Maestro operations supported by this client.
+func (m *MaestroChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.AllCapabilities) &^ backend.CapabilitySet(backend.CapabilityGenesisParams)
+}
+
 // NewMaestroChainContext creates a new Maestro chain context.
 func NewMaestroChainContext(networkId uint8, projectId string) (*MaestroChainContext, error) {
 	networkStr := networkString(networkId)
@@ -175,7 +180,7 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 }
 
 func (m *MaestroChainContext) GenesisParams() (backend.GenesisParameters, error) {
-	return backend.GenesisParameters{}, errors.New("genesis params not available via Maestro API")
+	return backend.GenesisParameters{}, backend.NewUnsupportedError("Maestro", backend.CapabilityGenesisParams)
 }
 
 func (m *MaestroChainContext) NetworkId() uint8 {

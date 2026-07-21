@@ -31,6 +31,17 @@ type OgmiosChainContext struct {
 	networkId uint8
 }
 
+// Capabilities reports the operations supported by the configured Ogmios
+// client. Address UTxO queries and script lookup require the optional Kupo
+// client; UTxO-by-reference queries are served directly by Ogmios.
+func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
+	capabilities := backend.CapabilitySet(backend.AllCapabilities)
+	if o.kupo == nil {
+		capabilities &^= backend.CapabilitySet(backend.CapabilityUtxos | backend.CapabilityScriptCbor)
+	}
+	return capabilities
+}
+
 // NewOgmiosChainContext creates a new Ogmios chain context.
 func NewOgmiosChainContext(ogmiosClient *ogmigo.Client, kupoClient *kugo.Client, networkId uint8) *OgmiosChainContext {
 	return &OgmiosChainContext{
@@ -102,7 +113,7 @@ func (o *OgmiosChainContext) Tip() (uint64, error) {
 
 func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
 	if o.kupo == nil {
-		return nil, errors.New("kupo client required for UTxO lookup")
+		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityUtxos)
 	}
 	ctx := context.Background()
 	matches, err := o.kupo.Matches(ctx, kugo.OnlyUnspent(), kugo.Address(address.String()))
@@ -345,7 +356,7 @@ func (o *OgmiosChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
 	if o.kupo == nil {
-		return nil, errors.New("kupo client required for script lookup")
+		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityScriptCbor)
 	}
 	ctx := context.Background()
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
