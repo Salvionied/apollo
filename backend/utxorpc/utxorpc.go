@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
 	query "github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
@@ -314,6 +317,10 @@ func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 // off-chain or chained inputs. Passing a non-empty additionalUtxos is not an
 // error, but those UTxOs have no effect.
 func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	expected, err := expectedRedeemerKeys(txCbor)
+	if err != nil {
+		return nil, err
+	}
 	req := connect.NewRequest(&submit.EvalTxRequest{
 		Tx: &submit.AnyChainTx{
 			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
@@ -324,7 +331,7 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[co
 	if err != nil {
 		return nil, fmt.Errorf("evaluate transaction: %w", err)
 	}
-	return evalTxResponseToExUnits(resp.Msg)
+	return evalTxResponseToExpectedExUnits(resp.Msg, expected)
 }
 
 // evalTxResponseToExUnits converts an EvalTxResponse into a redeemer ExUnits
@@ -332,6 +339,65 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[co
 // is an error: returning an empty map with a nil error would let callers
 // silently keep zero execution budgets for their redeemers.
 func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey]common.ExUnits, error) {
+	return parseEvalTxResponse(msg, utxorpcPurposeToRedeemerTag)
+}
+
+func evalTxResponseToExpectedExUnits(
+	msg *submit.EvalTxResponse,
+	expected map[common.RedeemerKey]struct{},
+) (map[common.RedeemerKey]common.ExUnits, error) {
+	standard, standardErr := parseEvalTxResponse(msg, utxorpcPurposeToRedeemerTag)
+	var evaluationErr *EvaluationError
+	if errors.As(standardErr, &evaluationErr) {
+		return nil, standardErr
+	}
+	fallback, fallbackErr := parseEvalTxResponse(msg, utxorpcZeroBasedPurposeToRedeemerTag)
+
+	standardMatches := standardErr == nil && sameRedeemerKeySet(standard, expected)
+	fallbackMatches := fallbackErr == nil && sameRedeemerKeySet(fallback, expected)
+	switch {
+	case standardMatches && fallbackMatches:
+		if !sameRedeemerKeySet(standard, redeemerKeySet(fallback)) {
+			return nil, fmt.Errorf(
+				"ambiguous redeemer purpose encoding: expected keys %s; standard observed keys %s; zero-based observed keys %s",
+				formatRedeemerKeys(redeemerKeySet(expected)),
+				formatRedeemerKeys(redeemerKeySet(standard)),
+				formatRedeemerKeys(redeemerKeySet(fallback)),
+			)
+		}
+		return standard, nil
+	case standardMatches:
+		return standard, nil
+	case fallbackMatches:
+		return fallback, nil
+	default:
+		return nil, fmt.Errorf(
+			"redeemer purpose encoding does not match transaction: expected keys %s; standard observed keys %s (%v); zero-based observed keys %s (%v)",
+			formatRedeemerKeys(redeemerKeySet(expected)),
+			formatRedeemerKeys(redeemerKeySet(standard)),
+			standardErr,
+			formatRedeemerKeys(redeemerKeySet(fallback)),
+			fallbackErr,
+		)
+	}
+}
+
+func expectedRedeemerKeys(txCbor []byte) (map[common.RedeemerKey]struct{}, error) {
+	var tx conway.ConwayTransaction
+	if _, err := cbor.Decode(txCbor, &tx); err != nil {
+		return nil, fmt.Errorf("failed to decode submitted transaction: %w", err)
+	}
+	expected := make(map[common.RedeemerKey]struct{}, len(tx.WitnessSet.WsRedeemers.Redeemers))
+	for key := range tx.WitnessSet.WsRedeemers.Redeemers {
+		expected[key] = struct{}{}
+	}
+	return expected, nil
+}
+
+func parseEvalTxResponse(
+	msg *submit.EvalTxResponse,
+	mapPurpose func(cardano.RedeemerPurpose) (common.RedeemerTag, error),
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	if msg == nil {
 		return nil, errors.New("empty evaluate response")
 	}
@@ -358,25 +424,25 @@ func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey
 	}
 	result := make(map[common.RedeemerKey]common.ExUnits)
 	for _, redeemer := range cardanoReport.GetRedeemers() {
-		tag, err := utxorpcPurposeToRedeemerTag(redeemer.GetPurpose())
+		tag, err := mapPurpose(redeemer.GetPurpose())
 		if err != nil {
-			return nil, fmt.Errorf("failed to map redeemer purpose: %w", err)
+			return result, fmt.Errorf("failed to map redeemer purpose: %w", err)
 		}
 		key := common.RedeemerKey{
 			Tag:   tag,
 			Index: redeemer.GetIndex(),
 		}
 		if _, exists := result[key]; exists {
-			return nil, fmt.Errorf("duplicate redeemer in evaluation report for %d:%d", tag, redeemer.GetIndex())
+			return result, fmt.Errorf("duplicate evaluation report for redeemer %d:%d", tag, redeemer.GetIndex())
 		}
 		eu := redeemer.GetExUnits()
 		if eu == nil {
-			return nil, fmt.Errorf("no ExUnits in evaluation report for redeemer %d:%d", tag, redeemer.GetIndex())
+			return result, fmt.Errorf("no ExUnits in evaluation report for redeemer %d:%d", tag, redeemer.GetIndex())
 		}
 		mem := eu.GetMemory()
 		steps := eu.GetSteps()
 		if mem > math.MaxInt64 || steps > math.MaxInt64 {
-			return nil, fmt.Errorf("ExUnits overflow: memory=%d steps=%d", mem, steps)
+			return result, fmt.Errorf("ExUnits overflow: memory=%d steps=%d", mem, steps)
 		}
 		result[key] = common.ExUnits{
 			Memory: int64(mem),
@@ -387,6 +453,41 @@ func evalTxResponseToExUnits(msg *submit.EvalTxResponse) (map[common.RedeemerKey
 		return nil, errors.New("script evaluation returned no results")
 	}
 	return result, nil
+}
+
+func redeemerKeySet[V any](values map[common.RedeemerKey]V) map[common.RedeemerKey]struct{} {
+	keys := make(map[common.RedeemerKey]struct{}, len(values))
+	for key := range values {
+		keys[key] = struct{}{}
+	}
+	return keys
+}
+
+func sameRedeemerKeySet[V any](actual map[common.RedeemerKey]V, expected map[common.RedeemerKey]struct{}) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for key := range actual {
+		if _, ok := expected[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func formatRedeemerKeys(keys map[common.RedeemerKey]struct{}) string {
+	sorted := make([]common.RedeemerKey, 0, len(keys))
+	for key := range keys {
+		sorted = append(sorted, key)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return common.CompareRedeemerKeys(sorted[i], sorted[j]) < 0
+	})
+	formatted := make([]string, 0, len(sorted))
+	for _, key := range sorted {
+		formatted = append(formatted, fmt.Sprintf("%d:%d", key.Tag, key.Index))
+	}
+	return "[" + strings.Join(formatted, ", ") + "]"
 }
 
 func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
@@ -462,7 +563,30 @@ func utxorpcPurposeToRedeemerTag(purpose cardano.RedeemerPurpose) (common.Redeem
 		return common.RedeemerTagCert, nil
 	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_REWARD:
 		return common.RedeemerTagReward, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_VOTE:
+		return common.RedeemerTagVoting, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_PROPOSE:
+		return common.RedeemerTagProposing, nil
 	default:
 		return 0, fmt.Errorf("unsupported redeemer purpose: %d", purpose)
+	}
+}
+
+func utxorpcZeroBasedPurposeToRedeemerTag(purpose cardano.RedeemerPurpose) (common.RedeemerTag, error) {
+	switch purpose {
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_UNSPECIFIED:
+		return common.RedeemerTagSpend, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_SPEND:
+		return common.RedeemerTagMint, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_MINT:
+		return common.RedeemerTagCert, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_CERT:
+		return common.RedeemerTagReward, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_REWARD:
+		return common.RedeemerTagVoting, nil
+	case cardano.RedeemerPurpose_REDEEMER_PURPOSE_VOTE:
+		return common.RedeemerTagProposing, nil
+	default:
+		return 0, fmt.Errorf("unsupported zero-based redeemer purpose: %d", purpose)
 	}
 }
