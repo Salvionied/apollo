@@ -318,6 +318,8 @@ func ScriptRefFromBytes(scriptType uint, scriptBytes []byte, expectedHashHex str
 		script = common.PlutusV2Script(scriptBytes)
 	case common.ScriptRefTypePlutusV3:
 		script = common.PlutusV3Script(scriptBytes)
+	case common.ScriptRefTypePlutusV4:
+		script = common.PlutusV4Script(scriptBytes)
 	default:
 		return nil, fmt.Errorf("unsupported script ref type %d", scriptType)
 	}

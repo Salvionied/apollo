@@ -28,6 +28,16 @@ func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) 
 	}
 }
 
+func TestCostModelsFromRpcIncludesPlutusV4(t *testing.T) {
+	models := costModelsFromRpc(&cardano.CostModels{
+		PlutusV4: &cardano.CostModel{Values: []int64{1, 2, 3}},
+	})
+	got := models["PlutusV4"]
+	if !reflect.DeepEqual(got, []int64{1, 2, 3}) {
+		t.Fatalf("PlutusV4 cost model = %v, want [1 2 3]", got)
+	}
+}
+
 func TestEvalTxResponseRejectsSingleEvaluationError(t *testing.T) {
 	msg := evalTxResponse([]*cardano.EvalError{
 		{Msg: "PreservationOfValue"},

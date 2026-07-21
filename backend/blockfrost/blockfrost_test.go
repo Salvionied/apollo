@@ -399,7 +399,8 @@ func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
 			"PlutusV3": {"addInteger-cpu-arguments-intercept": 1, "addInteger-cpu-arguments-slope": 2}
 		},
 		"cost_models_raw": {
-			"PlutusV3": [100, 200, 300, 400]
+			"PlutusV3": [100, 200, 300, 400],
+			"PlutusV4": [500, 600]
 		}
 	}`
 
@@ -414,6 +415,9 @@ func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
 	got := pp.CostModels["PlutusV3"]
 	if len(got) != 4 || got[0] != 100 || got[3] != 400 {
 		t.Fatalf("expected cost_models_raw values, got %v", got)
+	}
+	if got := pp.CostModels["PlutusV4"]; len(got) != 2 || got[0] != 500 || got[1] != 600 {
+		t.Fatalf("expected PlutusV4 cost_models_raw values, got %v", got)
 	}
 }
 
@@ -706,6 +710,20 @@ func TestBfScriptRefFromScriptLanguageDetection(t *testing.T) {
 	}
 	if v4.PlutusV4 == nil || *v4.PlutusV4 != wantHex || v4.PlutusV1 != nil || v4.PlutusV2 != nil || v4.PlutusV3 != nil {
 		t.Fatalf("v4 mis-tagged: %+v", v4)
+	}
+}
+
+func TestScriptRefFromHashDetectsPlutusV4(t *testing.T) {
+	script := common.PlutusV4Script([]byte{0x49, 0x48, 0x01, 0x00})
+	ref, err := scriptRefFromHash(script.Hash(), script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref.Type != common.ScriptRefTypePlutusV4 {
+		t.Fatalf("script ref type = %d, want %d", ref.Type, common.ScriptRefTypePlutusV4)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
 	}
 }
 

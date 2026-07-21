@@ -198,22 +198,31 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 		pp.MinFeeRefScriptCostPerByte = float64(refCost.GetNumerator()) / float64(refCost.GetDenominator())
 	}
 
-	// Parse cost models from UTxO RPC protobuf response.
-	// Keys match ComputeScriptDataHash expectations: "PlutusV1", "PlutusV2", "PlutusV3".
-	if cm := params.GetCostModels(); cm != nil {
-		pp.CostModels = make(map[string][]int64)
-		if v1 := cm.GetPlutusV1(); v1 != nil {
-			pp.CostModels["PlutusV1"] = append([]int64(nil), v1.GetValues()...)
-		}
-		if v2 := cm.GetPlutusV2(); v2 != nil {
-			pp.CostModels["PlutusV2"] = append([]int64(nil), v2.GetValues()...)
-		}
-		if v3 := cm.GetPlutusV3(); v3 != nil {
-			pp.CostModels["PlutusV3"] = append([]int64(nil), v3.GetValues()...)
-		}
-	}
+	pp.CostModels = costModelsFromRpc(params.GetCostModels())
 
 	return pp, nil
+}
+
+// costModelsFromRpc translates UTxO RPC cost models to the canonical names
+// expected by ComputeScriptDataHash.
+func costModelsFromRpc(cm *cardano.CostModels) map[string][]int64 {
+	if cm == nil {
+		return nil
+	}
+	models := make(map[string][]int64)
+	if v1 := cm.GetPlutusV1(); v1 != nil {
+		models["PlutusV1"] = append([]int64(nil), v1.GetValues()...)
+	}
+	if v2 := cm.GetPlutusV2(); v2 != nil {
+		models["PlutusV2"] = append([]int64(nil), v2.GetValues()...)
+	}
+	if v3 := cm.GetPlutusV3(); v3 != nil {
+		models["PlutusV3"] = append([]int64(nil), v3.GetValues()...)
+	}
+	if v4 := cm.GetPlutusV4(); v4 != nil {
+		models["PlutusV4"] = append([]int64(nil), v4.GetValues()...)
+	}
+	return models
 }
 
 func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error) {

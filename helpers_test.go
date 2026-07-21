@@ -677,6 +677,32 @@ func TestComputeScriptDataHashPlutusV1LanguageView(t *testing.T) {
 	}
 }
 
+func TestComputeScriptDataHashPlutusV4LanguageView(t *testing.T) {
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagSpend, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
+	}
+	costs := map[string][]int64{"PlutusV4": {100, 200, 300}}
+	got, err := ComputeScriptDataHash(redeemers, nil, costs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemerBytes, err := cbor.Encode(redeemers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	langViews, err := common.EncodeLangViews(
+		map[uint]struct{}{3: {}},
+		map[uint][]int64{3: costs["PlutusV4"]},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.Blake2b256Hash(append(append([]byte{}, redeemerBytes...), langViews...))
+	if *got != want {
+		t.Fatalf("PlutusV4 language-view hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+}
+
 func TestComputeScriptDataHashMultipleLanguagesDeterministic(t *testing.T) {
 	redeemers := map[common.RedeemerKey]common.RedeemerValue{
 		{Tag: common.RedeemerTagMint, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
