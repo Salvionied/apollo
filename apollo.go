@@ -1134,7 +1134,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if err != nil {
 		return a, err
 	}
-	totalRequired, err = totalRequired.Add(governanceRequired)
+	balanceRequired, err := totalRequired.Add(governanceRequired)
 	if err != nil {
 		return a, fmt.Errorf("governance value overflow: %w", err)
 	}
@@ -1200,7 +1200,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, fmt.Errorf("preliminary fee overflows int64: max fee=%d reference script fee=%d", prelimFee, refScriptFeeReserve)
 	}
 	prelimFee += refScriptFeeReserve
-	selectionTarget, err := totalRequired.Add(NewSimpleValue(uint64(prelimFee))) //nolint:gosec // maxFee is bounded above and refScriptFeeReserve overflow is checked above
+	selectionTarget, err := balanceRequired.Add(NewSimpleValue(uint64(prelimFee))) //nolint:gosec // maxFee is bounded above and refScriptFeeReserve overflow is checked above
 	if err != nil {
 		return a, fmt.Errorf("selection target overflow: %w", err)
 	}
@@ -1248,19 +1248,8 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
-	// Automatic ExUnit estimation for script transactions
-	if a.isEstimateRequired && a.estimateExUnits {
-		if err := a.estimateExecutionUnits(allInputUtxos, outputs); err != nil {
-			return a, fmt.Errorf("ExUnit estimation failed: %w", err)
-		}
-	}
-
-	// Estimate fee with a convergence loop. The initial estimate is computed
-	// without a change output, but the final transaction will likely include
-	// one. After computing the change output, we re-estimate the fee with
-	// the full output set. If the fee increases, we recompute change. This
-	// typically converges in 1-2 iterations.
-	const maxFeeIterations = 3
+	// Estimate the initial fee. The balanced evaluation loop below rebuilds the
+	// complete transaction shape (change, collateral, and ExUnits) until stable.
 	baseOutputs := make([]babbage.BabbageTransactionOutput, len(outputs))
 	copy(baseOutputs, outputs)
 
@@ -1311,143 +1300,71 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 	}
 
-	changeAddr := a.getChangeAddress()
-
-	// buildOutputsWithChange computes the output set (base outputs plus a
-	// change output if needed) for the given fee.
-	buildOutputsWithChange := func(fee int64) ([]babbage.BabbageTransactionOutput, error) {
-		outputs := make([]babbage.BabbageTransactionOutput, len(baseOutputs))
-		copy(outputs, baseOutputs)
-
-		// Calculate change: totalRequired includes deposits, totalInput includes refunds.
-		if fee < 0 {
-			return nil, fmt.Errorf("negative fee: %d", fee)
-		}
-		feeValue := NewSimpleValue(uint64(fee)) //nolint:gosec // validated non-negative above
-		totalNeeded, err := totalRequired.Add(feeValue)
-		if err != nil {
-			return nil, fmt.Errorf("required value overflow: %w", err)
-		}
-		changeValue, err := totalInput.Sub(totalNeeded)
-		if err != nil {
-			return nil, fmt.Errorf("insufficient funds: %w", err)
-		}
-		// Reject burns not covered by inputs and prune zero quantities,
-		// which are invalid in Conway-era output values.
-		changeValue.Assets, err = normalizeChangeAssets(changeValue.Assets)
-		if err != nil {
-			return nil, err
-		}
-
-		if changeValue.Coin > 0 || changeValue.HasAssets() {
-			changeOutput := NewBabbageOutput(changeAddr, changeValue, nil, nil)
-			pp, err := a.Context.ProtocolParams()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get protocol params for change output: %w", err)
-			}
-			minChange, err := MinLovelacePostAlonzo(&changeOutput, pp.CoinsPerUtxoByteValue())
-			if err != nil {
-				return nil, fmt.Errorf("failed to compute min UTxO for change output: %w", err)
-			}
-			if minChange < 0 {
-				return nil, fmt.Errorf("invalid min UTxO for change output: %d", minChange)
-			}
-			if changeValue.Coin >= uint64(minChange) {
-				outputs = append(outputs, changeOutput)
-			} else if changeValue.HasAssets() {
-				// Change has assets but insufficient ADA for min UTxO.
-				// The shortfall must come from available inputs.
-				shortfall := uint64(minChange) - changeValue.Coin
-				changeValue.Coin = uint64(minChange)
-				changeOutput = NewBabbageOutput(changeAddr, changeValue, nil, nil)
-				actualMin, err := MinLovelacePostAlonzo(&changeOutput, pp.CoinsPerUtxoByteValue())
-				if err != nil {
-					return nil, fmt.Errorf("failed to compute actual min UTxO for change output: %w", err)
-				}
-				if actualMin > minChange {
-					// minChange validated non-negative above, actualMin > minChange
-					shortfall += uint64(actualMin) - uint64(minChange) //nolint:gosec
-					changeValue.Coin = uint64(actualMin)               //nolint:gosec
-					changeOutput = NewBabbageOutput(changeAddr, changeValue, nil, nil)
-				}
-				// Verify the shortfall is covered by total input.
-				// totalInput already includes refunds; add deposits to the output side.
-				totalInputCoin := totalInput.Coin
-				totalOutputCoin := uint64(0)
-				for _, out := range outputs {
-					totalOutputCoin += out.OutputAmount.Amount
-				}
-				totalOutputCoin += changeValue.Coin + uint64(fee) //nolint:gosec // validated non-negative above
-				depositAdj := a.certificateDepositAdjustment(stakeDeposit)
-				if depositAdj > 0 {
-					totalOutputCoin += uint64(depositAdj)
-				}
-				totalOutputCoin += governanceRequired.Coin
-				if totalOutputCoin > totalInputCoin {
-					return nil, fmt.Errorf("insufficient funds: need %d more lovelace for change output min UTxO", totalOutputCoin-totalInputCoin)
-				}
-				_ = shortfall // verified via balance check above
-				outputs = append(outputs, changeOutput)
-			}
-			// If change is ADA-only but below min UTxO and has no assets,
-			// it is too small to create an output -- absorbed as additional fee.
-		}
-		return outputs, nil
+	balance := balanceContext{
+		totalInput:         totalInput,
+		totalRequired:      totalRequired,
+		governanceRequired: governanceRequired,
+		stakeDeposit:       stakeDeposit,
+		changeAddress:      a.getChangeAddress(),
 	}
-
+	const maxEvaluationIterations = 5
+	var previousShape string
+	seenShapes := make(map[string]struct{}, maxEvaluationIterations)
 	converged := false
-	for range maxFeeIterations {
-		outputs, err = buildOutputsWithChange(fee)
-		if err != nil {
-			return a, err
+	for range maxEvaluationIterations {
+		balanced, balanceErr := a.buildBalancedOutputs(baseOutputs, fee, balance)
+		if balanceErr != nil {
+			return a, balanceErr
 		}
-
-		// Re-estimate fee with the full output set (including change).
-		// If the user set an explicit fee, skip re-estimation.
-		if a.Fee > 0 {
-			converged = true
-			break
-		}
-		// Size the collateral against the current fee BEFORE re-estimating, so
-		// the fee accounts for the final collateral total/return footprint in
-		// the body. A collateral_return that only materializes after sizing
-		// would otherwise grow the tx past the frozen estimate.
+		outputs, fee = balanced.Outputs, balanced.Fee
 		if err := a.finalizeCollateral(fee); err != nil {
 			return a, err
 		}
-		newFee, err := a.estimateFee(allInputUtxos, outputs)
-		if err != nil {
-			return a, fmt.Errorf("fee re-estimation failed: %w", err)
+
+		if a.isEstimateRequired && a.estimateExUnits {
+			units, evalErr := a.estimateExecutionUnits(allInputUtxos, outputs, fee)
+			if evalErr != nil {
+				return a, fmt.Errorf("ExUnit estimation failed: %w", evalErr)
+			}
+			a.applyExecutionUnits(units, allInputUtxos)
 		}
-		newFee += a.FeePadding
-		if newFee < 0 {
-			newFee = 0
+
+		if fee < 0 {
+			return a, fmt.Errorf("negative fee: %d", fee)
 		}
-		if newFee <= fee {
-			// Fee did not increase; the current estimate is sufficient.
+		body, bodyErr := a.buildBody(allInputUtxos, outputs, uint64(fee)) //nolint:gosec // validated non-negative above
+		if bodyErr != nil {
+			return a, bodyErr
+		}
+		bodyBytes, bodyErr := cbor.Encode(&body)
+		if bodyErr != nil {
+			return a, fmt.Errorf("failed to encode evaluation shape: %w", bodyErr)
+		}
+		shape := string(bodyBytes)
+		newFee := fee
+		if !a.forceFee && a.Fee == 0 {
+			newFee, err = a.estimateFee(allInputUtxos, outputs)
+			if err != nil {
+				return a, fmt.Errorf("fee re-estimation failed: %w", err)
+			}
+			newFee += a.FeePadding
+			if newFee < 0 {
+				newFee = 0
+			}
+		}
+		if newFee == fee && previousShape == shape {
 			converged = true
 			break
 		}
+		if _, seen := seenShapes[shape]; seen {
+			return a, errors.New("evaluation transaction did not converge after 5 iterations")
+		}
+		seenShapes[shape] = struct{}{}
+		previousShape = shape
 		fee = newFee
 	}
 	if !converged {
-		// The final iteration raised the fee after outputs were computed;
-		// rebuild the change output against the final fee so the transaction
-		// still conserves value.
-		outputs, err = buildOutputsWithChange(fee)
-		if err != nil {
-			return a, err
-		}
-	}
-
-	// Recompute total collateral and the collateral return from the FINAL fee.
-	// setCollateral() runs before coin selection and fee estimation, so it can
-	// only size collateral from a preliminary (max-by-size) fee. The ledger
-	// requires total collateral >= ceil(fee * collateralPercent / 100) against
-	// the ACTUAL fee, so a stale preliminary value triggers
-	// InsufficientCollateral. Resize here now that the fee is final.
-	if err := a.finalizeCollateral(fee); err != nil {
-		return a, err
+		return a, errors.New("evaluation transaction did not converge after 5 iterations")
 	}
 
 	// Build transaction body
@@ -1858,26 +1775,29 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 // estimateExecutionUnits builds a preliminary transaction and evaluates it
 // against the chain to get actual execution units for script redeemers.
 // The returned ExUnits include a buffer for safety.
-func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) error {
+func (a *Apollo) estimateExecutionUnits(
+	inputs []common.Utxo,
+	outputs []babbage.BabbageTransactionOutput,
+	fee int64,
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	// Build preliminary tx with current (possibly zero) ExUnits. The fee field
 	// is `omitempty`, so a zero fee is dropped from the CBOR and the body has no
 	// fee (key 2). Strict evaluators (Ogmios, and Blockfrost which proxies it)
 	// reject such a body with "field fee with key 2, not decoded". Use a
 	// non-zero placeholder fee so the field is always present; its value does
 	// not affect script evaluation.
-	placeholderFee, feeErr := a.Context.MaxTxFee()
-	if feeErr != nil || placeholderFee == 0 {
-		placeholderFee = 2_000_000
+	if fee < 0 {
+		return nil, fmt.Errorf("negative fee: %d", fee)
 	}
-	body, err := a.buildBody(inputs, outputs, placeholderFee)
+	body, err := a.buildBody(inputs, outputs, uint64(fee)) //nolint:gosec // validated non-negative above
 	if err != nil {
-		return fmt.Errorf("failed to build preliminary tx body: %w", err)
+		return nil, fmt.Errorf("failed to build preliminary tx body: %w", err)
 	}
 	ws := a.buildWitnessSet(inputs)
 
 	witnesses, err := a.evaluationWitnesses(&body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
 
@@ -1889,7 +1809,7 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	if a.auxiliaryData != nil {
 		md, mdErr := a.buildMetadata()
 		if mdErr != nil {
-			return mdErr
+			return nil, mdErr
 		}
 		if md != nil {
 			prelimTx.TxMetadata = md
@@ -1897,20 +1817,24 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 	}
 	txBytes, err := cbor.Encode(&prelimTx)
 	if err != nil {
-		return fmt.Errorf("failed to encode preliminary tx: %w", err)
+		return nil, fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
 	evalResult, err := a.Context.EvaluateTx(txBytes, inputs)
 	if err != nil {
-		return fmt.Errorf("EvaluateTx failed: %w", err)
+		return nil, fmt.Errorf("EvaluateTx failed: %w", err)
 	}
 	if len(evalResult) == 0 {
-		return errors.New("EvaluateTx returned no results")
+		return nil, errors.New("EvaluateTx returned no results")
 	}
 
-	// Update redeemers with evaluated ExUnits + buffer. Results that do not
+	// Validate every result before changing registered redeemers. Results that do not
 	// match a registered redeemer indicate a misbehaving evaluation backend;
 	// fail closed rather than sign a transaction with zero execution budgets.
+	validated := make(map[common.RedeemerKey]common.ExUnits, len(evalResult))
+	seenSpend := make(map[string]bool, len(a.redeemers))
+	seenMint := make(map[string]bool, len(a.mintRedeemers))
+	seenStake := make(map[string]bool, len(a.stakeRedeemers))
 	for evalKey, evalUnits := range evalResult {
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
@@ -1920,66 +1844,92 @@ func (a *Apollo) estimateExecutionUnits(inputs []common.Utxo, outputs []babbage.
 		case common.RedeemerTagSpend:
 			// Find the spending redeemer for this input index
 			if uint64(evalKey.Index) >= uint64(len(inputs)) {
-				return fmt.Errorf("EvaluateTx returned spend redeemer index %d out of range (%d inputs)", evalKey.Index, len(inputs))
+				return nil, fmt.Errorf("EvaluateTx returned spend redeemer index %d out of range (%d inputs)", evalKey.Index, len(inputs))
 			}
 			ref := utxoRef(inputs[evalKey.Index])
 			entry, ok := a.redeemers[ref]
 			if !ok {
-				return fmt.Errorf("EvaluateTx returned a result for input %s, which has no registered redeemer", ref)
+				return nil, fmt.Errorf("EvaluateTx returned a result for input %s, which has no registered redeemer", ref)
 			}
-			entry.ExUnits = bufferedUnits
-			a.redeemers[ref] = entry
+			_ = entry
+			seenSpend[ref] = true
 		case common.RedeemerTagMint:
 			sortedPolicies := a.sortedMintPolicyIds()
 			if uint64(evalKey.Index) >= uint64(len(sortedPolicies)) {
-				return fmt.Errorf("EvaluateTx returned mint redeemer index %d out of range (%d policies)", evalKey.Index, len(sortedPolicies))
+				return nil, fmt.Errorf("EvaluateTx returned mint redeemer index %d out of range (%d policies)", evalKey.Index, len(sortedPolicies))
 			}
 			policyHex := sortedPolicies[evalKey.Index]
 			entry, ok := a.mintRedeemers[policyHex]
 			if !ok {
-				return fmt.Errorf("EvaluateTx returned a result for mint policy %s, which has no registered redeemer", policyHex)
+				return nil, fmt.Errorf("EvaluateTx returned a result for mint policy %s, which has no registered redeemer", policyHex)
 			}
-			entry.ExUnits = bufferedUnits
-			a.mintRedeemers[policyHex] = entry
+			_ = entry
+			seenMint[policyHex] = true
 		case common.RedeemerTagReward:
 			sortedWdAddrs := a.sortedWithdrawalKeys()
 			if uint64(evalKey.Index) >= uint64(len(sortedWdAddrs)) {
-				return fmt.Errorf("EvaluateTx returned withdrawal redeemer index %d out of range (%d withdrawals)", evalKey.Index, len(sortedWdAddrs))
+				return nil, fmt.Errorf("EvaluateTx returned withdrawal redeemer index %d out of range (%d withdrawals)", evalKey.Index, len(sortedWdAddrs))
 			}
 			addrKey := sortedWdAddrs[evalKey.Index]
 			wd := a.withdrawals[addrKey]
 			skhHex := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
 			entry, ok := a.stakeRedeemers[skhHex]
 			if !ok {
-				return fmt.Errorf("EvaluateTx returned a result for withdrawal %s, which has no registered redeemer", skhHex)
+				return nil, fmt.Errorf("EvaluateTx returned a result for withdrawal %s, which has no registered redeemer", skhHex)
 			}
-			entry.ExUnits = bufferedUnits
-			a.stakeRedeemers[skhHex] = entry
+			_ = entry
+			seenStake[skhHex] = true
 		default:
-			return fmt.Errorf("EvaluateTx returned unsupported redeemer tag %d", evalKey.Tag)
+			return nil, fmt.Errorf("EvaluateTx returned unsupported redeemer tag %d", evalKey.Tag)
 		}
+		validated[evalKey] = bufferedUnits
 	}
 
 	// Every registered redeemer must have received an execution budget; a
 	// redeemer left at zero ExUnits would fail phase-2 validation on-chain
 	// and forfeit the collateral.
-	for ref, entry := range a.redeemers {
-		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
-			return fmt.Errorf("execution-unit evaluation returned no result for spend redeemer on input %s", ref)
+	for ref := range a.redeemers {
+		if !seenSpend[ref] {
+			return nil, fmt.Errorf("execution-unit evaluation returned no result for spend redeemer on input %s", ref)
 		}
 	}
-	for policyHex, entry := range a.mintRedeemers {
-		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
-			return fmt.Errorf("execution-unit evaluation returned no result for mint redeemer on policy %s", policyHex)
+	for policyHex := range a.mintRedeemers {
+		if !seenMint[policyHex] {
+			return nil, fmt.Errorf("execution-unit evaluation returned no result for mint redeemer on policy %s", policyHex)
 		}
 	}
-	for skhHex, entry := range a.stakeRedeemers {
-		if entry.ExUnits.Memory == 0 && entry.ExUnits.Steps == 0 {
-			return fmt.Errorf("execution-unit evaluation returned no result for withdrawal redeemer on stake key %s", skhHex)
+	for skhHex := range a.stakeRedeemers {
+		if !seenStake[skhHex] {
+			return nil, fmt.Errorf("execution-unit evaluation returned no result for withdrawal redeemer on stake key %s", skhHex)
 		}
 	}
 
-	return nil
+	return validated, nil
+}
+
+// applyExecutionUnits is deliberately separate from estimateExecutionUnits:
+// callers only reach it after the complete evaluator response was validated.
+func (a *Apollo) applyExecutionUnits(units map[common.RedeemerKey]common.ExUnits, inputs []common.Utxo) {
+	for key, exUnits := range units {
+		switch key.Tag {
+		case common.RedeemerTagSpend:
+			ref := utxoRef(inputs[key.Index])
+			entry := a.redeemers[ref]
+			entry.ExUnits = exUnits
+			a.redeemers[ref] = entry
+		case common.RedeemerTagMint:
+			policy := a.sortedMintPolicyIds()[key.Index]
+			entry := a.mintRedeemers[policy]
+			entry.ExUnits = exUnits
+			a.mintRedeemers[policy] = entry
+		case common.RedeemerTagReward:
+			wd := a.withdrawals[a.sortedWithdrawalKeys()[key.Index]]
+			stakeKey := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
+			entry := a.stakeRedeemers[stakeKey]
+			entry.ExUnits = exUnits
+			a.stakeRedeemers[stakeKey] = entry
+		}
+	}
 }
 
 // bufferExUnits scales evaluated execution units by a safety factor, saturating

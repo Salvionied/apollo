@@ -336,7 +336,7 @@ func TestEvaluationWitnessesSignPostBalanceBody(t *testing.T) {
 	provider := signingEvaluationProvider{key: key}
 	a := New(context).SetWallet(NewExternalWallet(testAddress(t))).AddRequiredSigner(hash).AddEvaluationWitnessProvider(provider)
 
-	if err := a.estimateExecutionUnits(nil, nil); err == nil || !strings.Contains(err.Error(), "no results") {
+	if _, err := a.estimateExecutionUnits(nil, nil, 0); err == nil || !strings.Contains(err.Error(), "no results") {
 		t.Fatalf("expected evaluation result error after capture, got %v", err)
 	}
 	var tx conway.ConwayTransaction
