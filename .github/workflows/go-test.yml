@@ -2,11 +2,10 @@ name: go-test
 
 on:
   push:
-    tags:
-      - v*
     branches:
       - master
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -26,3 +25,45 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: go-test
         run: go test ./...
+
+  race:
+    name: race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+      - run: go test -race ./...
+
+  quality:
+    name: format, tidy, vet, and 386 build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Check module files
+        run: go mod tidy -diff
+      - name: Vet
+        run: go vet ./...
+      - name: Compile Linux 386
+        env:
+          GOOS: linux
+          GOARCH: "386"
+        run: go build ./...
+
+  vulnerability:
+    name: vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - run: govulncheck ./...

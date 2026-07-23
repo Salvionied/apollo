@@ -68,7 +68,10 @@ func (a *Apollo) AttachDatum(datum *common.Datum) *Apollo
 
 ## Inputs and constraints
 
-- Apollo works with `*common.Datum` (alias for `*common.PlutusData` from gouroboros). For CLI-style file or JSON value input, you must read and parse/decode in your application, then pass the resulting datum into the builder.
+- Apollo works with `*common.Datum`. Its Plutus data value is provided by
+  `github.com/blinklabs-io/plutigo/data`; gouroboros does not export a
+  `common.PlutusData` type. For CLI-style file or JSON value input, read and
+  decode it in your application, then pass the resulting datum to the builder.
 - `PayToContractAsHash`: you supply the hash bytes; the ledger may need the full datum elsewhere (e.g. another output or previous tx) if the contract expects it.
 
 ## Behavior details
