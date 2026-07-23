@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,40 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+func TestOgmiosCapabilitiesWithoutKupo(t *testing.T) {
+	ctx := NewOgmiosChainContext(nil, nil, 0)
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
+		t.Fatal("expected Ogmios-supported capabilities")
+	}
+	if backend.Supports(ctx, backend.CapabilityUtxos|backend.CapabilityScriptCbor) {
+		t.Fatal("Ogmios without Kupo reported Kupo capabilities")
+	}
+
+	tests := []struct {
+		name       string
+		capability backend.Capability
+		call       func() error
+	}{
+		{"utxos", backend.CapabilityUtxos, func() error { _, err := ctx.Utxos(testAddress(t)); return err }},
+		{"script", backend.CapabilityScriptCbor, func() error { _, err := ctx.ScriptCbor(common.Blake2b224{}); return err }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.call()
+			if !errors.Is(err, backend.ErrUnsupported) {
+				t.Fatalf("expected ErrUnsupported, got %v", err)
+			}
+			var unsupported *backend.UnsupportedError
+			if !errors.As(err, &unsupported) || unsupported.Capability != test.capability {
+				t.Fatalf("unexpected unsupported error: %#v", err)
+			}
+		})
+	}
+}
 
 func testAddress(t *testing.T) common.Address {
 	t.Helper()
@@ -185,6 +219,43 @@ func TestKupoScriptToScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestKupoScriptToScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	script := kugo.Script{
+		Language: kupoScriptLanguagePlutusV4,
+		Script:   hex.EncodeToString(scriptBytes),
+	}
+	correctHash := hex.EncodeToString(common.PlutusV4Script(scriptBytes).Hash().Bytes())
+
+	ref, err := kupoScriptToScriptRef(script, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+}
+
+func TestOgmiosScriptToScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	ref, err := ogmiosScriptToScriptRef(json.RawMessage(`{"language":"plutus:v4","cbor":"010203"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+	if got := ref.Script.RawScriptBytes(); !bytes.Equal(got, scriptBytes) {
+		t.Fatalf("script bytes = %x, want %x", got, scriptBytes)
+	}
+}
+
+func TestOgmiosCostModelKeyPlutusV4(t *testing.T) {
+	if got := ogmiosCostModelKey("plutus:v4"); got != "PlutusV4" {
+		t.Fatalf("cost model key = %q, want PlutusV4", got)
+	}
+}
+
 func TestEvaluateResponseToExUnitsRejectsZeroResults(t *testing.T) {
 	if _, err := evaluateResponseToExUnits(nil); err == nil {
 		t.Fatal("expected error for nil response")
@@ -313,6 +384,80 @@ func TestCommonUtxoToShared(t *testing.T) {
 	}
 	if su.Datum != "" || su.DatumHash != "" {
 		t.Fatalf("unexpected datum fields: datum=%q datumHash=%q", su.Datum, su.DatumHash)
+	}
+}
+
+func TestCommonUtxoToSharedRejectsMissingFields(t *testing.T) {
+	valid := sampleCommonUtxo(t)
+	var typedNilInput *shelley.ShelleyTransactionInput
+	var typedNilOutput *babbage.BabbageTransactionOutput
+
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "nil transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "typed nil transaction input",
+			utxo:    common.Utxo{Id: typedNilInput, Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+		{
+			name:    "typed nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id, Output: typedNilOutput},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := commonUtxoToShared(test.utxo); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestEvaluateTxRejectsMalformedAdditionalUtxos(t *testing.T) {
+	valid := sampleCommonUtxo(t)
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "missing transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "missing transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	ctx := NewOgmiosChainContext(ogmigo.New(), nil, 0)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{test.utxo}); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
 	}
 }
 

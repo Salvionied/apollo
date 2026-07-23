@@ -28,6 +28,10 @@ const (
 	StakeDeposit   = 2_000_000
 )
 
+// ErrPlutusV4RequiresDijkstra reports that an operation needs a Dijkstra-era
+// transaction witness set, while Apollo currently builds Conway transactions.
+var ErrPlutusV4RequiresDijkstra = errors.New("plutus V4 requires Dijkstra transaction support; Apollo currently builds Conway transactions")
+
 // Apollo is the main transaction builder.
 type Apollo struct {
 	Context            backend.ChainContext
@@ -299,8 +303,19 @@ func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits
 }
 
 // AttachScript attaches a script to the witness set, deduplicating by hash.
-// Accepts PlutusV1Script, PlutusV2Script, PlutusV3Script, or NativeScript.
+// It accepts NativeScript and PlutusV1Script through PlutusV3Script. Plutus V4
+// witnesses require Dijkstra-era transaction support and cause Complete to
+// return ErrPlutusV4RequiresDijkstra.
 func (a *Apollo) AttachScript(script common.Script) *Apollo {
+	scriptType, err := scriptRefType(script)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
+	if scriptType == common.ScriptRefTypePlutusV4 {
+		a.setErrOnce(ErrPlutusV4RequiresDijkstra)
+		return a
+	}
 	hash := script.Hash().String()
 	if a.hasScriptHash(hash) {
 		return a
@@ -309,12 +324,20 @@ func (a *Apollo) AttachScript(script common.Script) *Apollo {
 	switch s := script.(type) {
 	case common.PlutusV1Script:
 		a.v1scripts = append(a.v1scripts, s)
+	case *common.PlutusV1Script:
+		a.v1scripts = append(a.v1scripts, *s)
 	case common.PlutusV2Script:
 		a.v2scripts = append(a.v2scripts, s)
+	case *common.PlutusV2Script:
+		a.v2scripts = append(a.v2scripts, *s)
 	case common.PlutusV3Script:
 		a.v3scripts = append(a.v3scripts, s)
+	case *common.PlutusV3Script:
+		a.v3scripts = append(a.v3scripts, *s)
 	case common.NativeScript:
 		a.nativescripts = append(a.nativescripts, s)
+	case *common.NativeScript:
+		a.nativescripts = append(a.nativescripts, *s)
 	}
 	return a
 }
@@ -418,8 +441,13 @@ func (a *Apollo) PayToAddress(addr common.Address, lovelace int64, units ...Unit
 }
 
 // PayToAddressWithReferenceScript pays to address with a reference script attached.
-// The script type (V1/V2/V3/Native) is detected automatically.
+// The script type is detected automatically. Plutus V4 reference scripts
+// require Dijkstra-era transaction support and are rejected by this
+// Conway-era builder.
 func (a *Apollo) PayToAddressWithReferenceScript(addr common.Address, lovelace int64, script common.Script, units ...Unit) (*Apollo, error) {
+	if isPlutusV4Script(script) {
+		return a, ErrPlutusV4RequiresDijkstra
+	}
 	ref, err := NewScriptRef(script)
 	if err != nil {
 		return a, fmt.Errorf("failed to create script ref: %w", err)
@@ -1732,11 +1760,15 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 	seen := make(map[string]struct{})
 	total := 0
 
-	addScript := func(script common.Script) {
+	addScript := func(script common.Script) error {
 		if script == nil {
-			return
+			return nil
+		}
+		if isPlutusV4Script(script) {
+			return ErrPlutusV4RequiresDijkstra
 		}
 		total += len(script.RawScriptBytes())
+		return nil
 	}
 
 	// Spending inputs already resolved by the caller carry their outputs.
@@ -1746,7 +1778,9 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 			continue
 		}
 		seen[ref] = struct{}{}
-		addScript(utxo.Output.ScriptRef())
+		if err := addScript(utxo.Output.ScriptRef()); err != nil {
+			return 0, err
+		}
 	}
 
 	// Reference inputs must be resolved against the chain context.
@@ -1766,7 +1800,9 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 		if utxo == nil {
 			return 0, fmt.Errorf("reference input %s not found for reference-script fee", ref)
 		}
-		addScript(utxo.Output.ScriptRef())
+		if err := addScript(utxo.Output.ScriptRef()); err != nil {
+			return 0, err
+		}
 	}
 
 	return total, nil
@@ -2181,9 +2217,6 @@ func (a *Apollo) usedScriptCostModels(
 	inputs []common.Utxo,
 	available map[string][]int64,
 ) (map[string][]int64, error) {
-	if len(available) == 0 {
-		return nil, nil
-	}
 	used := make(map[string]struct{})
 	if len(a.v1scripts) > 0 {
 		used["PlutusV1"] = struct{}{}
@@ -2195,7 +2228,9 @@ func (a *Apollo) usedScriptCostModels(
 		used["PlutusV3"] = struct{}{}
 	}
 	for _, utxo := range inputs {
-		addScriptLanguage(used, utxo.Output.ScriptRef())
+		if err := addScriptLanguage(used, utxo.Output.ScriptRef()); err != nil {
+			return nil, err
+		}
 	}
 	for _, refInput := range a.referenceInputs {
 		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
@@ -2208,8 +2243,13 @@ func (a *Apollo) usedScriptCostModels(
 			)
 		}
 		if utxo != nil {
-			addScriptLanguage(used, utxo.Output.ScriptRef())
+			if err := addScriptLanguage(used, utxo.Output.ScriptRef()); err != nil {
+				return nil, err
+			}
 		}
+	}
+	if len(available) == 0 {
+		return nil, nil
 	}
 	if len(used) == 0 {
 		if len(a.redeemers) == 0 && len(a.mintRedeemers) == 0 && len(a.stakeRedeemers) == 0 {
@@ -2884,7 +2924,7 @@ func redeemerEntriesEqual(lhs, rhs redeemerEntry) bool {
 	return bytes.Equal(lhsBytes, rhsBytes)
 }
 
-func addScriptLanguage(used map[string]struct{}, script common.Script) {
+func addScriptLanguage(used map[string]struct{}, script common.Script) error {
 	switch script.(type) {
 	case common.PlutusV1Script, *common.PlutusV1Script:
 		used["PlutusV1"] = struct{}{}
@@ -2892,6 +2932,18 @@ func addScriptLanguage(used map[string]struct{}, script common.Script) {
 		used["PlutusV2"] = struct{}{}
 	case common.PlutusV3Script, *common.PlutusV3Script:
 		used["PlutusV3"] = struct{}{}
+	case common.PlutusV4Script, *common.PlutusV4Script:
+		return ErrPlutusV4RequiresDijkstra
+	}
+	return nil
+}
+
+func isPlutusV4Script(script common.Script) bool {
+	switch script.(type) {
+	case common.PlutusV4Script, *common.PlutusV4Script:
+		return true
+	default:
+		return false
 	}
 }
 

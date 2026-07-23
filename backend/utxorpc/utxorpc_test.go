@@ -13,7 +13,45 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
 	submit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
+	ctx := NewUtxoRpcChainContext("http://localhost", 0, nil)
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
+		t.Fatal("expected UTxO RPC supported capabilities")
+	}
+	if backend.Supports(ctx, backend.CapabilityGenesisParams|backend.CapabilityEvaluateTxAdditionalUtxos) {
+		t.Fatal("UTxO RPC reported unavailable capabilities")
+	}
+
+	tests := []struct {
+		name       string
+		capability backend.Capability
+		call       func() error
+	}{
+		{"genesis", backend.CapabilityGenesisParams, func() error { _, err := ctx.GenesisParams(); return err }},
+		{"epoch", backend.CapabilityCurrentEpoch, func() error { _, err := ctx.CurrentEpoch(); return err }},
+		{"additional utxos", backend.CapabilityEvaluateTxAdditionalUtxos, func() error {
+			_, err := ctx.EvaluateTx(nil, []common.Utxo{{}})
+			return err
+		}},
+		{"script", backend.CapabilityScriptCbor, func() error { _, err := ctx.ScriptCbor(common.Blake2b224{}); return err }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.call()
+			if !errors.Is(err, backend.ErrUnsupported) {
+				t.Fatalf("expected ErrUnsupported, got %v", err)
+			}
+			var unsupported *backend.UnsupportedError
+			if !errors.As(err, &unsupported) || unsupported.Capability != test.capability {
+				t.Fatalf("unexpected unsupported error: %#v", err)
+			}
+		})
+	}
+}
 
 func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) *submit.EvalTxResponse {
 	return &submit.EvalTxResponse{
@@ -25,6 +63,16 @@ func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) 
 				},
 			},
 		},
+	}
+}
+
+func TestCostModelsFromRpcIncludesPlutusV4(t *testing.T) {
+	models := costModelsFromRpc(&cardano.CostModels{
+		PlutusV4: &cardano.CostModel{Values: []int64{1, 2, 3}},
+	})
+	got := models["PlutusV4"]
+	if !reflect.DeepEqual(got, []int64{1, 2, 3}) {
+		t.Fatalf("PlutusV4 cost model = %v, want [1 2 3]", got)
 	}
 }
 

@@ -18,6 +18,8 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/maestro-org/go-sdk/models"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -32,6 +34,28 @@ type errorReader struct {
 
 func (r errorReader) Read(_ []byte) (int, error) {
 	return 0, r.err
+}
+
+func TestMaestroCapabilitiesAndUnsupportedGenesis(t *testing.T) {
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos|backend.CapabilityScriptCbor) {
+		t.Fatal("expected Maestro supported capabilities")
+	}
+	if backend.Supports(ctx, backend.CapabilityGenesisParams) {
+		t.Fatal("Maestro reported genesis parameter support")
+	}
+
+	_, err = ctx.GenesisParams()
+	if !errors.Is(err, backend.ErrUnsupported) {
+		t.Fatalf("expected ErrUnsupported, got %v", err)
+	}
+	var unsupported *backend.UnsupportedError
+	if !errors.As(err, &unsupported) || unsupported.Capability != backend.CapabilityGenesisParams {
+		t.Fatalf("unexpected unsupported error: %#v", err)
+	}
 }
 
 func testAddress(t *testing.T) common.Address {
@@ -185,6 +209,25 @@ func TestMaestroScriptRefVerifiesHash(t *testing.T) {
 	wrongHash := hex.EncodeToString(common.PlutusV1Script(scriptBytes).Hash().Bytes())
 	if _, err := maestroScriptRef("plutusv2", scriptBytes, wrongHash); err == nil {
 		t.Fatal("expected script hash mismatch error")
+	}
+}
+
+func TestMaestroScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	correctHash := hex.EncodeToString(common.PlutusV4Script(scriptBytes).Hash().Bytes())
+
+	ref, err := maestroScriptRef("plutusv4", scriptBytes, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+}
+
+func TestMaestroCostModelKeyPlutusV4(t *testing.T) {
+	if got := maestroCostModelKey("plutus:v4"); got != "PlutusV4" {
+		t.Fatalf("cost model key = %q, want PlutusV4", got)
 	}
 }
 
