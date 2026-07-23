@@ -540,6 +540,8 @@ func ComputeScriptDataHash(
 			version = 1
 		case "PlutusV3":
 			version = 2
+		case "PlutusV4":
+			version = 3
 		default:
 			return nil, fmt.Errorf("unsupported cost model language: %q", lang)
 		}
@@ -593,22 +595,55 @@ func MinLovelacePostAlonzo(output *babbage.BabbageTransactionOutput, coinsPerUtx
 // --- ScriptRef Constructors ---
 
 // NewScriptRef creates a ScriptRef by detecting the script type automatically.
-// Accepts NativeScript, PlutusV1Script, PlutusV2Script, or PlutusV3Script.
+// Accepts NativeScript and PlutusV1Script through PlutusV4Script.
 func NewScriptRef(script common.Script) (*common.ScriptRef, error) {
-	var scriptType uint
-	switch script.(type) {
-	case common.NativeScript:
-		scriptType = 0
-	case common.PlutusV1Script:
-		scriptType = 1
-	case common.PlutusV2Script:
-		scriptType = 2
-	case common.PlutusV3Script:
-		scriptType = 3
-	default:
-		return nil, fmt.Errorf("unsupported script type: %T", script)
+	scriptType, err := scriptRefType(script)
+	if err != nil {
+		return nil, err
 	}
 	return &common.ScriptRef{Type: scriptType, Script: script}, nil
+}
+
+func scriptRefType(script common.Script) (uint, error) {
+	switch s := script.(type) {
+	case common.NativeScript:
+		return common.ScriptRefTypeNativeScript, nil
+	case *common.NativeScript:
+		if s == nil {
+			return 0, errors.New("script must not be nil")
+		}
+		return common.ScriptRefTypeNativeScript, nil
+	case common.PlutusV1Script:
+		return common.ScriptRefTypePlutusV1, nil
+	case *common.PlutusV1Script:
+		if s == nil {
+			return 0, errors.New("script must not be nil")
+		}
+		return common.ScriptRefTypePlutusV1, nil
+	case common.PlutusV2Script:
+		return common.ScriptRefTypePlutusV2, nil
+	case *common.PlutusV2Script:
+		if s == nil {
+			return 0, errors.New("script must not be nil")
+		}
+		return common.ScriptRefTypePlutusV2, nil
+	case common.PlutusV3Script:
+		return common.ScriptRefTypePlutusV3, nil
+	case *common.PlutusV3Script:
+		if s == nil {
+			return 0, errors.New("script must not be nil")
+		}
+		return common.ScriptRefTypePlutusV3, nil
+	case common.PlutusV4Script:
+		return common.ScriptRefTypePlutusV4, nil
+	case *common.PlutusV4Script:
+		if s == nil {
+			return 0, errors.New("script must not be nil")
+		}
+		return common.ScriptRefTypePlutusV4, nil
+	default:
+		return 0, fmt.Errorf("unsupported script type: %T", script)
+	}
 }
 
 // GetStakeCredentialFromAddress extracts the staking credential from an address.

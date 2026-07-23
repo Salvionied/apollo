@@ -36,6 +36,11 @@ type MaestroChainContext struct {
 	apiKey string
 }
 
+// Capabilities reports the Maestro operations supported by this client.
+func (m *MaestroChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.AllCapabilities) &^ backend.CapabilitySet(backend.CapabilityGenesisParams)
+}
+
 // NewMaestroChainContext creates a new Maestro chain context.
 func NewMaestroChainContext(networkId uint8, projectId string) (*MaestroChainContext, error) {
 	networkStr := networkString(networkId)
@@ -143,9 +148,9 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 
 	// Parse cost models from Maestro response.
 	// PlutusCostModels is typed as `any`; when unmarshaled from JSON it is
-	// map[string]interface{} with keys like "plutus:v1", "plutus:v2", "plutus:v3"
+	// map[string]interface{} with keys like "plutus:v1" through "plutus:v4"
 	// and values that are []interface{} of float64.
-	// ComputeScriptDataHash expects keys "PlutusV1", "PlutusV2", "PlutusV3".
+	// ComputeScriptDataHash expects keys "PlutusV1" through "PlutusV4".
 	if rawModels, ok := data.PlutusCostModels.(map[string]any); ok {
 		pp.CostModels = make(map[string][]int64, len(rawModels))
 		for key, val := range rawModels {
@@ -175,7 +180,7 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 }
 
 func (m *MaestroChainContext) GenesisParams() (backend.GenesisParameters, error) {
-	return backend.GenesisParameters{}, errors.New("genesis params not available via Maestro API")
+	return backend.GenesisParameters{}, backend.NewUnsupportedError("Maestro", backend.CapabilityGenesisParams)
 }
 
 func (m *MaestroChainContext) NetworkId() uint8 {
@@ -603,6 +608,8 @@ func maestroScriptRef(scriptType string, scriptCbor []byte, expectedHashHex stri
 		refType = common.ScriptRefTypePlutusV2
 	case "plutusv3":
 		refType = common.ScriptRefTypePlutusV3
+	case "plutusv4":
+		refType = common.ScriptRefTypePlutusV4
 	default:
 		return nil, fmt.Errorf("unknown script type %q", scriptType)
 	}
@@ -610,7 +617,7 @@ func maestroScriptRef(scriptType string, scriptCbor []byte, expectedHashHex stri
 }
 
 // maestroCostModelKey translates Maestro cost model keys to the canonical form
-// expected by ComputeScriptDataHash ("PlutusV1", "PlutusV2", "PlutusV3").
+// expected by ComputeScriptDataHash ("PlutusV1" through "PlutusV4").
 func maestroCostModelKey(key string) string {
 	switch key {
 	case "plutus:v1":
@@ -619,6 +626,8 @@ func maestroCostModelKey(key string) string {
 		return "PlutusV2"
 	case "plutus:v3":
 		return "PlutusV3"
+	case "plutus:v4":
+		return "PlutusV4"
 	default:
 		return key
 	}

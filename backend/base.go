@@ -2,15 +2,145 @@ package backend
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
+
+// Capability identifies an optional ChainContext operation. A ChainContext
+// always has the corresponding method for source compatibility, but a
+// particular backend may not be able to implement every operation.
+type Capability uint32
+
+const (
+	CapabilityProtocolParams Capability = 1 << iota
+	CapabilityGenesisParams
+	CapabilityCurrentEpoch
+	CapabilityMaxTxFee
+	CapabilityTip
+	CapabilityUtxos
+	CapabilitySubmitTx
+	CapabilityEvaluateTx
+	// CapabilityEvaluateTxAdditionalUtxos indicates that EvaluateTx honours
+	// its additionalUtxos argument for off-chain or chained inputs.
+	CapabilityEvaluateTxAdditionalUtxos
+	CapabilityUtxoByRef
+	CapabilityScriptCbor
+)
+
+// AllCapabilities is the set implied by the historic ChainContext contract.
+// It is used for contexts that do not opt into CapabilityReporter so existing
+// third-party implementations remain source- and behavior-compatible.
+const AllCapabilities = CapabilityProtocolParams |
+	CapabilityGenesisParams |
+	CapabilityCurrentEpoch |
+	CapabilityMaxTxFee |
+	CapabilityTip |
+	CapabilityUtxos |
+	CapabilitySubmitTx |
+	CapabilityEvaluateTx |
+	CapabilityEvaluateTxAdditionalUtxos |
+	CapabilityUtxoByRef |
+	CapabilityScriptCbor
+
+// CapabilitySet is a bit set of backend capabilities.
+type CapabilitySet uint32
+
+// Has reports whether every requested capability is present.
+func (s CapabilitySet) Has(capability Capability) bool {
+	return Capability(s)&capability == capability
+}
+
+// CapabilityReporter is an optional extension to ChainContext. It is kept
+// separate from ChainContext so implementations outside this module are not
+// forced to add a method when capability reporting is introduced.
+type CapabilityReporter interface {
+	Capabilities() CapabilitySet
+}
+
+// CapabilitiesOf returns the capabilities reported by ctx. Contexts that do
+// not implement CapabilityReporter are treated as supporting the historic
+// complete ChainContext contract.
+func CapabilitiesOf(ctx ChainContext) CapabilitySet {
+	if reporter, ok := ctx.(CapabilityReporter); ok {
+		return reporter.Capabilities()
+	}
+	return CapabilitySet(AllCapabilities)
+}
+
+// Supports reports whether ctx reports support for every requested capability.
+func Supports(ctx ChainContext, capability Capability) bool {
+	return CapabilitiesOf(ctx).Has(capability)
+}
+
+func (c Capability) String() string {
+	switch c {
+	case CapabilityProtocolParams:
+		return "protocol parameter queries"
+	case CapabilityGenesisParams:
+		return "genesis parameter queries"
+	case CapabilityCurrentEpoch:
+		return "current epoch queries"
+	case CapabilityMaxTxFee:
+		return "maximum transaction fee queries"
+	case CapabilityTip:
+		return "chain tip queries"
+	case CapabilityUtxos:
+		return "address UTxO queries"
+	case CapabilitySubmitTx:
+		return "transaction submission"
+	case CapabilityEvaluateTx:
+		return "transaction evaluation"
+	case CapabilityEvaluateTxAdditionalUtxos:
+		return "transaction evaluation with additional UTxOs"
+	case CapabilityUtxoByRef:
+		return "UTxO reference queries"
+	case CapabilityScriptCbor:
+		return "script CBOR lookup"
+	default:
+		return fmt.Sprintf("unknown capability (%d)", c)
+	}
+}
+
+// ErrUnsupported is returned when a ChainContext operation cannot be
+// implemented by its backend. Use errors.Is to check the category and
+// errors.As with UnsupportedError to inspect the operation.
+var ErrUnsupported = errors.New("backend operation unsupported")
+
+// UnsupportedError identifies a backend operation that is unavailable.
+type UnsupportedError struct {
+	Backend    string
+	Capability Capability
+}
+
+func (e *UnsupportedError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Backend == "" {
+		return fmt.Sprintf("%s is unsupported", e.Capability)
+	}
+	return fmt.Sprintf("%s does not support %s", e.Backend, e.Capability)
+}
+
+// Unwrap lets callers use errors.Is(err, ErrUnsupported).
+func (e *UnsupportedError) Unwrap() error {
+	return ErrUnsupported
+}
+
+// NewUnsupportedError constructs an error for an unavailable backend
+// capability. Backends should return this instead of a provider-specific
+// message when support is known to be absent locally.
+func NewUnsupportedError(backendName string, capability Capability) *UnsupportedError {
+	return &UnsupportedError{Backend: backendName, Capability: capability}
+}
 
 // ChainContext provides an interface for interacting with a Cardano blockchain.
 type ChainContext interface {
@@ -27,15 +157,40 @@ type ChainContext interface {
 	// resolved UTxOs supplied to the evaluator (e.g. spending inputs that are
 	// not yet confirmed on-chain, such as off-chain or chained inputs), so that
 	// script execution-unit estimation can resolve inputs the backend cannot
-	// see on-chain. Ogmios, Blockfrost, and Maestro forward/respect
-	// additionalUtxos. UTxO RPC currently ignores additionalUtxos and can only
-	// evaluate transactions whose inputs are already visible on-chain; it does
-	// NOT support evaluation of off-chain or chained inputs. Passing non-empty
-	// additionalUtxos to such a backend is not an error, but those UTxOs will
-	// not be considered.
+	// see on-chain. Callers that require additional UTxOs to be considered must
+	// check CapabilityEvaluateTxAdditionalUtxos before relying on this behavior.
+	// Backends that do not report that capability may ignore additionalUtxos or
+	// return ErrUnsupported when the argument is non-empty.
 	EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
 	UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
 	ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)
+}
+
+// ValidateAdditionalUtxo verifies that a resolved UTxO has both pieces needed
+// by backend evaluation APIs. TransactionInput and TransactionOutput are
+// interfaces, so this also rejects typed nil pointers stored in either field.
+func ValidateAdditionalUtxo(utxo common.Utxo) error {
+	if isNilInterface(utxo.Id) {
+		return errors.New("additional UTxO is missing transaction input")
+	}
+	if isNilInterface(utxo.Output) {
+		return errors.New("additional UTxO is missing transaction output")
+	}
+	return nil
+}
+
+func isNilInterface(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	valueOf := reflect.ValueOf(value)
+	switch valueOf.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return valueOf.IsNil()
+	default:
+		return false
+	}
 }
 
 // GenesisParameters holds Cardano genesis configuration values.
@@ -381,6 +536,8 @@ func ScriptRefFromBytes(scriptType uint, scriptBytes []byte, expectedHashHex str
 		script = common.PlutusV2Script(scriptBytes)
 	case common.ScriptRefTypePlutusV3:
 		script = common.PlutusV3Script(scriptBytes)
+	case common.ScriptRefTypePlutusV4:
+		script = common.PlutusV4Script(scriptBytes)
 	default:
 		return nil, fmt.Errorf("unsupported script ref type %d", scriptType)
 	}

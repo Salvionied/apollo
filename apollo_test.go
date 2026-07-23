@@ -576,6 +576,40 @@ func TestAttachScriptV3Dedup(t *testing.T) {
 	}
 }
 
+func TestAttachScriptV4RequiresDijkstra(t *testing.T) {
+	a := New(setupFixedContext())
+	a.AttachScript(common.PlutusV4Script([]byte{0x01, 0x02, 0x03}))
+
+	if a.err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("AttachScript error = %v, want %v", a.err, ErrPlutusV4RequiresDijkstra)
+	}
+	if _, err := a.Complete(); err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("Complete error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+}
+
+func TestAttachScriptPointer(t *testing.T) {
+	a := New(setupFixedContext())
+	script := common.PlutusV1Script([]byte{0x01, 0x02, 0x03})
+
+	a.AttachScript(&script)
+
+	if len(a.v1scripts) != 1 {
+		t.Fatalf("attached script count = %d, want 1", len(a.v1scripts))
+	}
+}
+
+func TestAttachScriptPlutusV4PointerRequiresDijkstra(t *testing.T) {
+	a := New(setupFixedContext())
+	script := common.PlutusV4Script([]byte{0x01, 0x02, 0x03})
+
+	a.AttachScript(&script)
+
+	if a.err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("AttachScript error = %v, want %v", a.err, ErrPlutusV4RequiresDijkstra)
+	}
+}
+
 func TestAttachScriptNativeScript(t *testing.T) {
 	cc := setupFixedContext()
 	a := New(cc)
@@ -958,8 +992,8 @@ func TestNewScriptRefV1(t *testing.T) {
 	if ref == nil {
 		t.Fatal("expected non-nil ScriptRef")
 	}
-	if ref.Type != 1 {
-		t.Errorf("expected type 1, got %d", ref.Type)
+	if ref.Type != common.ScriptRefTypePlutusV1 {
+		t.Errorf("expected type %d, got %d", common.ScriptRefTypePlutusV1, ref.Type)
 	}
 }
 
@@ -972,8 +1006,8 @@ func TestNewScriptRefV2(t *testing.T) {
 	if ref == nil {
 		t.Fatal("expected non-nil ScriptRef")
 	}
-	if ref.Type != 2 {
-		t.Errorf("expected type 2, got %d", ref.Type)
+	if ref.Type != common.ScriptRefTypePlutusV2 {
+		t.Errorf("expected type %d, got %d", common.ScriptRefTypePlutusV2, ref.Type)
 	}
 }
 
@@ -986,8 +1020,113 @@ func TestNewScriptRefV3(t *testing.T) {
 	if ref == nil {
 		t.Fatal("expected non-nil ScriptRef")
 	}
-	if ref.Type != 3 {
-		t.Errorf("expected type 3, got %d", ref.Type)
+	if ref.Type != common.ScriptRefTypePlutusV3 {
+		t.Errorf("expected type %d, got %d", common.ScriptRefTypePlutusV3, ref.Type)
+	}
+}
+
+func TestNewScriptRefV4(t *testing.T) {
+	script := common.PlutusV4Script([]byte{0x01, 0x02})
+	ref, err := NewScriptRef(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref == nil {
+		t.Fatal("expected non-nil ScriptRef")
+	}
+	if ref.Type != common.ScriptRefTypePlutusV4 {
+		t.Errorf("expected type %d, got %d", common.ScriptRefTypePlutusV4, ref.Type)
+	}
+}
+
+func TestNewScriptRefPointerScripts(t *testing.T) {
+	v1 := common.PlutusV1Script([]byte{0x01})
+	v2 := common.PlutusV2Script([]byte{0x02})
+	v3 := common.PlutusV3Script([]byte{0x03})
+	v4 := common.PlutusV4Script([]byte{0x04})
+	var keyHash common.Blake2b224
+	native, err := NewNativeScriptPubkey(keyHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		script     common.Script
+		scriptType uint
+	}{
+		{name: "native", script: &native, scriptType: common.ScriptRefTypeNativeScript},
+		{name: "PlutusV1", script: &v1, scriptType: common.ScriptRefTypePlutusV1},
+		{name: "PlutusV2", script: &v2, scriptType: common.ScriptRefTypePlutusV2},
+		{name: "PlutusV3", script: &v3, scriptType: common.ScriptRefTypePlutusV3},
+		{name: "PlutusV4", script: &v4, scriptType: common.ScriptRefTypePlutusV4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ref, err := NewScriptRef(tt.script)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ref.Type != tt.scriptType {
+				t.Fatalf("script ref type = %d, want %d", ref.Type, tt.scriptType)
+			}
+		})
+	}
+}
+
+func TestNewScriptRefRejectsNilScriptPointer(t *testing.T) {
+	var script *common.PlutusV4Script
+	if _, err := NewScriptRef(script); err == nil {
+		t.Fatal("NewScriptRef accepted a nil script pointer")
+	}
+}
+
+func TestPayToAddressWithPlutusV4ReferenceScriptRequiresDijkstra(t *testing.T) {
+	a := New(setupFixedContext())
+	_, err := a.PayToAddressWithReferenceScript(
+		testAddress(t),
+		2_000_000,
+		common.PlutusV4Script([]byte{0x01, 0x02}),
+	)
+	if err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("PayToAddressWithReferenceScript error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+}
+
+func TestUsedScriptCostModelsRejectsPlutusV4ReferenceScript(t *testing.T) {
+	ref, err := NewScriptRef(common.PlutusV4Script([]byte{0x01, 0x02}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(setupFixedContext())
+	_, err = a.usedScriptCostModels(
+		[]common.Utxo{{
+			Output: &babbage.BabbageTransactionOutput{TxOutScriptRef: ref},
+		}},
+		nil,
+	)
+	if err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("usedScriptCostModels error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+}
+
+func TestTotalReferenceScriptSizeRejectsPlutusV4(t *testing.T) {
+	ref, err := NewScriptRef(common.PlutusV4Script([]byte{0x01, 0x02}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txHash common.Blake2b256
+	txHash[0] = 1
+	a := New(setupFixedContext())
+	_, err = a.totalReferenceScriptSize([]common.Utxo{{
+		Id: shelley.ShelleyTransactionInput{TxId: txHash, OutputIndex: 0},
+		Output: &babbage.BabbageTransactionOutput{
+			TxOutScriptRef: ref,
+		},
+	}})
+	if err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("totalReferenceScriptSize error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
 	}
 }
 

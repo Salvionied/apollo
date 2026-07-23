@@ -39,10 +39,20 @@ type BlockFrostChainContext struct {
 	genesisCacheAt time.Time
 }
 
+// Capabilities reports the ChainContext feature set implemented by Blockfrost.
+// The hosted evaluate-with-UTxOs endpoint cannot resolve every additional UTxO
+// shape, notably asset-bearing off-chain outputs, so it is not advertised as a
+// general chained-input evaluator.
+func (b *BlockFrostChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.AllCapabilities) &^
+		backend.CapabilitySet(backend.CapabilityEvaluateTxAdditionalUtxos)
+}
+
 const (
 	cacheExpiry                   = 5 * time.Minute
 	maxBlockfrostResponseBytes    = 10 * 1024 * 1024
 	maxBlockfrostErrorSnippetSize = 512
+	maxConcurrentUtxoHydrations   = 8
 )
 
 // NewBlockFrostChainContext creates a new BlockFrost backend.
@@ -239,6 +249,7 @@ func (b *BlockFrostChainContext) Tip() (uint64, error) {
 func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
 	const maxPages = 1000
 	var allUtxos []common.Utxo
+	resolver := newScriptRefResolver(b)
 
 	for page := 1; page <= maxPages+1; page++ {
 		path := fmt.Sprintf("/addresses/%s/utxos?page=%d", address.String(), page)
@@ -258,13 +269,11 @@ func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, e
 			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxPages)
 		}
 
-		for _, raw := range rawUtxos {
-			utxo, err := b.hydrateUtxo(raw, address)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse UTxO %s#%d: %w", raw.TxHash, raw.OutputIndex, err)
-			}
-			allUtxos = append(allUtxos, utxo)
+		utxos, err := b.hydrateUtxoPage(rawUtxos, address, resolver.resolve)
+		if err != nil {
+			return nil, err
 		}
+		allUtxos = append(allUtxos, utxos...)
 	}
 	return allUtxos, nil
 }
@@ -305,6 +314,12 @@ var (
 )
 
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	for i, utxo := range additionalUtxos {
+		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("invalid additional UTxO at index %d: %w", i, err)
+		}
+	}
+
 	// Prefer /utils/txs/evaluate (hex body). Apollo always passes spending
 	// inputs as additionalUtxos even when they are already on-chain; posting
 	// them to /utils/txs/evaluate/utxos re-encodes inline datums and reference
@@ -429,6 +444,10 @@ func buildEvalUtxosRequest(txCbor []byte, additionalUtxos []common.Utxo) ([]byte
 // bfAdditionalUtxoItemFromUtxo builds a single [txIn, txOut] additional-UTxO
 // entry from a resolved gouroboros UTxO.
 func bfAdditionalUtxoItemFromUtxo(utxo common.Utxo) (bfAdditionalUtxoItem, error) {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return bfAdditionalUtxoItem{}, err
+	}
+
 	out := utxo.Output
 
 	txIn := bfTxIn{
@@ -901,8 +920,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	// cost_models which may be either:
 	//   - array format:  {"PlutusV1": [205665, 812, ...]}
 	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
-	// Both formats use keys "PlutusV1", "PlutusV2", "PlutusV3" which match
-	// the canonical form expected by ComputeScriptDataHash.
+	// Both formats use keys "PlutusV1" through "PlutusV4" which match the
+	// canonical form expected by ComputeScriptDataHash.
 	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
 		var rawModels map[string][]int64
 		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
@@ -1073,6 +1092,58 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 }
 
 func (b *BlockFrostChainContext) hydrateUtxo(raw bfAddressUTxO, address common.Address) (common.Utxo, error) {
+	return b.hydrateUtxoWithScriptResolver(raw, address, b.scriptRefByHash)
+}
+
+func (b *BlockFrostChainContext) hydrateUtxoPage(
+	rawUtxos []bfAddressUTxO,
+	address common.Address,
+	resolveScript func(string) (*common.ScriptRef, error),
+) ([]common.Utxo, error) {
+	utxos := make([]common.Utxo, len(rawUtxos))
+	errs := make([]error, len(rawUtxos))
+
+	workers := min(len(rawUtxos), maxConcurrentUtxoHydrations)
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				utxo, err := b.hydrateUtxoWithScriptResolver(rawUtxos[index], address, resolveScript)
+				if err != nil {
+					errs[index] = fmt.Errorf(
+						"failed to parse UTxO %s#%d: %w",
+						rawUtxos[index].TxHash,
+						rawUtxos[index].OutputIndex,
+						err,
+					)
+					continue
+				}
+				utxos[index] = utxo
+			}
+		}()
+	}
+	for index := range rawUtxos {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return utxos, nil
+}
+
+func (b *BlockFrostChainContext) hydrateUtxoWithScriptResolver(
+	raw bfAddressUTxO,
+	address common.Address,
+	resolveScript func(string) (*common.ScriptRef, error),
+) (common.Utxo, error) {
 	utxo, err := raw.toUtxo(address)
 	if err != nil {
 		return common.Utxo{}, err
@@ -1089,13 +1160,56 @@ func (b *BlockFrostChainContext) hydrateUtxo(raw bfAddressUTxO, address common.A
 		output.DatumOption = datumOpt
 	}
 	if raw.ReferenceScriptHash != "" {
-		scriptRef, err := b.scriptRefByHash(raw.ReferenceScriptHash)
+		scriptRef, err := resolveScript(raw.ReferenceScriptHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to resolve reference script %s: %w", raw.ReferenceScriptHash, err)
 		}
 		output.TxOutScriptRef = scriptRef
 	}
 	return utxo, nil
+}
+
+type scriptRefResolver struct {
+	context *BlockFrostChainContext
+
+	mu      sync.Mutex
+	entries map[string]*scriptRefResolveResult
+}
+
+type scriptRefResolveResult struct {
+	done      chan struct{}
+	scriptRef *common.ScriptRef
+	err       error
+}
+
+func newScriptRefResolver(context *BlockFrostChainContext) *scriptRefResolver {
+	return &scriptRefResolver{
+		context: context,
+		entries: make(map[string]*scriptRefResolveResult),
+	}
+}
+
+func (r *scriptRefResolver) resolve(hashHex string) (*common.ScriptRef, error) {
+	// Script hashes are hexadecimal, so normalize the key to coalesce case-only
+	// variants returned by upstream services.
+	key := strings.ToLower(hashHex)
+
+	r.mu.Lock()
+	entry, ok := r.entries[key]
+	if !ok {
+		entry = &scriptRefResolveResult{done: make(chan struct{})}
+		r.entries[key] = entry
+	}
+	r.mu.Unlock()
+
+	if ok {
+		<-entry.done
+		return entry.scriptRef, entry.err
+	}
+
+	entry.scriptRef, entry.err = r.context.scriptRefByHash(key)
+	close(entry.done)
+	return entry.scriptRef, entry.err
 }
 
 // inlineDatumOptionFromBlockfrost builds an inline datum option from BlockFrost's
@@ -1170,6 +1284,13 @@ func scriptRefFromHash(
 		return &common.ScriptRef{
 			Type:   common.ScriptRefTypePlutusV3,
 			Script: v3,
+		}, nil
+	}
+	v4 := common.PlutusV4Script(scriptCbor)
+	if v4.Hash() == scriptHash {
+		return &common.ScriptRef{
+			Type:   common.ScriptRefTypePlutusV4,
+			Script: v4,
 		}, nil
 	}
 	return nil, errors.New("unable to determine reference script language from script hash")

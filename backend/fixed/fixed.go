@@ -23,6 +23,16 @@ type FixedChainContext struct {
 	utxosByRef     map[string]common.Utxo   // keyed by "txid#index"
 }
 
+// Capabilities reports the deterministic in-memory operations provided by the
+// fixed test context. It intentionally does not pretend to be a chain node.
+func (f *FixedChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.CapabilityProtocolParams |
+		backend.CapabilityGenesisParams |
+		backend.CapabilityMaxTxFee |
+		backend.CapabilityUtxos |
+		backend.CapabilityUtxoByRef)
+}
+
 // NewFixedChainContext creates a new FixedChainContext with the given protocol parameters.
 func NewFixedChainContext(pp backend.ProtocolParameters, gp backend.GenesisParameters, networkId uint8) *FixedChainContext {
 	return &FixedChainContext{
@@ -112,6 +122,9 @@ func (f *FixedChainContext) NetworkId() uint8 {
 }
 
 func (f *FixedChainContext) CurrentEpoch() (uint64, error) {
+	// Preserve the fixed context's historic deterministic placeholder. It is
+	// intentionally not reported as CapabilityCurrentEpoch because it is not
+	// derived from chain state.
 	return 0, nil
 }
 
@@ -124,6 +137,9 @@ func (f *FixedChainContext) MaxTxFee() (uint64, error) {
 }
 
 func (f *FixedChainContext) Tip() (uint64, error) {
+	// Preserve the fixed context's historic deterministic placeholder. It is
+	// intentionally not reported as CapabilityTip because it is not derived
+	// from chain state.
 	return 0, nil
 }
 
@@ -137,11 +153,11 @@ func (f *FixedChainContext) Utxos(address common.Address) ([]common.Utxo, error)
 }
 
 func (f *FixedChainContext) SubmitTx(_ []byte) (common.Blake2b256, error) {
-	return common.Blake2b256{}, errors.New("cannot submit tx with fixed chain context")
+	return common.Blake2b256{}, backend.NewUnsupportedError("fixed chain context", backend.CapabilitySubmitTx)
 }
 
 func (f *FixedChainContext) EvaluateTx(_ []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
-	return nil, errors.New("cannot evaluate tx with fixed chain context")
+	return nil, backend.NewUnsupportedError("fixed chain context", backend.CapabilityEvaluateTx)
 }
 
 func (f *FixedChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
@@ -155,5 +171,5 @@ func (f *FixedChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*
 }
 
 func (f *FixedChainContext) ScriptCbor(_ common.Blake2b224) ([]byte, error) {
-	return nil, errors.New("not implemented in fixed chain context")
+	return nil, backend.NewUnsupportedError("fixed chain context", backend.CapabilityScriptCbor)
 }

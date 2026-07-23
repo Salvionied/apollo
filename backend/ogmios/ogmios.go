@@ -31,6 +31,17 @@ type OgmiosChainContext struct {
 	networkId uint8
 }
 
+// Capabilities reports the operations supported by the configured Ogmios
+// client. Address UTxO queries and script lookup require the optional Kupo
+// client; UTxO-by-reference queries are served directly by Ogmios.
+func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
+	capabilities := backend.CapabilitySet(backend.AllCapabilities)
+	if o.kupo == nil {
+		capabilities &^= backend.CapabilitySet(backend.CapabilityUtxos | backend.CapabilityScriptCbor)
+	}
+	return capabilities
+}
+
 // NewOgmiosChainContext creates a new Ogmios chain context.
 func NewOgmiosChainContext(ogmiosClient *ogmigo.Client, kupoClient *kugo.Client, networkId uint8) *OgmiosChainContext {
 	return &OgmiosChainContext{
@@ -102,7 +113,7 @@ func (o *OgmiosChainContext) Tip() (uint64, error) {
 
 func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
 	if o.kupo == nil {
-		return nil, errors.New("kupo client required for UTxO lookup")
+		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityUtxos)
 	}
 	ctx := context.Background()
 	matches, err := o.kupo.Matches(ctx, kugo.OnlyUnspent(), kugo.Address(address.String()))
@@ -184,6 +195,10 @@ func commonUtxosToShared(utxos []common.Utxo) ([]shared.Utxo, error) {
 // "ada" (with inner key "lovelace") for the coin, and the policy ID hex (with
 // inner asset-name hex) for native assets.
 func commonUtxoToShared(utxo common.Utxo) (shared.Utxo, error) {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return shared.Utxo{}, err
+	}
+
 	out := utxo.Output
 
 	coin, err := bigIntToNum(out.Amount())
@@ -345,7 +360,7 @@ func (o *OgmiosChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
 	if o.kupo == nil {
-		return nil, errors.New("kupo client required for script lookup")
+		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityScriptCbor)
 	}
 	ctx := context.Background()
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
@@ -452,8 +467,8 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 	}
 
 	// Parse cost models from Ogmios JSON.
-	// Ogmios uses keys like "plutus:v1", "plutus:v2", "plutus:v3".
-	// ComputeScriptDataHash expects "PlutusV1", "PlutusV2", "PlutusV3".
+	// Ogmios uses keys like "plutus:v1" through "plutus:v4".
+	// ComputeScriptDataHash expects "PlutusV1" through "PlutusV4".
 	if len(p.CostModels) > 0 {
 		var rawModels map[string][]int64
 		if err := json.Unmarshal(p.CostModels, &rawModels); err != nil {
@@ -469,7 +484,7 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 }
 
 // ogmiosCostModelKey translates Ogmios cost model keys to the canonical form
-// expected by ComputeScriptDataHash ("PlutusV1", "PlutusV2", "PlutusV3").
+// expected by ComputeScriptDataHash ("PlutusV1" through "PlutusV4").
 func ogmiosCostModelKey(key string) string {
 	switch key {
 	case "plutus:v1":
@@ -478,6 +493,8 @@ func ogmiosCostModelKey(key string) string {
 		return "PlutusV2"
 	case "plutus:v3":
 		return "PlutusV3"
+	case "plutus:v4":
+		return "PlutusV4"
 	default:
 		return key
 	}
@@ -514,6 +531,11 @@ func (g *ogmiosGenesisConfig) toGenesisParams() backend.GenesisParameters {
 type datumFetcher interface {
 	Datum(ctx context.Context, datumHash string) (string, error)
 }
+
+// Kugo v1.3.1 does not export a Plutus V4 language constant yet. Retain the
+// wire value here so this conversion supports it as soon as Kugo can decode
+// a "plutus:v4" response.
+const kupoScriptLanguagePlutusV4 kugo.ScriptLanguage = 4
 
 func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, datums datumFetcher) (common.Utxo, error) {
 	hashBytes, err := hex.DecodeString(match.TransactionID)
@@ -790,6 +812,8 @@ func kupoScriptToScriptRef(script kugo.Script, expectedHashHex string) (*common.
 		scriptType = common.ScriptRefTypePlutusV2
 	case kugo.ScriptLanguagePlutusV3:
 		scriptType = common.ScriptRefTypePlutusV3
+	case kupoScriptLanguagePlutusV4:
+		scriptType = common.ScriptRefTypePlutusV4
 	default:
 		return nil, fmt.Errorf("unsupported kupo script language: %d", script.Language)
 	}
@@ -798,7 +822,7 @@ func kupoScriptToScriptRef(script kugo.Script, expectedHashHex string) (*common.
 }
 
 // ogmiosScriptToScriptRef converts an Ogmios script JSON to a common.ScriptRef.
-// Ogmios v6 uses: {"language": "plutus:v1"|"plutus:v2"|"plutus:v3"|"native", "cbor": "hex"}
+// Ogmios v6 uses: {"language": "plutus:v1" through "plutus:v4"|"native", "cbor": "hex"}
 // Ogmios does not include the script hash in UTxO responses, so no hash
 // verification is possible here.
 func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, error) {
@@ -829,6 +853,8 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 		scriptType = common.ScriptRefTypePlutusV2
 	case "plutus:v3":
 		scriptType = common.ScriptRefTypePlutusV3
+	case "plutus:v4":
+		scriptType = common.ScriptRefTypePlutusV4
 	default:
 		return nil, fmt.Errorf("unsupported ogmios script language %q", raw.Language)
 	}

@@ -215,6 +215,22 @@ func TestScriptRefFromBytesVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestScriptRefFromBytesPlutusV4(t *testing.T) {
+	script := common.PlutusV4Script([]byte{0x01, 0x02, 0x03})
+	correctHash := hex.EncodeToString(script.Hash().Bytes())
+
+	ref, err := ScriptRefFromBytes(common.ScriptRefTypePlutusV4, script, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref.Type != common.ScriptRefTypePlutusV4 {
+		t.Fatalf("script ref type = %d, want %d", ref.Type, common.ScriptRefTypePlutusV4)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+}
+
 func TestScriptRefFromBytesRejectsHashMismatch(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02, 0x03})
 	// The same bytes hashed as PlutusV1 produce a different script hash.
