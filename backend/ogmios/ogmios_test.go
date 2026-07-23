@@ -350,6 +350,80 @@ func TestCommonUtxoToShared(t *testing.T) {
 	}
 }
 
+func TestCommonUtxoToSharedRejectsMissingFields(t *testing.T) {
+	valid := sampleCommonUtxo(t)
+	var typedNilInput *shelley.ShelleyTransactionInput
+	var typedNilOutput *babbage.BabbageTransactionOutput
+
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "nil transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "typed nil transaction input",
+			utxo:    common.Utxo{Id: typedNilInput, Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+		{
+			name:    "typed nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id, Output: typedNilOutput},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := commonUtxoToShared(test.utxo); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestEvaluateTxRejectsMalformedAdditionalUtxos(t *testing.T) {
+	valid := sampleCommonUtxo(t)
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "missing transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "missing transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	ctx := NewOgmiosChainContext(ogmigo.New(), nil, 0)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{test.utxo}); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestCommonUtxoToSharedInlineDatum(t *testing.T) {
 	var txId common.Blake2b256
 	for i := range txId {

@@ -589,6 +589,49 @@ func TestBuildEvalUtxosRequestShape(t *testing.T) {
 	}
 }
 
+func TestBfAdditionalUtxoItemFromUtxoRejectsMissingFields(t *testing.T) {
+	valid := sampleAdaOnlyUtxo(t)
+	var typedNilInput *shelley.ShelleyTransactionInput
+	var typedNilOutput *babbage.BabbageTransactionOutput
+
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "nil transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "typed nil transaction input",
+			utxo:    common.Utxo{Id: typedNilInput, Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+		{
+			name:    "typed nil transaction output",
+			utxo:    common.Utxo{Id: valid.Id, Output: typedNilOutput},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := bfAdditionalUtxoItemFromUtxo(test.utxo); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestBuildEvalUtxosRequestHashOnlyDatum(t *testing.T) {
 	var txId common.Blake2b256
 	for i := range txId {
@@ -767,6 +810,47 @@ func TestEvaluateTxPrefersSimpleEndpointWhenAdditionalUtxosProvided(t *testing.T
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
 		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+func TestEvaluateTxRejectsMalformedAdditionalUtxosBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	valid := sampleAdaOnlyUtxo(t)
+	tests := []struct {
+		name    string
+		utxo    common.Utxo
+		wantErr string
+	}{
+		{
+			name:    "missing transaction input",
+			utxo:    common.Utxo{Output: valid.Output},
+			wantErr: "missing transaction input",
+		},
+		{
+			name:    "missing transaction output",
+			utxo:    common.Utxo{Id: valid.Id},
+			wantErr: "missing transaction output",
+		},
+	}
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{test.utxo}); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			} else if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
 	}
 }
 

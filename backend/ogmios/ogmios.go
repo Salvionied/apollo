@@ -195,6 +195,10 @@ func commonUtxosToShared(utxos []common.Utxo) ([]shared.Utxo, error) {
 // "ada" (with inner key "lovelace") for the coin, and the policy ID hex (with
 // inner asset-name hex) for native assets.
 func commonUtxoToShared(utxo common.Utxo) (shared.Utxo, error) {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return shared.Utxo{}, err
+	}
+
 	out := utxo.Output
 
 	coin, err := bigIntToNum(out.Amount())
