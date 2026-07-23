@@ -36,6 +36,8 @@ type MaestroChainContext struct {
 	apiKey string
 }
 
+const maxMaestroEvaluateErrorResponseBytes = 64 * 1024
+
 // Capabilities reports the Maestro operations supported by this client.
 func (m *MaestroChainContext) Capabilities() backend.CapabilitySet {
 	return backend.CapabilitySet(backend.AllCapabilities) &^ backend.CapabilitySet(backend.CapabilityGenesisParams)
@@ -389,7 +391,10 @@ func (m *MaestroChainContext) postEvaluate(body []byte) (models.EvaluateTxRespon
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, _ := io.ReadAll(resp.Body)
+		msg, err := io.ReadAll(io.LimitReader(resp.Body, maxMaestroEvaluateErrorResponseBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read maestro evaluate error response with status %d: %w", resp.StatusCode, err)
+		}
 		return nil, fmt.Errorf("maestro evaluate failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 
@@ -421,6 +426,15 @@ func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerK
 			return nil, fmt.Errorf("invalid redeemer tag %q: %w", eval.RedeemerTag, err)
 		}
 		key := common.RedeemerKey{Tag: tag, Index: uint32(eval.RedeemerIndex)}
+		if _, exists := result[key]; exists {
+			return nil, fmt.Errorf("duplicate evaluation report for redeemer %d:%d", tag, key.Index)
+		}
+		if eval.ExUnits.Mem < 0 {
+			return nil, fmt.Errorf("negative execution memory for redeemer %d:%d: %d", tag, key.Index, eval.ExUnits.Mem)
+		}
+		if eval.ExUnits.Steps < 0 {
+			return nil, fmt.Errorf("negative execution steps for redeemer %d:%d: %d", tag, key.Index, eval.ExUnits.Steps)
+		}
 		result[key] = common.ExUnits{Memory: eval.ExUnits.Mem, Steps: eval.ExUnits.Steps}
 	}
 	return result, nil
