@@ -35,7 +35,14 @@ jobs:
           result-encoding: string
           script: |
             try {
-              const prerelease = process.env.RELEASE_TAG.includes("-");
+              const semverPattern = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+              const parsedTag = semverPattern.exec(process.env.RELEASE_TAG);
+              if (!parsedTag) {
+                throw new Error(
+                  `release tag ${process.env.RELEASE_TAG} is not valid SemVer (expected vMAJOR.MINOR.PATCH)`,
+                );
+              }
+              const prerelease = parsedTag[4] !== undefined;
               const response = await github.rest.repos.createRelease({
                 generate_release_notes: true,
                 name: process.env.RELEASE_TAG,
