@@ -189,9 +189,11 @@ func NewKeyPairWallet(addr common.Address, key bip32.XPrv) (*KeyPairWallet, erro
 	if len(key) != 96 {
 		return nil, fmt.Errorf("invalid BIP32 extended private key length: expected 96 bytes, got %d", len(key))
 	}
+	keyCopy := make(bip32.XPrv, len(key))
+	copy(keyCopy, key)
 	return &KeyPairWallet{
 		address:    addr,
-		privateKey: key,
+		privateKey: keyCopy,
 	}, nil
 }
 

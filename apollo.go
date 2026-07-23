@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"math/big"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -109,7 +110,7 @@ type auxData struct {
 
 // New creates a new Apollo transaction builder with the given chain context.
 func New(cc backend.ChainContext) *Apollo {
-	return &Apollo{
+	a := &Apollo{
 		Context:         cc,
 		redeemers:       make(map[string]redeemerEntry),
 		stakeRedeemers:  make(map[string]redeemerEntry),
@@ -117,6 +118,10 @@ func New(cc backend.ChainContext) *Apollo {
 		withdrawals:     make(map[string]withdrawalEntry),
 		estimateExUnits: true,
 	}
+	if isNilChainContext(cc) {
+		a.setErrOnce(errors.New("chain context must not be nil"))
+	}
+	return a
 }
 
 // SetWallet sets the wallet for the transaction builder.
@@ -197,6 +202,19 @@ func (a *Apollo) AddRequiredSigner(pkh common.Blake2b224) *Apollo {
 
 // AddRequiredSignerPaymentKey adds the payment key hash from an address as a required signer.
 func (a *Apollo) AddRequiredSignerPaymentKey(addr common.Address) *Apollo {
+	switch addr.Type() {
+	case common.AddressTypeKeyKey,
+		common.AddressTypeKeyScript,
+		common.AddressTypeKeyPointer,
+		common.AddressTypeKeyNone:
+		// These address forms have a payment key credential.
+	default:
+		a.setErrOnce(fmt.Errorf(
+			"AddRequiredSignerPaymentKey: address type %d does not have a payment key credential",
+			addr.Type(),
+		))
+		return a
+	}
 	a.requiredSigners = append(a.requiredSigners, addr.PaymentKeyHash())
 	return a
 }
@@ -212,24 +230,40 @@ func (a *Apollo) AddRequiredSignerStakeKey(addr common.Address) *Apollo {
 
 // SetTtl sets the transaction time-to-live.
 func (a *Apollo) SetTtl(ttl int64) *Apollo {
+	if ttl < 0 {
+		a.setErrOnce(errors.New("SetTtl: ttl must be non-negative"))
+		return a
+	}
 	a.Ttl = ttl
 	return a
 }
 
 // SetValidityStart sets the validity start slot.
 func (a *Apollo) SetValidityStart(start int64) *Apollo {
+	if start < 0 {
+		a.setErrOnce(errors.New("SetValidityStart: start must be non-negative"))
+		return a
+	}
 	a.ValidityStart = start
 	return a
 }
 
 // SetFee sets a specific fee (disables fee estimation).
 func (a *Apollo) SetFee(fee int64) *Apollo {
+	if fee < 0 {
+		a.setErrOnce(errors.New("SetFee: fee must be non-negative"))
+		return a
+	}
 	a.Fee = fee
 	return a
 }
 
 // SetFeePadding adds additional fee padding.
 func (a *Apollo) SetFeePadding(padding int64) *Apollo {
+	if padding < 0 {
+		a.setErrOnce(errors.New("SetFeePadding: padding must be non-negative"))
+		return a
+	}
 	a.FeePadding = padding
 	return a
 }
@@ -243,6 +277,10 @@ func (a *Apollo) SetCoinSelector(selector CoinSelector) *Apollo {
 
 // ForceFee sets a fixed fee for the transaction, bypassing automatic fee estimation.
 func (a *Apollo) ForceFee(fee int64) *Apollo {
+	if fee < 0 {
+		a.setErrOnce(errors.New("ForceFee: fee must be non-negative"))
+		return a
+	}
 	a.Fee = fee
 	a.forceFee = true
 	return a
@@ -1033,6 +1071,10 @@ func (a *Apollo) SignWithSkey(skey []byte) (*Apollo, error) {
 
 // SetCollateralAmount sets the target collateral amount.
 func (a *Apollo) SetCollateralAmount(amount int64) *Apollo {
+	if amount < 0 {
+		a.setErrOnce(errors.New("SetCollateralAmount: amount must be non-negative"))
+		return a
+	}
 	a.collateralAmount = amount
 	return a
 }
@@ -1053,7 +1095,9 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	return a, nil
 }
 
-// Clone returns a deep copy of this Apollo builder.
+// Clone returns a deep copy of builder-owned state. Injected collaborators
+// (the chain context, wallet, coin selector, and evaluation witness providers)
+// are retained so the clone preserves the original builder's behavior.
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
 		Context:                    a.Context,
@@ -1070,6 +1114,7 @@ func (a *Apollo) Clone() *Apollo {
 		currentTreasury:            a.currentTreasury,
 		treasuryDonation:           a.treasuryDonation,
 		estimateExUnits:            a.estimateExUnits,
+		coinSelector:               a.coinSelector,
 		wallet:                     a.wallet,
 		evaluationWitnessProviders: append([]EvaluationWitnessProvider(nil), a.evaluationWitnessProviders...),
 		err:                        a.err,
@@ -1080,6 +1125,11 @@ func (a *Apollo) Clone() *Apollo {
 	}
 	for _, p := range a.payments {
 		if pp, ok := p.(*Payment); ok {
+			if pp == nil {
+				clone.setErrOnce(errors.New("clone payment: payment must not be nil"))
+				clone.payments = append(clone.payments, p)
+				continue
+			}
 			cp := *pp
 			if len(pp.Units) > 0 {
 				cp.Units = make([]Unit, len(pp.Units))
@@ -1089,62 +1139,280 @@ func (a *Apollo) Clone() *Apollo {
 				cp.DatumHash = make([]byte, len(pp.DatumHash))
 				copy(cp.DatumHash, pp.DatumHash)
 			}
+			if pp.Datum != nil {
+				var datum common.Datum
+				if err := cloneCBORValue(*pp.Datum, &datum); err != nil {
+					clone.setErrOnce(fmt.Errorf("clone payment datum: %w", err))
+				} else {
+					cp.Datum = &datum
+				}
+			}
+			if pp.ScriptRef != nil {
+				var scriptRef common.ScriptRef
+				if err := cloneCBORValue(*pp.ScriptRef, &scriptRef); err != nil {
+					clone.setErrOnce(fmt.Errorf("clone payment script reference: %w", err))
+				} else {
+					cp.ScriptRef = &scriptRef
+				}
+			}
 			clone.payments = append(clone.payments, &cp)
+		} else if cloner, ok := p.(PaymentCloner); ok {
+			clonedPayment, err := cloner.ClonePayment()
+			if err != nil {
+				clone.setErrOnce(fmt.Errorf("clone custom payment: %w", err))
+			}
+			if clonedPayment == nil {
+				clone.setErrOnce(errors.New("clone custom payment: ClonePayment returned nil"))
+			}
+			clone.payments = append(clone.payments, clonedPayment)
 		} else {
+			clone.setErrOnce(fmt.Errorf(
+				"clone custom payment %T: implement PaymentCloner to support deep cloning",
+				p,
+			))
 			clone.payments = append(clone.payments, p)
 		}
 	}
-	clone.utxos = append(clone.utxos, a.utxos...)
-	clone.preselectedUtxos = append(clone.preselectedUtxos, a.preselectedUtxos...)
+	clone.utxos = cloneUtxos(a.utxos, clone, "available")
+	clone.preselectedUtxos = cloneUtxos(a.preselectedUtxos, clone, "preselected")
 	clone.inputAddresses = append(clone.inputAddresses, a.inputAddresses...)
-	clone.datums = append(clone.datums, a.datums...)
+	for _, datum := range a.datums {
+		var datumCopy common.Datum
+		if err := cloneCBORValue(datum, &datumCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone datum: %w", err))
+			continue
+		}
+		clone.datums = append(clone.datums, datumCopy)
+	}
 	clone.requiredSigners = append(clone.requiredSigners, a.requiredSigners...)
-	clone.v1scripts = append(clone.v1scripts, a.v1scripts...)
-	clone.v2scripts = append(clone.v2scripts, a.v2scripts...)
-	clone.v3scripts = append(clone.v3scripts, a.v3scripts...)
+	for _, script := range a.v1scripts {
+		clone.v1scripts = append(clone.v1scripts, slices.Clone(script))
+	}
+	for _, script := range a.v2scripts {
+		clone.v2scripts = append(clone.v2scripts, slices.Clone(script))
+	}
+	for _, script := range a.v3scripts {
+		clone.v3scripts = append(clone.v3scripts, slices.Clone(script))
+	}
 	clone.mint = append(clone.mint, a.mint...)
-	clone.collaterals = append(clone.collaterals, a.collaterals...)
+	clone.collaterals = cloneUtxos(a.collaterals, clone, "collateral")
 	clone.referenceInputs = append(clone.referenceInputs, a.referenceInputs...)
-	clone.nativescripts = append(clone.nativescripts, a.nativescripts...)
+	for _, script := range a.nativescripts {
+		var scriptCopy common.NativeScript
+		if err := cloneCBORValue(script, &scriptCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone native script: %w", err))
+			continue
+		}
+		clone.nativescripts = append(clone.nativescripts, scriptCopy)
+	}
 	clone.usedUtxos = make(map[string]bool, len(a.usedUtxos))
 	maps.Copy(clone.usedUtxos, a.usedUtxos)
-	clone.certificates = append(clone.certificates, a.certificates...)
+	for _, certificate := range a.certificates {
+		var certificateCopy common.CertificateWrapper
+		if err := cloneCBORValue(certificate, &certificateCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone certificate: %w", err))
+			continue
+		}
+		clone.certificates = append(clone.certificates, certificateCopy)
+	}
 	clone.scriptHashes = append(clone.scriptHashes, a.scriptHashes...)
-	clone.proposalProcedures = append(clone.proposalProcedures, a.proposalProcedures...)
+	for _, proposal := range a.proposalProcedures {
+		var proposalCopy conway.ConwayProposalProcedure
+		if err := cloneCBORValue(proposal, &proposalCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone proposal procedure: %w", err))
+			continue
+		}
+		clone.proposalProcedures = append(clone.proposalProcedures, proposalCopy)
+	}
 	clone.votingProcedures = cloneVotingProcedures(a.votingProcedures)
-	maps.Copy(clone.redeemers, a.redeemers)
-	maps.Copy(clone.stakeRedeemers, a.stakeRedeemers)
-	maps.Copy(clone.mintRedeemers, a.mintRedeemers)
+	cloneRedeemerMap(a.redeemers, clone.redeemers, clone)
+	cloneRedeemerMap(a.stakeRedeemers, clone.stakeRedeemers, clone)
+	cloneRedeemerMap(a.mintRedeemers, clone.mintRedeemers, clone)
 	maps.Copy(clone.withdrawals, a.withdrawals)
 	if a.changeAddress != nil {
 		addr := *a.changeAddress
 		clone.changeAddress = &addr
 	}
 	if a.collateralReturn != nil {
-		cr := *a.collateralReturn
-		clone.collateralReturn = &cr
+		var cr babbage.BabbageTransactionOutput
+		if err := cloneCBORValue(*a.collateralReturn, &cr); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone collateral return: %w", err))
+		} else {
+			clone.collateralReturn = &cr
+		}
 	}
 	if a.auxiliaryData != nil {
 		clonedMeta := make(map[uint64]any, len(a.auxiliaryData.metadata))
-		maps.Copy(clonedMeta, a.auxiliaryData.metadata)
+		for key, value := range a.auxiliaryData.metadata {
+			clonedMeta[key] = cloneMetadataValue(value, clone)
+		}
 		clone.auxiliaryData = &auxData{metadata: clonedMeta}
 	}
 	if a.tx != nil {
 		txBytes, err := cbor.Encode(a.tx)
 		if err != nil {
-			// CBOR encode failed; leave clone.tx nil to avoid shallow-copy aliasing
-			clone.tx = nil
+			clone.setErrOnce(fmt.Errorf("clone transaction: encode CBOR: %w", err))
 		} else {
 			var txCopy conway.ConwayTransaction
 			if _, err := cbor.Decode(txBytes, &txCopy); err != nil {
-				// CBOR decode failed; leave clone.tx nil to avoid shallow-copy aliasing
-				clone.tx = nil
+				clone.setErrOnce(fmt.Errorf("clone transaction: decode CBOR: %w", err))
 			} else {
 				clone.tx = &txCopy
 			}
 		}
 	}
 	return clone
+}
+
+func isNilChainContext(ctx backend.ChainContext) bool {
+	if ctx == nil {
+		return true
+	}
+	value := reflect.ValueOf(ctx)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
+func cloneCBORValue(src, dst any) error {
+	encoded, err := cbor.Encode(src)
+	if err != nil {
+		return fmt.Errorf("encode CBOR: %w", err)
+	}
+	if _, err := cbor.Decode(encoded, dst); err != nil {
+		return fmt.Errorf("decode CBOR: %w", err)
+	}
+	return nil
+}
+
+func cloneCBORInterface[T any](src T) (T, error) {
+	var zero T
+	value := reflect.ValueOf(src)
+	if !value.IsValid() {
+		return zero, errors.New("value is nil")
+	}
+
+	encoded, err := cbor.Encode(src)
+	if err != nil {
+		return zero, fmt.Errorf("encode CBOR: %w", err)
+	}
+
+	valueType := value.Type()
+	var target reflect.Value
+	if valueType.Kind() == reflect.Pointer {
+		target = reflect.New(valueType.Elem())
+	} else {
+		target = reflect.New(valueType)
+	}
+	if _, err := cbor.Decode(encoded, target.Interface()); err != nil {
+		return zero, fmt.Errorf("decode CBOR: %w", err)
+	}
+
+	var candidate any
+	if valueType.Kind() == reflect.Pointer {
+		candidate = target.Interface()
+	} else {
+		candidate = target.Elem().Interface()
+	}
+	cloned, ok := candidate.(T)
+	if !ok {
+		return zero, fmt.Errorf("cloned CBOR value has unexpected type %T", candidate)
+	}
+	return cloned, nil
+}
+
+func cloneUtxos(src []common.Utxo, owner *Apollo, kind string) []common.Utxo {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]common.Utxo, 0, len(src))
+	for _, utxo := range src {
+		id, err := cloneCBORInterface[common.TransactionInput](utxo.Id)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone %s UTxO input: %w", kind, err))
+			continue
+		}
+		output, err := cloneCBORInterface[common.TransactionOutput](utxo.Output)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone %s UTxO output: %w", kind, err))
+			continue
+		}
+		dst = append(dst, common.Utxo{Id: id, Output: output})
+	}
+	return dst
+}
+
+func cloneRedeemerMap(src, dst map[string]redeemerEntry, owner *Apollo) {
+	for key, entry := range src {
+		var datum common.Datum
+		if err := cloneCBORValue(entry.Data, &datum); err != nil {
+			owner.setErrOnce(fmt.Errorf("clone redeemer %q datum: %w", key, err))
+			continue
+		}
+		entry.Data = datum
+		dst[key] = entry
+	}
+}
+
+func cloneMetadataValue(value any, owner *Apollo) any {
+	switch typed := value.(type) {
+	case nil, string, int, int64, uint64:
+		return typed
+	case *big.Int:
+		if typed == nil {
+			return (*big.Int)(nil)
+		}
+		return new(big.Int).Set(typed)
+	case big.Int:
+		return *new(big.Int).Set(&typed)
+	case []byte:
+		return slices.Clone(typed)
+	case MetadataMap:
+		cloned := make(MetadataMap, len(typed))
+		for i, entry := range typed {
+			cloned[i] = MetadataMapEntry{
+				Key:   cloneMetadataValue(entry.Key, owner),
+				Value: cloneMetadataValue(entry.Value, owner),
+			}
+		}
+		return cloned
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case map[uint64]any:
+		cloned := make(map[uint64]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case common.TransactionMetadatum:
+		encoded, err := cbor.Encode(typed)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone transaction metadatum: encode CBOR: %w", err))
+			return typed
+		}
+		cloned, err := common.DecodeMetadatumRaw(encoded)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone transaction metadatum: decode CBOR: %w", err))
+			return typed
+		}
+		return cloned
+	default:
+		owner.setErrOnce(fmt.Errorf("clone metadata value: unsupported type %T", value))
+		return value
+	}
 }
 
 // UtxoFromRef looks up a UTxO by transaction hash and index.
@@ -1681,15 +1949,40 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	if err != nil {
 		return nil, err
 	}
+	availableByRef := make(map[string]common.Utxo, len(available))
+	for _, utxo := range available {
+		availableByRef[utxoRef(utxo)] = utxo
+	}
+	canonical := make([]common.Utxo, 0, len(selected))
+	seen := make(map[string]struct{}, len(selected))
+	for _, utxo := range selected {
+		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
+		}
+		ref := utxoRef(utxo)
+		availableUtxo, ok := availableByRef[ref]
+		if !ok {
+			return nil, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
+		}
+		if _, ok := seen[ref]; ok {
+			return nil, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
+		}
+		seen[ref] = struct{}{}
+		canonical = append(canonical, availableUtxo)
+	}
+	selectedValue, err := a.sumUtxoValues(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("coin selector returned invalid selection: %w", err)
+	}
+	if !selectedValue.GreaterOrEqual(remaining) {
+		return nil, errors.New("coin selector returned a selection that does not cover the target")
+	}
 
 	// Commit to usedUtxos only on success
-	for i, utxo := range selected {
-		if err := validateUtxo(utxo); err != nil {
-			return nil, fmt.Errorf("coin selector returned invalid UTxO %d: %w", i, err)
-		}
+	for _, utxo := range canonical {
 		a.markUsed(utxoRef(utxo))
 	}
-	return selected, nil
+	return canonical, nil
 }
 
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
