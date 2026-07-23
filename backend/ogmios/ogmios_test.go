@@ -219,6 +219,43 @@ func TestKupoScriptToScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestKupoScriptToScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	script := kugo.Script{
+		Language: kupoScriptLanguagePlutusV4,
+		Script:   hex.EncodeToString(scriptBytes),
+	}
+	correctHash := hex.EncodeToString(common.PlutusV4Script(scriptBytes).Hash().Bytes())
+
+	ref, err := kupoScriptToScriptRef(script, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+}
+
+func TestOgmiosScriptToScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	ref, err := ogmiosScriptToScriptRef(json.RawMessage(`{"language":"plutus:v4","cbor":"010203"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+	if got := ref.Script.RawScriptBytes(); !bytes.Equal(got, scriptBytes) {
+		t.Fatalf("script bytes = %x, want %x", got, scriptBytes)
+	}
+}
+
+func TestOgmiosCostModelKeyPlutusV4(t *testing.T) {
+	if got := ogmiosCostModelKey("plutus:v4"); got != "PlutusV4" {
+		t.Fatalf("cost model key = %q, want PlutusV4", got)
+	}
+}
+
 func TestEvaluateResponseToExUnitsRejectsZeroResults(t *testing.T) {
 	if _, err := evaluateResponseToExUnits(nil); err == nil {
 		t.Fatal("expected error for nil response")

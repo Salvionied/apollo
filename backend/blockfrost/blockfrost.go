@@ -913,8 +913,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	// cost_models which may be either:
 	//   - array format:  {"PlutusV1": [205665, 812, ...]}
 	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
-	// Both formats use keys "PlutusV1", "PlutusV2", "PlutusV3" which match
-	// the canonical form expected by ComputeScriptDataHash.
+	// Both formats use keys "PlutusV1" through "PlutusV4" which match the
+	// canonical form expected by ComputeScriptDataHash.
 	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
 		var rawModels map[string][]int64
 		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
@@ -1182,6 +1182,13 @@ func scriptRefFromHash(
 		return &common.ScriptRef{
 			Type:   common.ScriptRefTypePlutusV3,
 			Script: v3,
+		}, nil
+	}
+	v4 := common.PlutusV4Script(scriptCbor)
+	if v4.Hash() == scriptHash {
+		return &common.ScriptRef{
+			Type:   common.ScriptRefTypePlutusV4,
+			Script: v4,
 		}, nil
 	}
 	return nil, errors.New("unable to determine reference script language from script hash")

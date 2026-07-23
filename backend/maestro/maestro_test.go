@@ -197,6 +197,25 @@ func TestMaestroScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestMaestroScriptRefPlutusV4(t *testing.T) {
+	scriptBytes := []byte{0x01, 0x02, 0x03}
+	correctHash := hex.EncodeToString(common.PlutusV4Script(scriptBytes).Hash().Bytes())
+
+	ref, err := maestroScriptRef("plutusv4", scriptBytes, correctHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ref.Script.(common.PlutusV4Script); !ok {
+		t.Fatalf("expected PlutusV4 script, got %T", ref.Script)
+	}
+}
+
+func TestMaestroCostModelKeyPlutusV4(t *testing.T) {
+	if got := maestroCostModelKey("plutus:v4"); got != "PlutusV4" {
+		t.Fatalf("cost model key = %q, want PlutusV4", got)
+	}
+}
+
 func TestMaestroScriptRefRejectsUnknownType(t *testing.T) {
 	if _, err := maestroScriptRef("plutusv9", []byte{0x01}, ""); err == nil {
 		t.Fatal("expected unknown script type error")
