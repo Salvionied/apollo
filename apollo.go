@@ -163,12 +163,22 @@ func (a *Apollo) AddPayment(payment PaymentI) *Apollo {
 
 // AddLoadedUTxOs adds UTxOs to the available pool for coin selection.
 func (a *Apollo) AddLoadedUTxOs(utxos ...common.Utxo) *Apollo {
+	for i, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			a.setErrOnce(fmt.Errorf("loaded UTxO %d is invalid: %w", i, err))
+			return a
+		}
+	}
 	a.utxos = append(a.utxos, utxos...)
 	return a
 }
 
 // AddInput adds a specific UTxO as a transaction input.
 func (a *Apollo) AddInput(utxo common.Utxo) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("input UTxO is invalid: %w", err))
+		return a
+	}
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	return a
 }
@@ -246,6 +256,10 @@ func (a *Apollo) SetChangeAddress(addr common.Address) *Apollo {
 
 // AddCollateral adds a UTxO as collateral for script transactions.
 func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("collateral UTxO is invalid: %w", err))
+		return a
+	}
 	a.collaterals = append(a.collaterals, utxo)
 	return a
 }
@@ -267,8 +281,8 @@ func (a *Apollo) AddReferenceInput(txHash string, index int) (*Apollo, error) {
 	if len(hashBytes) != common.Blake2b256Size {
 		return a, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
 	}
-	if index < 0 || index > math.MaxUint32 {
-		return a, fmt.Errorf("index must be 0-%d, got %d", math.MaxUint32, index)
+	if index < 0 || uint64(index) > uint64(math.MaxUint32) {
+		return a, fmt.Errorf("index must be 0-%d, got %d", uint64(math.MaxUint32), index)
 	}
 	var hash common.Blake2b256
 	copy(hash[:], hashBytes)
@@ -352,6 +366,10 @@ func (a *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 
 // CollectFrom adds a script UTxO as input with a spending redeemer.
 func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits common.ExUnits) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("script input UTxO is invalid: %w", err))
+		return a
+	}
 	a.isEstimateRequired = true
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	ref := utxoRef(utxo)
@@ -501,6 +519,9 @@ func (a *Apollo) ConsumeUTxO(utxo common.Utxo, payments ...PaymentI) (*Apollo, e
 }
 
 func (a *Apollo) utxoValue(utxo common.Utxo) (Value, error) {
+	if err := validateUtxo(utxo); err != nil {
+		return Value{}, err
+	}
 	v := Value{}
 	amt := utxo.Output.Amount()
 	if amt != nil {
@@ -802,7 +823,12 @@ func (a *Apollo) DeregisterPool(poolHash common.Blake2b224, epoch uint64) *Apoll
 // AddWithdrawal adds a staking reward withdrawal to the transaction.
 // For script-based withdrawals, provide a redeemer and execution units.
 func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerData *common.Datum, exUnits *common.ExUnits) *Apollo {
-	wdKey := address.String()
+	rewardAddress, err := withdrawalRewardAddress(address)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
+	wdKey := rewardAddress.String()
 	if existing, ok := a.withdrawals[wdKey]; ok {
 		if math.MaxUint64-existing.Amount < amount {
 			a.setErrOnce(fmt.Errorf("withdrawal amount overflow for %s", wdKey))
@@ -810,9 +836,9 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 		}
 		amount += existing.Amount
 	}
-	a.withdrawals[wdKey] = withdrawalEntry{Address: address, Amount: amount}
+	a.withdrawals[wdKey] = withdrawalEntry{Address: rewardAddress, Amount: amount}
 	if redeemerData != nil {
-		skh := address.StakeKeyHash()
+		skh := rewardAddress.StakeKeyHash()
 		if skh == (common.Blake2b224{}) {
 			a.setErrOnce(fmt.Errorf("withdrawal redeemer requires stake credential for %s", wdKey))
 			return a
@@ -833,6 +859,56 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 		a.isEstimateRequired = true
 	}
 	return a
+}
+
+// withdrawalRewardAddress returns the canonical reward account represented by
+// address. Reward addresses are preserved; base addresses are reduced to their
+// staking credential. Enterprise, pointer, and Byron addresses have no staking
+// credential suitable for a withdrawal.
+func withdrawalRewardAddress(address common.Address) (common.Address, error) {
+	switch address.Type() {
+	case common.AddressTypeNoneKey, common.AddressTypeNoneScript:
+		return address, nil
+	}
+
+	credential, ok := address.StakeCredential()
+	if !ok {
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q does not contain a staking credential",
+			address.String(),
+		)
+	}
+
+	var addressType uint8
+	switch credential.CredType {
+	case common.CredentialTypeAddrKeyHash:
+		addressType = common.AddressTypeNoneKey
+	case common.CredentialTypeScriptHash:
+		addressType = common.AddressTypeNoneScript
+	default:
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q has an unsupported staking credential",
+			address.String(),
+		)
+	}
+	networkID := address.NetworkId()
+	if networkID > math.MaxUint8 {
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q has an invalid network ID %d",
+			address.String(),
+			networkID,
+		)
+	}
+	rewardAddress, err := common.NewAddressFromParts(
+		addressType,
+		uint8(networkID),
+		nil,
+		credential.Credential.Bytes(),
+	)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to build withdrawal reward address: %w", err)
+	}
+	return rewardAddress, nil
 }
 
 // --- Metadata ---
@@ -1080,8 +1156,8 @@ func (a *Apollo) UtxoFromRef(txHash string, txIndex int) (*common.Utxo, error) {
 	if len(hashBytes) != common.Blake2b256Size {
 		return nil, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
 	}
-	if txIndex < 0 || txIndex > math.MaxUint32 {
-		return nil, fmt.Errorf("tx index must be 0-%d, got %d", math.MaxUint32, txIndex)
+	if txIndex < 0 || uint64(txIndex) > uint64(math.MaxUint32) {
+		return nil, fmt.Errorf("tx index must be 0-%d, got %d", uint64(math.MaxUint32), txIndex)
 	}
 	var hash common.Blake2b256
 	copy(hash[:], hashBytes)
@@ -1490,12 +1566,18 @@ func (a *Apollo) loadUtxos() error {
 		if err != nil {
 			return fmt.Errorf("failed to load UTxOs for %s: %w", addr.String(), err)
 		}
+		if err := validateUtxos(utxos); err != nil {
+			return fmt.Errorf("failed to load UTxOs for %s: %w", addr.String(), err)
+		}
 		a.utxos = append(a.utxos, utxos...)
 	}
 	// If no UTxOs loaded and wallet is set, load from wallet address
 	if len(a.utxos) == 0 && len(a.preselectedUtxos) == 0 && a.wallet != nil {
 		utxos, err := a.Context.Utxos(a.wallet.Address())
 		if err != nil {
+			return fmt.Errorf("failed to load wallet UTxOs: %w", err)
+		}
+		if err := validateUtxos(utxos); err != nil {
 			return fmt.Errorf("failed to load wallet UTxOs: %w", err)
 		}
 		a.utxos = utxos
@@ -1537,6 +1619,9 @@ func (a *Apollo) totalPreselectedValue() (Value, error) {
 func (a *Apollo) sumUtxoValues(utxos []common.Utxo) (Value, error) {
 	total := Value{}
 	for _, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return Value{}, err
+		}
 		amt := utxo.Output.Amount()
 		// Amounts come from a remote backend; reject anything outside the
 		// uint64 lovelace range instead of silently treating it as zero.
@@ -1580,6 +1665,9 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 
 	available := make([]common.Utxo, 0, len(a.utxos))
 	for _, utxo := range a.utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("available UTxO is invalid: %w", err)
+		}
 		if !a.isUsed(utxoRef(utxo)) {
 			available = append(available, utxo)
 		}
@@ -1595,7 +1683,10 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	}
 
 	// Commit to usedUtxos only on success
-	for _, utxo := range selected {
+	for i, utxo := range selected {
+		if err := validateUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("coin selector returned invalid UTxO %d: %w", i, err)
+		}
 		a.markUsed(utxoRef(utxo))
 	}
 	return selected, nil
@@ -1785,7 +1876,7 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 
 	// Reference inputs must be resolved against the chain context.
 	for _, refInput := range a.referenceInputs {
-		ref := hex.EncodeToString(refInput.TxId.Bytes()) + "#" + strconv.Itoa(int(refInput.OutputIndex))
+		ref := hex.EncodeToString(refInput.TxId.Bytes()) + "#" + strconv.FormatUint(uint64(refInput.OutputIndex), 10)
 		if _, ok := seen[ref]; ok {
 			continue
 		}
@@ -2465,7 +2556,23 @@ func (a *Apollo) markUsed(ref string) {
 }
 
 func utxoRef(utxo common.Utxo) string {
-	return hex.EncodeToString(utxo.Id.Id().Bytes()) + "#" + strconv.Itoa(int(utxo.Id.Index()))
+	return hex.EncodeToString(utxo.Id.Id().Bytes()) + "#" + strconv.FormatUint(uint64(utxo.Id.Index()), 10)
+}
+
+func validateUtxo(utxo common.Utxo) error {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return fmt.Errorf("UTxO is malformed: %w", err)
+	}
+	return nil
+}
+
+func validateUtxos(utxos []common.Utxo) error {
+	for i, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return fmt.Errorf("UTxO %d is invalid: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // getChangeAddress returns the change address (explicit or wallet).

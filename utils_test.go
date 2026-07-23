@@ -1,7 +1,9 @@
 package apollo
 
 import (
+	"math"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -51,6 +53,18 @@ func TestSortUtxos(t *testing.T) {
 	amt1 := sorted[1].Output.Amount()
 	if amt0.Cmp(amt1) < 0 {
 		t.Error("expected descending order")
+	}
+}
+
+func TestSortUtxosDoesNotPanicOnMalformedInput(t *testing.T) {
+	valid := makeTestUtxo(t, common.Blake2b256{1}, 0, 1_000_000)
+	var nilOutput *babbage.BabbageTransactionOutput
+	malformed := common.Utxo{Id: valid.Id, Output: nilOutput}
+
+	sorted := SortUtxos([]common.Utxo{malformed, valid})
+
+	if len(sorted) != 2 || validateUtxo(sorted[0]) != nil {
+		t.Fatal("expected valid UTxO to sort before malformed UTxO")
 	}
 }
 
@@ -109,6 +123,25 @@ func TestSortInputs(t *testing.T) {
 	firstAmt := sorted[0].Output.Amount()
 	if firstAmt == nil || firstAmt.Cmp(big.NewInt(2_000_000)) != 0 {
 		t.Error("expected hash2 utxo first (lower tx hash)")
+	}
+}
+
+func TestSortInputsDoesNotPanicOnMalformedInput(t *testing.T) {
+	valid := makeTestUtxo(t, common.Blake2b256{1}, 0, 1_000_000)
+	var nilInput *shelley.ShelleyTransactionInput
+	malformed := common.Utxo{Id: nilInput, Output: valid.Output}
+
+	sorted := SortInputs([]common.Utxo{malformed, valid})
+
+	if len(sorted) != 2 || validateUtxo(sorted[0]) != nil {
+		t.Fatal("expected valid input to sort before malformed input")
+	}
+}
+
+func TestUtxoRefPreservesUint32Index(t *testing.T) {
+	utxo := makeTestUtxo(t, common.Blake2b256{1}, math.MaxUint32, 1_000_000)
+	if got := utxoRef(utxo); !strings.HasSuffix(got, "#4294967295") {
+		t.Fatalf("UTxO ref = %q, want uint32 index preserved", got)
 	}
 }
 

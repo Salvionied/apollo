@@ -550,7 +550,7 @@ func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, 
 	if match.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", match.OutputIndex)
 	}
-	if match.OutputIndex > math.MaxUint32 {
+	if uint64(match.OutputIndex) > uint64(math.MaxUint32) {
 		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", match.OutputIndex)
 	}
 	utxo, err := sharedValueToUtxo(txId, uint32(match.OutputIndex), shared.Value(match.Value), address)

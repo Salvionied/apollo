@@ -418,7 +418,7 @@ func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerK
 		if eval.RedeemerIndex < 0 {
 			return nil, fmt.Errorf("negative redeemer index: %d", eval.RedeemerIndex)
 		}
-		if eval.RedeemerIndex > math.MaxUint32 {
+		if uint64(eval.RedeemerIndex) > uint64(math.MaxUint32) {
 			return nil, fmt.Errorf("redeemer index %d exceeds uint32 range", eval.RedeemerIndex)
 		}
 		tag, err := backend.ParseRedeemerTag(eval.RedeemerTag)

@@ -102,6 +102,9 @@ func (s *MACSSelector) Select(available []common.Utxo, target Value) ([]common.U
 	// MACS reads every amount to compute pool averages, so the whole pool is
 	// validated up front. Amounts come from a remote backend; reject anything
 	// outside the uint64 lovelace range (big.Int.Uint64 is undefined out of range).
+	if err := validateUtxos(available); err != nil {
+		return nil, fmt.Errorf("invalid coin-selection input: %w", err)
+	}
 	cands := make([]*macsCandidate, 0, len(available))
 	for i := range available {
 		amt := available[i].Output.Amount()

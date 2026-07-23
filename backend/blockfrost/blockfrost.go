@@ -1005,7 +1005,7 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 	if raw.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", raw.OutputIndex)
 	}
-	if raw.OutputIndex > math.MaxUint32 {
+	if uint64(raw.OutputIndex) > uint64(math.MaxUint32) {
 		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", raw.OutputIndex)
 	}
 	input := shelley.ShelleyTransactionInput{
