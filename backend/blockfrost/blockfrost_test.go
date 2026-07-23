@@ -2,6 +2,7 @@ package blockfrost
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,29 @@ import (
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
+
+type contextRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f contextRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+var _ backend.ContextChainContext = (*BlockFrostChainContext)(nil)
+
+func TestRequestContextPropagatesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	chainContext := NewBlockFrostChainContext("https://example.invalid", 0, "")
+	chainContext.client.Transport = contextRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, req.Context().Err()
+	})
+
+	_, err := chainContext.TipContext(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("TipContext() error = %v, want context.Canceled", err)
+	}
+}
 
 func TestBlockfrostCapabilities(t *testing.T) {
 	ctx := NewBlockFrostChainContext("http://localhost", 0, "")

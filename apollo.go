@@ -2,6 +2,7 @@ package apollo
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ var ErrPlutusV4RequiresDijkstra = errors.New("plutus V4 requires Dijkstra transa
 // Apollo is the main transaction builder.
 type Apollo struct {
 	Context            backend.ChainContext
+	requestContext     context.Context
 	payments           []PaymentI
 	isEstimateRequired bool
 	utxos              []common.Utxo
@@ -112,6 +114,7 @@ type auxData struct {
 func New(cc backend.ChainContext) *Apollo {
 	a := &Apollo{
 		Context:         cc,
+		requestContext:  context.Background(),
 		redeemers:       make(map[string]redeemerEntry),
 		stakeRedeemers:  make(map[string]redeemerEntry),
 		mintRedeemers:   make(map[string]redeemerEntry),
@@ -121,6 +124,18 @@ func New(cc backend.ChainContext) *Apollo {
 	if isNilChainContext(cc) {
 		a.setErrOnce(errors.New("chain context must not be nil"))
 	}
+	return a
+}
+
+// WithContext sets the context used by subsequent chain-context operations.
+// A nil context is treated as context.Background. The context is retained by
+// the builder, so callers should not use a short-lived context for operations
+// they intend to perform later.
+func (a *Apollo) WithContext(ctx context.Context) *Apollo {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.requestContext = ctx
 	return a
 }
 
@@ -1101,6 +1116,7 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
 		Context:                    a.Context,
+		requestContext:             a.requestContext,
 		isEstimateRequired:         a.isEstimateRequired,
 		Fee:                        a.Fee,
 		FeePadding:                 a.FeePadding,
@@ -1429,7 +1445,7 @@ func (a *Apollo) UtxoFromRef(txHash string, txIndex int) (*common.Utxo, error) {
 	}
 	var hash common.Blake2b256
 	copy(hash[:], hashBytes)
-	return a.Context.UtxoByRef(hash, uint32(txIndex))
+	return backend.UtxoByRefContext(a.requestContext, a.Context, hash, uint32(txIndex))
 }
 
 // GetUsedUTxOs returns a copy of the used UTxO references.
@@ -1488,7 +1504,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	// a silently wrong deposit produces a value-non-conserving transaction.
 	stakeDeposit := int64(StakeDeposit)
 	if len(a.certificates) > 0 {
-		pp, ppErr := a.Context.ProtocolParams()
+		pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context)
 		if ppErr != nil {
 			return a, fmt.Errorf("failed to get protocol params for certificate deposit: %w", ppErr)
 		}
@@ -1556,7 +1572,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	// MaxTxFee covers the size-based fee only; Conway reference-script fees are
 	// charged separately, so reserve the known reference-input / pinned-input
 	// surcharge before coin selection.
-	maxFee, feeErr := a.Context.MaxTxFee()
+	maxFee, feeErr := backend.MaxTxFeeContext(a.requestContext, a.Context)
 	if feeErr != nil {
 		return a, fmt.Errorf("failed to compute max tx fee for coin selection: %w", feeErr)
 	}
@@ -1823,14 +1839,14 @@ func (a *Apollo) Submit() (common.Blake2b256, error) {
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	return a.Context.SubmitTx(txCbor)
+	return backend.SubmitTxContext(a.requestContext, a.Context, txCbor)
 }
 
 // --- internal helpers ---
 
 func (a *Apollo) loadUtxos() error {
 	for _, addr := range a.inputAddresses {
-		utxos, err := a.Context.Utxos(addr)
+		utxos, err := backend.UtxosContext(a.requestContext, a.Context, addr)
 		if err != nil {
 			return fmt.Errorf("failed to load UTxOs for %s: %w", addr.String(), err)
 		}
@@ -1841,7 +1857,7 @@ func (a *Apollo) loadUtxos() error {
 	}
 	// If no UTxOs loaded and wallet is set, load from wallet address
 	if len(a.utxos) == 0 && len(a.preselectedUtxos) == 0 && a.wallet != nil {
-		utxos, err := a.Context.Utxos(a.wallet.Address())
+		utxos, err := backend.UtxosContext(a.requestContext, a.Context, a.wallet.Address())
 		if err != nil {
 			return fmt.Errorf("failed to load wallet UTxOs: %w", err)
 		}
@@ -1856,7 +1872,7 @@ func (a *Apollo) loadUtxos() error {
 func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 	outputs := make([]babbage.BabbageTransactionOutput, 0, len(a.payments))
 	for _, payment := range a.payments {
-		if err := payment.EnsureMinUTXO(a.Context); err != nil {
+		if err := payment.EnsureMinUTXO(backend.BindContext(a.requestContext, a.Context)); err != nil {
 			return nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
 		}
 		txOut, err := payment.ToTxOut()
@@ -1986,7 +2002,7 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 }
 
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
 	}
@@ -1998,7 +2014,7 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 	// producing a fee that is a few hundred lovelace short and a FeeTooSmallUTxO
 	// rejection. Use a placeholder fee whose CBOR width matches (or exceeds) the
 	// final fee so the size — and thus the fee — is not underestimated.
-	placeholderFee, feeErr := a.Context.MaxTxFee()
+	placeholderFee, feeErr := backend.MaxTxFeeContext(a.requestContext, a.Context)
 	if feeErr != nil || placeholderFee == 0 {
 		placeholderFee = 2_000_000
 	}
@@ -2083,7 +2099,7 @@ func (a *Apollo) referenceScriptFee(inputs []common.Utxo) (int64, error) {
 	if refScriptSize == 0 {
 		return 0, nil
 	}
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
 	}
@@ -2174,7 +2190,7 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 			continue
 		}
 		seen[ref] = struct{}{}
-		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
+		utxo, err := backend.UtxoByRefContext(a.requestContext, a.Context, refInput.TxId, refInput.OutputIndex)
 		if err != nil {
 			return 0, fmt.Errorf(
 				"failed to resolve reference input %s for reference-script fee: %w",
@@ -2240,7 +2256,7 @@ func (a *Apollo) estimateExecutionUnits(
 		return nil, fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
-	evalResult, err := a.Context.EvaluateTx(txBytes, inputs)
+	evalResult, err := backend.EvaluateTxContext(a.requestContext, a.Context, txBytes, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateTx failed: %w", err)
 	}
@@ -2477,7 +2493,7 @@ func (a *Apollo) buildBody(
 
 	// Script data hash
 	if len(a.redeemers) > 0 || len(a.mintRedeemers) > 0 || len(a.stakeRedeemers) > 0 || len(a.datums) > 0 {
-		pp, err := a.Context.ProtocolParams()
+		pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 		if err != nil {
 			return body, err
 		}
@@ -2617,7 +2633,7 @@ func (a *Apollo) usedScriptCostModels(
 		}
 	}
 	for _, refInput := range a.referenceInputs {
-		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
+		utxo, err := backend.UtxoByRefContext(a.requestContext, a.Context, refInput.TxId, refInput.OutputIndex)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to resolve reference input %s#%d for script data hash: %w",
@@ -2906,8 +2922,8 @@ func (a *Apollo) setCollateral() error {
 	minCollateral := int64(5_000_000) // conservative fallback
 	if a.collateralAmount > 0 {
 		minCollateral = a.collateralAmount
-	} else if pp, err := a.Context.ProtocolParams(); err == nil {
-		if maxFee, err := a.Context.MaxTxFee(); err == nil && pp.CollateralPercent > 0 &&
+	} else if pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context); err == nil {
+		if maxFee, err := backend.MaxTxFeeContext(a.requestContext, a.Context); err == nil && pp.CollateralPercent > 0 &&
 			maxFee <= math.MaxInt64/uint64(pp.CollateralPercent) {
 			computed := int64(maxFee) * int64(pp.CollateralPercent) / 100 //nolint:gosec // bounded above
 			if computed > 0 {
@@ -2918,7 +2934,7 @@ func (a *Apollo) setCollateral() error {
 
 	candidates := a.utxos
 	if len(candidates) == 0 && a.wallet != nil {
-		loaded, err := a.Context.Utxos(a.wallet.Address())
+		loaded, err := backend.UtxosContext(a.requestContext, a.Context, a.wallet.Address())
 		if err != nil {
 			return fmt.Errorf("failed to load UTxOs for collateral selection: %w", err)
 		}
@@ -3065,7 +3081,7 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 	if len(a.collaterals) == 0 {
 		return nil
 	}
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return fmt.Errorf("failed to get protocol params for collateral sizing: %w", err)
 	}
@@ -3248,7 +3264,7 @@ func (a *Apollo) validateCollateral() error {
 		}
 	}
 	// Enforce the protocol max on collateral inputs when known.
-	if pp, err := a.Context.ProtocolParams(); err == nil && pp.MaxCollateralInputs > 0 &&
+	if pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context); err == nil && pp.MaxCollateralInputs > 0 &&
 		len(a.collaterals) > pp.MaxCollateralInputs {
 		return fmt.Errorf(
 			"too many collateral inputs: %d exceeds protocol maximum of %d",
