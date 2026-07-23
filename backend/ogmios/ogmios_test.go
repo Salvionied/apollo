@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,40 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+func TestOgmiosCapabilitiesWithoutKupo(t *testing.T) {
+	ctx := NewOgmiosChainContext(nil, nil, 0)
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
+		t.Fatal("expected Ogmios-supported capabilities")
+	}
+	if backend.Supports(ctx, backend.CapabilityUtxos|backend.CapabilityScriptCbor) {
+		t.Fatal("Ogmios without Kupo reported Kupo capabilities")
+	}
+
+	tests := []struct {
+		name       string
+		capability backend.Capability
+		call       func() error
+	}{
+		{"utxos", backend.CapabilityUtxos, func() error { _, err := ctx.Utxos(testAddress(t)); return err }},
+		{"script", backend.CapabilityScriptCbor, func() error { _, err := ctx.ScriptCbor(common.Blake2b224{}); return err }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.call()
+			if !errors.Is(err, backend.ErrUnsupported) {
+				t.Fatalf("expected ErrUnsupported, got %v", err)
+			}
+			var unsupported *backend.UnsupportedError
+			if !errors.As(err, &unsupported) || unsupported.Capability != test.capability {
+				t.Fatalf("unexpected unsupported error: %#v", err)
+			}
+		})
+	}
+}
 
 func testAddress(t *testing.T) common.Address {
 	t.Helper()

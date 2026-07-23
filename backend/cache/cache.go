@@ -29,6 +29,11 @@ func NewCachedChainContext(inner backend.ChainContext, ttl time.Duration) *Cache
 	}
 }
 
+// Capabilities preserves the feature set of the wrapped context.
+func (c *CachedChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitiesOf(c.inner)
+}
+
 func (c *CachedChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
 	c.mu.Lock()
 	if c.cachedParams != nil && time.Since(c.paramsCacheAt) < c.ttl {

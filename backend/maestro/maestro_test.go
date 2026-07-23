@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"net/http"
@@ -16,7 +17,31 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/maestro-org/go-sdk/models"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+func TestMaestroCapabilitiesAndUnsupportedGenesis(t *testing.T) {
+	ctx, err := NewMaestroChainContextWithNetwork(0, "project-id", "preprod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos|backend.CapabilityScriptCbor) {
+		t.Fatal("expected Maestro supported capabilities")
+	}
+	if backend.Supports(ctx, backend.CapabilityGenesisParams) {
+		t.Fatal("Maestro reported genesis parameter support")
+	}
+
+	_, err = ctx.GenesisParams()
+	if !errors.Is(err, backend.ErrUnsupported) {
+		t.Fatalf("expected ErrUnsupported, got %v", err)
+	}
+	var unsupported *backend.UnsupportedError
+	if !errors.As(err, &unsupported) || unsupported.Capability != backend.CapabilityGenesisParams {
+		t.Fatalf("unexpected unsupported error: %#v", err)
+	}
+}
 
 func testAddress(t *testing.T) common.Address {
 	t.Helper()

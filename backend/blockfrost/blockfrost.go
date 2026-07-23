@@ -39,6 +39,15 @@ type BlockFrostChainContext struct {
 	genesisCacheAt time.Time
 }
 
+// Capabilities reports the ChainContext feature set implemented by Blockfrost.
+// The hosted evaluate-with-UTxOs endpoint cannot resolve every additional UTxO
+// shape, notably asset-bearing off-chain outputs, so it is not advertised as a
+// general chained-input evaluator.
+func (b *BlockFrostChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.AllCapabilities) &^
+		backend.CapabilitySet(backend.CapabilityEvaluateTxAdditionalUtxos)
+}
+
 const (
 	cacheExpiry                   = 5 * time.Minute
 	maxBlockfrostResponseBytes    = 10 * 1024 * 1024

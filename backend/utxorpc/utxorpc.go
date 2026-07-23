@@ -31,6 +31,13 @@ type UtxoRpcChainContext struct {
 	networkId uint8
 }
 
+// Capabilities reports the UTxO RPC operations supported by this client.
+func (u *UtxoRpcChainContext) Capabilities() backend.CapabilitySet {
+	return backend.CapabilitySet(backend.AllCapabilities) &^
+		backend.CapabilitySet(backend.CapabilityGenesisParams|backend.CapabilityCurrentEpoch|
+			backend.CapabilityEvaluateTxAdditionalUtxos|backend.CapabilityScriptCbor)
+}
+
 // EvaluationError reports deterministic Cardano transaction-evaluation errors
 // returned by the UTxO RPC provider.
 type EvaluationError struct {
@@ -217,7 +224,7 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 }
 
 func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error) {
-	return backend.GenesisParameters{}, errors.New("genesis params not available via UTxO RPC")
+	return backend.GenesisParameters{}, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityGenesisParams)
 }
 
 func (u *UtxoRpcChainContext) NetworkId() uint8 {
@@ -225,7 +232,7 @@ func (u *UtxoRpcChainContext) NetworkId() uint8 {
 }
 
 func (u *UtxoRpcChainContext) CurrentEpoch() (uint64, error) {
-	return 0, errors.New("epoch query not available via UTxO RPC")
+	return 0, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityCurrentEpoch)
 }
 
 func (u *UtxoRpcChainContext) MaxTxFee() (uint64, error) {
@@ -309,14 +316,13 @@ func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 	return result, nil
 }
 
-// EvaluateTx evaluates the scripts in a transaction. The additionalUtxos
-// argument is IGNORED: the utxorpc EvalTx schema (submit.EvalTxRequest) carries
-// only the raw transaction CBOR and has no field for additional/resolved
-// UTxOs. This backend can therefore only evaluate transactions whose inputs
-// are already visible on-chain to the provider and does NOT support evaluating
-// off-chain or chained inputs. Passing a non-empty additionalUtxos is not an
-// error, but those UTxOs have no effect.
-func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+// EvaluateTx evaluates the scripts in a transaction. UTxO RPC has no wire
+// field for additional/resolved UTxOs, so off-chain or chained inputs cannot
+// be evaluated by this backend.
+func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	if len(additionalUtxos) > 0 {
+		return nil, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityEvaluateTxAdditionalUtxos)
+	}
 	expected, err := expectedRedeemerKeys(txCbor)
 	if err != nil {
 		return nil, err
@@ -516,7 +522,7 @@ func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) 
 }
 
 func (u *UtxoRpcChainContext) ScriptCbor(_ common.Blake2b224) ([]byte, error) {
-	return nil, errors.New("script lookup not available via UTxO RPC")
+	return nil, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityScriptCbor)
 }
 
 func utxoFromRpc(item *query.AnyUtxoData) (common.Utxo, error) {

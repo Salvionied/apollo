@@ -18,7 +18,19 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+func TestBlockfrostCapabilities(t *testing.T) {
+	ctx := NewBlockFrostChainContext("http://localhost", 0, "")
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityScriptCbor) {
+		t.Fatalf("Blockfrost capabilities = %b, want evaluation and script lookup", ctx.Capabilities())
+	}
+	if backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
+		t.Fatal("Blockfrost must not report general additional-UTxO evaluation support")
+	}
+}
 
 func testAddress(t *testing.T) common.Address {
 	t.Helper()
