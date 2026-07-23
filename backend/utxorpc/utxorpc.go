@@ -201,13 +201,23 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 
 	// Conway reference-script base price (lovelace per byte for the first tier),
 	// exposed as a rational number.
-	if refCost := params.GetMinFeeScriptRefCostPerByte(); refCost != nil && refCost.GetDenominator() != 0 {
-		pp.MinFeeRefScriptCostPerByte = float64(refCost.GetNumerator()) / float64(refCost.GetDenominator())
-	}
+	setReferenceScriptFeePrice(&pp, params.GetMinFeeScriptRefCostPerByte())
 
 	pp.CostModels = costModelsFromRpc(params.GetCostModels())
 
 	return pp, nil
+}
+
+func setReferenceScriptFeePrice(pp *backend.ProtocolParameters, price *cardano.RationalNumber) {
+	if price == nil || price.GetDenominator() == 0 {
+		return
+	}
+	rational := new(big.Rat).SetFrac(
+		big.NewInt(int64(price.GetNumerator())),
+		new(big.Int).SetUint64(uint64(price.GetDenominator())),
+	)
+	pp.MinFeeRefScriptCostPerByteRational = rational
+	pp.MinFeeRefScriptCostPerByte, _ = rational.Float64()
 }
 
 // costModelsFromRpc translates UTxO RPC cost models to the canonical names

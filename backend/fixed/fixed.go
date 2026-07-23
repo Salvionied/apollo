@@ -3,6 +3,7 @@ package fixed
 import (
 	"encoding/hex"
 	"errors"
+	"math/big"
 	"strconv"
 	"sync"
 
@@ -102,6 +103,12 @@ func (f *FixedChainContext) ProtocolParams() (backend.ProtocolParameters, error)
 			cm[k] = dup
 		}
 		pp.CostModels = cm
+	}
+	if pp.MinFeeRefScriptCostPerByteRational != nil {
+		pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
+	}
+	if pp.MinFeeReferenceScriptsMultiplierRational != nil {
+		pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
 	}
 	return pp, nil
 }
