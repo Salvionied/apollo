@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -94,6 +97,194 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 	if _, ok := scriptRef.(common.PlutusV2Script); !ok {
 		t.Fatalf("expected PlutusV2 reference script, got %T", scriptRef)
+	}
+}
+
+func TestUtxosHydratesDuplicateReferenceScriptsOnce(t *testing.T) {
+	addr := testAddress(t)
+	script := common.PlutusV2Script([]byte{0x01, 0x02})
+	scriptHashHex := hex.EncodeToString(script.Hash().Bytes())
+	var scriptRequests atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/addresses/" + addr.String() + "/utxos":
+			if r.URL.Query().Get("page") == "1" {
+				_ = json.NewEncoder(w).Encode([]bfAddressUTxO{
+					{
+						TxHash:              strings.Repeat("a", 64),
+						OutputIndex:         0,
+						Address:             addr.String(),
+						Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+						ReferenceScriptHash: scriptHashHex,
+					},
+					{
+						TxHash:              strings.Repeat("b", 64),
+						OutputIndex:         1,
+						Address:             addr.String(),
+						Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "2000000"}},
+						ReferenceScriptHash: strings.ToUpper(scriptHashHex),
+					},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+		case "/api/v0/scripts/" + scriptHashHex + "/cbor":
+			scriptRequests.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]string{"cbor": hex.EncodeToString(script)})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	utxos, err := ctx.Utxos(addr)
+	if err != nil {
+		t.Fatalf("Utxos: %v", err)
+	}
+	if len(utxos) != 2 {
+		t.Fatalf("got %d UTxOs, want 2", len(utxos))
+	}
+	if got := scriptRequests.Load(); got != 1 {
+		t.Fatalf("script requests = %d, want 1", got)
+	}
+}
+
+func TestUtxosHydratesReferenceScriptsConcurrentlyInResponseOrder(t *testing.T) {
+	addr := testAddress(t)
+	const txHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+	rawUtxos := make([]bfAddressUTxO, maxConcurrentUtxoHydrations+1)
+	scripts := make(map[string]common.PlutusV2Script, len(rawUtxos))
+	for index := range rawUtxos {
+		script := common.PlutusV2Script{0x01, byte(index)}
+		scriptHashHex := hex.EncodeToString(script.Hash().Bytes())
+		scripts[scriptHashHex] = script
+		rawUtxos[index] = bfAddressUTxO{
+			TxHash:              txHash,
+			OutputIndex:         index,
+			Address:             addr.String(),
+			Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+			ReferenceScriptHash: scriptHashHex,
+		}
+	}
+
+	var active, maxActive atomic.Int32
+	started := make(chan struct{}, len(rawUtxos))
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseScripts := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseScripts)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/addresses/" + addr.String() + "/utxos":
+			if r.URL.Query().Get("page") == "1" {
+				_ = json.NewEncoder(w).Encode(rawUtxos)
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+
+		const scriptPrefix = "/api/v0/scripts/"
+		if !strings.HasPrefix(r.URL.Path, scriptPrefix) || !strings.HasSuffix(r.URL.Path, "/cbor") {
+			http.NotFound(w, r)
+			return
+		}
+		hashHex := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, scriptPrefix), "/cbor")
+		script, ok := scripts[hashHex]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		current := active.Add(1)
+		defer active.Add(-1)
+		for {
+			observed := maxActive.Load()
+			if current <= observed || maxActive.CompareAndSwap(observed, current) {
+				break
+			}
+		}
+		started <- struct{}{}
+		<-release
+		_ = json.NewEncoder(w).Encode(map[string]string{"cbor": hex.EncodeToString(script)})
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	type result struct {
+		utxos []common.Utxo
+		err   error
+	}
+	results := make(chan result, 1)
+	go func() {
+		utxos, err := ctx.Utxos(addr)
+		results <- result{utxos: utxos, err: err}
+	}()
+
+	for range maxConcurrentUtxoHydrations {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for concurrent script requests")
+		}
+	}
+	if got := maxActive.Load(); got != maxConcurrentUtxoHydrations {
+		t.Fatalf("maximum concurrent script requests = %d, want %d", got, maxConcurrentUtxoHydrations)
+	}
+	releaseScripts()
+
+	res := <-results
+	if res.err != nil {
+		t.Fatalf("Utxos: %v", res.err)
+	}
+	if len(res.utxos) != len(rawUtxos) {
+		t.Fatalf("got %d UTxOs, want %d", len(res.utxos), len(rawUtxos))
+	}
+	for index, utxo := range res.utxos {
+		if got := utxo.Id.Index(); got != uint32(index) {
+			t.Fatalf("UTxO at index %d has output index %d, want %d", index, got, index)
+		}
+	}
+}
+
+func TestUtxosReferenceScriptFailureIncludesUtxoContext(t *testing.T) {
+	addr := testAddress(t)
+	const txHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const scriptHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/addresses/" + addr.String() + "/utxos":
+			if r.URL.Query().Get("page") == "1" {
+				_ = json.NewEncoder(w).Encode([]bfAddressUTxO{{
+					TxHash:              txHash,
+					OutputIndex:         3,
+					Address:             addr.String(),
+					Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+					ReferenceScriptHash: scriptHash,
+				}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+		case "/api/v0/scripts/" + scriptHash + "/cbor":
+			http.Error(w, "script unavailable", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr)
+	if err == nil {
+		t.Fatal("expected Utxos to fail")
+	}
+	want := "failed to parse UTxO " + txHash + "#3: failed to resolve reference script " + scriptHash
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want context containing %q", err, want)
 	}
 }
 
