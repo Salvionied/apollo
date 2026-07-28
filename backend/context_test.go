@@ -110,6 +110,7 @@ func TestProtocolParamsContextFallsBackToLegacyContext(t *testing.T) {
 func TestProtocolParamsContextNormalizesNilContext(t *testing.T) {
 	chainContext := &trackingContextChain{}
 
+	//nolint:staticcheck // Verify the helper's documented nil-context normalization contract.
 	if _, err := ProtocolParamsContext(nil, chainContext); err != nil {
 		t.Fatalf("ProtocolParamsContext(nil) error = %v", err)
 	}

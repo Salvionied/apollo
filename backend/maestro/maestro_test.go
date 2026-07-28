@@ -32,6 +32,7 @@ func TestClientWithContextUsesBoundedFallback(t *testing.T) {
 	}
 	chainContext.client.HTTPClient = nil
 
+	//nolint:staticcheck // Verify the Maestro adapter's defensive nil-context fallback.
 	client := chainContext.clientWithContext(nil)
 	if client.HTTPClient == nil {
 		t.Fatal("clientWithContext() returned a nil HTTP client")

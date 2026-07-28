@@ -85,10 +85,13 @@ func TestApolloWithContextPropagatesCancellation(t *testing.T) {
 
 func TestApolloWithContextNormalizesNil(t *testing.T) {
 	chainContext := &contextTrackingChain{}
+	builder := New(chainContext)
+	builder.WithContext(nil) //nolint:staticcheck // Verify Apollo's documented nil-context normalization contract.
 
-	if _, err := New(chainContext).
-		WithContext(nil).
-		UtxoFromRef(hex.EncodeToString(make([]byte, common.Blake2b256Size)), 0); err != nil {
+	if _, err := builder.UtxoFromRef(
+		hex.EncodeToString(make([]byte, common.Blake2b256Size)),
+		0,
+	); err != nil {
 		t.Fatalf("UtxoFromRef() error = %v", err)
 	}
 	if chainContext.received == nil {

@@ -71,10 +71,6 @@ func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string
 	}
 }
 
-func (b *BlockFrostChainContext) request(method, path string, body io.Reader, contentType string) ([]byte, error) {
-	return b.requestContext(context.Background(), method, path, body, contentType)
-}
-
 func (b *BlockFrostChainContext) requestContext(
 	ctx context.Context,
 	method, path string,
@@ -421,10 +417,6 @@ func additionalUtxosContainNativeAssets(utxos []common.Utxo) bool {
 // evaluateTxSimple POSTs hex-encoded transaction CBOR to /utils/txs/evaluate.
 // BlockFrost expects the hex string in the body with Content-Type
 // application/cbor (not raw CBOR bytes).
-func (b *BlockFrostChainContext) evaluateTxSimple(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
-	return b.evaluateTxSimpleContext(context.Background(), txCbor)
-}
-
 func (b *BlockFrostChainContext) evaluateTxSimpleContext(
 	ctx context.Context,
 	txCbor []byte,
@@ -439,13 +431,6 @@ func (b *BlockFrostChainContext) evaluateTxSimpleContext(
 
 // evaluateTxWithAdditionalUtxos POSTs to /utils/txs/evaluate/utxos with a JSON
 // body carrying the transaction CBOR hex and a resolved additional UTxO set.
-func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxos(
-	txCbor []byte,
-	additionalUtxos []common.Utxo,
-) (map[common.RedeemerKey]common.ExUnits, error) {
-	return b.evaluateTxWithAdditionalUtxosContext(context.Background(), txCbor, additionalUtxos)
-}
-
 func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxosContext(
 	ctx context.Context,
 	txCbor []byte,
