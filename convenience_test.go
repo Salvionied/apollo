@@ -711,12 +711,16 @@ func TestFromAddressMatchesUnified(t *testing.T) {
 		},
 		{
 			"RegisterAndDelegateStake",
-			func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateStakeFromAddress(addr, poolHash, StakeDeposit) },
+			func(a *Apollo) (*Apollo, error) {
+				return a.RegisterAndDelegateStakeFromAddress(addr, poolHash, StakeDeposit)
+			},
 			func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateStake(addr, poolHash, StakeDeposit) },
 		},
 		{
 			"RegisterAndDelegateVote",
-			func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateVoteFromAddress(addr, drep, StakeDeposit) },
+			func(a *Apollo) (*Apollo, error) {
+				return a.RegisterAndDelegateVoteFromAddress(addr, drep, StakeDeposit)
+			},
 			func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateVote(addr, drep, StakeDeposit) },
 		},
 		{

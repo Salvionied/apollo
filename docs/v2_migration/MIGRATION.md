@@ -70,7 +70,7 @@ import "github.com/Salvionied/apollo/v2"
 
 ## Dependencies
 
-Apollo v2 uses [bursa](https://github.com/blinklabs-io/bursa) v0.15.0 for HD wallet key derivation and transaction signing. Bursa provides:
+Apollo v2 uses [bursa](https://github.com/blinklabs-io/bursa) v0.16.0 for HD wallet key derivation and transaction signing. Bursa provides:
 
 - **BIP32-Ed25519 key derivation** following CIP-1852 (payment, stake, DRep, committee, and calidus keys)
 - **Native `XPrv.Sign()`** for correct CIP-1852 extended Ed25519 signatures
@@ -115,7 +115,10 @@ ref := apollo.NewV2ScriptRef(v2Script)
 ref := apollo.NewV3ScriptRef(v3Script)
 
 // v2 - auto-detects type
-ref := apollo.NewScriptRef(script)
+ref, err := apollo.NewScriptRef(script)
+if err != nil {
+    return err
+}
 ```
 
 ### 3. Minting (2 methods -> 1)
@@ -291,7 +294,7 @@ This pattern applies to all 8 staking/delegation operations:
 | `serialization.PlutusData` | `common.Datum` |
 | `serialization.Redeemer` | `common.RedeemerKey` + `common.RedeemerValue` |
 | `serialization.NativeScript` | `common.NativeScript` |
-| `PlutusData` (custom) | `common.PlutusData` / `common.Datum` |
+| `PlutusData` (custom) | `common.Datum` (backed by `plutigo/data.PlutusData`) |
 
 ### 12. Backend / Chain Context
 
@@ -312,11 +315,11 @@ Supported backends: `blockfrost`, `ogmios`, `maestro`, `utxorpc`, `fixed` (testi
 v2 introduces an explicit `Value` type replacing various ad-hoc representations:
 
 ```go
-v := apollo.NewSimpleValue(2_000_000)           // ADA only
-v := apollo.NewValue(2_000_000, multiAsset)     // ADA + assets
-result, err := v.Add(other)                     // returns error on overflow
-v, err = v.Sub(other)
-ok := v.GreaterOrEqual(other)
+adaOnly := apollo.NewSimpleValue(2_000_000)
+withAssets := apollo.NewValue(2_000_000, multiAsset)
+result, err := withAssets.Add(other) // returns error on overflow
+result, err = result.Sub(other)
+ok := result.GreaterOrEqual(adaOnly)
 ```
 
 **Note**: `Value.Add` returns `(Value, error)` to detect uint64 overflow.
@@ -359,7 +362,10 @@ a, err = a.SetWalletFromMnemonic(mnemonic)                        // no passphra
 a, err = a.SetWalletFromMnemonicWithPassphrase(mnemonic, "pass")  // with passphrase
 ```
 
-## Complete v2 Public API
+## Selected v2 Public API
+
+This list highlights APIs commonly needed during migration. The Go package
+documentation and exported declarations are the authoritative complete API.
 
 ### Construction & Wallet
 - `New(cc) *Apollo`
@@ -392,7 +398,7 @@ a, err = a.SetWalletFromMnemonicWithPassphrase(mnemonic, "pass")  // with passph
 - `CollectFrom(utxo, redeemer, exUnits) *Apollo`
 - `ConsumeUTxO(utxo, payments...) (*Apollo, error)`
 - `UtxoFromRef(hash, index) (*Utxo, error)`
-- `GetUsedUTxOs() []string`
+- `GetUsedUTxOs() map[string]bool`
 
 ### Scripts & Minting
 - `AttachScript(script) *Apollo`

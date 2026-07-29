@@ -8,26 +8,46 @@ on:
 concurrency: ${{ github.ref }}
 
 jobs:
+  validate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/go-test.yml
+
+  lint:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/golangci-lint.yml
+
   create-release:
+    needs: [validate, lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       RELEASE_ID: ${{ steps.create-release.outputs.result }}
     steps:
-      - run: "echo \"RELEASE_TAG=${GITHUB_REF#refs/tags/}\" >> $GITHUB_ENV"
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: create-release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
           script: |
             try {
+              const semverPattern = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+              const parsedTag = semverPattern.exec(process.env.RELEASE_TAG);
+              if (!parsedTag) {
+                throw new Error(
+                  `release tag ${process.env.RELEASE_TAG} is not valid SemVer (expected vMAJOR.MINOR.PATCH)`,
+                );
+              }
+              const prerelease = parsedTag[4] !== undefined;
               const response = await github.rest.repos.createRelease({
                 generate_release_notes: true,
                 name: process.env.RELEASE_TAG,
                 owner: context.repo.owner,
-                prerelease: false,
+                prerelease,
                 repo: context.repo.repo,
                 tag_name: process.env.RELEASE_TAG,
               });

@@ -1,277 +1,97 @@
-# Migration Guide: SundaeSwap-finance/apollo Fork to Salvionied/apollo Master
+# Migrating from the SundaeSwap Apollo Fork
 
-This guide covers the changes needed when switching from
-`github.com/SundaeSwap-finance/apollo` back to
-`github.com/Salvionied/apollo/v2`.
+This page is a focused checklist for applications moving from
+`github.com/SundaeSwap-finance/apollo` to Apollo v2. The forks have diverged,
+so do not assume that types or method signatures are interchangeable.
 
-Both codebases share the same lineage. The upstream master has incorporated
-most of the SundaeSwap fork's improvements (error returns, PlutusV3, cost
-model rework, etc.) and added further refinements. The migration is mostly
-mechanical: update import paths and adjust to minor API differences.
+## Change the module path
 
----
-
-## 1. Module / Import Path
-
-**Every import must change:**
+Replace Apollo imports with the v2 module path:
 
 ```go
-// Before (fork)
-import "github.com/SundaeSwap-finance/apollo"
-import "github.com/SundaeSwap-finance/apollo/serialization/PlutusData"
-
-// After (upstream)
-import "github.com/Salvionied/apollo/v2"
-import "github.com/Salvionied/apollo/v2/serialization/PlutusData"
+import apollo "github.com/Salvionied/apollo/v2"
 ```
 
-A global find-and-replace handles this:
+Apollo v2 does not contain the old `serialization/*` package tree. Replace
+those imports with ledger types from gouroboros, primarily:
+
+```go
+import "github.com/blinklabs-io/gouroboros/ledger/common"
+```
+
+Then run:
 
 ```bash
-find . -name '*.go' -exec sed -i \
-  's|github.com/SundaeSwap-finance/apollo|github.com/Salvionied/apollo/v2|g' {} +
 go mod tidy
+go test ./...
 ```
 
-Run `go mod tidy` after the import rewrite to refresh module requirements.
+## Builder differences to check
 
-The fork depended on `github.com/SundaeSwap-finance/kugo` and
-`github.com/SundaeSwap-finance/ogmigo/v6`. Upstream uses
-`github.com/blinklabs-io/kugo` and `github.com/blinklabs-io/ogmigo/v6`
-(or other equivalents). You do not need to worry about these transitive
-dependencies unless you imported them directly.
-
----
-
-## 2. APIs That Are Identical
-
-The following SundaeSwap fork APIs exist in upstream master with the
-**same signature** -- no changes needed beyond the import path swap:
-
-| API | Notes |
-|-----|-------|
-| `Complete() (*Apollo, []byte, error)` | 3-return-value form |
-| `MintAssetsWithRedeemer(Unit, PlutusData)` | Takes `PlutusData` not `Redeemer` |
-| `ForceFee(int64) *Apollo` | |
-| `GetMints() Value.Value` | |
-| `GetBurns() Value.Value` | |
-| `GetEstimatedFee() (int64, error)` | |
-| `SetAdditionalUTxOs([]UTxO.UTxO) *Apollo` | |
-| `PayToContractAsHash(...)` | |
-| `AttachV3Script(PlutusV3Script)` | |
-| `GetUsedUTxOs() map[string]bool` | Was `[]string` in old upstream |
-| `RedeemerTagNames` | Was `RdeemerTagNames` in old upstream |
-| `Address.AddressFromBytes(payment, paymentIsScript, staking, stakingIsScript, network)` | Script credential support |
-| `Address.IsPublicKeyAddress() bool` | |
-| `ChainContext.Utxos() ([]UTxO.UTxO, error)` | Error return |
-| `ChainContext.EvaluateTx() (map[...]..., error)` | Error return |
-| `ChainContext.EvaluateTxWithAdditionalUtxos(...)` | |
-| `ChainContext.CostModelsV1/V2/V3()` | |
-| `PlutusData.CostModel` type | |
-| `Transaction.Bytes()` uses `CanonicalEncOptions` | |
-| `TransactionOutput.GetScriptRef()` returns `nil` for pre-Alonzo | |
-
----
-
-## 3. APIs That Differ
-
-### 3.1 `AddReferenceScriptV1/V2/V3`
-
-The fork combines reference input registration with script version tagging:
+Apollo v2 uses these current signatures:
 
 ```go
-// Fork -- takes txHash and index, implicitly calls AddReferenceInput
-b.AddReferenceScriptV2(txHash, index)
+builder := apollo.New(chainContext)
+
+builder, err := builder.Complete()
+txCbor, err := builder.GetTxCbor()
+
+builder = builder.AddLoadedUTxOs(utxos...)
+builder = builder.PayToAddress(address, lovelace, units...)
+builder = builder.CollectFrom(utxo, redeemer, exUnits)
+
+builder, err = builder.AddReferenceInput(txHash, index)
+used := builder.GetUsedUTxOs() // map[string]bool
 ```
 
-Upstream separates the two concerns:
+Reference scripts are constructed from a `common.Script`; the constructor can
+fail for an unsupported or nil script:
 
 ```go
-// Upstream -- call AddReferenceInput yourself, then tag the version
-b.AddReferenceInput(txHash, index).AddReferenceScriptV2()
-```
-
-**Migration:** Split the single call into two chained calls.
-
-### 3.2 `UtxoFromRef` Return Type
-
-The fork returns a value type:
-
-```go
-// Fork
-func (b *Apollo) UtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error)
-```
-
-Upstream returns a pointer:
-
-```go
-// Upstream
-func (b *Apollo) UtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)
-```
-
-**Migration:** Handle the `*UTxO.UTxO` return; check for `nil` in addition
-to checking the error.
-
-### 3.3 `GetUtxoFromRef` (ChainContext Interface)
-
-Same story -- the fork returns `(UTxO.UTxO, error)`, upstream returns
-`(*UTxO.UTxO, error)`:
-
-```go
-// Fork
-GetUtxoFromRef(txHash string, txIndex int) (UTxO.UTxO, error)
-
-// Upstream
-GetUtxoFromRef(txHash string, txIndex int) (*UTxO.UTxO, error)
-```
-
-**Migration:** If you implement `ChainContext`, update your return type
-to `*UTxO.UTxO`.
-
-### 3.4 `ScriptRef` Type
-
-The fork uses a struct with an `InnerScript` field (renamed from `_Script`):
-
-```go
-// Fork
-type ScriptRef struct {
-    Script InnerScript
-}
-type InnerScript struct {
-    _ struct{} `cbor:",toarray"`
-    Script []byte
+scriptRef, err := apollo.NewScriptRef(script)
+if err != nil {
+    return err
 }
 ```
 
-Upstream uses a flat `[]byte` alias with proper CBOR tag-24 handling and
-constructor helpers:
+Datums are `common.Datum` values. The underlying Plutus data representation
+comes from `github.com/blinklabs-io/plutigo/data`; there is no
+`common.PlutusData` type.
+
+## Custom chain contexts
+
+Custom backends must implement `backend.ChainContext` from
+`github.com/Salvionied/apollo/v2/backend`. Use that interface as the source of
+truth rather than copying method lists into application code; compile-time
+conformance catches future signature changes:
 
 ```go
-// Upstream
-type ScriptRef []byte
-
-func NewV1ScriptRef(script PlutusV1Script) (ScriptRef, error)
-func NewV2ScriptRef(script PlutusV2Script) (ScriptRef, error)
-func NewV3ScriptRef(script PlutusV3Script) (ScriptRef, error)
+var _ backend.ChainContext = (*myChainContext)(nil)
 ```
 
-**Migration:** Replace direct `ScriptRef{Script: InnerScript{...}}`
-construction with the `NewV1ScriptRef` / `NewV2ScriptRef` /
-`NewV3ScriptRef` constructors. Access to the raw script bytes changes
-from `scriptRef.Script.Script` to `[]byte(scriptRef)`.
+The repository includes Blockfrost, Maestro, Ogmios/Kupo, UTxO RPC, and a
+deterministic fixed backend for tests.
 
-### 3.5 `WalletAddressFromBytes`
+## Dependency expectations
 
-The fork renamed this to `AddressFromBytes` and removed the old name.
-Upstream has **both**: the new `AddressFromBytes` (with script credential
-flags) and a compatibility wrapper `WalletAddressFromBytes` that delegates
-to it with `paymentIsScript=false, stakingIsScript=false`.
+Apollo v2 currently uses Blink Labs packages for ledger behavior, wallet key
+derivation, and Plutus data:
 
-**Migration:** No action needed. If you were using `AddressFromBytes`,
-it exists. If you were using `WalletAddressFromBytes`, it also still
-exists upstream.
+- `github.com/blinklabs-io/gouroboros`
+- `github.com/blinklabs-io/bursa`
+- `github.com/blinklabs-io/plutigo`
 
-### 3.6 `SetWalletFromKeypair` Signing Key Handling
+Backend implementations may have additional provider-specific dependencies.
+Applications should not import Apollo's transitive dependencies directly.
 
-The fork passes the raw bytes directly to `Key.SigningKey`:
+## Recommended migration process
 
-```go
-// Fork
-signingKey := Key.SigningKey{Payload: signingKey_bytes}
-```
+1. Change the Apollo module path and remove old `serialization/*` imports.
+2. Replace serialization types with the corresponding gouroboros/common types.
+3. Update calls based on compiler errors; pay particular attention to methods
+   returning `(*Apollo, error)`.
+4. Update custom backends to satisfy `backend.ChainContext`.
+5. Run `go mod tidy`, `gofmt`, and `go test -race ./...`.
 
-Upstream uses `ed25519.NewKeyFromSeed()` to derive the full 64-byte
-private key from the 32-byte seed, matching the cardano-cli convention:
-
-```go
-// Upstream
-signingKey := Key.SigningKey{
-    Payload: ed25519.NewKeyFromSeed(signingKey_bytes),
-}
-```
-
-**Migration:** If you were passing raw 32-byte seeds from cardano-cli
-key files, upstream handles the conversion automatically. If you were
-relying on the fork's raw-passthrough behavior with pre-expanded 64-byte
-keys, you may need to adjust.
-
-### 3.7 Additional Error Returns on ChainContext Methods
-
-Apollo v2 uses the `backend.ChainContext` interface from `backend/base.go`.
-Custom implementations must use these method names and signatures:
-
-```go
-ProtocolParams() (backend.ProtocolParameters, error)
-GenesisParams() (backend.GenesisParameters, error)
-NetworkId() uint8
-CurrentEpoch() (uint64, error)
-MaxTxFee() (uint64, error)
-Tip() (uint64, error)
-Utxos(address common.Address) ([]common.Utxo, error)
-SubmitTx(txCbor []byte) (common.Blake2b256, error)
-EvaluateTx(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error)
-UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error)
-ScriptCbor(scriptHash common.Blake2b224) ([]byte, error)
-```
-
-**Migration:** Rename old fork methods such as `GetProtocolParams`,
-`GetGenesisParams`, `Epoch`, `LastBlockSlot`, and `GetContractCbor` to the
-v2 interface above, and update integer return types where needed.
-
-### 3.8 `ProtocolParameters.MinFeeReferenceScripts`
-
-Both have this field, but upstream uses it in the `Fee()` calculation
-identically. No migration needed.
-
-### 3.9 Ogmios Backend
-
-The fork upgraded to `ogmigo/v6` v6.1.0 with major rewrites to the
-Ogmios chain context. Upstream also supports `ogmigo/v6` but through
-its own backend paths. If you were using `OgmiosChainContext` directly,
-verify your constructor calls match the upstream API.
-
----
-
-## 4. Deleted Code
-
-### `txBuilding/TxBuilder/TxBuilder.go`
-
-The fork deleted this file (the old transaction builder). Upstream also
-does not ship this file on master. If you were importing from
-`txBuilding/TxBuilder`, that package no longer exists in either codebase
--- use `apollo.New(cc)` with the builder pattern instead.
-
----
-
-## 5. Dependency Changes
-
-| Fork | Upstream |
-|------|----------|
-| `go 1.23.0` | `go 1.25.8` |
-| `github.com/SundaeSwap-finance/kugo v1.3.0` | Different kugo dependency |
-| `github.com/SundaeSwap-finance/ogmigo/v6 v6.1.0` | Different ogmigo dependency |
-| `golang.org/x/exp` (removed) | Also removed |
-| `github.com/tyler-smith/go-bip39` | `github.com/blinklabs-io/go-bip39` |
-
-Run `go mod tidy` after switching imports.
-
----
-
-## 6. Migration Checklist
-
-1. **Find-and-replace** all `github.com/SundaeSwap-finance/apollo`
-   imports to `github.com/Salvionied/apollo/v2`
-2. **Split** `AddReferenceScriptV1/V2/V3(txHash, index)` calls into
-   `AddReferenceInput(txHash, index).AddReferenceScriptV1/V2/V3()`
-3. **Update** `UtxoFromRef` / `GetUtxoFromRef` callers to expect
-   `*UTxO.UTxO` instead of `UTxO.UTxO`
-4. **Update** any custom `ChainContext` implementations to match the
-   v2 `backend.ChainContext` interface (`ProtocolParams`, `GenesisParams`,
-   `NetworkId`, `CurrentEpoch`, `MaxTxFee`, `Tip`, `Utxos`, `SubmitTx`,
-   `EvaluateTx`, `UtxoByRef`, `ScriptCbor`)
-5. **Replace** `ScriptRef` struct usage with the new `[]byte`-based
-   `ScriptRef` and its `NewV1/V2/V3ScriptRef` constructors
-6. **Run** `go mod tidy` to resolve dependency changes
-7. **Run** `make format && make golines` to match upstream style
-   (80-char lines)
-8. **Run** `go test -race ./...` to verify
+For migration from Salvionied Apollo v1, use the
+[v1-to-v2 migration guide](v2_migration/MIGRATION.md).

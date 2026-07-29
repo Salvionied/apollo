@@ -73,7 +73,9 @@ Redeemer tags: `RedeemerTagSpend`, `RedeemerTagMint`, `RedeemerTagCert`, `Redeem
 
 ## Datum Types
 
-Datums use `common.Datum` (alias for `common.PlutusData`). They can be attached inline to outputs or as hashes:
+Datums use `common.Datum`, whose Plutus data value comes from
+`github.com/blinklabs-io/plutigo/data`. They can be attached inline to outputs
+or as hashes:
 
 ```go
 // Inline datum on output

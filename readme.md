@@ -2,13 +2,27 @@
     <img src="./assets/logo.jpg" alt="apollo logo" width="480">
 </div>
 
-# Apollo: Pure Golang Cardano Building blocks 
-## Pure Golang Cardano Serialization
+# Apollo v2
 
-The Objective of this library is to give Developers Access to each and every needed resource for cardano development.
-The final goal is to be able to have this library interact directly with the node without intermediaries.
+Pure Go building blocks for constructing Cardano transactions.
 
-Little Sample Usage:
+Apollo uses the Blink Labs ledger packages for Cardano types, CBOR, scripts,
+addresses, and transaction bodies.
+
+## Install
+
+Apollo v2 requires Go 1.25 or newer:
+
+```bash
+go get github.com/Salvionied/apollo/v2
+```
+
+See the [documentation index](docs/README.md), the
+[v1-to-v2 migration guide](docs/v2_migration/MIGRATION.md), and the
+[SundaeSwap fork migration notes](docs/sundaeswap-fork-migration.md).
+
+## Sample usage
+
 ```go
 package main
 
@@ -31,6 +45,7 @@ func main() {
 
     mnemonic := "your mnemonic here"
     a := apollo.New(bfc)
+    var err error
     a, err = a.SetWalletFromMnemonic(mnemonic)
     if err != nil {
         panic(err)
@@ -124,7 +139,7 @@ a.AddEvaluationWitnessProvider(remoteEvaluationSigner{})
 These signatures are used only for `EvaluateTx`; they are not retained in the
 final unsigned transaction.
 
-If you have any questions or requests feel free to drop into this discord and ask :) https://discord.gg/MH4CmJcg49
+For questions and requests, join the
+[Apollo Discord](https://discord.gg/MH4CmJcg49).
 
-By:
-    `Edoardo Salvioni - Zhaata` 
+Created by Edoardo Salvioni (Zhaata).
