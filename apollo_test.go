@@ -172,6 +172,22 @@ func TestAddLoadedUTxOs(t *testing.T) {
 	}
 }
 
+func TestAddLoadedUTxOsRejectsMalformedUTxOsAtomically(t *testing.T) {
+	a := New(setupFixedContext())
+	valid := makeTestUtxo(t, common.Blake2b256{1}, 0, 5_000_000)
+	var nilInput *shelley.ShelleyTransactionInput
+	malformed := common.Utxo{Id: nilInput, Output: valid.Output}
+
+	a.AddLoadedUTxOs(valid, malformed)
+
+	if a.err == nil {
+		t.Fatal("expected builder error")
+	}
+	if len(a.utxos) != 0 {
+		t.Fatalf("expected no partially-added UTxOs, got %d", len(a.utxos))
+	}
+}
+
 func TestAddInput(t *testing.T) {
 	cc := setupFixedContext()
 	a := New(cc)
@@ -181,6 +197,21 @@ func TestAddInput(t *testing.T) {
 	a.AddInput(utxo)
 	if len(a.preselectedUtxos) != 1 {
 		t.Errorf("expected 1 preselected utxo, got %d", len(a.preselectedUtxos))
+	}
+}
+
+func TestAddInputRejectsTypedNilOutput(t *testing.T) {
+	a := New(setupFixedContext())
+	valid := makeTestUtxo(t, common.Blake2b256{1}, 0, 5_000_000)
+	var nilOutput *babbage.BabbageTransactionOutput
+
+	a.AddInput(common.Utxo{Id: valid.Id, Output: nilOutput})
+
+	if a.err == nil {
+		t.Fatal("expected builder error")
+	}
+	if len(a.preselectedUtxos) != 0 {
+		t.Fatalf("expected no malformed input, got %d", len(a.preselectedUtxos))
 	}
 }
 
@@ -488,6 +519,21 @@ func TestCollectFrom(t *testing.T) {
 	}
 }
 
+func TestCollectFromRejectsMalformedUTxOWithoutMutatingRedeemers(t *testing.T) {
+	a := New(setupFixedContext())
+	var nilInput *shelley.ShelleyTransactionInput
+	utxo := common.Utxo{Id: nilInput}
+
+	a.CollectFrom(utxo, common.Datum{}, common.ExUnits{})
+
+	if a.err == nil {
+		t.Fatal("expected builder error")
+	}
+	if len(a.preselectedUtxos) != 0 || len(a.redeemers) != 0 || a.isEstimateRequired {
+		t.Fatal("malformed script input mutated builder state")
+	}
+}
+
 func TestPayToContract(t *testing.T) {
 	cc := setupFixedContext()
 	a := New(cc)
@@ -707,6 +753,132 @@ func TestAddWithdrawal(t *testing.T) {
 	if len(a.withdrawals) != 1 {
 		t.Errorf("expected 1 withdrawal, got %d", len(a.withdrawals))
 	}
+	reward := addr.StakeAddress()
+	if reward == nil {
+		t.Fatal("expected test base address to have a reward address")
+	}
+	entry, ok := a.withdrawals[reward.String()]
+	if !ok {
+		t.Fatalf("expected canonical reward account %s", reward.String())
+	}
+	got, err := entry.Address.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := reward.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("withdrawal address bytes = %x, want %x", got, want)
+	}
+}
+
+func TestAddWithdrawalPreservesRewardAddress(t *testing.T) {
+	a := New(setupFixedContext())
+	base := testAddress(t)
+	reward := base.StakeAddress()
+	if reward == nil {
+		t.Fatal("expected reward address")
+	}
+
+	a.AddWithdrawal(*reward, 1_000_000, nil, nil)
+
+	entry, ok := a.withdrawals[reward.String()]
+	if !ok {
+		t.Fatalf("expected reward account %s", reward.String())
+	}
+	got, err := entry.Address.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := reward.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("withdrawal address bytes = %x, want %x", got, want)
+	}
+}
+
+func TestAddWithdrawalConvertsScriptStakeCredential(t *testing.T) {
+	var paymentHash, stakeScriptHash common.Blake2b224
+	paymentHash[0] = 0xaa
+	stakeScriptHash[0] = 0xbb
+	base, err := common.NewAddressFromParts(
+		common.AddressTypeKeyScript,
+		common.AddressNetworkTestnet,
+		paymentHash.Bytes(),
+		stakeScriptHash.Bytes(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(setupFixedContext())
+
+	a.AddWithdrawal(base, 1_000_000, nil, nil)
+
+	if a.err != nil {
+		t.Fatal(a.err)
+	}
+	reward, err := common.NewAddressFromParts(
+		common.AddressTypeNoneScript,
+		common.AddressNetworkTestnet,
+		nil,
+		stakeScriptHash.Bytes(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := a.withdrawals[reward.String()]
+	if !ok {
+		t.Fatalf("expected script reward account %s", reward.String())
+	}
+	got, err := entry.Address.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := reward.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("withdrawal address bytes = %x, want %x", got, want)
+	}
+}
+
+func TestAddWithdrawalRejectsAddressesWithoutStakeCredential(t *testing.T) {
+	var paymentHash common.Blake2b224
+	paymentHash[0] = 0xaa
+	enterprise, err := common.NewAddressFromParts(
+		common.AddressTypeKeyNone,
+		common.AddressNetworkTestnet,
+		paymentHash.Bytes(),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointer, err := common.NewAddressFromParts(
+		common.AddressTypeKeyPointer,
+		common.AddressNetworkTestnet,
+		paymentHash.Bytes(),
+		[]byte{0, 0, 0},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, address := range []common.Address{enterprise, pointer, common.Address{}} {
+		a := New(setupFixedContext())
+		a.AddWithdrawal(address, 1_000_000, nil, nil)
+		if a.err == nil {
+			t.Fatalf("expected builder error for address type %d", address.Type())
+		}
+		if len(a.withdrawals) != 0 {
+			t.Fatal("invalid withdrawal mutated builder state")
+		}
+	}
 }
 
 func TestAddWithdrawalWithRedeemer(t *testing.T) {
@@ -735,7 +907,11 @@ func TestAddWithdrawalAggregatesAmounts(t *testing.T) {
 	a.AddWithdrawal(addr, 1_000_000, nil, nil)
 	a.AddWithdrawal(addr, 2_000_000, nil, nil)
 
-	if got := a.withdrawals[addr.String()].Amount; got != 3_000_000 {
+	reward := addr.StakeAddress()
+	if reward == nil {
+		t.Fatal("expected reward address")
+	}
+	if got := a.withdrawals[reward.String()].Amount; got != 3_000_000 {
 		t.Fatalf("expected aggregated withdrawal amount, got %d", got)
 	}
 }
@@ -1159,6 +1335,23 @@ func TestCompleteWithWithdrawal(t *testing.T) {
 	}
 	if len(tx.Body.TxWithdrawals) != 1 {
 		t.Errorf("expected 1 withdrawal, got %d", len(tx.Body.TxWithdrawals))
+	}
+	reward := addr.StakeAddress()
+	if reward == nil {
+		t.Fatal("expected reward address")
+	}
+	want, err := reward.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for withdrawalAddress := range tx.Body.TxWithdrawals {
+		got, err := withdrawalAddress.Bytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("transaction withdrawal address bytes = %x, want reward account %x", got, want)
+		}
 	}
 }
 

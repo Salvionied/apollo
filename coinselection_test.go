@@ -179,6 +179,23 @@ func TestLargestFirstSelectorName(t *testing.T) {
 	}
 }
 
+func TestCoinSelectorsRejectMalformedUTxOs(t *testing.T) {
+	selectors := []CoinSelector{
+		&LargestFirstSelector{},
+		NewMACSSelector(),
+	}
+	for _, selector := range selectors {
+		t.Run(selector.Name(), func(t *testing.T) {
+			if _, err := selector.Select(
+				[]common.Utxo{{}},
+				NewSimpleValue(1),
+			); err == nil {
+				t.Fatal("expected malformed UTxO error")
+			}
+		})
+	}
+}
+
 // TestLargestFirstSelectorOrder pins the exact legacy behavior: ADA-only
 // UTxOs are consumed first in descending lovelace order, before any
 // asset-carrying UTxOs.

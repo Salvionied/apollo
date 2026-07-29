@@ -7,6 +7,8 @@ import (
 
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
 
 // balanceContext contains every value in the Cardano balance equation that is
@@ -60,7 +62,7 @@ func (a *Apollo) buildBalancedOutputs(
 	}
 
 	changeOutput := NewBabbageOutput(ctx.changeAddress, change, nil, nil)
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return balancedOutputs{}, fmt.Errorf("failed to get protocol params for change output: %w", err)
 	}

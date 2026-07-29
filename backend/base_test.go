@@ -8,6 +8,24 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
 
+type nilChainContext struct {
+	ChainContext
+}
+
+func TestCapabilitiesOfNilContext(t *testing.T) {
+	if got := CapabilitiesOf(nil); got != 0 {
+		t.Fatalf("CapabilitiesOf(nil) = %d, want 0", got)
+	}
+
+	var ctx *nilChainContext
+	if got := CapabilitiesOf(ctx); got != 0 {
+		t.Fatalf("CapabilitiesOf(typed nil) = %d, want 0", got)
+	}
+	if Supports(ctx, CapabilityProtocolParams) {
+		t.Fatal("Supports reports a capability for a typed nil context")
+	}
+}
+
 func TestCoinsPerUtxoByteValueDefault(t *testing.T) {
 	pp := ProtocolParameters{}
 	val := pp.CoinsPerUtxoByteValue()

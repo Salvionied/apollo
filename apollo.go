@@ -2,12 +2,14 @@ package apollo
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
 	"math"
 	"math/big"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -35,6 +37,7 @@ var ErrPlutusV4RequiresDijkstra = errors.New("plutus V4 requires Dijkstra transa
 // Apollo is the main transaction builder.
 type Apollo struct {
 	Context            backend.ChainContext
+	requestContext     context.Context
 	payments           []PaymentI
 	isEstimateRequired bool
 	utxos              []common.Utxo
@@ -109,14 +112,31 @@ type auxData struct {
 
 // New creates a new Apollo transaction builder with the given chain context.
 func New(cc backend.ChainContext) *Apollo {
-	return &Apollo{
+	a := &Apollo{
 		Context:         cc,
+		requestContext:  context.Background(),
 		redeemers:       make(map[string]redeemerEntry),
 		stakeRedeemers:  make(map[string]redeemerEntry),
 		mintRedeemers:   make(map[string]redeemerEntry),
 		withdrawals:     make(map[string]withdrawalEntry),
 		estimateExUnits: true,
 	}
+	if isNilChainContext(cc) {
+		a.setErrOnce(errors.New("chain context must not be nil"))
+	}
+	return a
+}
+
+// WithContext sets the context used by subsequent chain-context operations.
+// A nil context is treated as context.Background. The context is retained by
+// the builder, so callers should not use a short-lived context for operations
+// they intend to perform later.
+func (a *Apollo) WithContext(ctx context.Context) *Apollo {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.requestContext = ctx
+	return a
 }
 
 // SetWallet sets the wallet for the transaction builder.
@@ -163,12 +183,22 @@ func (a *Apollo) AddPayment(payment PaymentI) *Apollo {
 
 // AddLoadedUTxOs adds UTxOs to the available pool for coin selection.
 func (a *Apollo) AddLoadedUTxOs(utxos ...common.Utxo) *Apollo {
+	for i, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			a.setErrOnce(fmt.Errorf("loaded UTxO %d is invalid: %w", i, err))
+			return a
+		}
+	}
 	a.utxos = append(a.utxos, utxos...)
 	return a
 }
 
 // AddInput adds a specific UTxO as a transaction input.
 func (a *Apollo) AddInput(utxo common.Utxo) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("input UTxO is invalid: %w", err))
+		return a
+	}
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	return a
 }
@@ -187,6 +217,19 @@ func (a *Apollo) AddRequiredSigner(pkh common.Blake2b224) *Apollo {
 
 // AddRequiredSignerPaymentKey adds the payment key hash from an address as a required signer.
 func (a *Apollo) AddRequiredSignerPaymentKey(addr common.Address) *Apollo {
+	switch addr.Type() {
+	case common.AddressTypeKeyKey,
+		common.AddressTypeKeyScript,
+		common.AddressTypeKeyPointer,
+		common.AddressTypeKeyNone:
+		// These address forms have a payment key credential.
+	default:
+		a.setErrOnce(fmt.Errorf(
+			"AddRequiredSignerPaymentKey: address type %d does not have a payment key credential",
+			addr.Type(),
+		))
+		return a
+	}
 	a.requiredSigners = append(a.requiredSigners, addr.PaymentKeyHash())
 	return a
 }
@@ -202,24 +245,40 @@ func (a *Apollo) AddRequiredSignerStakeKey(addr common.Address) *Apollo {
 
 // SetTtl sets the transaction time-to-live.
 func (a *Apollo) SetTtl(ttl int64) *Apollo {
+	if ttl < 0 {
+		a.setErrOnce(errors.New("SetTtl: ttl must be non-negative"))
+		return a
+	}
 	a.Ttl = ttl
 	return a
 }
 
 // SetValidityStart sets the validity start slot.
 func (a *Apollo) SetValidityStart(start int64) *Apollo {
+	if start < 0 {
+		a.setErrOnce(errors.New("SetValidityStart: start must be non-negative"))
+		return a
+	}
 	a.ValidityStart = start
 	return a
 }
 
 // SetFee sets a specific fee (disables fee estimation).
 func (a *Apollo) SetFee(fee int64) *Apollo {
+	if fee < 0 {
+		a.setErrOnce(errors.New("SetFee: fee must be non-negative"))
+		return a
+	}
 	a.Fee = fee
 	return a
 }
 
 // SetFeePadding adds additional fee padding.
 func (a *Apollo) SetFeePadding(padding int64) *Apollo {
+	if padding < 0 {
+		a.setErrOnce(errors.New("SetFeePadding: padding must be non-negative"))
+		return a
+	}
 	a.FeePadding = padding
 	return a
 }
@@ -233,6 +292,10 @@ func (a *Apollo) SetCoinSelector(selector CoinSelector) *Apollo {
 
 // ForceFee sets a fixed fee for the transaction, bypassing automatic fee estimation.
 func (a *Apollo) ForceFee(fee int64) *Apollo {
+	if fee < 0 {
+		a.setErrOnce(errors.New("ForceFee: fee must be non-negative"))
+		return a
+	}
 	a.Fee = fee
 	a.forceFee = true
 	return a
@@ -246,6 +309,10 @@ func (a *Apollo) SetChangeAddress(addr common.Address) *Apollo {
 
 // AddCollateral adds a UTxO as collateral for script transactions.
 func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("collateral UTxO is invalid: %w", err))
+		return a
+	}
 	a.collaterals = append(a.collaterals, utxo)
 	return a
 }
@@ -267,8 +334,8 @@ func (a *Apollo) AddReferenceInput(txHash string, index int) (*Apollo, error) {
 	if len(hashBytes) != common.Blake2b256Size {
 		return a, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
 	}
-	if index < 0 || index > math.MaxUint32 {
-		return a, fmt.Errorf("index must be 0-%d, got %d", math.MaxUint32, index)
+	if index < 0 || uint64(index) > uint64(math.MaxUint32) {
+		return a, fmt.Errorf("index must be 0-%d, got %d", uint64(math.MaxUint32), index)
 	}
 	var hash common.Blake2b256
 	copy(hash[:], hashBytes)
@@ -352,6 +419,10 @@ func (a *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 
 // CollectFrom adds a script UTxO as input with a spending redeemer.
 func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits common.ExUnits) *Apollo {
+	if err := validateUtxo(utxo); err != nil {
+		a.setErrOnce(fmt.Errorf("script input UTxO is invalid: %w", err))
+		return a
+	}
 	a.isEstimateRequired = true
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	ref := utxoRef(utxo)
@@ -501,6 +572,9 @@ func (a *Apollo) ConsumeUTxO(utxo common.Utxo, payments ...PaymentI) (*Apollo, e
 }
 
 func (a *Apollo) utxoValue(utxo common.Utxo) (Value, error) {
+	if err := validateUtxo(utxo); err != nil {
+		return Value{}, err
+	}
 	v := Value{}
 	amt := utxo.Output.Amount()
 	if amt != nil {
@@ -802,7 +876,12 @@ func (a *Apollo) DeregisterPool(poolHash common.Blake2b224, epoch uint64) *Apoll
 // AddWithdrawal adds a staking reward withdrawal to the transaction.
 // For script-based withdrawals, provide a redeemer and execution units.
 func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerData *common.Datum, exUnits *common.ExUnits) *Apollo {
-	wdKey := address.String()
+	rewardAddress, err := withdrawalRewardAddress(address)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
+	wdKey := rewardAddress.String()
 	if existing, ok := a.withdrawals[wdKey]; ok {
 		if math.MaxUint64-existing.Amount < amount {
 			a.setErrOnce(fmt.Errorf("withdrawal amount overflow for %s", wdKey))
@@ -810,9 +889,9 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 		}
 		amount += existing.Amount
 	}
-	a.withdrawals[wdKey] = withdrawalEntry{Address: address, Amount: amount}
+	a.withdrawals[wdKey] = withdrawalEntry{Address: rewardAddress, Amount: amount}
 	if redeemerData != nil {
-		skh := address.StakeKeyHash()
+		skh := rewardAddress.StakeKeyHash()
 		if skh == (common.Blake2b224{}) {
 			a.setErrOnce(fmt.Errorf("withdrawal redeemer requires stake credential for %s", wdKey))
 			return a
@@ -833,6 +912,56 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 		a.isEstimateRequired = true
 	}
 	return a
+}
+
+// withdrawalRewardAddress returns the canonical reward account represented by
+// address. Reward addresses are preserved; base addresses are reduced to their
+// staking credential. Enterprise, pointer, and Byron addresses have no staking
+// credential suitable for a withdrawal.
+func withdrawalRewardAddress(address common.Address) (common.Address, error) {
+	switch address.Type() {
+	case common.AddressTypeNoneKey, common.AddressTypeNoneScript:
+		return address, nil
+	}
+
+	credential, ok := address.StakeCredential()
+	if !ok {
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q does not contain a staking credential",
+			address.String(),
+		)
+	}
+
+	var addressType uint8
+	switch credential.CredType {
+	case common.CredentialTypeAddrKeyHash:
+		addressType = common.AddressTypeNoneKey
+	case common.CredentialTypeScriptHash:
+		addressType = common.AddressTypeNoneScript
+	default:
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q has an unsupported staking credential",
+			address.String(),
+		)
+	}
+	networkID := address.NetworkId()
+	if networkID > math.MaxUint8 {
+		return common.Address{}, fmt.Errorf(
+			"withdrawal address %q has an invalid network ID %d",
+			address.String(),
+			networkID,
+		)
+	}
+	rewardAddress, err := common.NewAddressFromParts(
+		addressType,
+		uint8(networkID),
+		nil,
+		credential.Credential.Bytes(),
+	)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to build withdrawal reward address: %w", err)
+	}
+	return rewardAddress, nil
 }
 
 // --- Metadata ---
@@ -957,6 +1086,10 @@ func (a *Apollo) SignWithSkey(skey []byte) (*Apollo, error) {
 
 // SetCollateralAmount sets the target collateral amount.
 func (a *Apollo) SetCollateralAmount(amount int64) *Apollo {
+	if amount < 0 {
+		a.setErrOnce(errors.New("SetCollateralAmount: amount must be non-negative"))
+		return a
+	}
 	a.collateralAmount = amount
 	return a
 }
@@ -977,10 +1110,13 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	return a, nil
 }
 
-// Clone returns a deep copy of this Apollo builder.
+// Clone returns a deep copy of builder-owned state. Injected collaborators
+// (the chain context, wallet, coin selector, and evaluation witness providers)
+// are retained so the clone preserves the original builder's behavior.
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
 		Context:                    a.Context,
+		requestContext:             a.requestContext,
 		isEstimateRequired:         a.isEstimateRequired,
 		Fee:                        a.Fee,
 		FeePadding:                 a.FeePadding,
@@ -994,6 +1130,7 @@ func (a *Apollo) Clone() *Apollo {
 		currentTreasury:            a.currentTreasury,
 		treasuryDonation:           a.treasuryDonation,
 		estimateExUnits:            a.estimateExUnits,
+		coinSelector:               a.coinSelector,
 		wallet:                     a.wallet,
 		evaluationWitnessProviders: append([]EvaluationWitnessProvider(nil), a.evaluationWitnessProviders...),
 		err:                        a.err,
@@ -1004,6 +1141,11 @@ func (a *Apollo) Clone() *Apollo {
 	}
 	for _, p := range a.payments {
 		if pp, ok := p.(*Payment); ok {
+			if pp == nil {
+				clone.setErrOnce(errors.New("clone payment: payment must not be nil"))
+				clone.payments = append(clone.payments, p)
+				continue
+			}
 			cp := *pp
 			if len(pp.Units) > 0 {
 				cp.Units = make([]Unit, len(pp.Units))
@@ -1013,62 +1155,280 @@ func (a *Apollo) Clone() *Apollo {
 				cp.DatumHash = make([]byte, len(pp.DatumHash))
 				copy(cp.DatumHash, pp.DatumHash)
 			}
+			if pp.Datum != nil {
+				var datum common.Datum
+				if err := cloneCBORValue(*pp.Datum, &datum); err != nil {
+					clone.setErrOnce(fmt.Errorf("clone payment datum: %w", err))
+				} else {
+					cp.Datum = &datum
+				}
+			}
+			if pp.ScriptRef != nil {
+				var scriptRef common.ScriptRef
+				if err := cloneCBORValue(*pp.ScriptRef, &scriptRef); err != nil {
+					clone.setErrOnce(fmt.Errorf("clone payment script reference: %w", err))
+				} else {
+					cp.ScriptRef = &scriptRef
+				}
+			}
 			clone.payments = append(clone.payments, &cp)
+		} else if cloner, ok := p.(PaymentCloner); ok {
+			clonedPayment, err := cloner.ClonePayment()
+			if err != nil {
+				clone.setErrOnce(fmt.Errorf("clone custom payment: %w", err))
+			}
+			if clonedPayment == nil {
+				clone.setErrOnce(errors.New("clone custom payment: ClonePayment returned nil"))
+			}
+			clone.payments = append(clone.payments, clonedPayment)
 		} else {
+			clone.setErrOnce(fmt.Errorf(
+				"clone custom payment %T: implement PaymentCloner to support deep cloning",
+				p,
+			))
 			clone.payments = append(clone.payments, p)
 		}
 	}
-	clone.utxos = append(clone.utxos, a.utxos...)
-	clone.preselectedUtxos = append(clone.preselectedUtxos, a.preselectedUtxos...)
+	clone.utxos = cloneUtxos(a.utxos, clone, "available")
+	clone.preselectedUtxos = cloneUtxos(a.preselectedUtxos, clone, "preselected")
 	clone.inputAddresses = append(clone.inputAddresses, a.inputAddresses...)
-	clone.datums = append(clone.datums, a.datums...)
+	for _, datum := range a.datums {
+		var datumCopy common.Datum
+		if err := cloneCBORValue(datum, &datumCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone datum: %w", err))
+			continue
+		}
+		clone.datums = append(clone.datums, datumCopy)
+	}
 	clone.requiredSigners = append(clone.requiredSigners, a.requiredSigners...)
-	clone.v1scripts = append(clone.v1scripts, a.v1scripts...)
-	clone.v2scripts = append(clone.v2scripts, a.v2scripts...)
-	clone.v3scripts = append(clone.v3scripts, a.v3scripts...)
+	for _, script := range a.v1scripts {
+		clone.v1scripts = append(clone.v1scripts, slices.Clone(script))
+	}
+	for _, script := range a.v2scripts {
+		clone.v2scripts = append(clone.v2scripts, slices.Clone(script))
+	}
+	for _, script := range a.v3scripts {
+		clone.v3scripts = append(clone.v3scripts, slices.Clone(script))
+	}
 	clone.mint = append(clone.mint, a.mint...)
-	clone.collaterals = append(clone.collaterals, a.collaterals...)
+	clone.collaterals = cloneUtxos(a.collaterals, clone, "collateral")
 	clone.referenceInputs = append(clone.referenceInputs, a.referenceInputs...)
-	clone.nativescripts = append(clone.nativescripts, a.nativescripts...)
+	for _, script := range a.nativescripts {
+		var scriptCopy common.NativeScript
+		if err := cloneCBORValue(script, &scriptCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone native script: %w", err))
+			continue
+		}
+		clone.nativescripts = append(clone.nativescripts, scriptCopy)
+	}
 	clone.usedUtxos = make(map[string]bool, len(a.usedUtxos))
 	maps.Copy(clone.usedUtxos, a.usedUtxos)
-	clone.certificates = append(clone.certificates, a.certificates...)
+	for _, certificate := range a.certificates {
+		var certificateCopy common.CertificateWrapper
+		if err := cloneCBORValue(certificate, &certificateCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone certificate: %w", err))
+			continue
+		}
+		clone.certificates = append(clone.certificates, certificateCopy)
+	}
 	clone.scriptHashes = append(clone.scriptHashes, a.scriptHashes...)
-	clone.proposalProcedures = append(clone.proposalProcedures, a.proposalProcedures...)
+	for _, proposal := range a.proposalProcedures {
+		var proposalCopy conway.ConwayProposalProcedure
+		if err := cloneCBORValue(proposal, &proposalCopy); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone proposal procedure: %w", err))
+			continue
+		}
+		clone.proposalProcedures = append(clone.proposalProcedures, proposalCopy)
+	}
 	clone.votingProcedures = cloneVotingProcedures(a.votingProcedures)
-	maps.Copy(clone.redeemers, a.redeemers)
-	maps.Copy(clone.stakeRedeemers, a.stakeRedeemers)
-	maps.Copy(clone.mintRedeemers, a.mintRedeemers)
+	cloneRedeemerMap(a.redeemers, clone.redeemers, clone)
+	cloneRedeemerMap(a.stakeRedeemers, clone.stakeRedeemers, clone)
+	cloneRedeemerMap(a.mintRedeemers, clone.mintRedeemers, clone)
 	maps.Copy(clone.withdrawals, a.withdrawals)
 	if a.changeAddress != nil {
 		addr := *a.changeAddress
 		clone.changeAddress = &addr
 	}
 	if a.collateralReturn != nil {
-		cr := *a.collateralReturn
-		clone.collateralReturn = &cr
+		var cr babbage.BabbageTransactionOutput
+		if err := cloneCBORValue(*a.collateralReturn, &cr); err != nil {
+			clone.setErrOnce(fmt.Errorf("clone collateral return: %w", err))
+		} else {
+			clone.collateralReturn = &cr
+		}
 	}
 	if a.auxiliaryData != nil {
 		clonedMeta := make(map[uint64]any, len(a.auxiliaryData.metadata))
-		maps.Copy(clonedMeta, a.auxiliaryData.metadata)
+		for key, value := range a.auxiliaryData.metadata {
+			clonedMeta[key] = cloneMetadataValue(value, clone)
+		}
 		clone.auxiliaryData = &auxData{metadata: clonedMeta}
 	}
 	if a.tx != nil {
 		txBytes, err := cbor.Encode(a.tx)
 		if err != nil {
-			// CBOR encode failed; leave clone.tx nil to avoid shallow-copy aliasing
-			clone.tx = nil
+			clone.setErrOnce(fmt.Errorf("clone transaction: encode CBOR: %w", err))
 		} else {
 			var txCopy conway.ConwayTransaction
 			if _, err := cbor.Decode(txBytes, &txCopy); err != nil {
-				// CBOR decode failed; leave clone.tx nil to avoid shallow-copy aliasing
-				clone.tx = nil
+				clone.setErrOnce(fmt.Errorf("clone transaction: decode CBOR: %w", err))
 			} else {
 				clone.tx = &txCopy
 			}
 		}
 	}
 	return clone
+}
+
+func isNilChainContext(ctx backend.ChainContext) bool {
+	if ctx == nil {
+		return true
+	}
+	value := reflect.ValueOf(ctx)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
+func cloneCBORValue(src, dst any) error {
+	encoded, err := cbor.Encode(src)
+	if err != nil {
+		return fmt.Errorf("encode CBOR: %w", err)
+	}
+	if _, err := cbor.Decode(encoded, dst); err != nil {
+		return fmt.Errorf("decode CBOR: %w", err)
+	}
+	return nil
+}
+
+func cloneCBORInterface[T any](src T) (T, error) {
+	var zero T
+	value := reflect.ValueOf(src)
+	if !value.IsValid() {
+		return zero, errors.New("value is nil")
+	}
+
+	encoded, err := cbor.Encode(src)
+	if err != nil {
+		return zero, fmt.Errorf("encode CBOR: %w", err)
+	}
+
+	valueType := value.Type()
+	var target reflect.Value
+	if valueType.Kind() == reflect.Pointer {
+		target = reflect.New(valueType.Elem())
+	} else {
+		target = reflect.New(valueType)
+	}
+	if _, err := cbor.Decode(encoded, target.Interface()); err != nil {
+		return zero, fmt.Errorf("decode CBOR: %w", err)
+	}
+
+	var candidate any
+	if valueType.Kind() == reflect.Pointer {
+		candidate = target.Interface()
+	} else {
+		candidate = target.Elem().Interface()
+	}
+	cloned, ok := candidate.(T)
+	if !ok {
+		return zero, fmt.Errorf("cloned CBOR value has unexpected type %T", candidate)
+	}
+	return cloned, nil
+}
+
+func cloneUtxos(src []common.Utxo, owner *Apollo, kind string) []common.Utxo {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]common.Utxo, 0, len(src))
+	for _, utxo := range src {
+		id, err := cloneCBORInterface[common.TransactionInput](utxo.Id)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone %s UTxO input: %w", kind, err))
+			continue
+		}
+		output, err := cloneCBORInterface[common.TransactionOutput](utxo.Output)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone %s UTxO output: %w", kind, err))
+			continue
+		}
+		dst = append(dst, common.Utxo{Id: id, Output: output})
+	}
+	return dst
+}
+
+func cloneRedeemerMap(src, dst map[string]redeemerEntry, owner *Apollo) {
+	for key, entry := range src {
+		var datum common.Datum
+		if err := cloneCBORValue(entry.Data, &datum); err != nil {
+			owner.setErrOnce(fmt.Errorf("clone redeemer %q datum: %w", key, err))
+			continue
+		}
+		entry.Data = datum
+		dst[key] = entry
+	}
+}
+
+func cloneMetadataValue(value any, owner *Apollo) any {
+	switch typed := value.(type) {
+	case nil, string, int, int64, uint64:
+		return typed
+	case *big.Int:
+		if typed == nil {
+			return (*big.Int)(nil)
+		}
+		return new(big.Int).Set(typed)
+	case big.Int:
+		return *new(big.Int).Set(&typed)
+	case []byte:
+		return slices.Clone(typed)
+	case MetadataMap:
+		cloned := make(MetadataMap, len(typed))
+		for i, entry := range typed {
+			cloned[i] = MetadataMapEntry{
+				Key:   cloneMetadataValue(entry.Key, owner),
+				Value: cloneMetadataValue(entry.Value, owner),
+			}
+		}
+		return cloned
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case map[uint64]any:
+		cloned := make(map[uint64]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneMetadataValue(item, owner)
+		}
+		return cloned
+	case common.TransactionMetadatum:
+		encoded, err := cbor.Encode(typed)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone transaction metadatum: encode CBOR: %w", err))
+			return typed
+		}
+		cloned, err := common.DecodeMetadatumRaw(encoded)
+		if err != nil {
+			owner.setErrOnce(fmt.Errorf("clone transaction metadatum: decode CBOR: %w", err))
+			return typed
+		}
+		return cloned
+	default:
+		owner.setErrOnce(fmt.Errorf("clone metadata value: unsupported type %T", value))
+		return value
+	}
 }
 
 // UtxoFromRef looks up a UTxO by transaction hash and index.
@@ -1080,12 +1440,12 @@ func (a *Apollo) UtxoFromRef(txHash string, txIndex int) (*common.Utxo, error) {
 	if len(hashBytes) != common.Blake2b256Size {
 		return nil, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
 	}
-	if txIndex < 0 || txIndex > math.MaxUint32 {
-		return nil, fmt.Errorf("tx index must be 0-%d, got %d", math.MaxUint32, txIndex)
+	if txIndex < 0 || uint64(txIndex) > uint64(math.MaxUint32) {
+		return nil, fmt.Errorf("tx index must be 0-%d, got %d", uint64(math.MaxUint32), txIndex)
 	}
 	var hash common.Blake2b256
 	copy(hash[:], hashBytes)
-	return a.Context.UtxoByRef(hash, uint32(txIndex))
+	return backend.UtxoByRefContext(a.requestContext, a.Context, hash, uint32(txIndex))
 }
 
 // GetUsedUTxOs returns a copy of the used UTxO references.
@@ -1144,7 +1504,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	// a silently wrong deposit produces a value-non-conserving transaction.
 	stakeDeposit := int64(StakeDeposit)
 	if len(a.certificates) > 0 {
-		pp, ppErr := a.Context.ProtocolParams()
+		pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context)
 		if ppErr != nil {
 			return a, fmt.Errorf("failed to get protocol params for certificate deposit: %w", ppErr)
 		}
@@ -1212,7 +1572,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	// MaxTxFee covers the size-based fee only; Conway reference-script fees are
 	// charged separately, so reserve the known reference-input / pinned-input
 	// surcharge before coin selection.
-	maxFee, feeErr := a.Context.MaxTxFee()
+	maxFee, feeErr := backend.MaxTxFeeContext(a.requestContext, a.Context)
 	if feeErr != nil {
 		return a, fmt.Errorf("failed to compute max tx fee for coin selection: %w", feeErr)
 	}
@@ -1479,23 +1839,29 @@ func (a *Apollo) Submit() (common.Blake2b256, error) {
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	return a.Context.SubmitTx(txCbor)
+	return backend.SubmitTxContext(a.requestContext, a.Context, txCbor)
 }
 
 // --- internal helpers ---
 
 func (a *Apollo) loadUtxos() error {
 	for _, addr := range a.inputAddresses {
-		utxos, err := a.Context.Utxos(addr)
+		utxos, err := backend.UtxosContext(a.requestContext, a.Context, addr)
 		if err != nil {
+			return fmt.Errorf("failed to load UTxOs for %s: %w", addr.String(), err)
+		}
+		if err := validateUtxos(utxos); err != nil {
 			return fmt.Errorf("failed to load UTxOs for %s: %w", addr.String(), err)
 		}
 		a.utxos = append(a.utxos, utxos...)
 	}
 	// If no UTxOs loaded and wallet is set, load from wallet address
 	if len(a.utxos) == 0 && len(a.preselectedUtxos) == 0 && a.wallet != nil {
-		utxos, err := a.Context.Utxos(a.wallet.Address())
+		utxos, err := backend.UtxosContext(a.requestContext, a.Context, a.wallet.Address())
 		if err != nil {
+			return fmt.Errorf("failed to load wallet UTxOs: %w", err)
+		}
+		if err := validateUtxos(utxos); err != nil {
 			return fmt.Errorf("failed to load wallet UTxOs: %w", err)
 		}
 		a.utxos = utxos
@@ -1506,7 +1872,7 @@ func (a *Apollo) loadUtxos() error {
 func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 	outputs := make([]babbage.BabbageTransactionOutput, 0, len(a.payments))
 	for _, payment := range a.payments {
-		if err := payment.EnsureMinUTXO(a.Context); err != nil {
+		if err := payment.EnsureMinUTXO(backend.BindContext(a.requestContext, a.Context)); err != nil {
 			return nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
 		}
 		txOut, err := payment.ToTxOut()
@@ -1537,6 +1903,9 @@ func (a *Apollo) totalPreselectedValue() (Value, error) {
 func (a *Apollo) sumUtxoValues(utxos []common.Utxo) (Value, error) {
 	total := Value{}
 	for _, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return Value{}, err
+		}
 		amt := utxo.Output.Amount()
 		// Amounts come from a remote backend; reject anything outside the
 		// uint64 lovelace range instead of silently treating it as zero.
@@ -1580,6 +1949,9 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 
 	available := make([]common.Utxo, 0, len(a.utxos))
 	for _, utxo := range a.utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("available UTxO is invalid: %w", err)
+		}
 		if !a.isUsed(utxoRef(utxo)) {
 			available = append(available, utxo)
 		}
@@ -1593,16 +1965,44 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	if err != nil {
 		return nil, err
 	}
+	availableByRef := make(map[string]common.Utxo, len(available))
+	for _, utxo := range available {
+		availableByRef[utxoRef(utxo)] = utxo
+	}
+	canonical := make([]common.Utxo, 0, len(selected))
+	seen := make(map[string]struct{}, len(selected))
+	for _, utxo := range selected {
+		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+			return nil, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
+		}
+		ref := utxoRef(utxo)
+		availableUtxo, ok := availableByRef[ref]
+		if !ok {
+			return nil, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
+		}
+		if _, ok := seen[ref]; ok {
+			return nil, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
+		}
+		seen[ref] = struct{}{}
+		canonical = append(canonical, availableUtxo)
+	}
+	selectedValue, err := a.sumUtxoValues(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("coin selector returned invalid selection: %w", err)
+	}
+	if !selectedValue.GreaterOrEqual(remaining) {
+		return nil, errors.New("coin selector returned a selection that does not cover the target")
+	}
 
 	// Commit to usedUtxos only on success
-	for _, utxo := range selected {
+	for _, utxo := range canonical {
 		a.markUsed(utxoRef(utxo))
 	}
-	return selected, nil
+	return canonical, nil
 }
 
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
 	}
@@ -1614,7 +2014,7 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 	// producing a fee that is a few hundred lovelace short and a FeeTooSmallUTxO
 	// rejection. Use a placeholder fee whose CBOR width matches (or exceeds) the
 	// final fee so the size — and thus the fee — is not underestimated.
-	placeholderFee, feeErr := a.Context.MaxTxFee()
+	placeholderFee, feeErr := backend.MaxTxFeeContext(a.requestContext, a.Context)
 	if feeErr != nil || placeholderFee == 0 {
 		placeholderFee = 2_000_000
 	}
@@ -1699,7 +2099,7 @@ func (a *Apollo) referenceScriptFee(inputs []common.Utxo) (int64, error) {
 	if refScriptSize == 0 {
 		return 0, nil
 	}
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
 	}
@@ -1785,12 +2185,12 @@ func (a *Apollo) totalReferenceScriptSize(inputs []common.Utxo) (int, error) {
 
 	// Reference inputs must be resolved against the chain context.
 	for _, refInput := range a.referenceInputs {
-		ref := hex.EncodeToString(refInput.TxId.Bytes()) + "#" + strconv.Itoa(int(refInput.OutputIndex))
+		ref := hex.EncodeToString(refInput.TxId.Bytes()) + "#" + strconv.FormatUint(uint64(refInput.OutputIndex), 10)
 		if _, ok := seen[ref]; ok {
 			continue
 		}
 		seen[ref] = struct{}{}
-		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
+		utxo, err := backend.UtxoByRefContext(a.requestContext, a.Context, refInput.TxId, refInput.OutputIndex)
 		if err != nil {
 			return 0, fmt.Errorf(
 				"failed to resolve reference input %s for reference-script fee: %w",
@@ -1856,7 +2256,7 @@ func (a *Apollo) estimateExecutionUnits(
 		return nil, fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
-	evalResult, err := a.Context.EvaluateTx(txBytes, inputs)
+	evalResult, err := backend.EvaluateTxContext(a.requestContext, a.Context, txBytes, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateTx failed: %w", err)
 	}
@@ -2093,7 +2493,7 @@ func (a *Apollo) buildBody(
 
 	// Script data hash
 	if len(a.redeemers) > 0 || len(a.mintRedeemers) > 0 || len(a.stakeRedeemers) > 0 || len(a.datums) > 0 {
-		pp, err := a.Context.ProtocolParams()
+		pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 		if err != nil {
 			return body, err
 		}
@@ -2233,7 +2633,7 @@ func (a *Apollo) usedScriptCostModels(
 		}
 	}
 	for _, refInput := range a.referenceInputs {
-		utxo, err := a.Context.UtxoByRef(refInput.TxId, refInput.OutputIndex)
+		utxo, err := backend.UtxoByRefContext(a.requestContext, a.Context, refInput.TxId, refInput.OutputIndex)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to resolve reference input %s#%d for script data hash: %w",
@@ -2465,7 +2865,23 @@ func (a *Apollo) markUsed(ref string) {
 }
 
 func utxoRef(utxo common.Utxo) string {
-	return hex.EncodeToString(utxo.Id.Id().Bytes()) + "#" + strconv.Itoa(int(utxo.Id.Index()))
+	return hex.EncodeToString(utxo.Id.Id().Bytes()) + "#" + strconv.FormatUint(uint64(utxo.Id.Index()), 10)
+}
+
+func validateUtxo(utxo common.Utxo) error {
+	if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+		return fmt.Errorf("UTxO is malformed: %w", err)
+	}
+	return nil
+}
+
+func validateUtxos(utxos []common.Utxo) error {
+	for i, utxo := range utxos {
+		if err := validateUtxo(utxo); err != nil {
+			return fmt.Errorf("UTxO %d is invalid: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // getChangeAddress returns the change address (explicit or wallet).
@@ -2506,8 +2922,8 @@ func (a *Apollo) setCollateral() error {
 	minCollateral := int64(5_000_000) // conservative fallback
 	if a.collateralAmount > 0 {
 		minCollateral = a.collateralAmount
-	} else if pp, err := a.Context.ProtocolParams(); err == nil {
-		if maxFee, err := a.Context.MaxTxFee(); err == nil && pp.CollateralPercent > 0 &&
+	} else if pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context); err == nil {
+		if maxFee, err := backend.MaxTxFeeContext(a.requestContext, a.Context); err == nil && pp.CollateralPercent > 0 &&
 			maxFee <= math.MaxInt64/uint64(pp.CollateralPercent) {
 			computed := int64(maxFee) * int64(pp.CollateralPercent) / 100 //nolint:gosec // bounded above
 			if computed > 0 {
@@ -2518,7 +2934,7 @@ func (a *Apollo) setCollateral() error {
 
 	candidates := a.utxos
 	if len(candidates) == 0 && a.wallet != nil {
-		loaded, err := a.Context.Utxos(a.wallet.Address())
+		loaded, err := backend.UtxosContext(a.requestContext, a.Context, a.wallet.Address())
 		if err != nil {
 			return fmt.Errorf("failed to load UTxOs for collateral selection: %w", err)
 		}
@@ -2665,7 +3081,7 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 	if len(a.collaterals) == 0 {
 		return nil
 	}
-	pp, err := a.Context.ProtocolParams()
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return fmt.Errorf("failed to get protocol params for collateral sizing: %w", err)
 	}
@@ -2848,7 +3264,7 @@ func (a *Apollo) validateCollateral() error {
 		}
 	}
 	// Enforce the protocol max on collateral inputs when known.
-	if pp, err := a.Context.ProtocolParams(); err == nil && pp.MaxCollateralInputs > 0 &&
+	if pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context); err == nil && pp.MaxCollateralInputs > 0 &&
 		len(a.collaterals) > pp.MaxCollateralInputs {
 		return fmt.Errorf(
 			"too many collateral inputs: %d exceeds protocol maximum of %d",

@@ -105,6 +105,13 @@ type PaymentI interface {
 	ToValue() (Value, error)
 }
 
+// PaymentCloner is implemented by custom PaymentI implementations that can
+// produce an independent copy for Apollo.Clone. Apollo's built-in Payment
+// implementation is cloned directly.
+type PaymentCloner interface {
+	ClonePayment() (PaymentI, error)
+}
+
 // Payment represents a transaction output with receiver, lovelace, and optional assets.
 type Payment struct {
 	Lovelace  int64

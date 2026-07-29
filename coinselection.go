@@ -39,6 +39,9 @@ func (s *LargestFirstSelector) Select(available []common.Utxo, target Value) ([]
 	if remaining.Coin == 0 && !remaining.HasAssets() {
 		return nil, nil
 	}
+	if err := validateUtxos(available); err != nil {
+		return nil, fmt.Errorf("invalid coin-selection input: %w", err)
+	}
 	sorted := SortUtxos(available)
 	// Stabilize ordering for equal-amount UTxOs to preserve deterministic selection.
 	for i := 0; i < len(sorted); {

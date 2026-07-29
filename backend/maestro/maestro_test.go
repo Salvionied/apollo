@@ -2,6 +2,7 @@ package maestro
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,70 @@ import (
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
+
+var _ backend.ContextChainContext = (*MaestroChainContext)(nil)
+
+func TestClientWithContextUsesBoundedFallback(t *testing.T) {
+	chainContext, err := NewMaestroChainContext(0, "test-key")
+	if err != nil {
+		t.Fatalf("NewMaestroChainContext() error = %v", err)
+	}
+	chainContext.client.HTTPClient = nil
+
+	//nolint:staticcheck // Verify the Maestro adapter's defensive nil-context fallback.
+	client := chainContext.clientWithContext(nil)
+	if client.HTTPClient == nil {
+		t.Fatal("clientWithContext() returned a nil HTTP client")
+	}
+	if client.HTTPClient.Timeout != defaultMaestroHTTPTimeout {
+		t.Fatalf(
+			"clientWithContext() timeout = %s, want %s",
+			client.HTTPClient.Timeout,
+			defaultMaestroHTTPTimeout,
+		)
+	}
+}
+
+func TestClientWithContextPropagatesCallerContext(t *testing.T) {
+	type contextKey struct{}
+	key := contextKey{}
+	ctx := context.WithValue(context.Background(), key, "caller")
+
+	chainContext, err := NewMaestroChainContext(0, "test-key")
+	if err != nil {
+		t.Fatalf("NewMaestroChainContext() error = %v", err)
+	}
+	chainContext.client.HTTPClient.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Context().Value(key); got != "caller" {
+			t.Fatalf("request context value = %v, want caller", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"slot":1}}`)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	if _, err := chainContext.TipContext(ctx); err != nil {
+		t.Fatalf("TipContext() error = %v", err)
+	}
+}
+
+func TestPostEvaluateContextCancellationWithNilSDKClient(t *testing.T) {
+	chainContext, err := NewMaestroChainContext(0, "test-key")
+	if err != nil {
+		t.Fatalf("NewMaestroChainContext() error = %v", err)
+	}
+	chainContext.client.BaseUrl = "https://example.invalid"
+	chainContext.client.HTTPClient = nil
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = chainContext.postEvaluateContext(ctx, []byte(`{}`))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("postEvaluateContext() error = %v, want context.Canceled", err)
+	}
+}
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 

@@ -2,6 +2,7 @@ package maestro
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
@@ -36,7 +38,38 @@ type MaestroChainContext struct {
 	apiKey string
 }
 
-const maxMaestroEvaluateErrorResponseBytes = 64 * 1024
+const (
+	maxMaestroEvaluateErrorResponseBytes = 64 * 1024
+	defaultMaestroHTTPTimeout            = 30 * time.Second
+)
+
+type contextTransport struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (t contextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.base.RoundTrip(req.Clone(t.ctx))
+}
+
+func (m *MaestroChainContext) clientWithContext(ctx context.Context) *maestroClient.Client {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	client := *m.client
+	httpClient := client.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: defaultMaestroHTTPTimeout}
+	}
+	contextClient := *httpClient
+	transport := contextClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	contextClient.Transport = contextTransport{ctx: ctx, base: transport}
+	client.HTTPClient = &contextClient
+	return &client
+}
 
 // Capabilities reports the Maestro operations supported by this client.
 func (m *MaestroChainContext) Capabilities() backend.CapabilitySet {
@@ -91,7 +124,11 @@ func NewMaestroChainContextWithNetwork(networkId uint8, projectId string, networ
 }
 
 func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
-	resp, err := m.client.ProtocolParameters()
+	return m.ProtocolParamsContext(context.Background())
+}
+
+func (m *MaestroChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
+	resp, err := m.clientWithContext(ctx).ProtocolParameters()
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -182,6 +219,15 @@ func (m *MaestroChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 }
 
 func (m *MaestroChainContext) GenesisParams() (backend.GenesisParameters, error) {
+	return m.GenesisParamsContext(context.Background())
+}
+
+func (m *MaestroChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return backend.GenesisParameters{}, err
+		}
+	}
 	return backend.GenesisParameters{}, backend.NewUnsupportedError("Maestro", backend.CapabilityGenesisParams)
 }
 
@@ -190,7 +236,11 @@ func (m *MaestroChainContext) NetworkId() uint8 {
 }
 
 func (m *MaestroChainContext) CurrentEpoch() (uint64, error) {
-	resp, err := m.client.CurrentEpoch()
+	return m.CurrentEpochContext(context.Background())
+}
+
+func (m *MaestroChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
+	resp, err := m.clientWithContext(ctx).CurrentEpoch()
 	if err != nil {
 		return 0, err
 	}
@@ -201,7 +251,11 @@ func (m *MaestroChainContext) CurrentEpoch() (uint64, error) {
 }
 
 func (m *MaestroChainContext) MaxTxFee() (uint64, error) {
-	pp, err := m.ProtocolParams()
+	return m.MaxTxFeeContext(context.Background())
+}
+
+func (m *MaestroChainContext) MaxTxFeeContext(ctx context.Context) (uint64, error) {
+	pp, err := m.ProtocolParamsContext(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -209,7 +263,11 @@ func (m *MaestroChainContext) MaxTxFee() (uint64, error) {
 }
 
 func (m *MaestroChainContext) Tip() (uint64, error) {
-	resp, err := m.client.ChainTip()
+	return m.TipContext(context.Background())
+}
+
+func (m *MaestroChainContext) TipContext(ctx context.Context) (uint64, error) {
+	resp, err := m.clientWithContext(ctx).ChainTip()
 	if err != nil {
 		return 0, err
 	}
@@ -220,13 +278,18 @@ func (m *MaestroChainContext) Tip() (uint64, error) {
 }
 
 func (m *MaestroChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
+	return m.UtxosContext(context.Background(), address)
+}
+
+func (m *MaestroChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
 	const maxPages = 1000
 	var allUtxos []common.Utxo
 	params := utils.NewParameters()
 	var lastCursor string
+	client := m.clientWithContext(ctx)
 
 	for range maxPages {
-		resp, err := m.client.UtxosAtAddress(address.String(), params)
+		resp, err := client.UtxosAtAddress(address.String(), params)
 		if err != nil {
 			return nil, err
 		}
@@ -255,12 +318,16 @@ func (m *MaestroChainContext) Utxos(address common.Address) ([]common.Utxo, erro
 }
 
 func (m *MaestroChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
+	return m.SubmitTxContext(context.Background(), txCbor)
+}
+
+func (m *MaestroChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
 	// The Maestro SDK's Client.SubmitTx posts to a corrupted URL
 	// ("/submitmodels.BasicResponse{}/tx") and can never work. Use
 	// TxManagerSubmit instead, which posts the hex-encoded transaction
 	// CBOR to the documented POST /txmanager submit endpoint.
 	txCborHex := hex.EncodeToString(txCbor)
-	txHash, err := m.client.TxManagerSubmit(txCborHex)
+	txHash, err := m.clientWithContext(ctx).TxManagerSubmit(txCborHex)
 	if err != nil {
 		return common.Blake2b256{}, fmt.Errorf("maestro tx submission failed: %w", err)
 	}
@@ -288,10 +355,18 @@ func (m *MaestroChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 // the required {tx_hash, index, txout_cbor} entries, so the request is built
 // here against the SDK client's base URL and API key.
 func (m *MaestroChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	return m.EvaluateTxContext(context.Background(), txCbor, additionalUtxos)
+}
+
+func (m *MaestroChainContext) EvaluateTxContext(
+	ctx context.Context,
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	txHex := hex.EncodeToString(txCbor)
 
 	if len(additionalUtxos) == 0 {
-		evalResp, err := m.client.EvaluateTx(txHex)
+		evalResp, err := m.clientWithContext(ctx).EvaluateTx(txHex)
 		if err != nil {
 			return nil, err
 		}
@@ -302,7 +377,7 @@ func (m *MaestroChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common
 	if err != nil {
 		return nil, err
 	}
-	evalResp, err := m.postEvaluate(reqBody)
+	evalResp, err := m.postEvaluateContext(ctx, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -371,8 +446,18 @@ func maestroAdditionalUtxoFromUtxo(utxo common.Utxo) (maestroAdditionalUtxo, err
 // client's base URL, API key and HTTP client, and decodes the response with the
 // same shape the SDK uses.
 func (m *MaestroChainContext) postEvaluate(body []byte) (models.EvaluateTxResponse, error) {
+	return m.postEvaluateContext(context.Background(), body)
+}
+
+func (m *MaestroChainContext) postEvaluateContext(
+	ctx context.Context,
+	body []byte,
+) (models.EvaluateTxResponse, error) {
 	url := m.client.BaseUrl + "/transactions/evaluate"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +467,7 @@ func (m *MaestroChainContext) postEvaluate(body []byte) (models.EvaluateTxRespon
 
 	httpClient := m.client.HTTPClient
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: defaultMaestroHTTPTimeout}
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -418,7 +503,7 @@ func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerK
 		if eval.RedeemerIndex < 0 {
 			return nil, fmt.Errorf("negative redeemer index: %d", eval.RedeemerIndex)
 		}
-		if eval.RedeemerIndex > math.MaxUint32 {
+		if uint64(eval.RedeemerIndex) > uint64(math.MaxUint32) {
 			return nil, fmt.Errorf("redeemer index %d exceeds uint32 range", eval.RedeemerIndex)
 		}
 		tag, err := backend.ParseRedeemerTag(eval.RedeemerTag)
@@ -441,8 +526,16 @@ func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerK
 }
 
 func (m *MaestroChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	return m.UtxoByRefContext(context.Background(), txHash, index)
+}
+
+func (m *MaestroChainContext) UtxoByRefContext(
+	ctx context.Context,
+	txHash common.Blake2b256,
+	index uint32,
+) (*common.Utxo, error) {
 	hashHex := hex.EncodeToString(txHash.Bytes())
-	resp, err := m.client.TransactionOutputFromReference(hashHex, int(index), nil)
+	resp, err := m.clientWithContext(ctx).TransactionOutputFromReference(hashHex, int(index), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -459,8 +552,15 @@ func (m *MaestroChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) 
 }
 
 func (m *MaestroChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
+	return m.ScriptCborContext(context.Background(), scriptHash)
+}
+
+func (m *MaestroChainContext) ScriptCborContext(
+	ctx context.Context,
+	scriptHash common.Blake2b224,
+) ([]byte, error) {
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
-	resp, err := m.client.ScriptByHash(hashHex)
+	resp, err := m.clientWithContext(ctx).ScriptByHash(hashHex)
 	if err != nil {
 		return nil, err
 	}

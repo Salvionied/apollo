@@ -1,6 +1,7 @@
 package utxorpc
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -30,6 +31,8 @@ type UtxoRpcChainContext struct {
 	client    *sdk.UtxorpcClient
 	networkId uint8
 }
+
+var _ backend.ContextChainContext = (*UtxoRpcChainContext)(nil)
 
 // Capabilities reports the UTxO RPC operations supported by this client.
 func (u *UtxoRpcChainContext) Capabilities() backend.CapabilitySet {
@@ -133,9 +136,13 @@ func bigIntToString(bi *cardano.BigInt) string {
 }
 
 func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
+	return u.ProtocolParamsContext(context.Background())
+}
+
+func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	req := connect.NewRequest(&query.ReadParamsRequest{})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadParams(req)
+	resp, err := u.client.ReadParamsWithContext(ctx, req)
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -243,6 +250,13 @@ func costModelsFromRpc(cm *cardano.CostModels) map[string][]int64 {
 }
 
 func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error) {
+	return u.GenesisParamsContext(context.Background())
+}
+
+func (u *UtxoRpcChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
+	if err := ctx.Err(); err != nil {
+		return backend.GenesisParameters{}, err
+	}
 	return backend.GenesisParameters{}, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityGenesisParams)
 }
 
@@ -251,11 +265,22 @@ func (u *UtxoRpcChainContext) NetworkId() uint8 {
 }
 
 func (u *UtxoRpcChainContext) CurrentEpoch() (uint64, error) {
+	return u.CurrentEpochContext(context.Background())
+}
+
+func (u *UtxoRpcChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	return 0, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityCurrentEpoch)
 }
 
 func (u *UtxoRpcChainContext) MaxTxFee() (uint64, error) {
-	pp, err := u.ProtocolParams()
+	return u.MaxTxFeeContext(context.Background())
+}
+
+func (u *UtxoRpcChainContext) MaxTxFeeContext(ctx context.Context) (uint64, error) {
+	pp, err := u.ProtocolParamsContext(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -263,9 +288,13 @@ func (u *UtxoRpcChainContext) MaxTxFee() (uint64, error) {
 }
 
 func (u *UtxoRpcChainContext) Tip() (uint64, error) {
+	return u.TipContext(context.Background())
+}
+
+func (u *UtxoRpcChainContext) TipContext(ctx context.Context) (uint64, error) {
 	req := connect.NewRequest(&syncpb.ReadTipRequest{})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadTip(req)
+	resp, err := u.client.ReadTipWithContext(ctx, req)
 	if err != nil {
 		return 0, err
 	}
@@ -277,6 +306,10 @@ func (u *UtxoRpcChainContext) Tip() (uint64, error) {
 }
 
 func (u *UtxoRpcChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
+	return u.UtxosContext(context.Background(), address)
+}
+
+func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
 	addrBytes, err := address.Bytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get address bytes: %w", err)
@@ -296,7 +329,7 @@ func (u *UtxoRpcChainContext) Utxos(address common.Address) ([]common.Utxo, erro
 		},
 	})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.SearchUtxos(req)
+	resp, err := u.client.SearchUtxosWithContext(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -313,13 +346,17 @@ func (u *UtxoRpcChainContext) Utxos(address common.Address) ([]common.Utxo, erro
 }
 
 func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
+	return u.SubmitTxContext(context.Background(), txCbor)
+}
+
+func (u *UtxoRpcChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
 	req := connect.NewRequest(&submit.SubmitTxRequest{
 		Tx: &submit.AnyChainTx{
 			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
 		},
 	})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.SubmitTx(req)
+	resp, err := u.client.SubmitTxWithContext(ctx, req)
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
@@ -339,6 +376,17 @@ func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 // field for additional/resolved UTxOs, so off-chain or chained inputs cannot
 // be evaluated by this backend.
 func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	return u.EvaluateTxContext(context.Background(), txCbor, additionalUtxos)
+}
+
+func (u *UtxoRpcChainContext) EvaluateTxContext(
+	ctx context.Context,
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(additionalUtxos) > 0 {
 		return nil, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityEvaluateTxAdditionalUtxos)
 	}
@@ -352,7 +400,7 @@ func (u *UtxoRpcChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common
 		},
 	})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.EvalTx(req)
+	resp, err := u.client.EvalTxWithContext(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate transaction: %w", err)
 	}
@@ -516,6 +564,14 @@ func formatRedeemerKeys(keys map[common.RedeemerKey]struct{}) string {
 }
 
 func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	return u.UtxoByRefContext(context.Background(), txHash, index)
+}
+
+func (u *UtxoRpcChainContext) UtxoByRefContext(
+	ctx context.Context,
+	txHash common.Blake2b256,
+	index uint32,
+) (*common.Utxo, error) {
 	req := connect.NewRequest(&query.ReadUtxosRequest{
 		Keys: []*query.TxoRef{
 			{
@@ -525,7 +581,7 @@ func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) 
 		},
 	})
 	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadUtxos(req)
+	resp, err := u.client.ReadUtxosWithContext(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +596,14 @@ func (u *UtxoRpcChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) 
 	return &utxo, nil
 }
 
-func (u *UtxoRpcChainContext) ScriptCbor(_ common.Blake2b224) ([]byte, error) {
+func (u *UtxoRpcChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
+	return u.ScriptCborContext(context.Background(), scriptHash)
+}
+
+func (u *UtxoRpcChainContext) ScriptCborContext(ctx context.Context, _ common.Blake2b224) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return nil, backend.NewUnsupportedError("UTxO RPC", backend.CapabilityScriptCbor)
 }
 

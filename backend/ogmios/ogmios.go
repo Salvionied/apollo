@@ -31,6 +31,8 @@ type OgmiosChainContext struct {
 	networkId uint8
 }
 
+var _ backend.ContextChainContext = (*OgmiosChainContext)(nil)
+
 // Capabilities reports the operations supported by the configured Ogmios
 // client. Address UTxO queries and script lookup require the optional Kupo
 // client; UTxO-by-reference queries are served directly by Ogmios.
@@ -52,7 +54,10 @@ func NewOgmiosChainContext(ogmiosClient *ogmigo.Client, kupoClient *kugo.Client,
 }
 
 func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
-	ctx := context.Background()
+	return o.ProtocolParamsContext(context.Background())
+}
+
+func (o *OgmiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	raw, err := o.ogmios.CurrentProtocolParameters(ctx)
 	if err != nil {
 		return backend.ProtocolParameters{}, err
@@ -67,7 +72,10 @@ func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error
 }
 
 func (o *OgmiosChainContext) GenesisParams() (backend.GenesisParameters, error) {
-	ctx := context.Background()
+	return o.GenesisParamsContext(context.Background())
+}
+
+func (o *OgmiosChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
 	raw, err := o.ogmios.GenesisConfig(ctx, "shelley")
 	if err != nil {
 		return backend.GenesisParameters{}, err
@@ -86,12 +94,19 @@ func (o *OgmiosChainContext) NetworkId() uint8 {
 }
 
 func (o *OgmiosChainContext) CurrentEpoch() (uint64, error) {
-	ctx := context.Background()
+	return o.CurrentEpochContext(context.Background())
+}
+
+func (o *OgmiosChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
 	return o.ogmios.CurrentEpoch(ctx)
 }
 
 func (o *OgmiosChainContext) MaxTxFee() (uint64, error) {
-	pp, err := o.ProtocolParams()
+	return o.MaxTxFeeContext(context.Background())
+}
+
+func (o *OgmiosChainContext) MaxTxFeeContext(ctx context.Context) (uint64, error) {
+	pp, err := o.ProtocolParamsContext(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -99,7 +114,10 @@ func (o *OgmiosChainContext) MaxTxFee() (uint64, error) {
 }
 
 func (o *OgmiosChainContext) Tip() (uint64, error) {
-	ctx := context.Background()
+	return o.TipContext(context.Background())
+}
+
+func (o *OgmiosChainContext) TipContext(ctx context.Context) (uint64, error) {
 	point, err := o.ogmios.ChainTip(ctx)
 	if err != nil {
 		return 0, err
@@ -112,10 +130,13 @@ func (o *OgmiosChainContext) Tip() (uint64, error) {
 }
 
 func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
+	return o.UtxosContext(context.Background(), address)
+}
+
+func (o *OgmiosChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
 	if o.kupo == nil {
 		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityUtxos)
 	}
-	ctx := context.Background()
 	matches, err := o.kupo.Matches(ctx, kugo.OnlyUnspent(), kugo.Address(address.String()))
 	if err != nil {
 		return nil, err
@@ -133,7 +154,10 @@ func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error
 }
 
 func (o *OgmiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
-	ctx := context.Background()
+	return o.SubmitTxContext(context.Background(), txCbor)
+}
+
+func (o *OgmiosChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
 	txHex := hex.EncodeToString(txCbor)
 	resp, err := o.ogmios.SubmitTx(ctx, txHex)
 	if err != nil {
@@ -155,7 +179,14 @@ func (o *OgmiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) 
 }
 
 func (o *OgmiosChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
-	ctx := context.Background()
+	return o.EvaluateTxContext(context.Background(), txCbor, additionalUtxos)
+}
+
+func (o *OgmiosChainContext) EvaluateTxContext(
+	ctx context.Context,
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	txHex := hex.EncodeToString(txCbor)
 	var resp *ogmigo.EvaluateTxResponse
 	var err error
@@ -332,7 +363,14 @@ func evaluateResponseToExUnits(resp *ogmigo.EvaluateTxResponse) (map[common.Rede
 }
 
 func (o *OgmiosChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
-	ctx := context.Background()
+	return o.UtxoByRefContext(context.Background(), txHash, index)
+}
+
+func (o *OgmiosChainContext) UtxoByRefContext(
+	ctx context.Context,
+	txHash common.Blake2b256,
+	index uint32,
+) (*common.Utxo, error) {
 	hashHex := hex.EncodeToString(txHash.Bytes())
 	query := chainsync.TxInQuery{
 		Transaction: shared.UtxoTxID{ID: hashHex},
@@ -359,10 +397,16 @@ func (o *OgmiosChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (
 }
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
+	return o.ScriptCborContext(context.Background(), scriptHash)
+}
+
+func (o *OgmiosChainContext) ScriptCborContext(
+	ctx context.Context,
+	scriptHash common.Blake2b224,
+) ([]byte, error) {
 	if o.kupo == nil {
 		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityScriptCbor)
 	}
-	ctx := context.Background()
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
 	script, err := o.kupo.Script(ctx, hashHex)
 	if err != nil {
@@ -550,7 +594,7 @@ func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, 
 	if match.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", match.OutputIndex)
 	}
-	if match.OutputIndex > math.MaxUint32 {
+	if uint64(match.OutputIndex) > uint64(math.MaxUint32) {
 		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", match.OutputIndex)
 	}
 	utxo, err := sharedValueToUtxo(txId, uint32(match.OutputIndex), shared.Value(match.Value), address)

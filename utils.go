@@ -12,7 +12,15 @@ import (
 func SortUtxos(utxos []common.Utxo) []common.Utxo {
 	res := make([]common.Utxo, len(utxos))
 	copy(res, utxos)
-	sort.Slice(res, func(i, j int) bool {
+	sort.SliceStable(res, func(i, j int) bool {
+		iValid := validateUtxo(res[i]) == nil
+		jValid := validateUtxo(res[j]) == nil
+		if iValid != jValid {
+			return iValid
+		}
+		if !iValid {
+			return false
+		}
 		iHasAssets := res[i].Output.Assets() != nil
 		jHasAssets := res[j].Output.Assets() != nil
 		if !iHasAssets && !jHasAssets {
@@ -40,7 +48,15 @@ func SortUtxos(utxos []common.Utxo) []common.Utxo {
 func SortInputs(inputs []common.Utxo) []common.Utxo {
 	sorted := make([]common.Utxo, len(inputs))
 	copy(sorted, inputs)
-	sort.Slice(sorted, func(i, j int) bool {
+	sort.SliceStable(sorted, func(i, j int) bool {
+		iValid := validateUtxo(sorted[i]) == nil
+		jValid := validateUtxo(sorted[j]) == nil
+		if iValid != jValid {
+			return iValid
+		}
+		if !iValid {
+			return false
+		}
 		iId := hex.EncodeToString(sorted[i].Id.Id().Bytes())
 		jId := hex.EncodeToString(sorted[j].Id.Id().Bytes())
 		if iId != jId {

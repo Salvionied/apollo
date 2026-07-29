@@ -2,6 +2,7 @@ package blockfrost
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -70,9 +71,14 @@ func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string
 	}
 }
 
-func (b *BlockFrostChainContext) request(method, path string, body io.Reader, contentType string) ([]byte, error) {
+func (b *BlockFrostChainContext) requestContext(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+) ([]byte, error) {
 	url := b.baseUrl + path
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +114,10 @@ func (b *BlockFrostChainContext) request(method, path string, body io.Reader, co
 }
 
 func (b *BlockFrostChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
+	return b.ProtocolParamsContext(context.Background())
+}
+
+func (b *BlockFrostChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	b.mu.Lock()
 	if b.cachedParams != nil && time.Since(b.paramsCacheAt) < cacheExpiry {
 		pp := *b.cachedParams
@@ -126,7 +136,7 @@ func (b *BlockFrostChainContext) ProtocolParams() (backend.ProtocolParameters, e
 	}
 	b.mu.Unlock()
 
-	data, err := b.request("GET", "/epochs/latest/parameters", nil, "")
+	data, err := b.requestContext(ctx, "GET", "/epochs/latest/parameters", nil, "")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -162,6 +172,10 @@ func (b *BlockFrostChainContext) ProtocolParams() (backend.ProtocolParameters, e
 }
 
 func (b *BlockFrostChainContext) GenesisParams() (backend.GenesisParameters, error) {
+	return b.GenesisParamsContext(context.Background())
+}
+
+func (b *BlockFrostChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
 	b.mu.Lock()
 	if b.cachedGenesis != nil && time.Since(b.genesisCacheAt) < cacheExpiry {
 		gp := *b.cachedGenesis
@@ -170,7 +184,7 @@ func (b *BlockFrostChainContext) GenesisParams() (backend.GenesisParameters, err
 	}
 	b.mu.Unlock()
 
-	data, err := b.request("GET", "/genesis", nil, "")
+	data, err := b.requestContext(ctx, "GET", "/genesis", nil, "")
 	if err != nil {
 		return backend.GenesisParameters{}, err
 	}
@@ -205,7 +219,11 @@ func (b *BlockFrostChainContext) NetworkId() uint8 {
 }
 
 func (b *BlockFrostChainContext) CurrentEpoch() (uint64, error) {
-	data, err := b.request("GET", "/epochs/latest", nil, "")
+	return b.CurrentEpochContext(context.Background())
+}
+
+func (b *BlockFrostChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
+	data, err := b.requestContext(ctx, "GET", "/epochs/latest", nil, "")
 	if err != nil {
 		return 0, err
 	}
@@ -222,7 +240,11 @@ func (b *BlockFrostChainContext) CurrentEpoch() (uint64, error) {
 }
 
 func (b *BlockFrostChainContext) MaxTxFee() (uint64, error) {
-	pp, err := b.ProtocolParams()
+	return b.MaxTxFeeContext(context.Background())
+}
+
+func (b *BlockFrostChainContext) MaxTxFeeContext(ctx context.Context) (uint64, error) {
+	pp, err := b.ProtocolParamsContext(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -230,7 +252,11 @@ func (b *BlockFrostChainContext) MaxTxFee() (uint64, error) {
 }
 
 func (b *BlockFrostChainContext) Tip() (uint64, error) {
-	data, err := b.request("GET", "/blocks/latest", nil, "")
+	return b.TipContext(context.Background())
+}
+
+func (b *BlockFrostChainContext) TipContext(ctx context.Context) (uint64, error) {
+	data, err := b.requestContext(ctx, "GET", "/blocks/latest", nil, "")
 	if err != nil {
 		return 0, err
 	}
@@ -247,13 +273,17 @@ func (b *BlockFrostChainContext) Tip() (uint64, error) {
 }
 
 func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
+	return b.UtxosContext(context.Background(), address)
+}
+
+func (b *BlockFrostChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
 	const maxPages = 1000
 	var allUtxos []common.Utxo
-	resolver := newScriptRefResolver(b)
+	resolver := newScriptRefResolver(ctx, b)
 
 	for page := 1; page <= maxPages+1; page++ {
 		path := fmt.Sprintf("/addresses/%s/utxos?page=%d", address.String(), page)
-		data, err := b.request("GET", path, nil, "")
+		data, err := b.requestContext(ctx, "GET", path, nil, "")
 		if err != nil {
 			return nil, err
 		}
@@ -279,8 +309,12 @@ func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, e
 }
 
 func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
+	return b.SubmitTxContext(context.Background(), txCbor)
+}
+
+func (b *BlockFrostChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
 	body := bytes.NewReader(txCbor)
-	data, err := b.request("POST", "/tx/submit", body, "application/cbor")
+	data, err := b.requestContext(ctx, "POST", "/tx/submit", body, "application/cbor")
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
@@ -314,6 +348,14 @@ var (
 )
 
 func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+	return b.EvaluateTxContext(context.Background(), txCbor, additionalUtxos)
+}
+
+func (b *BlockFrostChainContext) EvaluateTxContext(
+	ctx context.Context,
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	for i, utxo := range additionalUtxos {
 		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
 			return nil, fmt.Errorf("invalid additional UTxO at index %d: %w", i, err)
@@ -333,7 +375,7 @@ func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []com
 	// additional set has no native assets.
 	var lastErr error
 	for attempt := 1; attempt <= evaluateSimpleRetries; attempt++ {
-		result, err := b.evaluateTxSimple(txCbor)
+		result, err := b.evaluateTxSimpleContext(ctx, txCbor)
 		if err == nil {
 			return result, nil
 		}
@@ -342,13 +384,19 @@ func (b *BlockFrostChainContext) EvaluateTx(txCbor []byte, additionalUtxos []com
 			return nil, err
 		}
 		if attempt < evaluateSimpleRetries {
-			time.Sleep(evaluateSimpleRetryWait)
+			timer := time.NewTimer(evaluateSimpleRetryWait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 	if len(additionalUtxos) == 0 || additionalUtxosContainNativeAssets(additionalUtxos) {
 		return nil, lastErr
 	}
-	return b.evaluateTxWithAdditionalUtxos(txCbor, additionalUtxos)
+	return b.evaluateTxWithAdditionalUtxosContext(ctx, txCbor, additionalUtxos)
 }
 
 // additionalUtxosContainNativeAssets reports whether any resolved UTxO carries
@@ -369,9 +417,12 @@ func additionalUtxosContainNativeAssets(utxos []common.Utxo) bool {
 // evaluateTxSimple POSTs hex-encoded transaction CBOR to /utils/txs/evaluate.
 // BlockFrost expects the hex string in the body with Content-Type
 // application/cbor (not raw CBOR bytes).
-func (b *BlockFrostChainContext) evaluateTxSimple(txCbor []byte) (map[common.RedeemerKey]common.ExUnits, error) {
+func (b *BlockFrostChainContext) evaluateTxSimpleContext(
+	ctx context.Context,
+	txCbor []byte,
+) (map[common.RedeemerKey]common.ExUnits, error) {
 	body := strings.NewReader(hex.EncodeToString(txCbor))
-	data, err := b.request("POST", "/utils/txs/evaluate", body, "application/cbor")
+	data, err := b.requestContext(ctx, "POST", "/utils/txs/evaluate", body, "application/cbor")
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +431,8 @@ func (b *BlockFrostChainContext) evaluateTxSimple(txCbor []byte) (map[common.Red
 
 // evaluateTxWithAdditionalUtxos POSTs to /utils/txs/evaluate/utxos with a JSON
 // body carrying the transaction CBOR hex and a resolved additional UTxO set.
-func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxos(
+func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxosContext(
+	ctx context.Context,
 	txCbor []byte,
 	additionalUtxos []common.Utxo,
 ) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -388,7 +440,7 @@ func (b *BlockFrostChainContext) evaluateTxWithAdditionalUtxos(
 	if err != nil {
 		return nil, err
 	}
-	data, err := b.request("POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
+	data, err := b.requestContext(ctx, "POST", "/utils/txs/evaluate/utxos", bytes.NewReader(reqBody), "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -722,9 +774,17 @@ func evalErrorSnippet(data []byte) string {
 }
 
 func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	return b.UtxoByRefContext(context.Background(), txHash, index)
+}
+
+func (b *BlockFrostChainContext) UtxoByRefContext(
+	ctx context.Context,
+	txHash common.Blake2b256,
+	index uint32,
+) (*common.Utxo, error) {
 	hashHex := hex.EncodeToString(txHash.Bytes())
 	path := fmt.Sprintf("/txs/%s/utxos", hashHex)
-	data, err := b.request("GET", path, nil, "")
+	data, err := b.requestContext(ctx, "GET", path, nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -754,7 +814,7 @@ func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint3
 			if err != nil {
 				return nil, err
 			}
-			utxo, err := b.hydrateUtxo(raw, addr)
+			utxo, err := b.hydrateUtxoContext(ctx, raw, addr)
 			if err != nil {
 				return nil, err
 			}
@@ -765,9 +825,16 @@ func (b *BlockFrostChainContext) UtxoByRef(txHash common.Blake2b256, index uint3
 }
 
 func (b *BlockFrostChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
+	return b.ScriptCborContext(context.Background(), scriptHash)
+}
+
+func (b *BlockFrostChainContext) ScriptCborContext(
+	ctx context.Context,
+	scriptHash common.Blake2b224,
+) ([]byte, error) {
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
 	path := fmt.Sprintf("/scripts/%s/cbor", hashHex)
-	data, err := b.request("GET", path, nil, "")
+	data, err := b.requestContext(ctx, "GET", path, nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -1005,7 +1072,7 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 	if raw.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", raw.OutputIndex)
 	}
-	if raw.OutputIndex > math.MaxUint32 {
+	if uint64(raw.OutputIndex) > uint64(math.MaxUint32) {
 		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", raw.OutputIndex)
 	}
 	input := shelley.ShelleyTransactionInput{
@@ -1095,6 +1162,20 @@ func (b *BlockFrostChainContext) hydrateUtxo(raw bfAddressUTxO, address common.A
 	return b.hydrateUtxoWithScriptResolver(raw, address, b.scriptRefByHash)
 }
 
+func (b *BlockFrostChainContext) hydrateUtxoContext(
+	ctx context.Context,
+	raw bfAddressUTxO,
+	address common.Address,
+) (common.Utxo, error) {
+	return b.hydrateUtxoWithScriptResolver(
+		raw,
+		address,
+		func(hashHex string) (*common.ScriptRef, error) {
+			return b.scriptRefByHashContext(ctx, hashHex)
+		},
+	)
+}
+
 func (b *BlockFrostChainContext) hydrateUtxoPage(
 	rawUtxos []bfAddressUTxO,
 	address common.Address,
@@ -1170,7 +1251,8 @@ func (b *BlockFrostChainContext) hydrateUtxoWithScriptResolver(
 }
 
 type scriptRefResolver struct {
-	context *BlockFrostChainContext
+	requestContext context.Context
+	chainContext   *BlockFrostChainContext
 
 	mu      sync.Mutex
 	entries map[string]*scriptRefResolveResult
@@ -1182,10 +1264,11 @@ type scriptRefResolveResult struct {
 	err       error
 }
 
-func newScriptRefResolver(context *BlockFrostChainContext) *scriptRefResolver {
+func newScriptRefResolver(ctx context.Context, chainContext *BlockFrostChainContext) *scriptRefResolver {
 	return &scriptRefResolver{
-		context: context,
-		entries: make(map[string]*scriptRefResolveResult),
+		requestContext: ctx,
+		chainContext:   chainContext,
+		entries:        make(map[string]*scriptRefResolveResult),
 	}
 }
 
@@ -1203,11 +1286,15 @@ func (r *scriptRefResolver) resolve(hashHex string) (*common.ScriptRef, error) {
 	r.mu.Unlock()
 
 	if ok {
-		<-entry.done
-		return entry.scriptRef, entry.err
+		select {
+		case <-r.requestContext.Done():
+			return nil, r.requestContext.Err()
+		case <-entry.done:
+			return entry.scriptRef, entry.err
+		}
 	}
 
-	entry.scriptRef, entry.err = r.context.scriptRefByHash(key)
+	entry.scriptRef, entry.err = r.chainContext.scriptRefByHashContext(r.requestContext, key)
 	close(entry.done)
 	return entry.scriptRef, entry.err
 }
@@ -1238,6 +1325,13 @@ func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTrans
 }
 
 func (b *BlockFrostChainContext) scriptRefByHash(hashHex string) (*common.ScriptRef, error) {
+	return b.scriptRefByHashContext(context.Background(), hashHex)
+}
+
+func (b *BlockFrostChainContext) scriptRefByHashContext(
+	ctx context.Context,
+	hashHex string,
+) (*common.ScriptRef, error) {
 	hashBytes, err := hex.DecodeString(hashHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid script hash hex %q: %w", hashHex, err)
@@ -1247,7 +1341,7 @@ func (b *BlockFrostChainContext) scriptRefByHash(hashHex string) (*common.Script
 	}
 	var scriptHash common.Blake2b224
 	copy(scriptHash[:], hashBytes)
-	scriptCbor, err := b.ScriptCbor(scriptHash)
+	scriptCbor, err := b.ScriptCborContext(ctx, scriptHash)
 	if err != nil {
 		return nil, err
 	}

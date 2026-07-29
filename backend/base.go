@@ -69,6 +69,9 @@ type CapabilityReporter interface {
 // not implement CapabilityReporter are treated as supporting the historic
 // complete ChainContext contract.
 func CapabilitiesOf(ctx ChainContext) CapabilitySet {
+	if isNilInterface(ctx) {
+		return 0
+	}
 	if reporter, ok := ctx.(CapabilityReporter); ok {
 		return reporter.Capabilities()
 	}
