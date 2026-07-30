@@ -2256,7 +2256,36 @@ func (a *Apollo) estimateExecutionUnits(
 		return nil, fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
-	evalResult, err := backend.EvaluateTxContext(a.requestContext, a.Context, txBytes, inputs)
+	// Only backends reporting CapabilityEvaluateTxAdditionalUtxos accept a
+	// resolved UTxO set. The ChainContext contract lets the rest ignore the
+	// argument or reject it outright, and backend/utxorpc rejects it, so
+	// forwarding the spending inputs unconditionally made every Plutus build
+	// fail there. Send nil instead and let the evaluator resolve inputs from
+	// its own chain view.
+	//
+	// That is correct for on-chain inputs. Apollo cannot narrow it further:
+	// there is no off-chain UTxO API and no provenance flag, so caller-supplied
+	// inputs (AddInput, AddLoadedUTxOs, CollectFrom) are indistinguishable from
+	// chain-loaded ones. Erroring on them would leave these backends as broken
+	// as before, because every script input arrives that way. Degrading is safe
+	// because it cannot understate a budget: an evaluator that cannot resolve an
+	// input either fails the call or omits that redeemer, and the validation
+	// below rejects a response missing any registered redeemer. Off-chain and
+	// chained inputs therefore fail loudly, and need a backend that reports the
+	// capability.
+	additionalUtxos := inputs
+	if !backend.Supports(
+		a.Context,
+		backend.CapabilityEvaluateTxAdditionalUtxos,
+	) {
+		additionalUtxos = nil
+	}
+	evalResult, err := backend.EvaluateTxContext(
+		a.requestContext,
+		a.Context,
+		txBytes,
+		additionalUtxos,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateTx failed: %w", err)
 	}
