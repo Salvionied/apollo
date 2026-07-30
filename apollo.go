@@ -1928,8 +1928,37 @@ func (a *Apollo) sumUtxoValues(utxos []common.Utxo) (Value, error) {
 	return total, nil
 }
 
+// pickSingleInput chooses one UTxO to spend when the balance equation is
+// already satisfied by implicit inputs and the transaction only needs a
+// non-empty input set. A pure-ADA UTxO is preferred so the change output is not
+// forced to carry native assets, and candidates are considered in canonical
+// order so the choice is deterministic.
+func pickSingleInput(available []common.Utxo) (common.Utxo, error) {
+	if len(available) == 0 {
+		return common.Utxo{}, errors.New(
+			"no available UTxO to spend: a transaction must spend at least one input",
+		)
+	}
+	sorted := SortUtxos(available)
+	for _, utxo := range sorted {
+		assets := utxo.Output.Assets()
+		if assets == nil || len(assets.Policies()) == 0 {
+			return utxo, nil
+		}
+	}
+	return sorted[0], nil
+}
+
 func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error) {
-	if currentInput.GreaterOrEqual(required) {
+	// Withdrawals, mints, and certificate deposit refunds are implicit inputs
+	// in the balance equation, so currentInput can already cover the target
+	// with no UTxO being spent at all. The ledger still requires a non-empty
+	// input set (InputSetEmptyUTxO), and a transaction that spends nothing also
+	// carries no payment-key witness and has nothing establishing its
+	// uniqueness. If the caller pinned an input we are already satisfied;
+	// otherwise selection must contribute one even though no value is needed.
+	covered := currentInput.GreaterOrEqual(required)
+	if covered && len(a.preselectedUtxos) > 0 {
 		return nil, nil
 	}
 
@@ -1957,13 +1986,27 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 		}
 	}
 
-	selector := a.coinSelector
-	if selector == nil {
-		selector = defaultCoinSelector
-	}
-	selected, err := selector.Select(available, remaining)
-	if err != nil {
-		return nil, err
+	var selected []common.Utxo
+	if covered {
+		// The value is already satisfied, so spend exactly one UTxO purely to
+		// satisfy the non-empty input set rule. Prefer a pure-ADA UTxO so the
+		// change output does not have to carry native assets it did not need
+		// to, and pick deterministically so construction stays reproducible.
+		pick, pickErr := pickSingleInput(available)
+		if pickErr != nil {
+			return nil, pickErr
+		}
+		selected = []common.Utxo{pick}
+	} else {
+		selector := a.coinSelector
+		if selector == nil {
+			selector = defaultCoinSelector
+		}
+		var selErr error
+		selected, selErr = selector.Select(available, remaining)
+		if selErr != nil {
+			return nil, selErr
+		}
 	}
 	availableByRef := make(map[string]common.Utxo, len(available))
 	for _, utxo := range available {
