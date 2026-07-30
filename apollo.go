@@ -3423,9 +3423,12 @@ func (a *Apollo) computeAuxDataHash() (*common.Blake2b256, error) {
 	if md == nil {
 		return nil, nil
 	}
-	mdBytes, err := cbor.Encode(md)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode metadata: %w", err)
+	// Hash the exact bytes buildMetadata stored, which are the bytes that will
+	// be serialized as auxiliary_data. Re-encoding here instead would let the
+	// declared hash and the wire representation drift apart.
+	mdBytes := md.Cbor()
+	if len(mdBytes) == 0 {
+		return nil, errors.New("metadata has no stored CBOR encoding")
 	}
 	hash := common.Blake2b256Hash(mdBytes)
 	return &hash, nil
@@ -3453,7 +3456,18 @@ func (a *Apollo) buildMetadata() (*common.MetaMap, error) {
 		}
 		pairs = append(pairs, common.MetaPair{Key: key, Value: val})
 	}
-	return &common.MetaMap{Pairs: pairs}, nil
+	md := &common.MetaMap{Pairs: pairs}
+	// gouroboros serializes auxiliary data from the value's stored CBOR
+	// (ConwayTransaction.MarshalCBOR emits TxMetadata.Cbor()), so a freshly
+	// built MetaMap must carry its own encoding. Without this the transaction
+	// is emitted with auxiliary_data set to CBOR null while the body still
+	// declares auxiliary_data_hash, and the metadata is silently dropped.
+	mdBytes, err := cbor.Encode(md)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode metadata: %w", err)
+	}
+	md.SetCbor(mdBytes)
+	return md, nil
 }
 
 // toMetadatum converts a Go value to a TransactionMetadatum.
