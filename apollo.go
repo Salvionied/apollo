@@ -1699,8 +1699,20 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	var previousShape string
 	seenShapes := make(map[string]struct{}, maxEvaluationIterations)
 	converged := false
+	// requestedFee is the size-based fee that drives the iteration.
+	// buildBalancedOutputs may return a larger fee than it was given, by
+	// absorbing sub-min-UTxO ADA change into it and dropping the change
+	// output. That surcharge is not something estimateFee can predict from the
+	// resulting outputs, so convergence is judged on requestedFee while fee
+	// carries the amount actually charged. Comparing the absorbed fee against
+	// a fresh estimate instead never terminates.
+	requestedFee := fee
 	for range maxEvaluationIterations {
-		balanced, balanceErr := a.buildBalancedOutputs(baseOutputs, fee, balance)
+		balanced, balanceErr := a.buildBalancedOutputs(
+			baseOutputs,
+			requestedFee,
+			balance,
+		)
 		if balanceErr != nil {
 			return a, balanceErr
 		}
@@ -1729,18 +1741,30 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, fmt.Errorf("failed to encode evaluation shape: %w", bodyErr)
 		}
 		shape := string(bodyBytes)
-		newFee := fee
+		nextFee := requestedFee
 		if !a.forceFee && a.Fee == 0 {
-			newFee, err = a.estimateFee(allInputUtxos, outputs)
+			nextFee, err = a.estimateFee(allInputUtxos, outputs)
 			if err != nil {
 				return a, fmt.Errorf("fee re-estimation failed: %w", err)
 			}
-			newFee += a.FeePadding
-			if newFee < 0 {
-				newFee = 0
+			nextFee += a.FeePadding
+			if nextFee < 0 {
+				nextFee = 0
 			}
 		}
-		if newFee == fee && previousShape == shape {
+		// Never settle on a fee below one already required by a shape that was
+		// considered. Around the change output's min-UTxO threshold the same
+		// transaction is bistable: at the lower fee the change clears min-UTxO
+		// and is emitted, which pushes the size-based fee up; at the higher fee
+		// the change falls below min-UTxO and is absorbed, which pulls the
+		// estimate back down. Allowing the fee to move downward alternates
+		// between those two shapes indefinitely, and the cheaper of them
+		// underpays its own size. Moving only upward terminates and never
+		// underpays.
+		if nextFee < requestedFee {
+			nextFee = requestedFee
+		}
+		if nextFee == requestedFee && previousShape == shape {
 			converged = true
 			break
 		}
@@ -1749,7 +1773,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 		seenShapes[shape] = struct{}{}
 		previousShape = shape
-		fee = newFee
+		requestedFee = nextFee
 	}
 	if !converged {
 		return a, errors.New("evaluation transaction did not converge after 5 iterations")
