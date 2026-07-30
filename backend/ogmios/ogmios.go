@@ -9,6 +9,8 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/SundaeSwap-finance/kugo"
 	ogmigo "github.com/SundaeSwap-finance/ogmigo/v6"
@@ -83,10 +85,12 @@ func (o *OgmiosChainContext) GenesisParamsContext(ctx context.Context) (backend.
 
 	var genesis ogmiosGenesisConfig
 	if err := json.Unmarshal(raw, &genesis); err != nil {
-		return backend.GenesisParameters{}, err
+		return backend.GenesisParameters{}, fmt.Errorf(
+			"failed to parse genesis config: %w", err,
+		)
 	}
 
-	return genesis.toGenesisParams(), nil
+	return genesis.toGenesisParams()
 }
 
 func (o *OgmiosChainContext) NetworkId() uint8 {
@@ -418,25 +422,33 @@ func (o *OgmiosChainContext) ScriptCborContext(
 // --- Ogmios response types and conversion ---
 
 type ogmiosProtocolParams struct {
-	MinFeeCoefficient  int64           `json:"minFeeCoefficient"`
-	MinFeeConstant     ogmiosLovelace  `json:"minFeeConstant"`
+	// The fee- and deposit-critical parameters are decoded through pointers so
+	// that a key missing from the response is reported by toProtocolParams
+	// instead of defaulting to zero. Ogmios sends all of them in every era.
+	MinFeeCoefficient  *int64          `json:"minFeeCoefficient"`
+	MinFeeConstant     *ogmiosLovelace `json:"minFeeConstant"`
 	MaxBlockBodySize   ogmiosBytes     `json:"maxBlockBodySize"`
 	MaxBlockHeaderSize ogmiosBytes     `json:"maxBlockHeaderSize"`
 	MaxTxSize          ogmiosBytes     `json:"maxTransactionSize"`
-	StakeKeyDeposit    ogmiosLovelace  `json:"stakeCredentialDeposit"`
-	PoolDeposit        ogmiosLovelace  `json:"stakePoolDeposit"`
-	MinPoolCost        ogmiosLovelace  `json:"minStakePoolCost"`
+	StakeKeyDeposit    *ogmiosLovelace `json:"stakeCredentialDeposit"`
+	PoolDeposit        *ogmiosLovelace `json:"stakePoolDeposit"`
+	MinPoolCost        *ogmiosLovelace `json:"minStakePoolCost"`
 	CollateralPercent  int             `json:"collateralPercentage"`
 	MaxCollateral      int             `json:"maxCollateralInputs"`
 	MaxValSize         ogmiosBytes     `json:"maxValueSize"`
 	ScriptPrices       ogmiosPrices    `json:"scriptExecutionPrices"`
 	MaxTxExUnits       ogmiosExUnits   `json:"maxExecutionUnitsPerTransaction"`
 	MaxBlockExUnits    ogmiosExUnits   `json:"maxExecutionUnitsPerBlock"`
-	MinUtxoDeposit     int64           `json:"minUtxoDepositCoefficient"`
+	MinUtxoDeposit     *int64          `json:"minUtxoDepositCoefficient"`
 	CostModels         json.RawMessage `json:"plutusCostModels"`
 	// Ogmios v6 exposes Conway reference-script pricing as a structured object
 	// {base, range, multiplier}; base is the lovelace-per-byte first-tier price.
 	MinFeeReferenceScripts *ogmiosRefScripts `json:"minFeeReferenceScripts"`
+	// maxReferenceScriptsSize arrived in Ogmios v6.5 and was renamed to
+	// maxReferenceScriptsSizePerTransaction in v7.0. Both spellings are
+	// optional: Ogmios before v6.5 sends neither.
+	MaxRefScriptsSize   *ogmiosBytes `json:"maxReferenceScriptsSize"`
+	MaxRefScriptsSizeTx *ogmiosBytes `json:"maxReferenceScriptsSizePerTransaction"`
 }
 
 type ogmiosRefScripts struct {
@@ -445,8 +457,40 @@ type ogmiosRefScripts struct {
 	Multiplier json.Number `json:"multiplier"`
 }
 
+// ogmiosLovelace decodes a lovelace-valued Ogmios protocol parameter.
+//
+// Ogmios v6.0.x encoded these as a bare {"lovelace": N}. Since v6.1.0 they are
+// Value<AdaOnly>, i.e. {"ada": {"lovelace": N}}. Both shapes are accepted so
+// older deployments keep working, and an amount carrying neither key is an
+// error rather than a zero: decoding an unrecognized shape to 0 in silence is
+// what left every fee short by the whole minFeeConstant.
 type ogmiosLovelace struct {
-	Lovelace int64 `json:"lovelace"`
+	Lovelace int64
+}
+
+func (l *ogmiosLovelace) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Ada *struct {
+			Lovelace *int64 `json:"lovelace"`
+		} `json:"ada"`
+		Lovelace *int64 `json:"lovelace"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	switch {
+	case wire.Ada != nil && wire.Ada.Lovelace != nil:
+		l.Lovelace = *wire.Ada.Lovelace
+	case wire.Lovelace != nil:
+		l.Lovelace = *wire.Lovelace
+	default:
+		return fmt.Errorf(
+			"unrecognized lovelace amount %s: want "+
+				`{"ada":{"lovelace":N}} or {"lovelace":N}`,
+			data,
+		)
+	}
+	return nil
 }
 
 type ogmiosBytes struct {
@@ -463,7 +507,38 @@ type ogmiosExUnits struct {
 	CPU    int64 `json:"cpu"`
 }
 
+// missingRequired lists the protocol parameters Apollo cannot balance a
+// transaction without. Reporting them is what keeps a renamed or restructured
+// Ogmios field from quietly becoming a zero fee, deposit, or min-UTxO cost.
+func (p *ogmiosProtocolParams) missingRequired() []string {
+	required := []struct {
+		name    string
+		present bool
+	}{
+		{"minFeeCoefficient", p.MinFeeCoefficient != nil},
+		{"minFeeConstant", p.MinFeeConstant != nil},
+		{"minUtxoDepositCoefficient", p.MinUtxoDeposit != nil},
+		{"stakeCredentialDeposit", p.StakeKeyDeposit != nil},
+		{"stakePoolDeposit", p.PoolDeposit != nil},
+		{"minStakePoolCost", p.MinPoolCost != nil},
+	}
+	missing := make([]string, 0, len(required))
+	for _, field := range required {
+		if !field.present {
+			missing = append(missing, field.name)
+		}
+	}
+	return missing
+}
+
 func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, error) {
+	if missing := p.missingRequired(); len(missing) > 0 {
+		return backend.ProtocolParameters{}, fmt.Errorf(
+			"ogmios protocol parameters missing required fields: %s",
+			strings.Join(missing, ", "),
+		)
+	}
+
 	priceMem, err := backend.ParseFraction(p.ScriptPrices.Memory)
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid memory price: %w", err)
@@ -475,7 +550,7 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 
 	pp := backend.ProtocolParameters{
 		MinFeeConstant:      p.MinFeeConstant.Lovelace,
-		MinFeeCoefficient:   p.MinFeeCoefficient,
+		MinFeeCoefficient:   *p.MinFeeCoefficient,
 		MaxBlockSize:        p.MaxBlockBodySize.Bytes,
 		MaxTxSize:           p.MaxTxSize.Bytes,
 		MaxBlockHeaderSize:  p.MaxBlockHeaderSize.Bytes,
@@ -491,7 +566,14 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 		MaxValSize:          strconv.Itoa(p.MaxValSize.Bytes),
 		CollateralPercent:   p.CollateralPercent,
 		MaxCollateralInputs: p.MaxCollateral,
-		CoinsPerUtxoByte:    strconv.FormatInt(p.MinUtxoDeposit, 10),
+		CoinsPerUtxoByte:    strconv.FormatInt(*p.MinUtxoDeposit, 10),
+	}
+
+	switch {
+	case p.MaxRefScriptsSize != nil:
+		pp.MaximumReferenceScriptsSize = p.MaxRefScriptsSize.Bytes
+	case p.MaxRefScriptsSizeTx != nil:
+		pp.MaximumReferenceScriptsSize = p.MaxRefScriptsSizeTx.Bytes
 	}
 
 	if p.MinFeeReferenceScripts != nil {
@@ -545,29 +627,119 @@ func ogmiosCostModelKey(key string) string {
 }
 
 type ogmiosGenesisConfig struct {
-	NetworkMagic      int     `json:"networkMagic"`
-	EpochLength       int     `json:"epochLength"`
-	SlotLength        int     `json:"slotLength"`
-	SlotsPerKesPeriod int     `json:"slotsPerKesPeriod"`
-	MaxKesEvolutions  int     `json:"maxKESEvolutions"`
-	SecurityParam     int     `json:"securityParameter"`
-	UpdateQuorum      int     `json:"updateQuorum"`
-	ActiveSlots       float64 `json:"activeSlotsCoefficient"`
-	MaxLovelaceSupply int64   `json:"maxLovelaceSupply"`
+	// Ogmios reports the system start as an ISO-8601 timestamp, while
+	// GenesisParameters carries Unix seconds like the other backends.
+	StartTime         string           `json:"startTime"`
+	NetworkMagic      int              `json:"networkMagic"`
+	EpochLength       int              `json:"epochLength"`
+	SlotLength        ogmiosSlotLength `json:"slotLength"`
+	SlotsPerKesPeriod int              `json:"slotsPerKesPeriod"`
+	MaxKesEvolutions  int              `json:"maxKesEvolutions"`
+	SecurityParam     int              `json:"securityParameter"`
+	UpdateQuorum      int              `json:"updateQuorum"`
+	ActiveSlots       ogmiosRatio      `json:"activeSlotsCoefficient"`
+	MaxLovelaceSupply int64            `json:"maxLovelaceSupply"`
 }
 
-func (g *ogmiosGenesisConfig) toGenesisParams() backend.GenesisParameters {
+// ogmiosRatio decodes an Ogmios ratio. Ogmios v6 sends these as exact
+// "numerator/denominator" strings (e.g. "1/20" for the mainnet active-slots
+// coefficient); v5 sent a bare JSON number. Both are accepted, and a value in
+// neither form is an error rather than a zero.
+type ogmiosRatio struct {
+	Value float64
+}
+
+func (r *ogmiosRatio) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		value, parseErr := backend.ParseFraction(text)
+		if parseErr != nil {
+			return fmt.Errorf("invalid ratio %q: %w", text, parseErr)
+		}
+		r.Value = value
+		return nil
+	}
+	var number float64
+	if err := json.Unmarshal(data, &number); err != nil {
+		return fmt.Errorf(
+			"unrecognized ratio %s: want a \"num/den\" string or a number",
+			data,
+		)
+	}
+	r.Value = number
+	return nil
+}
+
+// ogmiosSlotLength decodes an Ogmios slot length. Ogmios v6 sends
+// {"milliseconds": N}; v5 sent a bare number of seconds. Both are accepted and
+// normalized to the whole seconds that GenesisParameters reports, so the value
+// is never silently zero.
+type ogmiosSlotLength struct {
+	Seconds int
+}
+
+func (s *ogmiosSlotLength) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Milliseconds *int64 `json:"milliseconds"`
+	}
+	if err := json.Unmarshal(data, &wire); err == nil &&
+		wire.Milliseconds != nil {
+		millis := *wire.Milliseconds
+		if millis < 0 || millis/1000 > math.MaxInt32 {
+			return fmt.Errorf("slot length out of range: %d ms", millis)
+		}
+		s.Seconds = int(millis / 1000)
+		return nil
+	}
+	var seconds int
+	if err := json.Unmarshal(data, &seconds); err != nil {
+		return fmt.Errorf(
+			`unrecognized slot length %s: want {"milliseconds":N} or N`,
+			data,
+		)
+	}
+	s.Seconds = seconds
+	return nil
+}
+
+func (g *ogmiosGenesisConfig) toGenesisParams() (
+	backend.GenesisParameters,
+	error,
+) {
+	systemStart, err := parseOgmiosStartTime(g.StartTime)
+	if err != nil {
+		return backend.GenesisParameters{}, err
+	}
+
 	return backend.GenesisParameters{
-		ActiveSlotsCoefficient: g.ActiveSlots,
+		ActiveSlotsCoefficient: g.ActiveSlots.Value,
 		UpdateQuorum:           g.UpdateQuorum,
 		NetworkMagic:           g.NetworkMagic,
 		EpochLength:            g.EpochLength,
 		MaxLovelaceSupply:      strconv.FormatInt(g.MaxLovelaceSupply, 10),
-		SlotLength:             g.SlotLength,
+		SystemStart:            systemStart,
+		SlotLength:             g.SlotLength.Seconds,
 		SlotsPerKesPeriod:      g.SlotsPerKesPeriod,
 		MaxKesEvolutions:       g.MaxKesEvolutions,
 		SecurityParam:          g.SecurityParam,
+	}, nil
+}
+
+// parseOgmiosStartTime converts an Ogmios ISO-8601 genesis start time to the
+// Unix seconds reported by GenesisParameters. The Ogmios schema makes the
+// trailing zone designator optional, so a bare local-style timestamp is
+// accepted as UTC. An empty value yields zero; anything unparseable is an
+// error rather than a zero timestamp.
+func parseOgmiosStartTime(value string) (int64, error) {
+	if value == "" {
+		return 0, nil
 	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.Unix(), nil
+		}
+	}
+	return 0, fmt.Errorf("invalid genesis start time %q", value)
 }
 
 // datumFetcher resolves a datum's CBOR (hex-encoded) by its hash. It is
