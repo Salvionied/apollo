@@ -24,6 +24,7 @@ import (
 	sdk "github.com/utxorpc/go-sdk"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // UtxoRpcChainContext implements backend.ChainContext using the UTxO RPC protocol.
@@ -152,23 +153,23 @@ func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backen
 		return backend.ProtocolParameters{}, errors.New("no cardano params in response")
 	}
 
-	maxBlockSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockBodySize(), "max block body size")
+	maxBlockSize, err := backendutil.BoundedIntFromUint64(params.GetMaxBlockBodySize(), "max block body size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxTxSize, err := backend.BoundedIntFromUint64(params.GetMaxTxSize(), "max tx size")
+	maxTxSize, err := backendutil.BoundedIntFromUint64(params.GetMaxTxSize(), "max tx size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxBlockHeaderSize, err := backend.BoundedIntFromUint64(params.GetMaxBlockHeaderSize(), "max block header size")
+	maxBlockHeaderSize, err := backendutil.BoundedIntFromUint64(params.GetMaxBlockHeaderSize(), "max block header size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	collateralPercent, err := backend.BoundedIntFromUint64(params.GetCollateralPercentage(), "collateral percentage")
+	collateralPercent, err := backendutil.BoundedIntFromUint64(params.GetCollateralPercentage(), "collateral percentage")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxCollateralInputs, err := backend.BoundedIntFromUint64(params.GetMaxCollateralInputs(), "max collateral inputs")
+	maxCollateralInputs, err := backendutil.BoundedIntFromUint64(params.GetMaxCollateralInputs(), "max collateral inputs")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}

@@ -1070,6 +1070,8 @@ func TestGetWallet(t *testing.T) {
 	}
 }
 
+// A positive mint is not a burn, so GetBurns reports nothing for it while
+// GetMints reports the minted quantity.
 func TestGetBurnsMintPositive(t *testing.T) {
 	cc := setupFixedContext()
 	a := New(cc)
@@ -1080,11 +1082,21 @@ func TestGetBurnsMintPositive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !burns.HasAssets() {
+	if burns.Assets != nil {
+		t.Errorf("expected no burns for a positive mint, got %v", burns.Assets)
+	}
+
+	mints, err := a.GetMints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mints.HasAssets() {
 		t.Error("expected mint value to have assets")
 	}
 }
 
+// A negative mint is a burn, so GetBurns reports its absolute quantity while
+// GetMints keeps the signed quantity.
 func TestGetBurnsMintNegative(t *testing.T) {
 	cc := setupFixedContext()
 	a := New(cc)
@@ -1096,10 +1108,32 @@ func TestGetBurnsMintNegative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// HasAssets returns false for negative quantities since MultiAssetIsEmpty
-	// only considers positive quantities as "non-empty"
 	if burns.Assets == nil {
-		t.Error("expected burn to populate Assets field")
+		t.Fatal("expected burn to populate Assets field")
+	}
+	policyBytes, err := hex.DecodeString(
+		"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policyId common.Blake2b224
+	copy(policyId[:], policyBytes)
+	qty := burns.Assets.Asset(policyId, []byte("token"))
+	if qty == nil || qty.Int64() != 100 {
+		t.Errorf("burn quantity = %v, want 100", qty)
+	}
+
+	mints, err := a.GetMints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mints.Assets == nil {
+		t.Fatal("expected mints to populate Assets field")
+	}
+	mintQty := mints.Assets.Asset(policyId, []byte("token"))
+	if mintQty == nil || mintQty.Int64() != -100 {
+		t.Errorf("mint quantity = %v, want -100", mintQty)
 	}
 }
 

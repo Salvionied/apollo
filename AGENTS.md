@@ -59,6 +59,7 @@ golangci-lint run
 | `backend/fixed/` | Deterministic in-memory test backend |
 | `plutusencoder/` | Struct-tag-driven Plutus data marshaling |
 | `constants/` | Network constants |
+| `internal/backendutil/` | Provider response parsing helpers (not public API) |
 
 ### Key Interfaces
 
