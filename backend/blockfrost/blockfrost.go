@@ -24,6 +24,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // BlockFrostChainContext implements backend.ChainContext using the BlockFrost API.
@@ -702,7 +703,7 @@ func parseOgmiosV6EvaluationResult(raw json.RawMessage) (map[common.RedeemerKey]
 		if item.Validator.Purpose == "" {
 			return nil, fmt.Errorf("malformed evaluation result entry: %s", evalErrorSnippet(raw))
 		}
-		tag, err := backend.ParseRedeemerTag(item.Validator.Purpose)
+		tag, err := backendutil.ParseRedeemerTag(item.Validator.Purpose)
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer purpose %q: %w", item.Validator.Purpose, err)
 		}
@@ -748,7 +749,7 @@ func parseOgmiosV5EvaluationResult(raw json.RawMessage) (map[common.RedeemerKey]
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("malformed redeemer key %q: expected format 'tag:index'", key)
 		}
-		tag, err := backend.ParseRedeemerTag(parts[0])
+		tag, err := backendutil.ParseRedeemerTag(parts[0])
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer tag in key %q: %w", key, err)
 		}
@@ -933,23 +934,23 @@ type bfProtocolParams struct {
 }
 
 func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error) {
-	maxBlockSize, err := backend.BoundedInt(p.MaxBlockSize, "max_block_size")
+	maxBlockSize, err := backendutil.BoundedInt(p.MaxBlockSize, "max_block_size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxTxSize, err := backend.BoundedInt(p.MaxTxSize, "max_tx_size")
+	maxTxSize, err := backendutil.BoundedInt(p.MaxTxSize, "max_tx_size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxBlockHeaderSize, err := backend.BoundedInt(p.MaxBlockHeaderSize, "max_block_header_size")
+	maxBlockHeaderSize, err := backendutil.BoundedInt(p.MaxBlockHeaderSize, "max_block_header_size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	collateralPercent, err := backend.BoundedInt(p.CollateralPercent, "collateral_percent")
+	collateralPercent, err := backendutil.BoundedInt(p.CollateralPercent, "collateral_percent")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxCollateralInputs, err := backend.BoundedInt(p.MaxCollateralIn, "max_collateral_inputs")
+	maxCollateralInputs, err := backendutil.BoundedInt(p.MaxCollateralIn, "max_collateral_inputs")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -974,7 +975,7 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		CoinsPerUtxoByte:    p.CoinsPerUtxoSize,
 	}
 	if p.MinFeeRefScriptCostPerByte != "" {
-		price, err := backend.ParseRational(p.MinFeeRefScriptCostPerByte.String())
+		price, err := backendutil.ParseRational(p.MinFeeRefScriptCostPerByte.String())
 		if err != nil {
 			return backend.ProtocolParameters{}, fmt.Errorf("invalid min_fee_ref_script_cost_per_byte: %w", err)
 		}
@@ -1102,7 +1103,7 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 			if qty.Sign() < 0 {
 				return common.Utxo{}, fmt.Errorf("negative asset quantity %s for unit %s", qty.String(), amt.Unit)
 			}
-			policyId, assetName, err := backend.ParseAssetUnit(amt.Unit)
+			policyId, assetName, err := backendutil.ParseAssetUnit(amt.Unit)
 			if err != nil {
 				return common.Utxo{}, fmt.Errorf("invalid asset unit %q: %w", amt.Unit, err)
 			}

@@ -344,7 +344,11 @@ type PaymentI interface {
 }
 ```
 
-**`ParseFraction` returns errors**: `backend.ParseFraction` now returns `(float64, error)` instead of silently returning 0 on invalid input.
+**Provider response parsing is internal**: the helpers that normalize provider
+API responses (`ParseFraction`, `ParseRational`, `ParseAssetUnit`,
+`ParseRedeemerTag`, `BoundedInt`, `BoundedIntFromUint64`, `ScriptRefFromBytes`)
+are no longer exported from `backend`. They live in an internal package and
+validate their input instead of silently returning zero values.
 
 ### 15. Wallet Passphrase Support
 
@@ -361,6 +365,18 @@ w, err := apollo.NewBursaWalletWithPassphrase(mnemonic, "my-secret")
 a, err = a.SetWalletFromMnemonic(mnemonic)                        // no passphrase
 a, err = a.SetWalletFromMnemonicWithPassphrase(mnemonic, "pass")  // with passphrase
 ```
+
+### 16. Removed Constants and Types
+
+| Removed | Replacement |
+|---------|-------------|
+| `constants.Network`, `constants.MAINNET`, `constants.TESTNET`, `constants.PREVIEW`, `constants.PREPROD` | Pass the Cardano network ID directly: mainnet = `1`, testnets = `0`. The old enum numbered mainnet `0`, the inverse of the network IDs every backend constructor takes |
+| `constants.BlockfrostBaseUrlTestnet` | `constants.BlockfrostBaseUrlPreview` or `constants.BlockfrostBaseUrlPreprod`; the legacy testnet was decommissioned in 2023 |
+| `backend.AddressAmount` | None; it was never used by any API |
+
+`GetBurns()` now returns the absolute quantities of assets being burned rather
+than the net mint value. Use `GetMints()` for the net mint value, which retains
+negative quantities for burns.
 
 ## Selected v2 Public API
 
@@ -405,6 +421,7 @@ documentation and exported declarations are the authoritative complete API.
 - `AddDatum(datum) *Apollo`
 - `AttachDatum(datum) *Apollo`
 - `Mint(unit, redeemer, exUnits) *Apollo`
+- `GetMints() (Value, error)`
 - `GetBurns() (Value, error)`
 
 ### Reference Inputs
