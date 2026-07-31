@@ -112,12 +112,18 @@ procedure := common.VotingProcedure{
     Anchor: nil,
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AddVote(voter, actionId, procedure).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**
@@ -138,14 +144,20 @@ cardano-cli conway transaction build --vote-file vote.cert ...
 The same voter can vote on several different actions:
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     AddVote(voter, action1, common.VotingProcedure{Vote: common.GovVoteYes}).
     AddVote(voter, action2, common.VotingProcedure{Vote: common.GovVoteNo}).
     AddVote(voter, action3, common.VotingProcedure{Vote: common.GovVoteAbstain}).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 All three votes are stored under the single voter entry in the transaction's voting procedures map.
@@ -163,12 +175,18 @@ procedure := common.VotingProcedure{
     },
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AddVote(voter, actionId, procedure).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 ### Constitutional committee member voting with hot key
@@ -179,14 +197,20 @@ voter := common.Voter{
     Hash: ccHotKeyHash,
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AddVote(voter, actionId, common.VotingProcedure{
         Vote: common.GovVoteYes,
     }).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 Use the **hot** key hash here — the cold key authorized this hot key via `AuthorizeCommitteeHotKey`.
@@ -201,14 +225,20 @@ voter := common.Voter{
     Hash: poolColdKeyHash,
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AddVote(voter, actionId, common.VotingProcedure{
         Vote: common.GovVoteYes,
     }).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 ### Changing your vote before sending

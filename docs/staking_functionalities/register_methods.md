@@ -4,7 +4,7 @@ This page documents **stake registration** and **register+delegate** certificate
 
 ## Constants
 
-- **Stake key deposit**: 2 ADA (`2_000_000` lovelace), `StakeDeposit` in `apollo.go`. `Complete()` adds it to the required balance when registration certificates are present.
+- **Stake key deposit**: `StakeDeposit` in `apollo.go` is the 2 ADA (`2_000_000` lovelace) fallback. When registration certificates are present, `Complete()` uses the current network's `key_deposit` protocol parameter when available.
 
 ## Purpose and method signatures
 
@@ -72,7 +72,7 @@ func (a *Apollo) RegisterAndDelegateStakeAndVoteFromBech32(bech32 string, poolHa
 
 ## Inputs and constraints
 
-- Ensure inputs cover at least 2 ADA deposit when registering. `Complete()` adds the deposit automatically.
+- Ensure inputs cover the current network's key deposit when registering (2 ADA by default). `Complete()` adds the protocol-parameter amount automatically when it is available.
 - Pool key hash must be the correct 28-byte cold key hash for the target pool. DRep must be built as `common.Drep`.
 - The unified methods accept any of the listed types; the `FromAddress`/`FromBech32` variants provide compile-time type safety.
 
@@ -119,7 +119,10 @@ a, err = a.RegisterStakeFromBech32("stake1u...")
 ### Register and delegate in one transaction
 
 ```go
-cred, _ := a.GetStakeCredentialFromWallet()
+cred, err := a.GetStakeCredentialFromWallet()
+if err != nil {
+    panic(err)
+}
 a, err = a.RegisterAndDelegateStake(&cred, poolKeyHash, apollo.StakeDeposit)
 if err != nil {
     panic(err)
@@ -131,6 +134,6 @@ tx, err := a.Complete()
 
 ## Caveats and validation
 
-- Ensure enough inputs for the 2 ADA deposit. Pool key hash and DRep must match node expectations.
+- Ensure enough inputs for the current network's key deposit (2 ADA by default). Pool key hash and DRep must match node expectations.
 - All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.
 - Validate on preprod/mainnet with small amounts before production use.

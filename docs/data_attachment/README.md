@@ -25,6 +25,8 @@ This section documents how to attach **Plutus datums** (hash or inline) and **re
 
 Each functionality page above includes method signatures, behavior, side-by-side Apollo + CLI examples, evidence labels, and caveats.
 
+Plutus V4 reference scripts are recognized by the underlying types, but the current Conway transaction builder rejects V4 reference-script payments with `ErrPlutusV4RequiresDijkstra`; V4 requires Dijkstra-era transaction support.
+
 ## See also
 
 - [Staking Functionalities](../staking_functionalities/README.md) — Stake certificates and withdrawals
@@ -33,4 +35,3 @@ Each functionality page above includes method signatures, behavior, side-by-side
 ## Reference
 
 - [Cardano CLI repository](https://github.com/IntersectMBO/cardano-cli) — CLI command reference (10.14.0.0)
-

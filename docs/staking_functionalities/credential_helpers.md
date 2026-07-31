@@ -60,7 +60,10 @@ a, err = a.RegisterStake(&cred)
 **Apollo (credential from address):**
 
 ```go
-addr, _ := common.NewAddress("stake1u...")
+addr, err := common.NewAddress("stake1u...")
+if err != nil {
+    panic(err)
+}
 cred, err := apollo.GetStakeCredentialFromAddress(addr)
 ```
 

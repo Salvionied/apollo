@@ -4,7 +4,7 @@ This document details how Plutus V3 scripts are represented in the transaction w
 
 ## Transaction Witness Set
 
-The `ConwayTransactionWitnessSet` (from `gouroboros/ledger/conway`) contains fields for all Plutus script versions:
+The `ConwayTransactionWitnessSet` (from `gouroboros/ledger/conway`) contains witness fields for Plutus V1, V2, and V3. Plutus V4 witness fields belong to the Dijkstra-era transaction format and are not available in Apollo's current Conway builder:
 
 ```go
 // From gouroboros/ledger/conway
@@ -51,6 +51,7 @@ All script types implement `common.Script`:
 | Plutus V1 | `common.PlutusV1Script` | 1 |
 | Plutus V2 | `common.PlutusV2Script` | 2 |
 | Plutus V3 | `common.PlutusV3Script` | 3 |
+| Plutus V4 | `common.PlutusV4Script` | 4 (Dijkstra only; not available in the Conway builder) |
 
 ## Redeemers
 
@@ -82,7 +83,10 @@ or as hashes:
 a.PayToContract(scriptAddr, &datum, 5_000_000)
 
 // Datum hash on output (datum added to witness set)
-a.PayToContractWithDatumHash(scriptAddr, &datum, 5_000_000)
+a, err := a.PayToContractWithDatumHash(scriptAddr, &datum, 5_000_000)
+if err != nil {
+    // handle error
+}
 
 // Add datum directly to witness set
 a.AddDatum(&datum)

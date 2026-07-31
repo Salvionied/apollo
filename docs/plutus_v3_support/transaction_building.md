@@ -1,6 +1,6 @@
 # Transaction Building with Plutus V3
 
-Apollo v2 provides comprehensive support for building transactions with Plutus V3 scripts. This document details the key methods and patterns for working with V3 scripts.
+Apollo v2 provides comprehensive support for building transactions with Plutus V3 scripts. This document details the key methods and patterns for working with V3 scripts. Plutus V4 is recognized by some underlying types, but requires Dijkstra-era transaction support and cannot currently be attached to Apollo's Conway transactions.
 
 ## Plutus V3 Fields in `Apollo`
 

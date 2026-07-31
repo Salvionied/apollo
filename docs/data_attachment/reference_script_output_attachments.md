@@ -1,6 +1,6 @@
 # Reference Script Output Attachments
 
-This page documents attaching **reference scripts** (Plutus V1, V2, V3, or Native) to transaction outputs. Apollo v2 provides both a **unified** method that auto-detects the script version and **version-specific** convenience methods. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go), [`helpers.go`](../../helpers.go).
+This page documents attaching **reference scripts** (Plutus V1, V2, V3, or Native) to transaction outputs. Apollo v2 provides both a **unified** method that auto-detects the script version and **version-specific** convenience methods. `common.PlutusV4Script` is recognized by `NewScriptRef`, but V4 reference-script payments are rejected for the current Conway transaction format with `ErrPlutusV4RequiresDijkstra`. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go), [`helpers.go`](../../helpers.go).
 
 ## Purpose and method signatures
 
@@ -10,7 +10,7 @@ This page documents attaching **reference scripts** (Plutus V1, V2, V3, or Nativ
 func (a *Apollo) PayToAddressWithReferenceScript(addr common.Address, lovelace int64, script common.Script, units ...Unit) (*Apollo, error)
 ```
 
-Auto-detects the script type (V1, V2, V3, Native) and creates the appropriate `ScriptRef`.
+Auto-detects the script type (V1, V2, V3, V4, Native) and creates the appropriate `ScriptRef`. Only V1-V3 and Native scripts can currently be used by Apollo's Conway transaction builder.
 
 ### Version-specific: PayToAddressWithV1/V2/V3ReferenceScript
 
@@ -42,12 +42,12 @@ Type-safe wrappers with inline datum. These delegate to the unified `PayToContra
 
 ## Inputs and constraints
 
-- Script is passed as `common.PlutusV1Script`, `common.PlutusV2Script`, `common.PlutusV3Script`, or `common.NativeScript` (all from gouroboros). Loading from a file and optional CBOR decode is the application's responsibility.
+- Script is passed as `common.PlutusV1Script`, `common.PlutusV2Script`, `common.PlutusV3Script`, `common.PlutusV4Script`, or `common.NativeScript` (all from gouroboros). Loading from a file and optional CBOR decode is the application's responsibility. V4 is recognized but rejected by the current Conway payment methods; use a Dijkstra-capable transaction builder for V4.
 - Outputs with a reference script are always built as post-Alonzo so that `ScriptRef` is present.
 
 ## Behavior details
 
-- Reference scripts are stored in the output's `ScriptRef` field (post-Alonzo). `NewScriptRef(script)` wraps the script into a `common.ScriptRef` with the appropriate type code (0=Native, 1=V1, 2=V2, 3=V3).
+- Reference scripts are stored in the output's `ScriptRef` field (post-Alonzo). `NewScriptRef(script)` wraps the script into a `common.ScriptRef` with the appropriate type code (0=Native, 1=V1, 2=V2, 3=V3, 4=V4).
 - The unified method auto-detects the script version via Go type assertion.
 - Duplicate scripts attached via `AttachScript` are automatically deduplicated by hash.
 

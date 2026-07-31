@@ -45,13 +45,19 @@ Cardano CLI requires both flags together when donating; Apollo allows either ind
 **Apollo:**
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     SetCurrentTreasuryValue(currentEpochTreasuryValue).
     AddTreasuryDonation(5_000_000).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 `currentEpochTreasuryValue` should come from a fresh ledger query (e.g. `cardano-cli query ledger-state`).
@@ -84,12 +90,18 @@ This is convenient when constructing a transaction in stages — e.g. a fundrais
 If you don't care about racing with epoch boundaries, omit `SetCurrentTreasuryValue`:
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     AddTreasuryDonation(5_000_000).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 The node accepts the transaction as long as inputs cover outputs + fee + donation.

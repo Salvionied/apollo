@@ -39,7 +39,7 @@ func (a *Apollo) DelegateStakeAndVoteFromBech32(bech32 string, poolHash common.B
 ## Inputs and constraints
 
 - `poolHash`: 28-byte cold key hash (`common.Blake2b224`) of the target stake pool.
-- `drep`: `common.Drep` with Code (0 = key hash, 1 = script hash, or special values) and optional Credential.
+- `drep`: `common.Drep` with Type (0 = key hash, 1 = script hash, or special values) and optional Credential.
 
 ## Cardano CLI equivalence (10.14.0.0)
 
@@ -86,7 +86,7 @@ cardano-cli transaction build --certificate-file deleg.cert ...
 ### Stake and vote delegation (one cert)
 
 ```go
-drep := common.Drep{Type: 0, Hash: drepKeyHash}
+drep := common.Drep{Type: 0, Credential: drepKeyHash}
 a, err = a.DelegateStakeAndVote(nil, poolHash, drep)
 ```
 

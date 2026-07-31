@@ -1,6 +1,6 @@
 # DRep Methods
 
-This page documents the **DRep lifecycle** certificates: `RegisterDRep`, `RetireDRep`, `UpdateDRep`. Implementation: [`apollo.go`](../../apollo.go), `github.com/blinklabs-io/gouroboros/ledger/common` (`RegDRepCert`, `UnregDRepCert`, `UpdateDRepCert`). Certificate CBOR: [`governance_test.go`](../../governance_test.go).
+This page documents the **DRep lifecycle** certificates: `RegisterDRep`, `RetireDRep`, `UpdateDRep`. Implementation: [`apollo.go`](../../apollo.go), `github.com/blinklabs-io/gouroboros/ledger/common` (`RegistrationDrepCertificate`, `DeregistrationDrepCertificate`, `UpdateDrepCertificate`). Certificate CBOR: [`governance_test.go`](../../governance_test.go).
 
 A **DRep** (Delegated Representative) is an on-chain identity that other stakers can delegate their voting power to. DReps vote on governance actions on behalf of their delegators. The lifecycle is managed explicitly through three certificates: registration (kind 16), retirement (kind 17), and update (kind 18).
 
@@ -52,7 +52,7 @@ All three methods append a certificate to the builder's certificate list and ret
 
 ## Behavior details
 
-- **Deposit handling**: `RegisterDRep` requires the DRep deposit defined by current Conway protocol parameters (`drepDeposit`, typically 500 ADA). `Complete()` adds `RegDRepCert.Coin` to the required input amount automatically. `RetireDRep` refunds `UnregDRepCert.Coin` — pass the same amount that was originally deposited.
+- **Deposit handling**: `RegisterDRep` takes the DRep deposit defined by the current Conway protocol parameters (`drepDeposit`, typically 500 ADA). `Complete()` adds `RegistrationDrepCertificate.Amount` to the required input amount automatically. `RetireDRep` refunds `DeregistrationDrepCertificate.Amount` — pass the same amount that was originally deposited.
 - **Anchor optionality**: Pass `nil` for `anchor` to register or update a DRep without metadata. CBOR encodes the absent anchor as `null`.
 - **No replay protection in builder**: Apollo does not check whether a DRep is already registered or retired. The node will reject the transaction if the certificate is invalid in the current ledger state.
 
@@ -61,7 +61,7 @@ All three methods append a certificate to the builder's certificate list and ret
 - `credential.Credential` must be exactly 28 bytes.
 - `coin` for `RegisterDRep` must match the protocol-parameter `drepDeposit`. `coin` for `RetireDRep` must match the deposit originally paid at registration.
 - `anchor.DataHash` must be 32 bytes (Blake2b-256).
-- The transaction must include witnesses for the DRep credential (key witness for `Code: 0`, script witness for `Code: 1`).
+- The transaction must include witnesses for the DRep credential (key witness for `CredType: 0`, script witness for `CredType: 1`).
 
 ## Cardano CLI equivalence (10.14.0.0)
 
@@ -85,15 +85,21 @@ drepCred := common.Credential{
     Credential: drepKeyHash,
 }
 
-apollob, err = apollob.
+apollob = apollob.
     RegisterDRep(drepCred, 500_000_000, &common.GovAnchor{
         Url:      "https://example.com/drep.json",
         DataHash: drepDocHash,
     }).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**
@@ -112,12 +118,18 @@ cardano-cli conway transaction build --certificate-file drep-reg.cert ...
 ### Register without metadata
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     RegisterDRep(drepCred, 500_000_000, nil).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 ### Update a DRep's anchor
@@ -125,26 +137,38 @@ apollob, err = apollob.
 **Apollo:**
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     UpdateDRep(drepCred, &common.GovAnchor{
         Url:      "https://example.com/drep-v2.json",
         DataHash: newDocHash,
     }).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 To **remove** the anchor entirely, pass `nil`:
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     UpdateDRep(drepCred, nil).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 ### Retire a DRep
@@ -152,12 +176,18 @@ apollob, err = apollob.
 **Apollo:**
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     RetireDRep(drepCred, 500_000_000).  // Refund the original deposit
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**
@@ -183,7 +213,7 @@ cardano-cli conway governance drep retirement-certificate \
 
 ## Caveats and validation
 
-- **Deposit must equal the protocol parameter** at the time of registration. Submitting a `RegDRepCert` with the wrong `Coin` will be rejected by the node.
+- **Deposit must equal the protocol parameter** at the time of registration. Submitting a `RegistrationDrepCertificate` with the wrong `Amount` will be rejected by the node.
 - **Anchor URL is *not* dereferenced** by Apollo or the node. The node only verifies that the on-chain hash matches what was supplied — it never fetches the URL. Hosting and content integrity are your responsibility.
 - The DRep credential must sign the transaction (or its script must be witnessed for script DReps).
 - Validate on preview/preprod first — Conway parameters and deposit amounts vary across networks.

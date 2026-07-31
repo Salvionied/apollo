@@ -7,7 +7,7 @@ This page documents **vote (DRep) delegation**: `DelegateVote*`. Implementation:
 `common.Drep` (from gouroboros):
 
 - `Type`: 0 = key hash, 1 = script hash, or special values for "always abstain" / "no confidence."
-- `Hash`: optional key or script hash (zero for abstain/no-confidence).
+- `Credential`: optional key or script hash (zero for abstain/no-confidence).
 
 Build a `Drep` and pass it into the delegation methods.
 
@@ -53,7 +53,7 @@ import (
 
 drep := common.Drep{
     Type: 0,
-    Hash: drepKeyHash,
+    Credential: drepKeyHash,
 }
 a := apollo.New(cc)
 a.SetWallet(wallet)
@@ -76,5 +76,5 @@ a, err = a.DelegateVoteFromBech32("stake1u...", drep)
 
 ## Caveats and validation
 
-- No ApolloBuilder-level integration tests for vote delegation. Validate on preprod/mainnet with small amounts.
+- No end-to-end integration tests for vote delegation are documented here. Validate on preprod/mainnet with small amounts.
 - All types come from `github.com/blinklabs-io/gouroboros/ledger/common`.

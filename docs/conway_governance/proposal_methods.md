@@ -171,12 +171,18 @@ proposal := conway.ConwayProposalProcedure{
     },
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AddProposal(proposal).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**
@@ -376,13 +382,19 @@ apollob, err = apollob.AddProposal(proposal). /* ... */ Complete()
 ### Multiple proposals in one transaction
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     AddProposal(infoProposal).
     AddProposal(parameterChangeProposal).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 `Complete()` adds the **sum** of both deposits to the required input balance.
