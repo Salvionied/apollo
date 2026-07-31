@@ -1,6 +1,6 @@
 # Deregister Methods
 
-This page documents **stake deregistration**: `DeregisterStake`, `DeregisterStakeFromAddress`, `DeregisterStakeFromBech32`. Deregistering returns the 2 ADA stake key deposit; `Complete()` accounts for the refund. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go).
+This page documents **stake deregistration**: `DeregisterStake`, `DeregisterStakeFromAddress`, `DeregisterStakeFromBech32`. Deregistering refunds the current network's stake key deposit (2 ADA on networks using the default); `Complete()` accounts for the refund. Implementation: [`apollo.go`](../../apollo.go), [`convenience.go`](../../convenience.go).
 
 ## Purpose and method signatures
 

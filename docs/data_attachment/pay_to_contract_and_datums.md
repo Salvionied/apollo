@@ -101,7 +101,10 @@ func (a *Apollo) AttachDatum(datum *common.Datum) *Apollo
 ```go
 import "github.com/blinklabs-io/gouroboros/ledger/common"
 
-contractAddr, _ := common.NewAddress("addr1qy99jvml...")
+contractAddr, err := common.NewAddress("addr1qy99jvml...")
+if err != nil {
+    panic(err)
+}
 datum := common.Datum{} // your Plutus data
 apollob = apollob.
     SetChangeAddress(changeAddr).

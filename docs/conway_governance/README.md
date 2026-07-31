@@ -93,18 +93,24 @@ proposal := conway.ConwayProposalProcedure{
     },
 }
 
-builder, err := apollo.New(chainContext).
+builder := apollo.New(chainContext).
     RegisterDRep(drepCred, 500_000_000, &common.GovAnchor{
         Url:      "https://example.com/drep.json",
         DataHash: drepDocHash,
     }).
     AddVote(voter, actionId, procedure).
     AddProposal(proposal).
-    AddTreasuryDonation(5_000_000).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddTreasuryDonation(5_000_000)
+builder, err := builder.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+builder = builder.AddLoadedUTxOs(utxos...)
+builder, err = builder.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+builder, err = builder.Complete()
 ```
 
 `Complete()` accounts for the DRep deposit, the proposal deposit, and the treasury donation when balancing inputs and outputs.

@@ -11,7 +11,7 @@ The `PlutusV3Script` type is defined in gouroboros and implements the `common.Sc
 type PlutusV3Script []byte
 ```
 
-All Plutus script types (`PlutusV1Script`, `PlutusV2Script`, `PlutusV3Script`) implement the `common.Script` interface:
+All Plutus script types (`PlutusV1Script`, `PlutusV2Script`, `PlutusV3Script`, and `PlutusV4Script`) implement the `common.Script` interface:
 
 ```go
 type Script interface {
@@ -45,7 +45,10 @@ func main() {
     cc := blockfrost.NewBlockFrostChainContext(
         constants.BlockfrostBaseUrlPreview, 0, "your-project-id",
     )
-    scriptBytes, _ := hex.DecodeString("58...") // Compiled Plutus V3 script
+    scriptBytes, err := hex.DecodeString("58...") // Compiled Plutus V3 script
+    if err != nil {
+        panic(err)
+    }
     v3Script := common.PlutusV3Script(scriptBytes)
 
     a := apollo.New(cc)
@@ -62,7 +65,10 @@ func main() {
 The `Hash()` method on any script type returns a `ScriptHash` (alias for `Blake2b224`):
 
 ```go
-scriptBytes, _ := hex.DecodeString("58...")
+scriptBytes, err := hex.DecodeString("58...")
+if err != nil {
+    panic(err)
+}
 v3Script := common.PlutusV3Script(scriptBytes)
 
 hash := v3Script.Hash() // returns common.ScriptHash (common.Blake2b224)
@@ -80,8 +86,9 @@ if err != nil {
 }
 ```
 
-This works for all script types - the reference script type is determined automatically:
+This recognizes all script types - the reference script type is determined automatically:
 - `PlutusV1Script` -> type 1
 - `PlutusV2Script` -> type 2
 - `PlutusV3Script` -> type 3
+- `PlutusV4Script` -> type 4 (Dijkstra only; Conway payment methods return `ErrPlutusV4RequiresDijkstra`)
 - `NativeScript` -> type 0

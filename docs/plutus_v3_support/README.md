@@ -4,7 +4,7 @@ This documentation provides a comprehensive overview of Plutus V3 support within
 
 ## Key Changes in v2
 
-- **Unified script API**: A single `AttachScript` method handles all script types (V1, V2, V3, and NativeScript) with automatic type detection
+- **Unified script API**: A single `AttachScript` method handles the Conway-supported script types (V1, V2, V3, and NativeScript) with automatic type detection. Plutus V4 is recognized by script-reference helpers but requires Dijkstra-era transaction support.
 - **Unified reference inputs**: A single `AddReferenceInput` method works for all script versions
 - **gouroboros types**: All Plutus types come from `github.com/blinklabs-io/gouroboros/ledger/common`
 
@@ -18,5 +18,5 @@ This documentation provides a comprehensive overview of Plutus V3 support within
 
 ## See also
 
-- [Data Attachment](../data_attachment/README.md) — Datums and reference scripts on outputs (including V1/V2/V3 reference scripts)
+- [Data Attachment](../data_attachment/README.md) — Datums and reference scripts on outputs (including V1/V2/V3 reference scripts; V4 requires Dijkstra)
 - [Staking Functionalities](../staking_functionalities/README.md) — Stake certificates and withdrawals

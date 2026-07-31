@@ -26,7 +26,7 @@ Each page includes method signatures, behavior, side-by-side Apollo + CLI exampl
 | Vote (DRep) delegation | Yes | `DelegateVote`, `RegisterAndDelegateVote`, etc. |
 | Stake + vote combined | Yes | `DelegateStakeAndVote`, `RegisterAndDelegateStakeAndVote`, etc. |
 | Withdrawals | Yes | `AddWithdrawal(address, amount, redeemer, exUnits)` |
-| Deposit handling | Yes | `STAKE_DEPOSIT` (2 ADA) applied/refunded in `Complete()` |
+| Deposit handling | Yes | Current network `key_deposit` applied/refunded in `Complete()` (2 ADA fallback) |
 
 ## CLI-to-Apollo Mapping Index
 

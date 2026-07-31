@@ -43,7 +43,7 @@ import "github.com/Salvionied/apollo/v2"
 | `PayToContractWithV3ReferenceScript(...)` | `PayToContractWithV3ReferenceScript(...)` or `PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)` |
 | `CompleteExact(fee)` | `SetFee(fee)` then `Complete()` |
 | `SetEstimateRequired()` | Automatic — set by `CollectFrom` and `Mint` with redeemers |
-| `ConsumeAssetsFromUtxo(utxo, payments...)` | `AddInput(utxo)` then `AddPayment(payments...)` |
+| `ConsumeAssetsFromUtxo(utxo, payments...)` | `ConsumeUTxO(utxo, payments...)` |
 | `GetPaymentsLength()` | Removed — internal detail |
 | `GetRedeemers()` | Removed — leaked private type |
 | `UpdateRedeemers(r)` | Removed — leaked private type |
@@ -82,7 +82,7 @@ Wallet creation uses bursa internally — see `SetWalletFromMnemonic` and `NewBu
 
 ### 1. Script Attachment (12+ methods -> 1 unified + convenience)
 
-v2 uses a single `AttachScript` method that handles all script types — PlutusV1, PlutusV2, PlutusV3, and NativeScript. Duplicate scripts are ignored automatically.
+v2 uses a single `AttachScript` method that handles the Conway-supported script types — PlutusV1, PlutusV2, PlutusV3, and NativeScript. PlutusV4 requires Dijkstra-era transaction support and is rejected by the current builder. Duplicate scripts are ignored automatically.
 
 ```go
 // v1
@@ -155,7 +155,10 @@ a.PayToContract(addr, datum, lovelace, units...)
 a.PayToContract(addr, datum, lovelace, false, units...)
 
 // v2 - datum hash
-a.PayToContractWithDatumHash(addr, datum, lovelace, units...)
+a, err := a.PayToContractWithDatumHash(addr, datum, lovelace, units...)
+if err != nil {
+    return err
+}
 
 // v1 - pre-computed hash
 a.PayToContractAsHash(addr, hashBytes, lovelace, false)
@@ -175,20 +178,44 @@ a.PayToAddressWithV2ReferenceScript(addr, lovelace, v2Script, units...)
 a.PayToAddressWithV3ReferenceScript(addr, lovelace, v3Script, units...)
 
 // v2 - unified (auto-detects type)
-a.PayToAddressWithReferenceScript(addr, lovelace, script, units...)
+a, err := a.PayToAddressWithReferenceScript(addr, lovelace, script, units...)
+if err != nil {
+    return err
+}
 
 // v2 - version-specific (still available as convenience)
-a.PayToAddressWithV1ReferenceScript(addr, lovelace, v1Script, units...)
-a.PayToAddressWithV2ReferenceScript(addr, lovelace, v2Script, units...)
-a.PayToAddressWithV3ReferenceScript(addr, lovelace, v3Script, units...)
+a, err = a.PayToAddressWithV1ReferenceScript(addr, lovelace, v1Script, units...)
+if err != nil {
+    return err
+}
+a, err = a.PayToAddressWithV2ReferenceScript(addr, lovelace, v2Script, units...)
+if err != nil {
+    return err
+}
+a, err = a.PayToAddressWithV3ReferenceScript(addr, lovelace, v3Script, units...)
+if err != nil {
+    return err
+}
 
 // v2 - contract + reference script (new unified method)
-a.PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)
+a, err = a.PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)
+if err != nil {
+    return err
+}
 
 // v2 - version-specific contract + reference script (convenience)
-a.PayToContractWithV1ReferenceScript(addr, datum, lovelace, v1Script, units...)
-a.PayToContractWithV2ReferenceScript(addr, datum, lovelace, v2Script, units...)
-a.PayToContractWithV3ReferenceScript(addr, datum, lovelace, v3Script, units...)
+a, err = a.PayToContractWithV1ReferenceScript(addr, datum, lovelace, v1Script, units...)
+if err != nil {
+    return err
+}
+a, err = a.PayToContractWithV2ReferenceScript(addr, datum, lovelace, v2Script, units...)
+if err != nil {
+    return err
+}
+a, err = a.PayToContractWithV3ReferenceScript(addr, datum, lovelace, v3Script, units...)
+if err != nil {
+    return err
+}
 ```
 
 ### 6. Bech32 Convenience Methods
@@ -198,11 +225,23 @@ Bech32 convenience methods are available. You can also parse the address yoursel
 ```go
 // v2 - convenience methods (parse bech32 for you)
 a, err = a.PayToAddressBech32("addr1...", 2_000_000)
+if err != nil {
+    return err
+}
 a, err = a.AddInputAddressFromBech32("addr1...")
+if err != nil {
+    return err
+}
 a, err = a.SetChangeAddressBech32("addr1...")
+if err != nil {
+    return err
+}
 
 // v2 - explicit parsing (recommended for reuse)
 addr, err := common.NewAddress("addr1...")
+if err != nil {
+    return err
+}
 a.PayToAddress(addr, 2_000_000)
 a.AddInputAddress(addr)
 a.SetChangeAddress(addr)
@@ -211,6 +250,9 @@ a.SetChangeAddress(addr)
 **Note**: The `SetWalletFromBech32` method is not available in v2. Parse the address and use `NewExternalWallet`:
 ```go
 addr, err := common.NewAddress("addr1...")
+if err != nil {
+    return err
+}
 a.SetWallet(apollo.NewExternalWallet(addr))
 ```
 
@@ -239,6 +281,9 @@ a.AddReferenceInputV3(txHash, idx)  // for V3
 
 // v2
 a, err = a.AddReferenceInput(txHash, idx)    // for all script versions
+if err != nil {
+    return err
+}
 ```
 
 ### 9. Staking & Delegation (unified + convenience)
@@ -247,14 +292,32 @@ v2 provides unified methods that accept flexible input types via `any`, plus `Fr
 
 ```go
 // v2 - unified method, multiple input types
-a.RegisterStake(&cred)       // credential pointer
-a.RegisterStake(addr)        // common.Address
-a.RegisterStake("addr1...")  // bech32 string
-a.RegisterStake(nil)         // wallet fallback
+a, err = a.RegisterStake(&cred)       // credential pointer
+if err != nil {
+    return err
+}
+a, err = a.RegisterStake(addr)        // common.Address
+if err != nil {
+    return err
+}
+a, err = a.RegisterStake("addr1...")  // bech32 string
+if err != nil {
+    return err
+}
+a, err = a.RegisterStake(nil)         // wallet fallback
+if err != nil {
+    return err
+}
 
 // v2 - type-safe convenience wrappers (still available)
-a.RegisterStakeFromAddress(addr)
-a.RegisterStakeFromBech32("stake1u...")
+a, err = a.RegisterStakeFromAddress(addr)
+if err != nil {
+    return err
+}
+a, err = a.RegisterStakeFromBech32("stake1u...")
+if err != nil {
+    return err
+}
 ```
 
 This pattern applies to all 8 staking/delegation operations:
@@ -274,10 +337,10 @@ This pattern applies to all 8 staking/delegation operations:
 | Method | Reason |
 |--------|--------|
 | `CompleteExact(fee)` | Use `SetFee(fee)` then `Complete()` |
-| `SetWalletAsChangeAddress()` | Default behavior — wallet is always the change address |
+| `SetWalletAsChangeAddress()` | The wallet is the default change address unless `SetChangeAddress` is used |
 | `SetWalletFromKeypair(...)` | Incomplete implementation — build address manually |
 | `SetEstimateRequired()` | Internal — automatically set by `CollectFrom`/`Mint` |
-| `ConsumeAssetsFromUtxo(...)` | Use `AddInput(utxo)` then `AddPayment(...)` |
+| `ConsumeAssetsFromUtxo(...)` | Use `ConsumeUTxO(utxo, payments...)` |
 | `GetPaymentsLength()` | Internal detail |
 | `GetRedeemers()` | Leaked private type |
 | `UpdateRedeemers(r)` | Leaked private type |
@@ -359,7 +422,13 @@ w, err := apollo.NewBursaWalletWithPassphrase(mnemonic, "my-secret")
 
 // Via Apollo builder
 a, err = a.SetWalletFromMnemonic(mnemonic)                        // no passphrase
+if err != nil {
+    return err
+}
 a, err = a.SetWalletFromMnemonicWithPassphrase(mnemonic, "pass")  // with passphrase
+if err != nil {
+    return err
+}
 ```
 
 ## Selected v2 Public API
@@ -397,7 +466,7 @@ documentation and exported declarations are the authoritative complete API.
 - `AddInputAddressFromBech32(bech32) (*Apollo, error)`
 - `CollectFrom(utxo, redeemer, exUnits) *Apollo`
 - `ConsumeUTxO(utxo, payments...) (*Apollo, error)`
-- `UtxoFromRef(hash, index) (*Utxo, error)`
+- `UtxoFromRef(hash, index) (*common.Utxo, error)`
 - `GetUsedUTxOs() map[string]bool`
 
 ### Scripts & Minting

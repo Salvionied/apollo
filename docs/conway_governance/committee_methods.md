@@ -57,12 +57,18 @@ hot := common.Credential{
     Credential: ccHotKeyHash,
 }
 
-apollob, err = apollob.
+apollob = apollob.
     AuthorizeCommitteeHotKey(cold, hot).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**
@@ -79,26 +85,38 @@ cardano-cli conway governance committee create-hot-key-authorization-certificate
 **Apollo:**
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     ResignCommitteeColdKey(cold, &common.GovAnchor{
         Url:      "https://example.com/resignation.json",
         DataHash: resignDocHash,
     }).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 ### Resign without an anchor
 
 ```go
-apollob, err = apollob.
+apollob = apollob.
     ResignCommitteeColdKey(cold, nil).
-    AddInputAddressFromBech32(myAddr).
-    AddLoadedUTxOs(utxos...).
-    PayToAddressBech32(myAddr, 10_000_000).
-    Complete()
+    AddLoadedUTxOs(utxos...)
+apollob, err = apollob.AddInputAddressFromBech32(myAddr)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.PayToAddressBech32(myAddr, 10_000_000)
+if err != nil {
+    panic(err)
+}
+apollob, err = apollob.Complete()
 ```
 
 **Cardano CLI:**

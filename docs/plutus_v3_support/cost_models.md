@@ -1,10 +1,10 @@
-# Plutus Cost Models (V1, V2, V3)
+# Plutus Cost Models (V1, V2, V3, V4)
 
 This document describes how Plutus cost models are handled in Apollo v2.
 
 ## Cost Model Overview
 
-Cost models define the execution costs for each primitive operation in Plutus scripts. Each Plutus version (V1, V2, V3) has its own cost model with different parameters. These are part of the Cardano protocol parameters.
+Cost models define the execution costs for each primitive operation in Plutus scripts. Each Plutus version has its own cost model with different parameters. These are part of the Cardano protocol parameters. Apollo can represent and hash V4 cost models, but the current Conway transaction builder only creates V1-V3 witnesses; V4 transaction support requires the Dijkstra-era ledger format.
 
 ## Cost Model Retrieval
 
@@ -18,7 +18,7 @@ if err != nil {
 costModels := pp.CostModels // map[string][]int64
 ```
 
-The `CostModels` map uses string keys: `"PlutusV1"`, `"PlutusV2"`, `"PlutusV3"`.
+The `CostModels` map uses string keys: `"PlutusV1"`, `"PlutusV2"`, `"PlutusV3"`, and, when supplied by the backend, `"PlutusV4"`.
 
 ## Backend Integration
 
@@ -40,6 +40,9 @@ costModels := map[string][]int64{
     "PlutusV2": ppCardano.GetCostModels().GetPlutusV2().GetValues(),
     "PlutusV3": ppCardano.GetCostModels().GetPlutusV3().GetValues(),
 }
+if v4 := ppCardano.GetCostModels().GetPlutusV4(); v4 != nil {
+    costModels["PlutusV4"] = v4.GetValues()
+}
 ```
 
 ### Maestro
@@ -57,8 +60,8 @@ hash, err := apollo.ComputeScriptDataHash(redeemerMap, datums, pp.CostModels)
 The `ComputeScriptDataHash` function:
 1. CBOR-encodes the redeemers
 2. CBOR-encodes the datums
-3. CBOR-encodes the cost models as language views (keyed by language ID: 0=V1, 1=V2, 2=V3)
+3. CBOR-encodes the cost models as language views (keyed by language ID: 0=V1, 1=V2, 2=V3, 3=V4)
 4. Concatenates all three byte arrays
 5. Computes a Blake2b-256 hash of the concatenated bytes
 
-This ensures that transactions using V3 scripts include the correct V3 cost model in the script data hash.
+This ensures that transactions include the correct cost model for each script language represented in the script data hash. A V4 cost model may be present in protocol parameters, but V4 scripts cannot currently be attached to Conway transactions through Apollo.
