@@ -1482,6 +1482,14 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
+	// Every address this transaction commits to must be on the network the
+	// chain context is on. Checked here because the wallet, change, input and
+	// payment addresses are all resolved by this point, and before any
+	// selection or fee work so a cross-network build fails closed and early.
+	if err := a.validateAddressNetworks(); err != nil {
+		return a, err
+	}
+
 	// Auto-select collateral if needed (after UTxOs are loaded)
 	if err := a.setCollateral(); err != nil {
 		return a, err

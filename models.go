@@ -125,7 +125,7 @@ type Payment struct {
 
 // NewPayment creates a new Payment.
 func NewPayment(receiver string, lovelace int64, units []Unit) (*Payment, error) {
-	addr, err := common.NewAddress(receiver)
+	addr, err := ParseAddress(receiver)
 	if err != nil {
 		return nil, fmt.Errorf("invalid receiver address: %w", err)
 	}
