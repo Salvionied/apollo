@@ -12,6 +12,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 )
 
@@ -490,8 +491,99 @@ func NewVkeyWitnessFromSkey(
 	}
 }
 
+// DatumWireCbor returns the CBOR bytes datum will occupy in the witness set
+// and records them on the datum so that common.Datum.Hash, the witness set,
+// and every hash Apollo derives from the datum all agree.
+//
+// A datum decoded from CBOR keeps its original bytes, and those bytes are what
+// the datum hash on chain was computed over. gouroboros re-encodes datums
+// through plutigo whenever it marshals them, and plutigo emits the canonical
+// Plutus form (minimal integers, definite-length collections, byte strings
+// chunked above 64 bytes), so a datum whose stored CBOR is not already
+// canonical cannot be put back on the wire byte for byte. Hashing the stored
+// bytes anyway would declare a datum hash that no longer matches the datum in
+// the witness set, so the ledger would reject the transaction with
+// NotAllowedSupplementalDatums or MissingRequiredDatums. Apollo reports that
+// up front instead. Callers willing to accept the canonical re-encoding, and
+// the different datum hash that comes with it, can clear the stored bytes with
+// datum.SetCbor(nil); callers that only need an output to carry a datum hash
+// somebody else computed can use PayToContractAsHash, which does not put the
+// datum in the witness set at all.
+func DatumWireCbor(datum *common.Datum) ([]byte, error) {
+	if datum == nil {
+		return nil, errors.New("datum is nil")
+	}
+	encoded, err := cbor.Encode(datum)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode datum: %w", err)
+	}
+	stored := datum.Cbor()
+	if len(stored) == 0 {
+		datum.SetCbor(encoded)
+		return encoded, nil
+	}
+	if !bytes.Equal(stored, encoded) {
+		return nil, fmt.Errorf(
+			"datum CBOR is not in canonical Plutus form and cannot be "+
+				"preserved: its original bytes hash to %s but the witness "+
+				"set would carry bytes hashing to %s; clear the original "+
+				"bytes with SetCbor(nil) to accept the canonical form, or "+
+				"use PayToContractAsHash to reference the original hash "+
+				"without the datum",
+			common.Blake2b256Hash(stored).String(),
+			common.Blake2b256Hash(encoded).String(),
+		)
+	}
+	return stored, nil
+}
+
+// DatumHash returns the blake2b-256 hash of the CBOR bytes datum occupies in
+// the witness set, which is the datum hash the ledger matches an output's
+// datum hash against.
+//
+// Prefer this over common.Datum.Hash: that method hashes the datum's stored
+// CBOR, which is empty for a datum built in Go rather than decoded from CBOR,
+// so it silently returns blake2b-256 of the empty string. DatumHash also
+// records the wire bytes on datum, after which common.Datum.Hash agrees.
+func DatumHash(datum *common.Datum) (common.Blake2b256, error) {
+	datumCbor, err := DatumWireCbor(datum)
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	return common.Blake2b256Hash(datumCbor), nil
+}
+
+// WitnessPlutusData builds witness set field 4 (plutus_data) for the given
+// witness datums exactly as it goes on the wire.
+//
+// Conway's CDDL types the field as nonempty_set<plutus_data>, which permits
+// both a tag-258 set and a bare array. Apollo emits the tag-258 form for every
+// set it writes, so the tag is part of the field bytes the ledger hashes.
+// buildWitnessSet and ComputeScriptDataHash both go through this constructor
+// so the script integrity preimage cannot drift from the serialized field.
+func WitnessPlutusData(datums []common.Datum) cbor.SetType[common.Datum] {
+	return cbor.NewSetType(datums, true)
+}
+
+// WitnessRedeemers builds witness set field 5 (redeemers) for the given
+// redeemer map exactly as it goes on the wire. As with WitnessPlutusData, both
+// the witness set and the script integrity preimage are derived from it.
+func WitnessRedeemers(
+	redeemers map[common.RedeemerKey]common.RedeemerValue,
+) conway.ConwayRedeemers {
+	return conway.ConwayRedeemers{Redeemers: redeemers}
+}
+
 // ComputeScriptDataHash computes the script data hash per the ledger rules:
 // blake2b-256(redeemers_cbor || datums_cbor || lang_views_cbor).
+//
+// The ledger recomputes this hash over the original on-wire bytes of witness
+// set fields 5 and 4, so both halves of the preimage are produced by
+// serializing the very field values buildWitnessSet puts in the witness set,
+// rather than by re-deriving equivalent-looking CBOR. Re-deriving is how the
+// tag-258 set prefix on field 4 came to be missing from the preimage while
+// present on the wire, which made the ledger reject every transaction that
+// carried witness datums with ScriptIntegrityHashMismatch.
 //
 // When there are no witness datums, datums_cbor is omitted entirely (Alonzo,
 // Babbage, and Conway). Encoding an empty datum array here produces
@@ -506,21 +598,21 @@ func ComputeScriptDataHash(
 		return nil, nil
 	}
 
-	var redeemerBytes []byte
-	var err error
-	if len(redeemers) > 0 {
-		redeemerBytes, err = cbor.Encode(redeemers)
-	} else {
-		// Empty Conway redeemer map must be 0xa0, not CBOR null.
-		redeemerBytes, err = cbor.Encode(map[common.RedeemerKey]common.RedeemerValue{})
+	// An absent field 5 hashes as the empty Conway redeemer map 0xa0, which is
+	// what a nil map must not encode to (CBOR null).
+	if redeemers == nil {
+		redeemers = map[common.RedeemerKey]common.RedeemerValue{}
 	}
+	redeemerField := WitnessRedeemers(redeemers)
+	redeemerBytes, err := cbor.Encode(&redeemerField)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode redeemers: %w", err)
 	}
 
 	var datumBytes []byte
 	if len(datums) > 0 {
-		datumBytes, err = cbor.Encode(datums)
+		datumField := WitnessPlutusData(datums)
+		datumBytes, err = cbor.Encode(&datumField)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode datums: %w", err)
 		}

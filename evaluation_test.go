@@ -12,6 +12,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	plutigoData "github.com/blinklabs-io/plutigo/data"
 
+	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
 
@@ -39,6 +40,15 @@ type balancedEvalContext struct {
 
 	// resultFor returns ExUnits (or an error) for the call.
 	resultFor func(call int, tx *conway.ConwayTransaction, utxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error)
+}
+
+// Capabilities advertises evaluation on top of the fixed context's in-memory
+// operations. This stub honours additionalUtxos (its assertions read them), so
+// it must report CapabilityEvaluateTxAdditionalUtxos for Apollo to send them.
+func (c *balancedEvalContext) Capabilities() backend.CapabilitySet {
+	return c.FixedChainContext.Capabilities() |
+		backend.CapabilitySet(backend.CapabilityEvaluateTx|
+			backend.CapabilityEvaluateTxAdditionalUtxos)
 }
 
 func (c *balancedEvalContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {

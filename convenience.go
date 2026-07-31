@@ -10,7 +10,7 @@ import (
 
 // AddInputAddressFromBech32 adds a bech32 address whose UTxOs should be used for coin selection.
 func (a *Apollo) AddInputAddressFromBech32(bech32 string) (*Apollo, error) {
-	addr, err := common.NewAddress(bech32)
+	addr, err := ParseAddress(bech32)
 	if err != nil {
 		return a, fmt.Errorf("invalid bech32 address: %w", err)
 	}
@@ -20,7 +20,7 @@ func (a *Apollo) AddInputAddressFromBech32(bech32 string) (*Apollo, error) {
 
 // PayToAddressBech32 creates a simple payment to a bech32 address.
 func (a *Apollo) PayToAddressBech32(bech32 string, lovelace int64, units ...Unit) (*Apollo, error) {
-	addr, err := common.NewAddress(bech32)
+	addr, err := ParseAddress(bech32)
 	if err != nil {
 		return a, fmt.Errorf("invalid bech32 address: %w", err)
 	}
@@ -30,7 +30,7 @@ func (a *Apollo) PayToAddressBech32(bech32 string, lovelace int64, units ...Unit
 
 // SetChangeAddressBech32 sets the change address from a bech32 string.
 func (a *Apollo) SetChangeAddressBech32(bech32 string) (*Apollo, error) {
-	addr, err := common.NewAddress(bech32)
+	addr, err := ParseAddress(bech32)
 	if err != nil {
 		return a, fmt.Errorf("invalid bech32 address: %w", err)
 	}

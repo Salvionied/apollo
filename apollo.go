@@ -318,8 +318,16 @@ func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
 }
 
 // AddDatum adds a datum to the witness set.
+//
+// The datum's wire bytes are pinned onto it (see DatumWireCbor), so a datum
+// whose original CBOR cannot be reproduced on the wire is rejected here rather
+// than being silently rehashed into a transaction the ledger would refuse.
 func (a *Apollo) AddDatum(datum *common.Datum) *Apollo {
 	if datum != nil {
+		if _, err := DatumWireCbor(datum); err != nil {
+			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
+			return a
+		}
 		a.datums = append(a.datums, *datum)
 	}
 	return a
@@ -456,11 +464,12 @@ func (a *Apollo) PayToContractWithDatumHash(addr common.Address, datum *common.D
 		Units:    units,
 	}
 	if datum != nil {
-		datumCbor, err := cbor.Encode(datum)
+		// Hash the bytes the datum will occupy in the witness set, so the
+		// output's datum hash matches the datum the ledger sees.
+		hash, err := DatumHash(datum)
 		if err != nil {
-			return a, fmt.Errorf("failed to encode datum: %w", err)
+			return a, err
 		}
-		hash := common.Blake2b256Hash(datumCbor)
 		p.DatumHash = hash.Bytes()
 		a.datums = append(a.datums, *datum)
 	}
@@ -1455,9 +1464,11 @@ func (a *Apollo) GetUsedUTxOs() map[string]bool {
 	return cp
 }
 
-// GetBurns returns the total minted/burned value.
+// GetBurns returns the absolute quantities of all assets being burned
+// (negative mint amounts), which must be covered by transaction inputs. Use
+// GetMints for the net mint value, which retains negative quantities.
 func (a *Apollo) GetBurns() (Value, error) {
-	return a.mintValue()
+	return a.burnRequirementValue()
 }
 
 // GetWallet returns the current wallet.
@@ -1479,6 +1490,14 @@ func (a *Apollo) Complete() (*Apollo, error) {
 
 	// Load UTxOs from input addresses if needed (must happen before collateral selection)
 	if err := a.loadUtxos(); err != nil {
+		return a, err
+	}
+
+	// Every address this transaction commits to must be on the network the
+	// chain context is on. Checked here because the wallet, change, input and
+	// payment addresses are all resolved by this point, and before any
+	// selection or fee work so a cross-network build fails closed and early.
+	if err := a.validateAddressNetworks(); err != nil {
 		return a, err
 	}
 
@@ -1588,43 +1607,105 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, fmt.Errorf("preliminary fee overflows int64: max fee=%d reference script fee=%d", prelimFee, refScriptFeeReserve)
 	}
 	prelimFee += refScriptFeeReserve
-	selectionTarget, err := balanceRequired.Add(NewSimpleValue(uint64(prelimFee))) //nolint:gosec // maxFee is bounded above and refScriptFeeReserve overflow is checked above
-	if err != nil {
-		return a, fmt.Errorf("selection target overflow: %w", err)
-	}
-	// Tokens being burned must be present in the inputs. mintValue adds them
-	// to totalInput as negative amounts, which selection would otherwise
-	// ignore, silently building a transaction that cannot conserve value.
-	if a.hasMint() {
-		burnValue, err := a.burnRequirementValue()
-		if err != nil {
-			return a, err
+
+	// buildSelectionTarget converts a fee reserve into the value coin selection
+	// must cover. Tokens being burned must be present in the inputs: mintValue
+	// adds them to totalInput as negative amounts, which selection would
+	// otherwise ignore, silently building a transaction that cannot conserve
+	// value.
+	buildSelectionTarget := func(reserve int64) (Value, error) {
+		if reserve < 0 {
+			return Value{}, fmt.Errorf("negative fee reserve: %d", reserve)
 		}
-		selectionTarget, err = selectionTarget.Add(burnValue)
-		if err != nil {
-			return a, fmt.Errorf("selection target overflow: %w", err)
+		target, addErr := balanceRequired.Add(NewSimpleValue(uint64(reserve))) //nolint:gosec // checked non-negative above
+		if addErr != nil {
+			return Value{}, fmt.Errorf("selection target overflow: %w", addErr)
+		}
+		if a.hasMint() {
+			burnValue, burnErr := a.burnRequirementValue()
+			if burnErr != nil {
+				return Value{}, burnErr
+			}
+			target, addErr = target.Add(burnValue)
+			if addErr != nil {
+				return Value{}, fmt.Errorf("selection target overflow: %w", addErr)
+			}
+		}
+		return target, nil
+	}
+
+	// Reserving the full MaxTxFee makes selection refuse wallets that can
+	// comfortably afford the transaction: MaxTxFee prices a maximum-size
+	// transaction (876277 lovelace on mainnet parameters) while a simple
+	// transfer costs nearer 170000, so the top ~0.7 ADA of every wallet was
+	// unspendable and reported as "insufficient UTxOs to cover required value".
+	//
+	// Try a reserve estimated from the shape known so far. If the inputs it
+	// selects turn out to need more fee than was reserved, roll the reservation
+	// bookkeeping back and re-select against the full MaxTxFee ceiling, which is
+	// exactly the previous behaviour -- so this never selects less
+	// conservatively than before, it only avoids doing so unnecessarily.
+	//
+	// A smaller reserve is a strictly smaller selection target, so a failure at
+	// the estimated reserve would also fail at the ceiling; such failures are
+	// genuine insufficiency and are reported directly.
+	// The reserve starts at the fee for the shape known before selection and
+	// grows to whatever the selected inputs actually cost, re-selecting each
+	// time, until the reserve covers the fee it produces. Growth is monotone and
+	// capped at prelimFee, so the loop terminates and the last attempt is always
+	// the old ceiling behaviour.
+	const maxSelectionAttempts = 3
+	reserve := prelimFee
+	if initialFee, estErr := a.estimateFee(a.preselectedUtxos, outputs); estErr == nil {
+		reserve = initialFee + a.FeePadding
+		if reserve < 0 || reserve > prelimFee {
+			reserve = prelimFee
 		}
 	}
 
-	// Coin selection. setCollateral() reserves an auto-selected collateral UTxO
-	// out of the pool so multi-UTxO wallets keep a separate collateral and an
-	// unchanged tx shape. If that reservation starves selection (e.g. a wallet
-	// with a single UTxO), release the collateral for overlap - the ledger lets
-	// one UTxO be both a spending input and collateral - and retry once.
-	selectedUtxos, err := a.selectCoins(selectionTarget, totalInput)
-	if err != nil {
-		if a.releaseCollateralForOverlap() {
-			selectedUtxos, err = a.selectCoins(selectionTarget, totalInput)
-			if err != nil {
-				// The overlap retry also failed. Restore the collateral
-				// reservation and clear the overlap flag so a subsequent
-				// Complete() on this builder starts from consistent state.
-				a.restoreCollateralReservation()
-			}
+	var selectedUtxos []common.Utxo
+	for attempt := 0; ; attempt++ {
+		selectionTarget, targetErr := buildSelectionTarget(reserve)
+		if targetErr != nil {
+			return a, targetErr
 		}
+		preSelectionState := a.snapshotSelectionState()
+		selectedUtxos, err = a.selectCoinsAllowingCollateralOverlap(
+			selectionTarget,
+			totalInput,
+		)
 		if err != nil {
 			return a, fmt.Errorf("coin selection failed: %w", err)
 		}
+		if reserve >= prelimFee || attempt+1 >= maxSelectionAttempts {
+			break
+		}
+
+		// Price the shape actually selected. estimateFee already includes the
+		// reference-script surcharge for the inputs it is given, so its result
+		// is directly comparable to the reserve.
+		trialInputs := make(
+			[]common.Utxo,
+			0,
+			len(a.preselectedUtxos)+len(selectedUtxos),
+		)
+		trialInputs = append(trialInputs, a.preselectedUtxos...)
+		trialInputs = append(trialInputs, selectedUtxos...)
+		selectedFee, feeEstErr := a.estimateFee(SortInputs(trialInputs), outputs)
+		needed := prelimFee
+		if feeEstErr == nil {
+			needed = selectedFee + a.FeePadding
+			if needed < 0 || needed > prelimFee {
+				needed = prelimFee
+			}
+		}
+		if needed <= reserve {
+			break
+		}
+		// The reserve was too small for what it selected. Roll the reservation
+		// bookkeeping back so the next attempt selects from the same pool.
+		a.restoreSelectionState(preSelectionState)
+		reserve = needed
 	}
 
 	// Build inputs (explicit allocation to avoid slice aliasing)
@@ -1699,8 +1780,20 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	var previousShape string
 	seenShapes := make(map[string]struct{}, maxEvaluationIterations)
 	converged := false
+	// requestedFee is the size-based fee that drives the iteration.
+	// buildBalancedOutputs may return a larger fee than it was given, by
+	// absorbing sub-min-UTxO ADA change into it and dropping the change
+	// output. That surcharge is not something estimateFee can predict from the
+	// resulting outputs, so convergence is judged on requestedFee while fee
+	// carries the amount actually charged. Comparing the absorbed fee against
+	// a fresh estimate instead never terminates.
+	requestedFee := fee
 	for range maxEvaluationIterations {
-		balanced, balanceErr := a.buildBalancedOutputs(baseOutputs, fee, balance)
+		balanced, balanceErr := a.buildBalancedOutputs(
+			baseOutputs,
+			requestedFee,
+			balance,
+		)
 		if balanceErr != nil {
 			return a, balanceErr
 		}
@@ -1729,18 +1822,30 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, fmt.Errorf("failed to encode evaluation shape: %w", bodyErr)
 		}
 		shape := string(bodyBytes)
-		newFee := fee
+		nextFee := requestedFee
 		if !a.forceFee && a.Fee == 0 {
-			newFee, err = a.estimateFee(allInputUtxos, outputs)
+			nextFee, err = a.estimateFee(allInputUtxos, outputs)
 			if err != nil {
 				return a, fmt.Errorf("fee re-estimation failed: %w", err)
 			}
-			newFee += a.FeePadding
-			if newFee < 0 {
-				newFee = 0
+			nextFee += a.FeePadding
+			if nextFee < 0 {
+				nextFee = 0
 			}
 		}
-		if newFee == fee && previousShape == shape {
+		// Never settle on a fee below one already required by a shape that was
+		// considered. Around the change output's min-UTxO threshold the same
+		// transaction is bistable: at the lower fee the change clears min-UTxO
+		// and is emitted, which pushes the size-based fee up; at the higher fee
+		// the change falls below min-UTxO and is absorbed, which pulls the
+		// estimate back down. Allowing the fee to move downward alternates
+		// between those two shapes indefinitely, and the cheaper of them
+		// underpays its own size. Moving only upward terminates and never
+		// underpays.
+		if nextFee < requestedFee {
+			nextFee = requestedFee
+		}
+		if nextFee == requestedFee && previousShape == shape {
 			converged = true
 			break
 		}
@@ -1749,7 +1854,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 		seenShapes[shape] = struct{}{}
 		previousShape = shape
-		fee = newFee
+		requestedFee = nextFee
 	}
 	if !converged {
 		return a, errors.New("evaluation transaction did not converge after 5 iterations")
@@ -1928,8 +2033,37 @@ func (a *Apollo) sumUtxoValues(utxos []common.Utxo) (Value, error) {
 	return total, nil
 }
 
+// pickSingleInput chooses one UTxO to spend when the balance equation is
+// already satisfied by implicit inputs and the transaction only needs a
+// non-empty input set. A pure-ADA UTxO is preferred so the change output is not
+// forced to carry native assets, and candidates are considered in canonical
+// order so the choice is deterministic.
+func pickSingleInput(available []common.Utxo) (common.Utxo, error) {
+	if len(available) == 0 {
+		return common.Utxo{}, errors.New(
+			"no available UTxO to spend: a transaction must spend at least one input",
+		)
+	}
+	sorted := SortUtxos(available)
+	for _, utxo := range sorted {
+		assets := utxo.Output.Assets()
+		if assets == nil || len(assets.Policies()) == 0 {
+			return utxo, nil
+		}
+	}
+	return sorted[0], nil
+}
+
 func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error) {
-	if currentInput.GreaterOrEqual(required) {
+	// Withdrawals, mints, and certificate deposit refunds are implicit inputs
+	// in the balance equation, so currentInput can already cover the target
+	// with no UTxO being spent at all. The ledger still requires a non-empty
+	// input set (InputSetEmptyUTxO), and a transaction that spends nothing also
+	// carries no payment-key witness and has nothing establishing its
+	// uniqueness. If the caller pinned an input we are already satisfied;
+	// otherwise selection must contribute one even though no value is needed.
+	covered := currentInput.GreaterOrEqual(required)
+	if covered && len(a.preselectedUtxos) > 0 {
 		return nil, nil
 	}
 
@@ -1957,13 +2091,27 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 		}
 	}
 
-	selector := a.coinSelector
-	if selector == nil {
-		selector = defaultCoinSelector
-	}
-	selected, err := selector.Select(available, remaining)
-	if err != nil {
-		return nil, err
+	var selected []common.Utxo
+	if covered {
+		// The value is already satisfied, so spend exactly one UTxO purely to
+		// satisfy the non-empty input set rule. Prefer a pure-ADA UTxO so the
+		// change output does not have to carry native assets it did not need
+		// to, and pick deterministically so construction stays reproducible.
+		pick, pickErr := pickSingleInput(available)
+		if pickErr != nil {
+			return nil, pickErr
+		}
+		selected = []common.Utxo{pick}
+	} else {
+		selector := a.coinSelector
+		if selector == nil {
+			selector = defaultCoinSelector
+		}
+		var selErr error
+		selected, selErr = selector.Select(available, remaining)
+		if selErr != nil {
+			return nil, selErr
+		}
 	}
 	availableByRef := make(map[string]common.Utxo, len(available))
 	for _, utxo := range available {
@@ -2256,7 +2404,36 @@ func (a *Apollo) estimateExecutionUnits(
 		return nil, fmt.Errorf("failed to encode preliminary tx: %w", err)
 	}
 
-	evalResult, err := backend.EvaluateTxContext(a.requestContext, a.Context, txBytes, inputs)
+	// Only backends reporting CapabilityEvaluateTxAdditionalUtxos accept a
+	// resolved UTxO set. The ChainContext contract lets the rest ignore the
+	// argument or reject it outright, and backend/utxorpc rejects it, so
+	// forwarding the spending inputs unconditionally made every Plutus build
+	// fail there. Send nil instead and let the evaluator resolve inputs from
+	// its own chain view.
+	//
+	// That is correct for on-chain inputs. Apollo cannot narrow it further:
+	// there is no off-chain UTxO API and no provenance flag, so caller-supplied
+	// inputs (AddInput, AddLoadedUTxOs, CollectFrom) are indistinguishable from
+	// chain-loaded ones. Erroring on them would leave these backends as broken
+	// as before, because every script input arrives that way. Degrading is safe
+	// because it cannot understate a budget: an evaluator that cannot resolve an
+	// input either fails the call or omits that redeemer, and the validation
+	// below rejects a response missing any registered redeemer. Off-chain and
+	// chained inputs therefore fail loudly, and need a backend that reports the
+	// capability.
+	additionalUtxos := inputs
+	if !backend.Supports(
+		a.Context,
+		backend.CapabilityEvaluateTxAdditionalUtxos,
+	) {
+		additionalUtxos = nil
+	}
+	evalResult, err := backend.EvaluateTxContext(
+		a.requestContext,
+		a.Context,
+		txBytes,
+		additionalUtxos,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateTx failed: %w", err)
 	}
@@ -2532,14 +2709,12 @@ func (a *Apollo) buildWitnessSet(inputs []common.Utxo) conway.ConwayTransactionW
 		ws.WsNativeScripts = cbor.NewSetType(a.nativescripts, true)
 	}
 	if len(a.datums) > 0 {
-		ws.WsPlutusData = cbor.NewSetType(a.datums, true)
+		ws.WsPlutusData = WitnessPlutusData(a.datums)
 	}
 
 	redeemerMap := a.buildRedeemerMap(inputs)
 	if len(redeemerMap) > 0 {
-		ws.WsRedeemers = conway.ConwayRedeemers{
-			Redeemers: redeemerMap,
-		}
+		ws.WsRedeemers = WitnessRedeemers(redeemerMap)
 	}
 
 	return ws
@@ -3051,6 +3226,52 @@ func (a *Apollo) restoreCollateralReservation() {
 	a.collateralOverlapRef = ""
 }
 
+// selectionState captures the UTxO reservation bookkeeping that coin selection
+// mutates, so a speculative selection can be rolled back and retried against a
+// different fee reserve.
+type selectionState struct {
+	usedUtxos            map[string]bool
+	collateralOverlapRef string
+}
+
+func (a *Apollo) snapshotSelectionState() selectionState {
+	return selectionState{
+		usedUtxos:            maps.Clone(a.usedUtxos),
+		collateralOverlapRef: a.collateralOverlapRef,
+	}
+}
+
+func (a *Apollo) restoreSelectionState(s selectionState) {
+	a.usedUtxos = maps.Clone(s.usedUtxos)
+	a.collateralOverlapRef = s.collateralOverlapRef
+}
+
+// selectCoinsAllowingCollateralOverlap runs coin selection, and on failure
+// retries once with the auto-selected collateral released. setCollateral()
+// reserves a collateral UTxO out of the pool so multi-UTxO wallets keep a
+// separate collateral and an unchanged tx shape; when that reservation starves
+// selection (a wallet with a single UTxO, say) the ledger does permit one UTxO
+// to be both a spending input and collateral. If the retry also fails, the
+// reservation is restored so a subsequent Complete() starts from consistent
+// state.
+func (a *Apollo) selectCoinsAllowingCollateralOverlap(
+	target, totalInput Value,
+) ([]common.Utxo, error) {
+	selected, err := a.selectCoins(target, totalInput)
+	if err == nil {
+		return selected, nil
+	}
+	if a.releaseCollateralForOverlap() {
+		selected, retryErr := a.selectCoins(target, totalInput)
+		if retryErr == nil {
+			return selected, nil
+		}
+		a.restoreCollateralReservation()
+		return nil, retryErr
+	}
+	return nil, err
+}
+
 // finalizeCollateral sizes and validates the total collateral and the
 // collateral-return output against the final transaction fee. The ledger
 // requires
@@ -3423,9 +3644,12 @@ func (a *Apollo) computeAuxDataHash() (*common.Blake2b256, error) {
 	if md == nil {
 		return nil, nil
 	}
-	mdBytes, err := cbor.Encode(md)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode metadata: %w", err)
+	// Hash the exact bytes buildMetadata stored, which are the bytes that will
+	// be serialized as auxiliary_data. Re-encoding here instead would let the
+	// declared hash and the wire representation drift apart.
+	mdBytes := md.Cbor()
+	if len(mdBytes) == 0 {
+		return nil, errors.New("metadata has no stored CBOR encoding")
 	}
 	hash := common.Blake2b256Hash(mdBytes)
 	return &hash, nil
@@ -3453,7 +3677,18 @@ func (a *Apollo) buildMetadata() (*common.MetaMap, error) {
 		}
 		pairs = append(pairs, common.MetaPair{Key: key, Value: val})
 	}
-	return &common.MetaMap{Pairs: pairs}, nil
+	md := &common.MetaMap{Pairs: pairs}
+	// gouroboros serializes auxiliary data from the value's stored CBOR
+	// (ConwayTransaction.MarshalCBOR emits TxMetadata.Cbor()), so a freshly
+	// built MetaMap must carry its own encoding. Without this the transaction
+	// is emitted with auxiliary_data set to CBOR null while the body still
+	// declares auxiliary_data_hash, and the metadata is silently dropped.
+	mdBytes, err := cbor.Encode(md)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode metadata: %w", err)
+	}
+	md.SetCbor(mdBytes)
+	return md, nil
 }
 
 // toMetadatum converts a Go value to a TransactionMetadatum.
