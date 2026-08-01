@@ -318,8 +318,16 @@ func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
 }
 
 // AddDatum adds a datum to the witness set.
+//
+// The datum's wire bytes are pinned onto it (see DatumWireCbor), so a datum
+// whose original CBOR cannot be reproduced on the wire is rejected here rather
+// than being silently rehashed into a transaction the ledger would refuse.
 func (a *Apollo) AddDatum(datum *common.Datum) *Apollo {
 	if datum != nil {
+		if _, err := DatumWireCbor(datum); err != nil {
+			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
+			return a
+		}
 		a.datums = append(a.datums, *datum)
 	}
 	return a
@@ -456,11 +464,12 @@ func (a *Apollo) PayToContractWithDatumHash(addr common.Address, datum *common.D
 		Units:    units,
 	}
 	if datum != nil {
-		datumCbor, err := cbor.Encode(datum)
+		// Hash the bytes the datum will occupy in the witness set, so the
+		// output's datum hash matches the datum the ledger sees.
+		hash, err := DatumHash(datum)
 		if err != nil {
-			return a, fmt.Errorf("failed to encode datum: %w", err)
+			return a, err
 		}
-		hash := common.Blake2b256Hash(datumCbor)
 		p.DatumHash = hash.Bytes()
 		a.datums = append(a.datums, *datum)
 	}
@@ -2690,14 +2699,12 @@ func (a *Apollo) buildWitnessSet(inputs []common.Utxo) conway.ConwayTransactionW
 		ws.WsNativeScripts = cbor.NewSetType(a.nativescripts, true)
 	}
 	if len(a.datums) > 0 {
-		ws.WsPlutusData = cbor.NewSetType(a.datums, true)
+		ws.WsPlutusData = WitnessPlutusData(a.datums)
 	}
 
 	redeemerMap := a.buildRedeemerMap(inputs)
 	if len(redeemerMap) > 0 {
-		ws.WsRedeemers = conway.ConwayRedeemers{
-			Redeemers: redeemerMap,
-		}
+		ws.WsRedeemers = WitnessRedeemers(redeemerMap)
 	}
 
 	return ws
