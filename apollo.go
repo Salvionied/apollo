@@ -1588,43 +1588,105 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, fmt.Errorf("preliminary fee overflows int64: max fee=%d reference script fee=%d", prelimFee, refScriptFeeReserve)
 	}
 	prelimFee += refScriptFeeReserve
-	selectionTarget, err := balanceRequired.Add(NewSimpleValue(uint64(prelimFee))) //nolint:gosec // maxFee is bounded above and refScriptFeeReserve overflow is checked above
-	if err != nil {
-		return a, fmt.Errorf("selection target overflow: %w", err)
-	}
-	// Tokens being burned must be present in the inputs. mintValue adds them
-	// to totalInput as negative amounts, which selection would otherwise
-	// ignore, silently building a transaction that cannot conserve value.
-	if a.hasMint() {
-		burnValue, err := a.burnRequirementValue()
-		if err != nil {
-			return a, err
+
+	// buildSelectionTarget converts a fee reserve into the value coin selection
+	// must cover. Tokens being burned must be present in the inputs: mintValue
+	// adds them to totalInput as negative amounts, which selection would
+	// otherwise ignore, silently building a transaction that cannot conserve
+	// value.
+	buildSelectionTarget := func(reserve int64) (Value, error) {
+		if reserve < 0 {
+			return Value{}, fmt.Errorf("negative fee reserve: %d", reserve)
 		}
-		selectionTarget, err = selectionTarget.Add(burnValue)
-		if err != nil {
-			return a, fmt.Errorf("selection target overflow: %w", err)
+		target, addErr := balanceRequired.Add(NewSimpleValue(uint64(reserve))) //nolint:gosec // checked non-negative above
+		if addErr != nil {
+			return Value{}, fmt.Errorf("selection target overflow: %w", addErr)
+		}
+		if a.hasMint() {
+			burnValue, burnErr := a.burnRequirementValue()
+			if burnErr != nil {
+				return Value{}, burnErr
+			}
+			target, addErr = target.Add(burnValue)
+			if addErr != nil {
+				return Value{}, fmt.Errorf("selection target overflow: %w", addErr)
+			}
+		}
+		return target, nil
+	}
+
+	// Reserving the full MaxTxFee makes selection refuse wallets that can
+	// comfortably afford the transaction: MaxTxFee prices a maximum-size
+	// transaction (876277 lovelace on mainnet parameters) while a simple
+	// transfer costs nearer 170000, so the top ~0.7 ADA of every wallet was
+	// unspendable and reported as "insufficient UTxOs to cover required value".
+	//
+	// Try a reserve estimated from the shape known so far. If the inputs it
+	// selects turn out to need more fee than was reserved, roll the reservation
+	// bookkeeping back and re-select against the full MaxTxFee ceiling, which is
+	// exactly the previous behaviour -- so this never selects less
+	// conservatively than before, it only avoids doing so unnecessarily.
+	//
+	// A smaller reserve is a strictly smaller selection target, so a failure at
+	// the estimated reserve would also fail at the ceiling; such failures are
+	// genuine insufficiency and are reported directly.
+	// The reserve starts at the fee for the shape known before selection and
+	// grows to whatever the selected inputs actually cost, re-selecting each
+	// time, until the reserve covers the fee it produces. Growth is monotone and
+	// capped at prelimFee, so the loop terminates and the last attempt is always
+	// the old ceiling behaviour.
+	const maxSelectionAttempts = 3
+	reserve := prelimFee
+	if initialFee, estErr := a.estimateFee(a.preselectedUtxos, outputs); estErr == nil {
+		reserve = initialFee + a.FeePadding
+		if reserve < 0 || reserve > prelimFee {
+			reserve = prelimFee
 		}
 	}
 
-	// Coin selection. setCollateral() reserves an auto-selected collateral UTxO
-	// out of the pool so multi-UTxO wallets keep a separate collateral and an
-	// unchanged tx shape. If that reservation starves selection (e.g. a wallet
-	// with a single UTxO), release the collateral for overlap - the ledger lets
-	// one UTxO be both a spending input and collateral - and retry once.
-	selectedUtxos, err := a.selectCoins(selectionTarget, totalInput)
-	if err != nil {
-		if a.releaseCollateralForOverlap() {
-			selectedUtxos, err = a.selectCoins(selectionTarget, totalInput)
-			if err != nil {
-				// The overlap retry also failed. Restore the collateral
-				// reservation and clear the overlap flag so a subsequent
-				// Complete() on this builder starts from consistent state.
-				a.restoreCollateralReservation()
-			}
+	var selectedUtxos []common.Utxo
+	for attempt := 0; ; attempt++ {
+		selectionTarget, targetErr := buildSelectionTarget(reserve)
+		if targetErr != nil {
+			return a, targetErr
 		}
+		preSelectionState := a.snapshotSelectionState()
+		selectedUtxos, err = a.selectCoinsAllowingCollateralOverlap(
+			selectionTarget,
+			totalInput,
+		)
 		if err != nil {
 			return a, fmt.Errorf("coin selection failed: %w", err)
 		}
+		if reserve >= prelimFee || attempt+1 >= maxSelectionAttempts {
+			break
+		}
+
+		// Price the shape actually selected. estimateFee already includes the
+		// reference-script surcharge for the inputs it is given, so its result
+		// is directly comparable to the reserve.
+		trialInputs := make(
+			[]common.Utxo,
+			0,
+			len(a.preselectedUtxos)+len(selectedUtxos),
+		)
+		trialInputs = append(trialInputs, a.preselectedUtxos...)
+		trialInputs = append(trialInputs, selectedUtxos...)
+		selectedFee, feeEstErr := a.estimateFee(SortInputs(trialInputs), outputs)
+		needed := prelimFee
+		if feeEstErr == nil {
+			needed = selectedFee + a.FeePadding
+			if needed < 0 || needed > prelimFee {
+				needed = prelimFee
+			}
+		}
+		if needed <= reserve {
+			break
+		}
+		// The reserve was too small for what it selected. Roll the reservation
+		// bookkeeping back so the next attempt selects from the same pool.
+		a.restoreSelectionState(preSelectionState)
+		reserve = needed
 	}
 
 	// Build inputs (explicit allocation to avoid slice aliasing)
@@ -1699,8 +1761,20 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	var previousShape string
 	seenShapes := make(map[string]struct{}, maxEvaluationIterations)
 	converged := false
+	// requestedFee is the size-based fee that drives the iteration.
+	// buildBalancedOutputs may return a larger fee than it was given, by
+	// absorbing sub-min-UTxO ADA change into it and dropping the change
+	// output. That surcharge is not something estimateFee can predict from the
+	// resulting outputs, so convergence is judged on requestedFee while fee
+	// carries the amount actually charged. Comparing the absorbed fee against
+	// a fresh estimate instead never terminates.
+	requestedFee := fee
 	for range maxEvaluationIterations {
-		balanced, balanceErr := a.buildBalancedOutputs(baseOutputs, fee, balance)
+		balanced, balanceErr := a.buildBalancedOutputs(
+			baseOutputs,
+			requestedFee,
+			balance,
+		)
 		if balanceErr != nil {
 			return a, balanceErr
 		}
@@ -1729,18 +1803,30 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, fmt.Errorf("failed to encode evaluation shape: %w", bodyErr)
 		}
 		shape := string(bodyBytes)
-		newFee := fee
+		nextFee := requestedFee
 		if !a.forceFee && a.Fee == 0 {
-			newFee, err = a.estimateFee(allInputUtxos, outputs)
+			nextFee, err = a.estimateFee(allInputUtxos, outputs)
 			if err != nil {
 				return a, fmt.Errorf("fee re-estimation failed: %w", err)
 			}
-			newFee += a.FeePadding
-			if newFee < 0 {
-				newFee = 0
+			nextFee += a.FeePadding
+			if nextFee < 0 {
+				nextFee = 0
 			}
 		}
-		if newFee == fee && previousShape == shape {
+		// Never settle on a fee below one already required by a shape that was
+		// considered. Around the change output's min-UTxO threshold the same
+		// transaction is bistable: at the lower fee the change clears min-UTxO
+		// and is emitted, which pushes the size-based fee up; at the higher fee
+		// the change falls below min-UTxO and is absorbed, which pulls the
+		// estimate back down. Allowing the fee to move downward alternates
+		// between those two shapes indefinitely, and the cheaper of them
+		// underpays its own size. Moving only upward terminates and never
+		// underpays.
+		if nextFee < requestedFee {
+			nextFee = requestedFee
+		}
+		if nextFee == requestedFee && previousShape == shape {
 			converged = true
 			break
 		}
@@ -1749,7 +1835,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 		seenShapes[shape] = struct{}{}
 		previousShape = shape
-		fee = newFee
+		requestedFee = nextFee
 	}
 	if !converged {
 		return a, errors.New("evaluation transaction did not converge after 5 iterations")
@@ -3049,6 +3135,52 @@ func (a *Apollo) restoreCollateralReservation() {
 	}
 	a.markUsed(a.collateralOverlapRef)
 	a.collateralOverlapRef = ""
+}
+
+// selectionState captures the UTxO reservation bookkeeping that coin selection
+// mutates, so a speculative selection can be rolled back and retried against a
+// different fee reserve.
+type selectionState struct {
+	usedUtxos            map[string]bool
+	collateralOverlapRef string
+}
+
+func (a *Apollo) snapshotSelectionState() selectionState {
+	return selectionState{
+		usedUtxos:            maps.Clone(a.usedUtxos),
+		collateralOverlapRef: a.collateralOverlapRef,
+	}
+}
+
+func (a *Apollo) restoreSelectionState(s selectionState) {
+	a.usedUtxos = maps.Clone(s.usedUtxos)
+	a.collateralOverlapRef = s.collateralOverlapRef
+}
+
+// selectCoinsAllowingCollateralOverlap runs coin selection, and on failure
+// retries once with the auto-selected collateral released. setCollateral()
+// reserves a collateral UTxO out of the pool so multi-UTxO wallets keep a
+// separate collateral and an unchanged tx shape; when that reservation starves
+// selection (a wallet with a single UTxO, say) the ledger does permit one UTxO
+// to be both a spending input and collateral. If the retry also fails, the
+// reservation is restored so a subsequent Complete() starts from consistent
+// state.
+func (a *Apollo) selectCoinsAllowingCollateralOverlap(
+	target, totalInput Value,
+) ([]common.Utxo, error) {
+	selected, err := a.selectCoins(target, totalInput)
+	if err == nil {
+		return selected, nil
+	}
+	if a.releaseCollateralForOverlap() {
+		selected, retryErr := a.selectCoins(target, totalInput)
+		if retryErr == nil {
+			return selected, nil
+		}
+		a.restoreCollateralReservation()
+		return nil, retryErr
+	}
+	return nil, err
 }
 
 // finalizeCollateral sizes and validates the total collateral and the
