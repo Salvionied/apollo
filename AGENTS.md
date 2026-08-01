@@ -65,10 +65,17 @@ golangci-lint run
 
 **ChainContext** (`backend/base.go`):
 
-- `ProtocolParams()` - protocol parameters
-- `Utxos(address)` - query UTxOs
+- `ProtocolParams()` / `GenesisParams()` - protocol and genesis parameters
+- `NetworkId()` / `CurrentEpoch()` / `Tip()` - network and chain position
+- `MaxTxFee()` - maximum fee derived from protocol parameters
+- `Utxos(address)` / `UtxoByRef(txHash, index)` - query UTxOs
 - `SubmitTx(txCbor)` - submit a transaction
-- `EvaluateTx(txCbor)` - evaluate Plutus scripts
+- `EvaluateTx(txCbor, additionalUtxos)` - evaluate Plutus scripts
+- `ScriptCbor(scriptHash)` - resolve reference-script bytes
+
+Backends may implement `CapabilityReporter`; callers must check
+`CapabilityEvaluateTxAdditionalUtxos` before relying on evaluator-supplied
+UTxOs. `backend/cache` provides the cache wrapper.
 
 **Wallet** (`wallet.go`):
 

@@ -4,3 +4,8 @@ sample.txt
 /bin
 coverage.out
 coverage.html
+/.worktrees/
+/.claude/
+/.codex
+/.agents/
+/tmp/
