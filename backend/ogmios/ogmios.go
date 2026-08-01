@@ -24,6 +24,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // OgmiosChainContext implements backend.ChainContext using Ogmios + Kupo.
@@ -350,7 +351,7 @@ func evaluateResponseToExUnits(resp *ogmigo.EvaluateTxResponse) (map[common.Rede
 
 	result := make(map[common.RedeemerKey]common.ExUnits, len(resp.ExUnits))
 	for _, eu := range resp.ExUnits {
-		tag, err := backend.ParseRedeemerTag(eu.Validator.Purpose)
+		tag, err := backendutil.ParseRedeemerTag(eu.Validator.Purpose)
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer purpose %q: %w", eu.Validator.Purpose, err)
 		}
@@ -539,11 +540,11 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 		)
 	}
 
-	priceMem, err := backend.ParseFraction(p.ScriptPrices.Memory)
+	priceMem, err := backendutil.ParseFraction(p.ScriptPrices.Memory)
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid memory price: %w", err)
 	}
-	priceStep, err := backend.ParseFraction(p.ScriptPrices.CPU)
+	priceStep, err := backendutil.ParseFraction(p.ScriptPrices.CPU)
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid CPU price: %w", err)
 	}
@@ -577,11 +578,11 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 	}
 
 	if p.MinFeeReferenceScripts != nil {
-		base, err := backend.ParseRational(p.MinFeeReferenceScripts.Base.String())
+		base, err := backendutil.ParseRational(p.MinFeeReferenceScripts.Base.String())
 		if err != nil {
 			return backend.ProtocolParameters{}, fmt.Errorf("invalid reference-script base price: %w", err)
 		}
-		multiplier, err := backend.ParseRational(p.MinFeeReferenceScripts.Multiplier.String())
+		multiplier, err := backendutil.ParseRational(p.MinFeeReferenceScripts.Multiplier.String())
 		if err != nil {
 			return backend.ProtocolParameters{}, fmt.Errorf("invalid reference-script multiplier: %w", err)
 		}
@@ -652,7 +653,7 @@ type ogmiosRatio struct {
 func (r *ogmiosRatio) UnmarshalJSON(data []byte) error {
 	var text string
 	if err := json.Unmarshal(data, &text); err == nil {
-		value, parseErr := backend.ParseFraction(text)
+		value, parseErr := backendutil.ParseFraction(text)
 		if parseErr != nil {
 			return fmt.Errorf("invalid ratio %q: %w", text, parseErr)
 		}
@@ -1038,7 +1039,7 @@ func kupoScriptToScriptRef(script kugo.Script, expectedHashHex string) (*common.
 		return nil, fmt.Errorf("unsupported kupo script language: %d", script.Language)
 	}
 
-	return backend.ScriptRefFromBytes(scriptType, scriptBytes, expectedHashHex)
+	return backendutil.ScriptRefFromBytes(scriptType, scriptBytes, expectedHashHex)
 }
 
 // ogmiosScriptToScriptRef converts an Ogmios script JSON to a common.ScriptRef.
@@ -1079,5 +1080,5 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 		return nil, fmt.Errorf("unsupported ogmios script language %q", raw.Language)
 	}
 
-	return backend.ScriptRefFromBytes(scriptType, scriptBytes, "")
+	return backendutil.ScriptRefFromBytes(scriptType, scriptBytes, "")
 }

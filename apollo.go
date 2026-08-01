@@ -1464,9 +1464,11 @@ func (a *Apollo) GetUsedUTxOs() map[string]bool {
 	return cp
 }
 
-// GetBurns returns the total minted/burned value.
+// GetBurns returns the absolute quantities of all assets being burned
+// (negative mint amounts), which must be covered by transaction inputs. Use
+// GetMints for the net mint value, which retains negative quantities.
 func (a *Apollo) GetBurns() (Value, error) {
-	return a.mintValue()
+	return a.burnRequirementValue()
 }
 
 // GetWallet returns the current wallet.

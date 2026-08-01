@@ -25,6 +25,7 @@ import (
 	"github.com/maestro-org/go-sdk/utils"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // MaestroChainContext implements backend.ChainContext using the Maestro API.
@@ -134,32 +135,32 @@ func (m *MaestroChainContext) ProtocolParamsContext(ctx context.Context) (backen
 	}
 
 	data := resp.Data
-	priceMem, err := backend.ParseFraction(data.ScriptExecutionPrices.Memory)
+	priceMem, err := backendutil.ParseFraction(data.ScriptExecutionPrices.Memory)
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid memory price: %w", err)
 	}
-	priceStep, err := backend.ParseFraction(data.ScriptExecutionPrices.Steps)
+	priceStep, err := backendutil.ParseFraction(data.ScriptExecutionPrices.Steps)
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("invalid step price: %w", err)
 	}
 
-	maxBlockSize, err := backend.BoundedInt(data.MaxBlockBodySize.Bytes, "max block body size")
+	maxBlockSize, err := backendutil.BoundedInt(data.MaxBlockBodySize.Bytes, "max block body size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxTxSize, err := backend.BoundedInt(data.MaxTransactionSize.Bytes, "max transaction size")
+	maxTxSize, err := backendutil.BoundedInt(data.MaxTransactionSize.Bytes, "max transaction size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxBlockHeaderSize, err := backend.BoundedInt(data.MaxBlockHeaderSize.Bytes, "max block header size")
+	maxBlockHeaderSize, err := backendutil.BoundedInt(data.MaxBlockHeaderSize.Bytes, "max block header size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	collateralPercent, err := backend.BoundedInt(data.CollateralPercentage, "collateral percentage")
+	collateralPercent, err := backendutil.BoundedInt(data.CollateralPercentage, "collateral percentage")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
-	maxCollateralInputs, err := backend.BoundedInt(data.MaxCollateralInputs, "max collateral inputs")
+	maxCollateralInputs, err := backendutil.BoundedInt(data.MaxCollateralInputs, "max collateral inputs")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -506,7 +507,7 @@ func evaluationsToExUnits(evals models.EvaluateTxResponse) (map[common.RedeemerK
 		if uint64(eval.RedeemerIndex) > uint64(math.MaxUint32) {
 			return nil, fmt.Errorf("redeemer index %d exceeds uint32 range", eval.RedeemerIndex)
 		}
-		tag, err := backend.ParseRedeemerTag(eval.RedeemerTag)
+		tag, err := backendutil.ParseRedeemerTag(eval.RedeemerTag)
 		if err != nil {
 			return nil, fmt.Errorf("invalid redeemer tag %q: %w", eval.RedeemerTag, err)
 		}
@@ -605,7 +606,7 @@ func maestroUtxoToCommon(raw models.Utxo, address common.Address) (common.Utxo, 
 			if asset.Amount < 0 {
 				return common.Utxo{}, fmt.Errorf("negative asset amount %d for unit %s", asset.Amount, asset.Unit)
 			}
-			policyId, assetName, err := backend.ParseAssetUnit(asset.Unit)
+			policyId, assetName, err := backendutil.ParseAssetUnit(asset.Unit)
 			if err != nil {
 				return common.Utxo{}, fmt.Errorf("invalid asset unit %q: %w", asset.Unit, err)
 			}
@@ -727,7 +728,7 @@ func maestroScriptRef(scriptType string, scriptCbor []byte, expectedHashHex stri
 	default:
 		return nil, fmt.Errorf("unknown script type %q", scriptType)
 	}
-	return backend.ScriptRefFromBytes(refType, scriptCbor, expectedHashHex)
+	return backendutil.ScriptRefFromBytes(refType, scriptCbor, expectedHashHex)
 }
 
 // maestroCostModelKey translates Maestro cost model keys to the canonical form
