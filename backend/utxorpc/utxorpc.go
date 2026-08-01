@@ -336,14 +336,31 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 	}
 
 	var utxos []common.Utxo
-	for _, item := range resp.Msg.GetItems() {
-		utxo, err := utxoFromRpc(item)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse UTxO from RPC: %w", err)
+	seenTokens := make(map[string]struct{})
+	const maxPages = 10_000
+	for page := 0; page < maxPages; page++ {
+		for _, item := range resp.Msg.GetItems() {
+			utxo, err := utxoFromRpc(item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse UTxO from RPC: %w", err)
+			}
+			utxos = append(utxos, utxo)
 		}
-		utxos = append(utxos, utxo)
+		next := resp.Msg.GetNextToken()
+		if next == "" {
+			return utxos, nil
+		}
+		if _, seen := seenTokens[next]; seen {
+			return nil, fmt.Errorf("UTxO RPC pagination repeated token %q", next)
+		}
+		seenTokens[next] = struct{}{}
+		req.Msg.StartToken = next
+		resp, err = u.client.SearchUtxosWithContext(ctx, req)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return utxos, nil
+	return nil, fmt.Errorf("UTxO RPC pagination exceeded %d pages", maxPages)
 }
 
 func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {

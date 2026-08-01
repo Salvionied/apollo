@@ -1,6 +1,7 @@
 package apollo_test
 
 import (
+	"fmt"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 
 	apollo "github.com/Salvionied/apollo/v2"
@@ -25,6 +26,8 @@ func Example() {
 		PayToAddress(address, 2_000_000)
 
 	_ = builder
+	fmt.Println(builder != nil)
+	// Output: true
 }
 
 // ExampleNewScriptRef verifies the error-returning reference-script API from an
@@ -37,4 +40,6 @@ func ExampleNewScriptRef() {
 	}
 
 	_ = scriptRef
+	fmt.Println(scriptRef != nil)
+	// Output: true
 }

@@ -127,6 +127,24 @@ func New(cc backend.ChainContext) *Apollo {
 	return a
 }
 
+func (a *Apollo) initState() {
+	if a.requestContext == nil {
+		a.requestContext = context.Background()
+	}
+	if a.redeemers == nil {
+		a.redeemers = make(map[string]redeemerEntry)
+	}
+	if a.stakeRedeemers == nil {
+		a.stakeRedeemers = make(map[string]redeemerEntry)
+	}
+	if a.mintRedeemers == nil {
+		a.mintRedeemers = make(map[string]redeemerEntry)
+	}
+	if a.withdrawals == nil {
+		a.withdrawals = make(map[string]withdrawalEntry)
+	}
+}
+
 // WithContext sets the context used by subsequent chain-context operations.
 // A nil context is treated as context.Background. The context is retained by
 // the builder, so callers should not use a short-lived context for operations
@@ -177,6 +195,11 @@ func (a *Apollo) SetWalletFromMnemonicWithPassphrase(mnemonic string, passphrase
 
 // AddPayment adds a payment to the transaction.
 func (a *Apollo) AddPayment(payment PaymentI) *Apollo {
+	a.initState()
+	if isNilPayment(payment) {
+		a.setErrOnce(errors.New("payment must not be nil"))
+		return a
+	}
 	a.payments = append(a.payments, payment)
 	return a
 }
@@ -358,6 +381,7 @@ func (a *Apollo) AddReferenceInput(txHash string, index int) (*Apollo, error) {
 // Mint adds tokens to mint. If redeemer is provided, sets up script minting.
 // When exUnits is nil, execution units will be estimated automatically.
 func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits) *Apollo {
+	a.initState()
 	// Redeemer indexes bind to mint policies in byte-wise sorted order; mixed-case
 	// hex would sort differently as a string than as bytes, misbinding redeemers.
 	unit.PolicyId = strings.ToLower(unit.PolicyId)
@@ -427,6 +451,7 @@ func (a *Apollo) DisableExecutionUnitsEstimation() *Apollo {
 
 // CollectFrom adds a script UTxO as input with a spending redeemer.
 func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits common.ExUnits) *Apollo {
+	a.initState()
 	if err := validateUtxo(utxo); err != nil {
 		a.setErrOnce(fmt.Errorf("script input UTxO is invalid: %w", err))
 		return a
@@ -779,6 +804,9 @@ func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common
 
 // RegisterPool adds a pool registration certificate.
 func (a *Apollo) RegisterPool(params common.PoolRegistrationCertificate) *Apollo {
+	if params.Margin.Rat == nil || params.Margin.Denom().Sign() == 0 {
+		a.setErrOnce(errors.New("RegisterPool: margin must not be nil or have a zero denominator"))
+	}
 	params.CertType = uint(common.CertificateTypePoolRegistration)
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypePoolRegistration),
@@ -885,6 +913,7 @@ func (a *Apollo) DeregisterPool(poolHash common.Blake2b224, epoch uint64) *Apoll
 // AddWithdrawal adds a staking reward withdrawal to the transaction.
 // For script-based withdrawals, provide a redeemer and execution units.
 func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerData *common.Datum, exUnits *common.ExUnits) *Apollo {
+	a.initState()
 	rewardAddress, err := withdrawalRewardAddress(address)
 	if err != nil {
 		a.setErrOnce(err)
@@ -1302,6 +1331,19 @@ func isNilChainContext(ctx backend.ChainContext) bool {
 	}
 }
 
+func isNilPayment(payment PaymentI) bool {
+	if payment == nil {
+		return true
+	}
+	value := reflect.ValueOf(payment)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
 func cloneCBORValue(src, dst any) error {
 	encoded, err := cbor.Encode(src)
 	if err != nil {
@@ -1478,6 +1520,7 @@ func (a *Apollo) GetWallet() Wallet {
 
 // Complete performs coin selection, fee estimation, and builds the transaction.
 func (a *Apollo) Complete() (*Apollo, error) {
+	a.initState()
 	if a.err != nil {
 		return a, a.err
 	}
@@ -1522,6 +1565,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	// the backend when certificates are present, and fail closed on errors:
 	// a silently wrong deposit produces a value-non-conserving transaction.
 	stakeDeposit := int64(StakeDeposit)
+	poolDeposit := int64(0)
 	if len(a.certificates) > 0 {
 		pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context)
 		if ppErr != nil {
@@ -1532,8 +1576,12 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, fmt.Errorf("invalid key_deposit protocol parameter %q", pp.KeyDeposits)
 		}
 		stakeDeposit = d
+		poolDeposit, dErr = strconv.ParseInt(pp.PoolDeposits, 10, 64)
+		if dErr != nil || poolDeposit < 0 {
+			return a, fmt.Errorf("invalid pool_deposit protocol parameter %q", pp.PoolDeposits)
+		}
 	}
-	totalRequired, err = a.adjustForCertificateDeposits(totalRequired, stakeDeposit)
+	totalRequired, err = a.adjustForCertificateDeposits(totalRequired, stakeDeposit, poolDeposit)
 	if err != nil {
 		return a, fmt.Errorf("certificate deposit overflow: %w", err)
 	}
@@ -1579,7 +1627,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 	}
 	// Certificate deregistration refunds are implicit inputs
-	refundValue := a.certificateRefundValue(stakeDeposit)
+	refundValue := a.certificateRefundValue(stakeDeposit, poolDeposit)
 	if refundValue.Coin > 0 {
 		totalInput, err = totalInput.Add(refundValue)
 		if err != nil {
@@ -1884,6 +1932,19 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 		if md != nil {
 			a.tx.TxMetadata = md
+		}
+	}
+	pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context)
+	if ppErr != nil {
+		return a, fmt.Errorf("failed to get protocol params for transaction size validation: %w", ppErr)
+	}
+	if pp.MaxTxSize > 0 {
+		txBytes, encErr := cbor.Encode(a.tx)
+		if encErr != nil {
+			return a, fmt.Errorf("failed to encode completed transaction: %w", encErr)
+		}
+		if len(txBytes) > pp.MaxTxSize {
+			return a, fmt.Errorf("transaction size %d exceeds max_tx_size %d", len(txBytes), pp.MaxTxSize)
 		}
 	}
 
@@ -2452,6 +2513,16 @@ func (a *Apollo) estimateExecutionUnits(
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
 			Steps:  bufferExUnits(evalUnits.Steps, 1+ExStepBuffer),
+		}
+		if pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context); ppErr == nil {
+			maxMem, memErr := strconv.ParseInt(pp.MaxTxExMem, 10, 64)
+			maxSteps, stepsErr := strconv.ParseInt(pp.MaxTxExSteps, 10, 64)
+			if memErr == nil && maxMem > 0 && bufferedUnits.Memory > maxMem {
+				return nil, fmt.Errorf("buffered execution memory %d exceeds max_tx_ex_mem %d", bufferedUnits.Memory, maxMem)
+			}
+			if stepsErr == nil && maxSteps > 0 && bufferedUnits.Steps > maxSteps {
+				return nil, fmt.Errorf("buffered execution steps %d exceeds max_tx_ex_steps %d", bufferedUnits.Steps, maxSteps)
+			}
 		}
 		switch evalKey.Tag {
 		case common.RedeemerTagSpend:
@@ -3496,8 +3567,8 @@ func (a *Apollo) validateCollateral() error {
 }
 
 // adjustForCertificateDeposits adjusts the total required value for certificate deposits.
-func (a *Apollo) adjustForCertificateDeposits(required Value, depositPerCert int64) (Value, error) {
-	adj := a.certificateDepositAdjustment(depositPerCert)
+func (a *Apollo) adjustForCertificateDeposits(required Value, stakeDeposit, poolDeposit int64) (Value, error) {
+	adj := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
 	if adj > 0 {
 		deposit := NewSimpleValue(uint64(adj))
 		return required.Add(deposit)
@@ -3507,8 +3578,8 @@ func (a *Apollo) adjustForCertificateDeposits(required Value, depositPerCert int
 
 // certificateRefundValue returns the total deposit refund from deregistration certificates.
 // These refunds are implicit inputs in Cardano's balance equation.
-func (a *Apollo) certificateRefundValue(depositPerCert int64) Value {
-	adj := a.certificateDepositAdjustment(depositPerCert)
+func (a *Apollo) certificateRefundValue(stakeDeposit, poolDeposit int64) Value {
+	adj := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
 	if adj < 0 {
 		return NewSimpleValue(uint64(-adj))
 	}
@@ -3517,19 +3588,40 @@ func (a *Apollo) certificateRefundValue(depositPerCert int64) Value {
 
 // certificateDepositAdjustment calculates the net deposit change from certificates.
 // Positive means deposits needed, negative means refunds.
-func (a *Apollo) certificateDepositAdjustment(depositPerCert int64) int64 {
+func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits ...int64) int64 {
+	poolDeposit := int64(0)
+	if len(poolDeposits) > 0 {
+		poolDeposit = poolDeposits[0]
+	}
 	var adjustment int64
 	for _, cert := range a.certificates {
 		switch cert.Type {
-		case uint(common.CertificateTypeStakeRegistration),
-			uint(common.CertificateTypeRegistration),
-			uint(common.CertificateTypeStakeRegistrationDelegation),
+		case uint(common.CertificateTypeStakeRegistration):
+			adjustment += stakeDeposit
+		case uint(common.CertificateTypePoolRegistration):
+			adjustment += poolDeposit
+		case uint(common.CertificateTypeStakeDeregistration):
+			adjustment -= stakeDeposit
+		case uint(common.CertificateTypeDeregistration):
+			if c, ok := cert.Certificate.(*common.DeregistrationCertificate); ok {
+				adjustment -= c.Amount
+			}
+		case uint(common.CertificateTypeRegistration):
+			if c, ok := cert.Certificate.(*common.RegistrationCertificate); ok {
+				adjustment += c.Amount
+			}
+		case uint(common.CertificateTypeStakeRegistrationDelegation),
 			uint(common.CertificateTypeVoteRegistrationDelegation),
 			uint(common.CertificateTypeStakeVoteRegistrationDelegation):
-			adjustment += depositPerCert
-		case uint(common.CertificateTypeStakeDeregistration),
-			uint(common.CertificateTypeDeregistration):
-			adjustment -= depositPerCert
+			// These certificates carry their explicit deposit in Amount.
+			switch c := cert.Certificate.(type) {
+			case *common.StakeRegistrationDelegationCertificate:
+				adjustment += c.Amount
+			case *common.VoteRegistrationDelegationCertificate:
+				adjustment += c.Amount
+			case *common.StakeVoteRegistrationDelegationCertificate:
+				adjustment += c.Amount
+			}
 		case uint(common.CertificateTypeRegistrationDrep):
 			if c, ok := cert.Certificate.(*common.RegistrationDrepCertificate); ok {
 				adjustment += c.Amount

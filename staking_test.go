@@ -406,6 +406,17 @@ func TestCertificateDepositAdjustmentDeregOnly(t *testing.T) {
 	}
 }
 
+func TestCertificateDepositAdjustmentUsesPoolAndExplicitAmounts(t *testing.T) {
+	a := New(setupFixedContext())
+	a.certificates = []common.CertificateWrapper{
+		{Type: uint(common.CertificateTypePoolRegistration), Certificate: &common.PoolRegistrationCertificate{}},
+		{Type: uint(common.CertificateTypeRegistration), Certificate: &common.RegistrationCertificate{Amount: 1234567}},
+	}
+	if got, want := a.certificateDepositAdjustment(2_000_000, 500_000_000), int64(501_234_567); got != want {
+		t.Fatalf("certificate deposit adjustment = %d, want %d", got, want)
+	}
+}
+
 func TestGetStakeCredentialFromAddress(t *testing.T) {
 	addr := testAddress(t)
 	cred, err := GetStakeCredentialFromAddress(addr)

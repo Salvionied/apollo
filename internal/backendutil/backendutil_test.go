@@ -18,6 +18,22 @@ func TestParseFractionValid(t *testing.T) {
 	}
 }
 
+func TestParseRedeemerTagConwayPurposes(t *testing.T) {
+	tests := map[string]common.RedeemerTag{
+		"vote": common.RedeemerTagVoting, "voting": common.RedeemerTagVoting,
+		"propose": common.RedeemerTagProposing, "proposing": common.RedeemerTagProposing,
+		"guard": common.RedeemerTagGuarding, "guarding": common.RedeemerTagGuarding,
+	}
+	for input, want := range tests {
+		t.Run(input, func(t *testing.T) {
+			got, err := ParseRedeemerTag(input)
+			if err != nil || got != want {
+				t.Fatalf("ParseRedeemerTag(%q) = %v, %v; want %v, nil", input, got, err, want)
+			}
+		})
+	}
+}
+
 func TestParseFractionPlainNumber(t *testing.T) {
 	val, err := ParseFraction("0.0577")
 	if err != nil {

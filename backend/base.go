@@ -376,7 +376,15 @@ func TierRefScriptFeeRational(totalRefScriptSize int, baseFeePerByte *big.Rat, s
 	}
 	// floor(acc): acc is non-negative, so integer division of num/denom truncates
 	// toward zero, i.e. floors.
-	return new(big.Int).Quo(acc.Num(), acc.Denom()).Int64()
+	result := new(big.Int).Quo(acc.Num(), acc.Denom())
+	if !result.IsInt64() {
+		// A negative fee would be catastrophic: callers could treat it as a
+		// credit and construct an underpriced transaction. The public helper
+		// predates error returns, so saturate at MaxInt64 and let fee validation
+		// reject the impossible result upstream.
+		return math.MaxInt64
+	}
+	return result.Int64()
 }
 
 func rationalFromFloat64(value float64) *big.Rat {
