@@ -357,7 +357,7 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 		req.Msg.StartToken = next
 		resp, err = u.client.SearchUtxosWithContext(ctx, req)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to fetch UTxO RPC page after token %q: %w", next, err)
 		}
 	}
 	return nil, fmt.Errorf("UTxO RPC pagination exceeded %d pages", maxPages)

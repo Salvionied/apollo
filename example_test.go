@@ -2,6 +2,7 @@ package apollo_test
 
 import (
 	"fmt"
+
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 
 	apollo "github.com/Salvionied/apollo/v2"

@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -322,6 +323,7 @@ func TestRegisterPool(t *testing.T) {
 		Operator: operator,
 		Pledge:   1000000,
 		Cost:     340000000,
+		Margin:   common.GenesisRat{Rat: big.NewRat(1, 2)},
 	}
 
 	a.RegisterPool(params)

@@ -806,6 +806,7 @@ func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common
 func (a *Apollo) RegisterPool(params common.PoolRegistrationCertificate) *Apollo {
 	if params.Margin.Rat == nil || params.Margin.Denom().Sign() == 0 {
 		a.setErrOnce(errors.New("RegisterPool: margin must not be nil or have a zero denominator"))
+		return a
 	}
 	params.CertType = uint(common.CertificateTypePoolRegistration)
 	a.certificates = append(a.certificates, common.CertificateWrapper{
@@ -2509,20 +2510,22 @@ func (a *Apollo) estimateExecutionUnits(
 	seenSpend := make(map[string]bool, len(a.redeemers))
 	seenMint := make(map[string]bool, len(a.mintRedeemers))
 	seenStake := make(map[string]bool, len(a.stakeRedeemers))
+	pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context)
+	if ppErr != nil {
+		return nil, fmt.Errorf("failed to get protocol params for execution-unit validation: %w", ppErr)
+	}
+	maxMem, memErr := strconv.ParseInt(pp.MaxTxExMem, 10, 64)
+	maxSteps, stepsErr := strconv.ParseInt(pp.MaxTxExSteps, 10, 64)
 	for evalKey, evalUnits := range evalResult {
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
 			Steps:  bufferExUnits(evalUnits.Steps, 1+ExStepBuffer),
 		}
-		if pp, ppErr := backend.ProtocolParamsContext(a.requestContext, a.Context); ppErr == nil {
-			maxMem, memErr := strconv.ParseInt(pp.MaxTxExMem, 10, 64)
-			maxSteps, stepsErr := strconv.ParseInt(pp.MaxTxExSteps, 10, 64)
-			if memErr == nil && maxMem > 0 && bufferedUnits.Memory > maxMem {
-				return nil, fmt.Errorf("buffered execution memory %d exceeds max_tx_ex_mem %d", bufferedUnits.Memory, maxMem)
-			}
-			if stepsErr == nil && maxSteps > 0 && bufferedUnits.Steps > maxSteps {
-				return nil, fmt.Errorf("buffered execution steps %d exceeds max_tx_ex_steps %d", bufferedUnits.Steps, maxSteps)
-			}
+		if memErr == nil && maxMem > 0 && bufferedUnits.Memory > maxMem {
+			return nil, fmt.Errorf("buffered execution memory %d exceeds max_tx_ex_mem %d", bufferedUnits.Memory, maxMem)
+		}
+		if stepsErr == nil && maxSteps > 0 && bufferedUnits.Steps > maxSteps {
+			return nil, fmt.Errorf("buffered execution steps %d exceeds max_tx_ex_steps %d", bufferedUnits.Steps, maxSteps)
 		}
 		switch evalKey.Tag {
 		case common.RedeemerTagSpend:
