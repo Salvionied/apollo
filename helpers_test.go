@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"bytes"
 	"math/big"
 	"strings"
 	"testing"
@@ -601,9 +602,19 @@ func TestComputeScriptDataHashIncludesNonEmptyDatums(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	datumBytes, err := cbor.Encode(datums)
+	// The datums half of the preimage is the plutus_data witness field as it is
+	// serialized, tag-258 set prefix included, not a bare CBOR array.
+	datumField := WitnessPlutusData(datums)
+	datumBytes, err := cbor.Encode(&datumField)
 	if err != nil {
 		t.Fatal(err)
+	}
+	bareDatumBytes, err := cbor.Encode(datums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(datumBytes, bareDatumBytes) {
+		t.Fatal("witness field and bare array encodings are identical")
 	}
 	langViews, err := common.EncodeLangViews(
 		map[uint]struct{}{1: {}},
@@ -615,6 +626,10 @@ func TestComputeScriptDataHashIncludesNonEmptyDatums(t *testing.T) {
 	want := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), datumBytes...), langViews...))
 	if *got != want {
 		t.Fatalf("hash mismatch:\n got %x\nwant %x", got.Bytes(), want.Bytes())
+	}
+	stale := common.Blake2b256Hash(append(append(append([]byte{}, redeemerBytes...), bareDatumBytes...), langViews...))
+	if *got == stale {
+		t.Fatal("preimage still uses the untagged datum array")
 	}
 }
 
