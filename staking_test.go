@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -322,6 +323,7 @@ func TestRegisterPool(t *testing.T) {
 		Operator: operator,
 		Pledge:   1000000,
 		Cost:     340000000,
+		Margin:   common.GenesisRat{Rat: big.NewRat(1, 2)},
 	}
 
 	a.RegisterPool(params)
@@ -403,6 +405,17 @@ func TestCertificateDepositAdjustmentDeregOnly(t *testing.T) {
 	adj := a.certificateDepositAdjustment(StakeDeposit)
 	if adj != -StakeDeposit {
 		t.Errorf("expected deposit refund of %d, got %d", -StakeDeposit, adj)
+	}
+}
+
+func TestCertificateDepositAdjustmentUsesPoolAndExplicitAmounts(t *testing.T) {
+	a := New(setupFixedContext())
+	a.certificates = []common.CertificateWrapper{
+		{Type: uint(common.CertificateTypePoolRegistration), Certificate: &common.PoolRegistrationCertificate{}},
+		{Type: uint(common.CertificateTypeRegistration), Certificate: &common.RegistrationCertificate{Amount: 1234567}},
+	}
+	if got, want := a.certificateDepositAdjustment(2_000_000, 500_000_000), int64(501_234_567); got != want {
+		t.Fatalf("certificate deposit adjustment = %d, want %d", got, want)
 	}
 }
 

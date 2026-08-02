@@ -73,8 +73,9 @@ func marshalValue(val reflect.Value) (data.PlutusData, error) {
 	case "Map":
 		return marshalMap(val, typ, constrTag, hasConstr)
 	default:
-		// IndefList, DefList, or no tag (default to DefList)
-		useIndef := containerType == "IndefList"
+		// IndefList, DefList, or no tag. The reference Plutus encoder uses
+		// indefinite-length lists for the unannotated container form.
+		useIndef := containerType != "DefList"
 		return marshalList(val, typ, constrTag, hasConstr, useIndef)
 	}
 }

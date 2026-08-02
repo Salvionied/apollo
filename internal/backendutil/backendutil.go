@@ -84,6 +84,12 @@ func ParseRedeemerTag(s string) (common.RedeemerTag, error) {
 		return common.RedeemerTagCert, nil
 	case "reward", "withdraw":
 		return common.RedeemerTagReward, nil
+	case "vote", "voting":
+		return common.RedeemerTagVoting, nil
+	case "propose", "proposing":
+		return common.RedeemerTagProposing, nil
+	case "guard", "guarding":
+		return common.RedeemerTagGuarding, nil
 	default:
 		return 0, fmt.Errorf("unsupported redeemer tag %q", s)
 	}

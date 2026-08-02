@@ -913,10 +913,10 @@ type bfProtocolParams struct {
 	MinPoolCost        string          `json:"min_pool_cost"`
 	PriceMem           float64         `json:"price_mem"`
 	PriceStep          float64         `json:"price_step"`
-	MaxTxExMem         string          `json:"max_tx_execution_units_memory"`
-	MaxTxExSteps       string          `json:"max_tx_execution_units_steps"`
-	MaxBlockExMem      string          `json:"max_block_execution_units_memory"`
-	MaxBlockExSteps    string          `json:"max_block_execution_units_steps"`
+	MaxTxExMem         string          `json:"max_tx_ex_mem"`
+	MaxTxExSteps       string          `json:"max_tx_ex_steps"`
+	MaxBlockExMem      string          `json:"max_block_ex_mem"`
+	MaxBlockExSteps    string          `json:"max_block_ex_steps"`
 	MaxValSize         string          `json:"max_val_size"`
 	CollateralPercent  int64           `json:"collateral_percent"`
 	MaxCollateralIn    int64           `json:"max_collateral_inputs"`
