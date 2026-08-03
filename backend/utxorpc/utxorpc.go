@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -17,20 +18,34 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
-	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
-	query "github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
-	submit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
-	syncpb "github.com/utxorpc/go-codegen/utxorpc/v1alpha/sync"
+	alphacardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
+	alphaquery "github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
+	alphasubmit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+	alphasync "github.com/utxorpc/go-codegen/utxorpc/v1alpha/sync"
+	cardano "github.com/utxorpc/go-codegen/utxorpc/v1beta/cardano"
+	query "github.com/utxorpc/go-codegen/utxorpc/v1beta/query"
+	submit "github.com/utxorpc/go-codegen/utxorpc/v1beta/submit"
+	syncpb "github.com/utxorpc/go-codegen/utxorpc/v1beta/sync"
 	sdk "github.com/utxorpc/go-sdk"
+	alphasdk "github.com/utxorpc/go-sdk/v1alpha"
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // UtxoRpcChainContext implements backend.ChainContext using the UTxO RPC protocol.
+//
+// Requests are made against utxorpc.v1beta. If a server reports that service
+// unimplemented, the context falls back to utxorpc.v1alpha and remembers the
+// choice, so servers that expose only the older services keep working without
+// any configuration. Dolos serves both on the same port.
 type UtxoRpcChainContext struct {
-	client    *sdk.UtxorpcClient
-	networkId uint8
+	client      *sdk.UtxorpcClient
+	alphaClient *alphasdk.UtxorpcClient
+	networkId   uint8
+
+	versionMu sync.Mutex
+	version   protoVersion
 }
 
 var _ backend.ContextChainContext = (*UtxoRpcChainContext)(nil)
@@ -61,9 +76,18 @@ func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]
 		opts = append(opts, sdk.WithHeaders(headers))
 	}
 	client := sdk.NewClient(opts...)
+	// Both clients are built up front because neither constructor performs
+	// network I/O; only the one that ends up negotiated is ever used.
+	alphaOpts := []alphasdk.ClientOption{
+		alphasdk.WithBaseUrl(baseUrl),
+	}
+	if len(headers) > 0 {
+		alphaOpts = append(alphaOpts, alphasdk.WithHeaders(headers))
+	}
 	return &UtxoRpcChainContext{
-		client:    client,
-		networkId: networkId,
+		client:      client,
+		alphaClient: alphasdk.NewClient(alphaOpts...),
+		networkId:   networkId,
 	}
 }
 
@@ -141,14 +165,31 @@ func (u *UtxoRpcChainContext) ProtocolParams() (backend.ProtocolParameters, erro
 }
 
 func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
-	req := connect.NewRequest(&query.ReadParamsRequest{})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadParamsWithContext(ctx, req)
+	msg, err := callWithVersionFallback(ctx, u,
+		func(ctx context.Context) (*query.ReadParamsResponse, error) {
+			req := connect.NewRequest(&query.ReadParamsRequest{})
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.ReadParamsWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Msg, nil
+		},
+		func(ctx context.Context) (*query.ReadParamsResponse, error) {
+			req := connect.NewRequest(&alphaquery.ReadParamsRequest{})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.ReadParamsWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return transcodeTo(resp.Msg, &query.ReadParamsResponse{})
+		},
+	)
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
 
-	params := resp.Msg.GetValues().GetCardano()
+	params := msg.GetValues().GetCardano()
 	if params == nil {
 		return backend.ProtocolParameters{}, errors.New("no cardano params in response")
 	}
@@ -293,13 +334,30 @@ func (u *UtxoRpcChainContext) Tip() (uint64, error) {
 }
 
 func (u *UtxoRpcChainContext) TipContext(ctx context.Context) (uint64, error) {
-	req := connect.NewRequest(&syncpb.ReadTipRequest{})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadTipWithContext(ctx, req)
+	msg, err := callWithVersionFallback(ctx, u,
+		func(ctx context.Context) (*syncpb.ReadTipResponse, error) {
+			req := connect.NewRequest(&syncpb.ReadTipRequest{})
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.ReadTipWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Msg, nil
+		},
+		func(ctx context.Context) (*syncpb.ReadTipResponse, error) {
+			req := connect.NewRequest(&alphasync.ReadTipRequest{})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.ReadTipWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return transcodeTo(resp.Msg, &syncpb.ReadTipResponse{})
+		},
+	)
 	if err != nil {
 		return 0, err
 	}
-	tip := resp.Msg.GetTip()
+	tip := msg.GetTip()
 	if tip == nil {
 		return 0, errors.New("no tip in response")
 	}
@@ -316,37 +374,24 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 		return nil, fmt.Errorf("failed to get address bytes: %w", err)
 	}
 
-	req := connect.NewRequest(&query.SearchUtxosRequest{
-		Predicate: &query.UtxoPredicate{
-			Match: &query.AnyUtxoPattern{
-				UtxoPattern: &query.AnyUtxoPattern_Cardano{
-					Cardano: &cardano.TxOutputPattern{
-						Address: &cardano.AddressPattern{
-							ExactAddress: addrBytes,
-						},
-					},
-				},
-			},
-		},
-	})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.SearchUtxosWithContext(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
 	var utxos []common.Utxo
 	seenTokens := make(map[string]struct{})
 	const maxPages = 10_000
+	var startToken string
 	for page := 0; page < maxPages; page++ {
-		for _, item := range resp.Msg.GetItems() {
-			utxo, err := utxoFromRpc(item)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse UTxO from RPC: %w", err)
+		page, err := u.searchUtxosPage(ctx, addrBytes, startToken)
+		if err != nil {
+			if startToken == "" {
+				return nil, err
 			}
-			utxos = append(utxos, utxo)
+			return nil, fmt.Errorf(
+				"failed to fetch UTxO RPC page after token %q: %w",
+				startToken,
+				err,
+			)
 		}
-		next := resp.Msg.GetNextToken()
+		utxos = append(utxos, page.utxos...)
+		next := page.nextToken
 		if next == "" {
 			return utxos, nil
 		}
@@ -354,13 +399,100 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 			return nil, fmt.Errorf("UTxO RPC pagination repeated token %q", next)
 		}
 		seenTokens[next] = struct{}{}
-		req.Msg.StartToken = next
-		resp, err = u.client.SearchUtxosWithContext(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch UTxO RPC page after token %q: %w", next, err)
-		}
+		startToken = next
 	}
 	return nil, fmt.Errorf("UTxO RPC pagination exceeded %d pages", maxPages)
+}
+
+// utxoPage is one page of a UTxO search, already converted to Apollo's types.
+type utxoPage struct {
+	utxos     []common.Utxo
+	nextToken string
+}
+
+// searchUtxosPage fetches one page of UTxOs for an address. An empty startToken
+// requests the first page.
+//
+// Each version converts its own response rather than reprojecting one onto the
+// other. Apollo reads only native_bytes and txo_ref, which both versions
+// declare identically, so this costs no duplicated logic -- the conversion
+// lives once in utxoFromParts -- and it avoids a marshal/unmarshal round trip
+// per page as well as any dependence on the parsed Cardano value structures
+// agreeing between versions.
+//
+// v1beta declares start_token as proto3 optional so it takes a pointer, while
+// v1alpha declares it as a plain string. GetNextToken() returns a string in
+// both and yields "" for an absent token, so the caller's termination check is
+// the same either way.
+func (u *UtxoRpcChainContext) searchUtxosPage(
+	ctx context.Context,
+	addrBytes []byte,
+	startToken string,
+) (utxoPage, error) {
+	return callWithVersionFallback(ctx, u,
+		func(ctx context.Context) (utxoPage, error) {
+			req := connect.NewRequest(&query.SearchUtxosRequest{
+				Predicate: &query.UtxoPredicate{
+					Match: &query.AnyUtxoPattern{
+						UtxoPattern: &query.AnyUtxoPattern_Cardano{
+							Cardano: &cardano.TxOutputPattern{
+								Address: &cardano.AddressPattern{
+									ExactAddress: addrBytes,
+								},
+							},
+						},
+					},
+				},
+			})
+			if startToken != "" {
+				req.Msg.StartToken = &startToken
+			}
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.SearchUtxosWithContext(ctx, req)
+			if err != nil {
+				return utxoPage{}, err
+			}
+			page := utxoPage{nextToken: resp.Msg.GetNextToken()}
+			for _, item := range resp.Msg.GetItems() {
+				utxo, err := utxoFromRpc(item)
+				if err != nil {
+					return utxoPage{}, err
+				}
+				page.utxos = append(page.utxos, utxo)
+			}
+			return page, nil
+		},
+		func(ctx context.Context) (utxoPage, error) {
+			req := connect.NewRequest(&alphaquery.SearchUtxosRequest{
+				Predicate: &alphaquery.UtxoPredicate{
+					Match: &alphaquery.AnyUtxoPattern{
+						UtxoPattern: &alphaquery.AnyUtxoPattern_Cardano{
+							Cardano: &alphacardano.TxOutputPattern{
+								Address: &alphacardano.AddressPattern{
+									ExactAddress: addrBytes,
+								},
+							},
+						},
+					},
+				},
+				StartToken: startToken,
+			})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.SearchUtxosWithContext(ctx, req)
+			if err != nil {
+				return utxoPage{}, err
+			}
+			page := utxoPage{nextToken: resp.Msg.GetNextToken()}
+			for _, item := range resp.Msg.GetItems() {
+				utxo, err := utxoFromRpcAlpha(item)
+				if err != nil {
+					return utxoPage{}, err
+				}
+				page.utxos = append(page.utxos, utxo)
+			}
+			return page, nil
+		},
+	)
 }
 
 func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
@@ -368,17 +500,38 @@ func (u *UtxoRpcChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error)
 }
 
 func (u *UtxoRpcChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
-	req := connect.NewRequest(&submit.SubmitTxRequest{
-		Tx: &submit.AnyChainTx{
-			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+	msg, err := callWithVersionFallback(ctx, u,
+		func(ctx context.Context) (*submit.SubmitTxResponse, error) {
+			req := connect.NewRequest(&submit.SubmitTxRequest{
+				Tx: &submit.AnyChainTx{
+					Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+				},
+			})
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.SubmitTxWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Msg, nil
 		},
-	})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.SubmitTxWithContext(ctx, req)
+		func(ctx context.Context) (*submit.SubmitTxResponse, error) {
+			req := connect.NewRequest(&alphasubmit.SubmitTxRequest{
+				Tx: &alphasubmit.AnyChainTx{
+					Type: &alphasubmit.AnyChainTx_Raw{Raw: txCbor},
+				},
+			})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.SubmitTxWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return transcodeTo(resp.Msg, &submit.SubmitTxResponse{})
+		},
+	)
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	ref := resp.Msg.GetRef()
+	ref := msg.GetRef()
 	if len(ref) == 0 {
 		return common.Blake2b256{}, errors.New("no tx ref in submit response")
 	}
@@ -412,17 +565,38 @@ func (u *UtxoRpcChainContext) EvaluateTxContext(
 	if err != nil {
 		return nil, err
 	}
-	req := connect.NewRequest(&submit.EvalTxRequest{
-		Tx: &submit.AnyChainTx{
-			Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+	msg, err := callWithVersionFallback(ctx, u,
+		func(ctx context.Context) (*submit.EvalTxResponse, error) {
+			req := connect.NewRequest(&submit.EvalTxRequest{
+				Tx: &submit.AnyChainTx{
+					Type: &submit.AnyChainTx_Raw{Raw: txCbor},
+				},
+			})
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.EvalTxWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Msg, nil
 		},
-	})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.EvalTxWithContext(ctx, req)
+		func(ctx context.Context) (*submit.EvalTxResponse, error) {
+			req := connect.NewRequest(&alphasubmit.EvalTxRequest{
+				Tx: &alphasubmit.AnyChainTx{
+					Type: &alphasubmit.AnyChainTx_Raw{Raw: txCbor},
+				},
+			})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.EvalTxWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return transcodeTo(resp.Msg, &submit.EvalTxResponse{})
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate transaction: %w", err)
 	}
-	return evalTxResponseToExpectedExUnits(resp.Msg, expected)
+	return evalTxResponseToExpectedExUnits(msg, expected)
 }
 
 // evalTxResponseToExUnits converts an EvalTxResponse into a redeemer ExUnits
@@ -590,27 +764,42 @@ func (u *UtxoRpcChainContext) UtxoByRefContext(
 	txHash common.Blake2b256,
 	index uint32,
 ) (*common.Utxo, error) {
-	req := connect.NewRequest(&query.ReadUtxosRequest{
-		Keys: []*query.TxoRef{
-			{
-				Hash:  txHash.Bytes(),
-				Index: index,
-			},
+	// Converted per version rather than reprojected: see searchUtxosPage.
+	found, err := callWithVersionFallback(ctx, u,
+		func(ctx context.Context) ([]common.Utxo, error) {
+			req := connect.NewRequest(&query.ReadUtxosRequest{
+				Keys: []*query.TxoRef{
+					{Hash: txHash.Bytes(), Index: index},
+				},
+			})
+			u.client.AddHeadersToRequest(req)
+			resp, err := u.client.ReadUtxosWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return convertUtxoItems(resp.Msg.GetItems(), utxoFromRpc)
 		},
-	})
-	u.client.AddHeadersToRequest(req)
-	resp, err := u.client.ReadUtxosWithContext(ctx, req)
+		func(ctx context.Context) ([]common.Utxo, error) {
+			req := connect.NewRequest(&alphaquery.ReadUtxosRequest{
+				Keys: []*alphaquery.TxoRef{
+					{Hash: txHash.Bytes(), Index: index},
+				},
+			})
+			u.alphaClient.AddHeadersToRequest(req)
+			resp, err := u.alphaClient.ReadUtxosWithContext(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return convertUtxoItems(resp.Msg.GetItems(), utxoFromRpcAlpha)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	items := resp.Msg.GetItems()
-	if len(items) == 0 {
+	if len(found) == 0 {
 		return nil, errors.New("utxo not found")
 	}
-	utxo, err := utxoFromRpc(items[0])
-	if err != nil {
-		return nil, err
-	}
+	utxo := found[0]
 	return &utxo, nil
 }
 
@@ -626,11 +815,49 @@ func (u *UtxoRpcChainContext) ScriptCborContext(ctx context.Context, _ common.Bl
 }
 
 func utxoFromRpc(item *query.AnyUtxoData) (common.Utxo, error) {
-	nativeBytes := item.GetNativeBytes()
+	ref := item.GetTxoRef()
+	return utxoFromParts(item.GetNativeBytes(), ref.GetHash(), ref.GetIndex())
+}
+
+// convertUtxoItems maps a version's UTxO items through its converter.
+func convertUtxoItems[T any](
+	items []T,
+	convert func(T) (common.Utxo, error),
+) ([]common.Utxo, error) {
+	out := make([]common.Utxo, 0, len(items))
+	for _, item := range items {
+		utxo, err := convert(item)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, utxo)
+	}
+	return out, nil
+}
+
+// utxoFromRpcAlpha is the v1alpha counterpart of utxoFromRpc.
+//
+// Apollo reads only native_bytes and txo_ref from a UTxO response, and both
+// proto versions declare those identically, so each version converts its own
+// response and shares utxoFromParts. That avoids reprojecting these messages
+// between versions, which would mean a marshal/unmarshal round trip per page
+// and a dependency on the parsed Cardano value structures agreeing -- they
+// nearly do, but v1alpha carries Asset.mint_coin and Multiasset.redeemer with
+// no v1beta counterpart.
+func utxoFromRpcAlpha(item *alphaquery.AnyUtxoData) (common.Utxo, error) {
+	ref := item.GetTxoRef()
+	return utxoFromParts(item.GetNativeBytes(), ref.GetHash(), ref.GetIndex())
+}
+
+// utxoFromParts builds a UTxO from the raw output CBOR and its reference.
+func utxoFromParts(
+	nativeBytes []byte,
+	refHash []byte,
+	refIndex uint32,
+) (common.Utxo, error) {
 	if len(nativeBytes) == 0 {
-		ref := item.GetTxoRef()
 		return common.Utxo{}, fmt.Errorf("no native bytes for utxo %s#%d",
-			hex.EncodeToString(ref.GetHash()), ref.GetIndex())
+			hex.EncodeToString(refHash), refIndex)
 	}
 
 	// Parse the CBOR-encoded transaction output
@@ -639,8 +866,6 @@ func utxoFromRpc(item *query.AnyUtxoData) (common.Utxo, error) {
 		return common.Utxo{}, fmt.Errorf("failed to parse utxo CBOR: %w", err)
 	}
 
-	ref := item.GetTxoRef()
-	refHash := ref.GetHash()
 	if len(refHash) != common.Blake2b256Size {
 		return common.Utxo{}, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(refHash))
 	}
@@ -649,7 +874,7 @@ func utxoFromRpc(item *query.AnyUtxoData) (common.Utxo, error) {
 
 	input := shelley.ShelleyTransactionInput{
 		TxId:        txId,
-		OutputIndex: ref.GetIndex(),
+		OutputIndex: refIndex,
 	}
 	return common.Utxo{
 		Id:     input,
