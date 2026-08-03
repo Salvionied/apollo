@@ -516,9 +516,13 @@ func (a *Apollo) resolveCredential(v any) (common.Credential, error) {
 	case common.Address:
 		return GetStakeCredentialFromAddress(val)
 	case string:
-		addr, err := common.NewAddress(val)
+		// ParseAddress rather than common.NewAddress: the latter treats a
+		// bech32 checksum failure as a reason to try base58, and Shelley
+		// addresses are entirely base58-legal, so a corrupted address would
+		// decode to an unrelated credential instead of failing.
+		addr, err := ParseAddress(val)
 		if err != nil {
-			return common.Credential{}, fmt.Errorf("invalid bech32 address: %w", err)
+			return common.Credential{}, fmt.Errorf("invalid address: %w", err)
 		}
 		return GetStakeCredentialFromAddress(addr)
 	case nil:
@@ -1948,8 +1952,49 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, fmt.Errorf("transaction size %d exceeds max_tx_size %d", len(txBytes), pp.MaxTxSize)
 		}
 	}
+	if err := validateOutputValueSizes(a.tx.Body.TxOutputs, pp); err != nil {
+		return a, err
+	}
 
 	return a, nil
+}
+
+// validateOutputValueSizes rejects any output whose serialized value exceeds
+// max_val_size.
+//
+// The ledger bounds the value portion of an output, not the whole output, so a
+// wallet holding many native assets can produce a change output the node
+// refuses even though the transaction as a whole is within max_tx_size.
+// Reporting it here names the offending output instead of leaving the caller
+// with an OutputTooBigUTxO rejection after submission.
+func validateOutputValueSizes(
+	outputs []babbage.BabbageTransactionOutput,
+	pp backend.ProtocolParameters,
+) error {
+	if pp.MaxValSize == "" {
+		return nil
+	}
+	maxValSize, err := strconv.ParseInt(pp.MaxValSize, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid max_val_size %q: %w", pp.MaxValSize, err)
+	}
+	if maxValSize <= 0 {
+		return nil
+	}
+	for i := range outputs {
+		valueBytes, err := cbor.Encode(outputs[i].OutputAmount)
+		if err != nil {
+			return fmt.Errorf("failed to encode output %d value: %w", i, err)
+		}
+		if int64(len(valueBytes)) > maxValSize {
+			return fmt.Errorf(
+				"output %d value size %d exceeds max_val_size %d; "+
+					"split the native assets across more outputs",
+				i, len(valueBytes), maxValSize,
+			)
+		}
+	}
+	return nil
 }
 
 // Sign signs the transaction with the wallet.
@@ -1988,6 +2033,17 @@ func (a *Apollo) Sign() (*Apollo, error) {
 }
 
 // GetTx returns the built transaction.
+//
+// Apollo builds Conway transactions, so the concrete Conway type is returned:
+// it gives callers every body and witness-set field, including ones no
+// era-neutral interface exposes, such as the network id. When Apollo gains
+// support for a later era, a sibling accessor is added for it rather than this
+// one changing meaning.
+//
+// The returned transaction is constructed rather than decoded, so its Cbor() is
+// empty: gouroboros populates stored CBOR only when unmarshalling. Use
+// GetTxCbor for the encoding, which is produced fresh on each call and so
+// cannot go stale when Sign adds witnesses.
 func (a *Apollo) GetTx() *conway.ConwayTransaction {
 	return a.tx
 }
@@ -2046,7 +2102,11 @@ func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build payment output: %w", err)
 		}
-		outputs = append(outputs, *txOut)
+		babbageOut, err := babbageOutputOf(txOut)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, *babbageOut)
 	}
 	return outputs, nil
 }
@@ -2211,6 +2271,61 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	return canonical, nil
 }
 
+// estimatedWitnessCount reports how many vkey witnesses the transaction is
+// expected to carry, for fee sizing.
+//
+// Counting only the wallet plus explicitly registered required signers
+// undercounts whenever the inputs span more than one payment credential or a
+// withdrawal or certificate needs a stake-key signature. Each missing witness
+// is around 102 bytes, and the converged fee has no slack, so an undercount
+// becomes FeeTooSmallUTxO at submission -- which is what made multi-signature
+// flows fail.
+//
+// Credentials are counted as a set, since one signature covers every input
+// under the same key. Script credentials are excluded: they are satisfied by a
+// script witness, not a vkey witness. The result never drops below the previous
+// estimate, so this can only raise a fee, never lower one.
+func (a *Apollo) estimatedWitnessCount(inputs []common.Utxo) int {
+	signers := make(map[common.Blake2b224]struct{})
+	if a.wallet != nil {
+		signers[a.wallet.PubKeyHash()] = struct{}{}
+	}
+	for _, hash := range a.requiredSigners {
+		signers[hash] = struct{}{}
+	}
+	addPaymentKey := func(utxos []common.Utxo) {
+		for _, utxo := range utxos {
+			if utxo.Output == nil {
+				continue
+			}
+			addr := utxo.Output.Address()
+			switch addr.Type() {
+			case common.AddressTypeKeyKey,
+				common.AddressTypeKeyScript,
+				common.AddressTypeKeyPointer,
+				common.AddressTypeKeyNone:
+				if hash := addr.PaymentKeyHash(); hash != (common.Blake2b224{}) {
+					signers[hash] = struct{}{}
+				}
+			}
+		}
+	}
+	addPaymentKey(inputs)
+	addPaymentKey(a.collaterals)
+	// A withdrawal is authorised by the stake credential of its reward address.
+	for _, entry := range a.withdrawals {
+		if hash := entry.Address.StakeKeyHash(); hash != (common.Blake2b224{}) {
+			signers[hash] = struct{}{}
+		}
+	}
+	count := len(signers)
+	// Never estimate below the previous behaviour.
+	if previous := 1 + len(a.requiredSigners); count < previous {
+		count = previous
+	}
+	return count
+}
+
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
 	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
@@ -2233,11 +2348,9 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 		return 0, err
 	}
 	ws := a.buildWitnessSet(inputs)
-	// Add fake vkey witnesses for size estimation (1 for wallet + 1 per required signer).
-	// Note: this count may underestimate if additional signers (e.g., multi-sig
-	// participants) are added after Complete(). Callers can use SetFeePadding()
-	// to account for extra witnesses.
-	witnessCount := 1 + len(a.requiredSigners)
+	// Add placeholder vkey witnesses so the size estimate accounts for the
+	// signatures the transaction will carry.
+	witnessCount := a.estimatedWitnessCount(inputs)
 	fakeWitnesses := make([]common.VkeyWitness, witnessCount)
 	for i := range fakeWitnesses {
 		fakeWitnesses[i] = common.VkeyWitness{
