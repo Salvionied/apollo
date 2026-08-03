@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/SundaeSwap-finance/kugo"
 	ogmigo "github.com/SundaeSwap-finance/ogmigo/v6"
-	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/chainsync/num"
 	"github.com/SundaeSwap-finance/ogmigo/v6/ouroboros/shared"
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -29,31 +29,141 @@ import (
 
 // OgmiosChainContext implements backend.ChainContext using Ogmios + Kupo.
 type OgmiosChainContext struct {
-	ogmios    *ogmigo.Client
-	kupo      *kugo.Client
+	ogmios    OgmiosClient
+	kupo      KupoClient
 	networkId uint8
 }
 
 var _ backend.ContextChainContext = (*OgmiosChainContext)(nil)
+
+// Config describes how an OgmiosChainContext reaches its services. Apollo
+// owns this type, so which client libraries this package builds - and which
+// major versions of them - stay an implementation detail.
+type Config struct {
+	// OgmiosEndpoint is the Ogmios JSON-RPC endpoint, e.g.
+	// "ws://localhost:1337". Ogmios is reached over WebSocket, so http and
+	// https URLs are accepted and dialed as ws and wss. Required.
+	OgmiosEndpoint string
+	// KupoEndpoint is the base URL of a Kupo instance, e.g.
+	// "http://localhost:1442". Optional: a context configured without one
+	// answers every query Ogmios serves on its own, and reports neither
+	// CapabilityUtxos nor CapabilityScriptCbor.
+	KupoEndpoint string
+	// NetworkId is the Cardano network identifier reported by NetworkId()
+	// (mainnet = 1, testnets = 0).
+	NetworkId uint8
+	// KupoTimeout bounds each Kupo HTTP request. Zero leaves the Kupo client
+	// default in place.
+	KupoTimeout time.Duration
+}
+
+// NewOgmiosChainContext creates an Ogmios chain context from connection
+// settings, building the Ogmios and Kupo clients internally. An endpoint that
+// is empty, or is not a URL Apollo can reach the service at, is rejected here
+// rather than failing on the first query.
+func NewOgmiosChainContext(cfg Config) (*OgmiosChainContext, error) {
+	ogmiosClient, err := newOgmigoClient(cfg.OgmiosEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	chainCtx := &OgmiosChainContext{
+		ogmios:    ogmiosClient,
+		networkId: cfg.NetworkId,
+	}
+	if cfg.KupoEndpoint != "" {
+		kupoClient, err := newKugoClient(cfg.KupoEndpoint, cfg.KupoTimeout)
+		if err != nil {
+			return nil, err
+		}
+		chainCtx.kupo = kupoClient
+	}
+	return chainCtx, nil
+}
+
+// NewOgmiosChainContextFromClients creates an Ogmios chain context from
+// caller-supplied clients. It is the escape hatch for tests and for callers
+// whose transport Config cannot express; both interfaces are Apollo's own, so
+// injecting a client does not pin Apollo to a client library.
+//
+// ogmiosClient is required. kupoClient may be nil, in which case the context
+// reports neither CapabilityUtxos nor CapabilityScriptCbor.
+func NewOgmiosChainContextFromClients(
+	ogmiosClient OgmiosClient,
+	kupoClient KupoClient,
+	networkId uint8,
+) (*OgmiosChainContext, error) {
+	if isNilClient(ogmiosClient) {
+		return nil, errors.New("ogmios client is required")
+	}
+	chainCtx := &OgmiosChainContext{
+		ogmios:    ogmiosClient,
+		networkId: networkId,
+	}
+	// A typed nil is normalized to a nil field so Capabilities reports the
+	// Kupo-less feature set instead of the context failing on first use.
+	if !isNilClient(kupoClient) {
+		chainCtx.kupo = kupoClient
+	}
+	return chainCtx, nil
+}
+
+// isNilClient reports whether an interface value is nil or holds a nil
+// pointer. A typed nil pointer still satisfies its interface, so without this
+// check it would pass the constructor and panic on first use.
+func isNilClient(client any) bool {
+	if client == nil {
+		return true
+	}
+	value := reflect.ValueOf(client)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer,
+		reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
+// errNoOgmiosClient reports a context that no constructor produced - a zero
+// value, say - and so has no client to query. Methods return it instead of
+// dereferencing a nil client.
+var errNoOgmiosClient = errors.New(
+	"ogmios chain context has no Ogmios client: build it with" +
+		" NewOgmiosChainContext or NewOgmiosChainContextFromClients",
+)
+
+// client returns the configured Ogmios client, or errNoOgmiosClient.
+func (o *OgmiosChainContext) client() (OgmiosClient, error) {
+	if o == nil || o.ogmios == nil {
+		return nil, errNoOgmiosClient
+	}
+	return o.ogmios, nil
+}
+
+// kupoClient returns the configured Kupo client, or an UnsupportedError
+// naming the capability the missing client would have provided.
+func (o *OgmiosChainContext) kupoClient(
+	capability backend.Capability,
+) (KupoClient, error) {
+	if o == nil || o.kupo == nil {
+		return nil, backend.NewUnsupportedError(
+			"Ogmios without Kupo", capability,
+		)
+	}
+	return o.kupo, nil
+}
 
 // Capabilities reports the operations supported by the configured Ogmios
 // client. Address UTxO queries and script lookup require the optional Kupo
 // client; UTxO-by-reference queries are served directly by Ogmios.
 func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
 	capabilities := backend.CapabilitySet(backend.AllCapabilities)
-	if o.kupo == nil {
-		capabilities &^= backend.CapabilitySet(backend.CapabilityUtxos | backend.CapabilityScriptCbor)
+	if o == nil || o.kupo == nil {
+		capabilities &^= backend.CapabilitySet(
+			backend.CapabilityUtxos | backend.CapabilityScriptCbor,
+		)
 	}
 	return capabilities
-}
-
-// NewOgmiosChainContext creates a new Ogmios chain context.
-func NewOgmiosChainContext(ogmiosClient *ogmigo.Client, kupoClient *kugo.Client, networkId uint8) *OgmiosChainContext {
-	return &OgmiosChainContext{
-		ogmios:    ogmiosClient,
-		kupo:      kupoClient,
-		networkId: networkId,
-	}
 }
 
 func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
@@ -61,7 +171,11 @@ func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error
 }
 
 func (o *OgmiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
-	raw, err := o.ogmios.CurrentProtocolParameters(ctx)
+	client, err := o.client()
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	raw, err := client.ProtocolParameters(ctx)
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
@@ -79,7 +193,11 @@ func (o *OgmiosChainContext) GenesisParams() (backend.GenesisParameters, error) 
 }
 
 func (o *OgmiosChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
-	raw, err := o.ogmios.GenesisConfig(ctx, "shelley")
+	client, err := o.client()
+	if err != nil {
+		return backend.GenesisParameters{}, err
+	}
+	raw, err := client.GenesisConfig(ctx, "shelley")
 	if err != nil {
 		return backend.GenesisParameters{}, err
 	}
@@ -103,7 +221,11 @@ func (o *OgmiosChainContext) CurrentEpoch() (uint64, error) {
 }
 
 func (o *OgmiosChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
-	return o.ogmios.CurrentEpoch(ctx)
+	client, err := o.client()
+	if err != nil {
+		return 0, err
+	}
+	return client.CurrentEpoch(ctx)
 }
 
 func (o *OgmiosChainContext) MaxTxFee() (uint64, error) {
@@ -123,15 +245,11 @@ func (o *OgmiosChainContext) Tip() (uint64, error) {
 }
 
 func (o *OgmiosChainContext) TipContext(ctx context.Context) (uint64, error) {
-	point, err := o.ogmios.ChainTip(ctx)
+	client, err := o.client()
 	if err != nil {
 		return 0, err
 	}
-	ps, ok := point.PointStruct()
-	if !ok || ps == nil {
-		return 0, errors.New("chain tip is origin")
-	}
-	return ps.Slot, nil
+	return client.Tip(ctx)
 }
 
 func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error) {
@@ -139,23 +257,11 @@ func (o *OgmiosChainContext) Utxos(address common.Address) ([]common.Utxo, error
 }
 
 func (o *OgmiosChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
-	if o.kupo == nil {
-		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityUtxos)
-	}
-	matches, err := o.kupo.Matches(ctx, kugo.OnlyUnspent(), kugo.Address(address.String()))
+	client, err := o.kupoClient(backend.CapabilityUtxos)
 	if err != nil {
 		return nil, err
 	}
-
-	var utxos []common.Utxo
-	for _, match := range matches {
-		utxo, err := matchToUtxo(ctx, match, address, o.kupo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse UTxO match: %w", err)
-		}
-		utxos = append(utxos, utxo)
-	}
-	return utxos, nil
+	return client.UtxosAtAddress(ctx, address)
 }
 
 func (o *OgmiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
@@ -163,24 +269,11 @@ func (o *OgmiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) 
 }
 
 func (o *OgmiosChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) (common.Blake2b256, error) {
-	txHex := hex.EncodeToString(txCbor)
-	resp, err := o.ogmios.SubmitTx(ctx, txHex)
+	client, err := o.client()
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	if resp.Error != nil {
-		return common.Blake2b256{}, fmt.Errorf("submit tx error: %s", resp.Error.Message)
-	}
-	hashBytes, err := hex.DecodeString(resp.ID)
-	if err != nil {
-		return common.Blake2b256{}, err
-	}
-	if len(hashBytes) != common.Blake2b256Size {
-		return common.Blake2b256{}, fmt.Errorf("invalid tx hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
-	}
-	var result common.Blake2b256
-	copy(result[:], hashBytes)
-	return result, nil
+	return client.SubmitTx(ctx, txCbor)
 }
 
 func (o *OgmiosChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -192,24 +285,18 @@ func (o *OgmiosChainContext) EvaluateTxContext(
 	txCbor []byte,
 	additionalUtxos []common.Utxo,
 ) (map[common.RedeemerKey]common.ExUnits, error) {
-	txHex := hex.EncodeToString(txCbor)
-	var resp *ogmigo.EvaluateTxResponse
-	var err error
-	if len(additionalUtxos) > 0 {
-		// Ogmios natively accepts a set of resolved UTxOs so it can evaluate
-		// inputs that are not yet visible on-chain.
-		sharedUtxos, convErr := commonUtxosToShared(additionalUtxos)
-		if convErr != nil {
-			return nil, convErr
-		}
-		resp, err = o.ogmios.EvaluateTxWithAdditionalUtxos(ctx, txHex, sharedUtxos)
-	} else {
-		resp, err = o.ogmios.EvaluateTx(ctx, txHex)
-	}
+	client, err := o.client()
 	if err != nil {
 		return nil, err
 	}
-	return evaluateResponseToExUnits(resp)
+	// Validated here, not only where the UTxOs are encoded for the wire, so
+	// a malformed additional UTxO is rejected whichever client is in use.
+	for _, utxo := range additionalUtxos {
+		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
+			return nil, err
+		}
+	}
+	return client.EvaluateTx(ctx, txCbor, additionalUtxos)
 }
 
 // commonUtxosToShared converts resolved gouroboros UTxOs into the ogmigo
@@ -376,29 +463,11 @@ func (o *OgmiosChainContext) UtxoByRefContext(
 	txHash common.Blake2b256,
 	index uint32,
 ) (*common.Utxo, error) {
-	hashHex := hex.EncodeToString(txHash.Bytes())
-	query := chainsync.TxInQuery{
-		Transaction: shared.UtxoTxID{ID: hashHex},
-		Index:       index,
-	}
-	utxos, err := o.ogmios.UtxosByTxIn(ctx, query)
+	client, err := o.client()
 	if err != nil {
 		return nil, err
 	}
-	if len(utxos) == 0 {
-		return nil, errors.New("utxo not found")
-	}
-
-	raw := utxos[0]
-	addr, err := common.NewAddress(raw.Address)
-	if err != nil {
-		return nil, err
-	}
-	result, err := ogmiosUtxoToCommon(raw, addr)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return client.UtxoByRef(ctx, txHash, index)
 }
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
@@ -409,15 +478,11 @@ func (o *OgmiosChainContext) ScriptCborContext(
 	ctx context.Context,
 	scriptHash common.Blake2b224,
 ) ([]byte, error) {
-	if o.kupo == nil {
-		return nil, backend.NewUnsupportedError("Ogmios without Kupo", backend.CapabilityScriptCbor)
-	}
-	hashHex := hex.EncodeToString(scriptHash.Bytes())
-	script, err := o.kupo.Script(ctx, hashHex)
+	client, err := o.kupoClient(backend.CapabilityScriptCbor)
 	if err != nil {
 		return nil, err
 	}
-	return hex.DecodeString(script.Script)
+	return client.ScriptCbor(ctx, scriptHash)
 }
 
 // --- Ogmios response types and conversion ---
