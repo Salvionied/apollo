@@ -54,8 +54,11 @@ func TestBlockfrostCapabilities(t *testing.T) {
 	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityScriptCbor) {
 		t.Fatalf("Blockfrost capabilities = %b, want evaluation and script lookup", ctx.Capabilities())
 	}
-	if backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
-		t.Fatal("Blockfrost must not report general additional-UTxO evaluation support")
+	// EvaluateTx honours additionalUtxos via the /evaluate/utxos fallback, and
+	// callers pass nil to backends that do not report the capability, so
+	// declining it would make that fallback unreachable.
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
+		t.Fatal("Blockfrost must report additional-UTxO evaluation support")
 	}
 }
 
@@ -187,7 +190,7 @@ func TestUtxosHydratesReferenceScriptsConcurrentlyInResponseOrder(t *testing.T) 
 		scripts[scriptHashHex] = script
 		rawUtxos[index] = bfAddressUTxO{
 			TxHash:              txHash,
-			OutputIndex:         index,
+			OutputIndex:         int64(index),
 			Address:             addr.String(),
 			Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
 			ReferenceScriptHash: scriptHashHex,
@@ -570,13 +573,44 @@ func TestAddressUTxOToUtxoRejectsNegativeAssetQuantity(t *testing.T) {
 	}
 }
 
-func TestAddressUTxOToUtxoRejectsOutputIndexOverflow(t *testing.T) {
+// TestAddressUTxOToUtxoRejectsOutputIndexOutOfRange pins both range guards in
+// toUtxo. bfAddressUTxO.OutputIndex is int64 rather than int precisely so this
+// test is expressible everywhere: with an int field the overflow literal does
+// not compile at GOARCH=386, and the guard it exercises would be dead code
+// there because a 32-bit int cannot hold a value above the uint32 range.
+func TestAddressUTxOToUtxoRejectsOutputIndexOutOfRange(t *testing.T) {
 	addr := testAddress(t)
-	raw := bfAddressUTxO{
-		TxHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		OutputIndex: int(math.MaxUint32) + 1,
-		Address:     addr.String(),
-		Amount:      []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+	for _, index := range []int64{-1, int64(math.MaxUint32) + 1} {
+		raw := bfAddressUTxO{
+			TxHash:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			OutputIndex: index,
+			Address:     addr.String(),
+			Amount:      []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		}
+		if _, err := raw.toUtxo(addr); err == nil {
+			t.Fatalf("expected rejection of output index %d", index)
+		}
+	}
+}
+
+// TestAddressUTxODecodesOutputIndexAboveUint32 covers the guard through the
+// path a real Blockfrost response takes. The out-of-range output_index must
+// survive JSON decoding and then be rejected by toUtxo on every architecture;
+// an int field would instead fail inside json.Unmarshal on 32-bit builds, so
+// the domain guard would never run and the error would be a decode error.
+func TestAddressUTxODecodesOutputIndexAboveUint32(t *testing.T) {
+	addr := testAddress(t)
+	body := []byte(`{
+		"tx_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"output_index": 4294967296,
+		"amount": [{"unit": "lovelace", "quantity": "1000000"}]
+	}`)
+	var raw bfAddressUTxO
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("failed to decode output_index above uint32 range: %v", err)
+	}
+	if want := int64(math.MaxUint32) + 1; raw.OutputIndex != want {
+		t.Fatalf("OutputIndex = %d, want %d", raw.OutputIndex, want)
 	}
 	if _, err := raw.toUtxo(addr); err == nil {
 		t.Fatal("expected output index overflow error")
@@ -1154,6 +1188,54 @@ func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
 		if paths[i] != wantPaths[i] {
 			t.Fatalf("paths = %v, want %v", paths, wantPaths)
 		}
+	}
+	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
+	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
+		t.Fatalf("unexpected ExUnits %+v", eu)
+	}
+}
+
+// TestEvaluateTxAdditionalUtxosReachableThroughCapabilityGate pins the link
+// between Capabilities() and the /evaluate/utxos fallback. Callers check
+// CapabilityEvaluateTxAdditionalUtxos and substitute nil when it is absent, so
+// declining the capability leaves the fallback dead code and chained or
+// indexing-lagged inputs fail with the original missing-inputs error. This
+// reproduces that gate rather than trusting the fallback test above, which
+// calls EvaluateTx directly and so passes either way.
+func TestEvaluateTxAdditionalUtxosReachableThroughCapabilityGate(t *testing.T) {
+	prevRetries, prevWait := evaluateSimpleRetries, evaluateSimpleRetryWait
+	evaluateSimpleRetries, evaluateSimpleRetryWait = 1, 0
+	defer func() {
+		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
+	}()
+
+	usedFallback := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/utils/txs/evaluate":
+			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
+		case "/api/v0/utils/txs/evaluate/utxos":
+			usedFallback = true
+			_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+
+	// Mirror the caller-side gate in Apollo's execution-unit estimation.
+	additionalUtxos := []common.Utxo{sampleAdaOnlyUtxo(t)}
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
+		additionalUtxos = nil
+	}
+	result, err := ctx.EvaluateTx([]byte{0x84}, additionalUtxos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usedFallback {
+		t.Fatal("/evaluate/utxos not reached through the capability gate")
 	}
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	if eu := result[key]; eu.Memory != 1700 || eu.Steps != 476468 {
