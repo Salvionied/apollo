@@ -11,8 +11,8 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/plutigo/data"
-	cardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
-	submit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+	cardano "github.com/utxorpc/go-codegen/utxorpc/v1beta/cardano"
+	submit "github.com/utxorpc/go-codegen/utxorpc/v1beta/submit"
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
@@ -53,7 +53,7 @@ func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 	}
 }
 
-func evalTxResponse(errors []*cardano.EvalError, redeemers []*cardano.Redeemer) *submit.EvalTxResponse {
+func evalTxResponse(errors []*cardano.EvalReport, redeemers []*cardano.Redeemer) *submit.EvalTxResponse {
 	return &submit.EvalTxResponse{
 		Report: &submit.AnyChainEval{
 			Chain: &submit.AnyChainEval_Cardano{
@@ -124,7 +124,7 @@ func TestCostModelsFromRpcIncludesPlutusV4(t *testing.T) {
 }
 
 func TestEvalTxResponseRejectsSingleEvaluationError(t *testing.T) {
-	msg := evalTxResponse([]*cardano.EvalError{
+	msg := evalTxResponse([]*cardano.EvalReport{
 		{Msg: "PreservationOfValue"},
 	}, nil)
 
@@ -139,7 +139,7 @@ func TestEvalTxResponseRejectsSingleEvaluationError(t *testing.T) {
 }
 
 func TestEvalTxResponsePreservesMultipleEvaluationErrors(t *testing.T) {
-	msg := evalTxResponse([]*cardano.EvalError{
+	msg := evalTxResponse([]*cardano.EvalReport{
 		{Msg: "  PreservationOfValue  "},
 		{Msg: "ReqSignerMissing"},
 		{Msg: " ScriptIntegrityHash "},
@@ -163,7 +163,7 @@ func TestEvalTxResponsePreservesMultipleEvaluationErrors(t *testing.T) {
 }
 
 func TestEvalTxResponseRejectsBlankEvaluationErrors(t *testing.T) {
-	msg := evalTxResponse([]*cardano.EvalError{
+	msg := evalTxResponse([]*cardano.EvalReport{
 		nil,
 		{Msg: " \t\n "},
 	}, nil)
@@ -180,7 +180,7 @@ func TestEvalTxResponseRejectsBlankEvaluationErrors(t *testing.T) {
 
 func TestEvalTxResponseRejectsErrorsWithRedeemers(t *testing.T) {
 	msg := evalTxResponse(
-		[]*cardano.EvalError{{Msg: "Plutus phase-2 error"}},
+		[]*cardano.EvalReport{{Msg: "Plutus phase-2 error"}},
 		[]*cardano.Redeemer{{
 			Purpose: cardano.RedeemerPurpose_REDEEMER_PURPOSE_SPEND,
 			Index:   0,
@@ -199,7 +199,7 @@ func TestEvalTxResponseRejectsErrorsWithRedeemers(t *testing.T) {
 }
 
 func TestEvalTxResponseToExpectedExUnitsPreservesEvaluationError(t *testing.T) {
-	msg := evalTxResponse([]*cardano.EvalError{
+	msg := evalTxResponse([]*cardano.EvalReport{
 		{Msg: "ReqSignerMissing"},
 	}, []*cardano.Redeemer{{
 		Purpose: cardano.RedeemerPurpose_REDEEMER_PURPOSE_SPEND,
