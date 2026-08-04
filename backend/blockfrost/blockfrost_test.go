@@ -1209,13 +1209,13 @@ func TestEvaluateTxAdditionalUtxosReachableThroughCapabilityGate(t *testing.T) {
 		evaluateSimpleRetries, evaluateSimpleRetryWait = prevRetries, prevWait
 	}()
 
-	usedFallback := false
+	var usedFallback atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v0/utils/txs/evaluate":
 			_, _ = w.Write([]byte(`{"result":{"EvaluationFailure":{"UnknownInputs":["abc#0"]}}}`))
 		case "/api/v0/utils/txs/evaluate/utxos":
-			usedFallback = true
+			usedFallback.Store(true)
 			_, _ = w.Write([]byte(`{"result":{"EvaluationResult":{"spend:0":{"memory":1700,"steps":476468}}}}`))
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
@@ -1234,7 +1234,7 @@ func TestEvaluateTxAdditionalUtxosReachableThroughCapabilityGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !usedFallback {
+	if !usedFallback.Load() {
 		t.Fatal("/evaluate/utxos not reached through the capability gate")
 	}
 	key := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
