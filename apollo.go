@@ -2318,6 +2318,41 @@ func (a *Apollo) estimatedWitnessCount(inputs []common.Utxo) int {
 			signers[hash] = struct{}{}
 		}
 	}
+	// Stake certificates are authorised by their stake credential. Script
+	// credentials are satisfied by a script witness and must not add a vkey
+	// witness to the estimate.
+	addStakeCredential := func(credential common.Credential) {
+		if credential.CredType == common.CredentialTypeAddrKeyHash &&
+			credential.Credential != (common.Blake2b224{}) {
+			signers[credential.Credential] = struct{}{}
+		}
+	}
+	for _, wrapper := range a.certificates {
+		switch certificate := wrapper.Certificate.(type) {
+		case *common.StakeRegistrationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.StakeDeregistrationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.StakeDelegationCertificate:
+			if certificate.StakeCredential != nil {
+				addStakeCredential(*certificate.StakeCredential)
+			}
+		case *common.RegistrationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.DeregistrationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.VoteDelegationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.StakeVoteDelegationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.StakeRegistrationDelegationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.VoteRegistrationDelegationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		case *common.StakeVoteRegistrationDelegationCertificate:
+			addStakeCredential(certificate.StakeCredential)
+		}
+	}
 	count := len(signers)
 	// Never estimate below the previous behaviour.
 	if previous := 1 + len(a.requiredSigners); count < previous {

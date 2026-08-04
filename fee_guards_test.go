@@ -129,6 +129,34 @@ func TestWitnessCountCoversWithdrawalStakeKey(t *testing.T) {
 	assertFeeCoversWitnesses(t, a, 2)
 }
 
+// TestWitnessCountCoversCertificateStakeKey guards stake certificates, whose
+// key credentials also require a vkey witness even without a withdrawal.
+func TestWitnessCountCoversCertificateStakeKey(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+	stakeHash := common.Blake2b224{0x42}
+	credential := common.Credential{
+		CredType:   common.CredentialTypeAddrKeyHash,
+		Credential: stakeHash,
+	}
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		SetCertificates([]common.CertificateWrapper{{
+			Type: uint(common.CertificateTypeStakeDelegation),
+			Certificate: &common.StakeDelegationCertificate{
+				CertType:        uint(common.CertificateTypeStakeDelegation),
+				StakeCredential: &credential,
+			},
+		}})
+	if got := a.estimatedWitnessCount(nil); got < 2 {
+		t.Errorf(
+			"estimatedWitnessCount = %d with a certificate stake key, want at least 2",
+			got,
+		)
+	}
+}
+
 // TestWitnessCountNeverBelowPrevious pins the safety property: the new estimate
 // can raise a fee but never lower one.
 func TestWitnessCountNeverBelowPrevious(t *testing.T) {
