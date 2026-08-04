@@ -3,7 +3,7 @@ package apollo
 import (
 	"bytes"
 	"crypto/ed25519"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/blinklabs-io/bursa"
@@ -49,7 +49,7 @@ func (c *submitCaptureContext) SubmitTx(
 		return common.Blake2b256{}, err
 	}
 	if len(elements) == 0 {
-		return common.Blake2b256{}, fmt.Errorf("submitted transaction has no body")
+		return common.Blake2b256{}, errors.New("submitted transaction has no body")
 	}
 	return common.Blake2b256Hash(elements[0]), nil
 }
