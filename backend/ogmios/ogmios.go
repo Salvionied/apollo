@@ -157,8 +157,11 @@ func (o *OgmiosChainContext) kupoClient(
 // client. Address UTxO queries and script lookup require the optional Kupo
 // client; UTxO-by-reference queries are served directly by Ogmios.
 func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
+	if o == nil || o.ogmios == nil {
+		return 0
+	}
 	capabilities := backend.CapabilitySet(backend.AllCapabilities)
-	if o == nil || o.kupo == nil {
+	if o.kupo == nil {
 		capabilities &^= backend.CapabilitySet(
 			backend.CapabilityUtxos | backend.CapabilityScriptCbor,
 		)

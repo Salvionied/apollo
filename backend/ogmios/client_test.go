@@ -555,8 +555,8 @@ func TestZeroValueChainContextReturnsErrors(t *testing.T) {
 	if got := ctx.NetworkId(); got != 0 {
 		t.Fatalf("NetworkId() = %d, want 0", got)
 	}
-	if backend.Supports(ctx, backend.CapabilityUtxos) {
-		t.Fatal("a context without a Kupo client must not report Utxos")
+	if got := ctx.Capabilities(); got != 0 {
+		t.Fatalf("Capabilities() = %v, want no capabilities", got)
 	}
 
 	tests := []struct {
