@@ -3,6 +3,7 @@ package apollo
 import (
 	"bytes"
 	"crypto/ed25519"
+	"fmt"
 	"testing"
 
 	"github.com/blinklabs-io/bursa"
@@ -43,7 +44,14 @@ func (c *submitCaptureContext) SubmitTx(
 	txCbor []byte,
 ) (common.Blake2b256, error) {
 	c.submitted = bytes.Clone(txCbor)
-	return common.Blake2b256Hash(txCbor), nil
+	var elements []cbor.RawMessage
+	if _, err := cbor.Decode(txCbor, &elements); err != nil {
+		return common.Blake2b256{}, err
+	}
+	if len(elements) == 0 {
+		return common.Blake2b256{}, fmt.Errorf("submitted transaction has no body")
+	}
+	return common.Blake2b256Hash(elements[0]), nil
 }
 
 // signAndSubmit builds a single-output transaction spending the wallet's own
