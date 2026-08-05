@@ -27,7 +27,7 @@ import (
 )
 
 func TestOgmiosCapabilitiesWithoutKupo(t *testing.T) {
-	ctx := NewOgmiosChainContext(nil, nil, 0)
+	ctx := testChainContext(t, Config{OgmiosEndpoint: testOgmiosEndpoint})
 	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
 		t.Fatal("expected Ogmios-supported capabilities")
 	}
@@ -451,7 +451,7 @@ func TestEvaluateTxRejectsMalformedAdditionalUtxos(t *testing.T) {
 		},
 	}
 
-	ctx := NewOgmiosChainContext(ogmigo.New(), nil, 0)
+	ctx := testChainContext(t, Config{OgmiosEndpoint: testOgmiosEndpoint})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{test.utxo}); err == nil {
