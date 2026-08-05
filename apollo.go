@@ -2230,7 +2230,11 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			selector = defaultCoinSelector
 		}
 		var selErr error
-		selected, selErr = selector.Select(available, remaining)
+		selected, selErr = selector.Select(
+			a.requestContext,
+			available,
+			remaining,
+		)
 		if selErr != nil {
 			return nil, selErr
 		}
