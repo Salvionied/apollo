@@ -373,7 +373,82 @@ import "github.com/Salvionied/apollo/v2/backend"
 
 Supported backends: `blockfrost`, `ogmios`, `maestro`, `utxorpc`, `fixed` (testing).
 
-### 13. Value Type
+**Ogmios takes a config, not clients.** `NewOgmiosChainContext` no longer
+accepts `*ogmigo.Client` and `*kugo.Client`, and it now returns an error. No
+Apollo constructor names a third-party type any more, so those libraries and
+their major versions stay an implementation detail rather than being frozen for
+the life of 2.x. Endpoints move into `ogmios.Config`:
+
+```go
+// v1
+ctx := OgmiosChainContext.NewOgmiosChainContext(
+    ogmigo.New(ogmigo.WithEndpoint("ws://localhost:1337")),
+    kugo.New(kugo.WithEndpoint("http://localhost:1442")),
+    1,
+)
+
+// v2
+ctx, err := ogmios.NewOgmiosChainContext(ogmios.Config{
+    OgmiosEndpoint: "ws://localhost:1337",
+    KupoEndpoint:   "http://localhost:1442",
+    NetworkId:      1,
+})
+if err != nil {
+    return err
+}
+```
+
+If you supply your own transport, or a test double, use
+`ogmios.NewOgmiosChainContextFromClients` with the Apollo-owned
+`ogmios.OgmiosClient` and `ogmios.KupoClient` interfaces.
+
+**UTxO RPC speaks v1beta.** The backend now calls `utxorpc.v1beta` and falls
+back to v1alpha when the server reports `UNIMPLEMENTED`, so both Dolos
+configurations work. Constructing the context is unchanged.
+
+### 13. Coin Selection Changed Default
+
+This one changes behavior without changing any code you wrote, so it is worth
+checking before you assume a fee regression is a bug.
+
+v1 always selected inputs largest-first. v2 defaults to Multi-Asset Coin
+Selection (MACS), so a given wallet will generally choose **different inputs
+and pay a different fee** than it did under v1.
+
+Measured on fees, over transactions built through `Complete()` with mainnet
+parameters: across a 150-transaction wallet lifetime of plain ADA payments MACS
+costs within 0.56% of largest-first, and it ends with one dust UTxO instead of
+ninety. When the payment carries native assets it is roughly three times
+cheaper — 200,437 lovelace over 20 inputs against largest-first's 623,629 over
+286, because largest-first sorts by lovelace and ignores which UTxOs hold the
+tokens being paid.
+
+To keep the v1 behavior exactly:
+
+```go
+a := apollo.New(cc).SetCoinSelector(&apollo.LargestFirstSelector{})
+```
+
+`CoinSelector` is a public interface, so you can also supply your own:
+
+```go
+type CoinSelector interface {
+    Name() string
+    Select(
+        ctx context.Context,
+        available []common.Utxo,
+        target Value,
+    ) ([]common.Utxo, error)
+}
+```
+
+Implementations must be deterministic, and must observe `ctx` while searching
+rather than running a large pool to completion.
+
+Selection honors the context passed to `WithContext`, so a large pool can be
+cancelled or bounded by a deadline.
+
+### 14. Value Type
 
 v2 introduces an explicit `Value` type replacing various ad-hoc representations:
 
@@ -387,7 +462,7 @@ ok := result.GreaterOrEqual(adaOnly)
 
 **Note**: `Value.Add` returns `(Value, error)` to detect uint64 overflow.
 
-### 14. Type Safety Improvements
+### 15. Type Safety Improvements
 
 **`int64` for monetary amounts**: `Unit.Quantity` and `Payment.Lovelace` are now `int64` (previously `int`) to ensure consistent 64-bit precision across all platforms.
 
@@ -403,9 +478,15 @@ type PaymentI interface {
 // v2
 type PaymentI interface {
     ToValue() (Value, error)
-    ToTxOut() (*babbage.BabbageTransactionOutput, error)
+    ToTxOut() (common.TransactionOutput, error)
 }
 ```
+
+`ToTxOut` is also era-neutral: it returns the `common.TransactionOutput`
+interface rather than `*babbage.BabbageTransactionOutput`, so the interface
+survives a new era without a major version. Apollo builds Conway bodies, which
+use the Babbage output format, so a `PaymentI` implementation that returns any
+other output type is rejected with an error at build time.
 
 **Provider response parsing is internal**: the helpers that normalize provider
 API responses (`ParseFraction`, `ParseRational`, `ParseAssetUnit`,
@@ -413,7 +494,7 @@ API responses (`ParseFraction`, `ParseRational`, `ParseAssetUnit`,
 are no longer exported from `backend`. They live in an internal package and
 validate their input instead of silently returning zero values.
 
-### 15. Wallet Passphrase Support
+### 16. Wallet Passphrase Support
 
 `NewBursaWallet` keeps the simple signature for common use. Use `NewBursaWalletWithPassphrase` for BIP39 passphrase:
 
@@ -435,7 +516,7 @@ if err != nil {
 }
 ```
 
-### 16. Removed Constants and Types
+### 17. Removed Constants and Types
 
 | Removed | Replacement |
 |---------|-------------|

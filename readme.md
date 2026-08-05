@@ -11,7 +11,8 @@ addresses, and transaction bodies.
 
 ## Install
 
-Apollo v2 requires Go 1.25 or newer:
+Apollo v2 requires Go 1.25.7 or newer — the `go` directive in `go.mod` is a
+hard floor, so an older 1.25 patch release fails to build:
 
 ```bash
 go get github.com/Salvionied/apollo/v2

@@ -1,6 +1,6 @@
 module github.com/Salvionied/apollo/v2
 
-go 1.25.12
+go 1.25.7
 
 require (
 	connectrpc.com/connect v1.20.0
