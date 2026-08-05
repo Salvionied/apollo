@@ -42,12 +42,17 @@ type BlockFrostChainContext struct {
 }
 
 // Capabilities reports the ChainContext feature set implemented by Blockfrost.
-// The hosted evaluate-with-UTxOs endpoint cannot resolve every additional UTxO
-// shape, notably asset-bearing off-chain outputs, so it is not advertised as a
-// general chained-input evaluator.
+//
+// CapabilityEvaluateTxAdditionalUtxos is included: EvaluateTx does honour the
+// argument, by retrying the plain evaluate endpoint for indexing lag and then
+// posting the resolved set to /utils/txs/evaluate/utxos. The hosted endpoint
+// cannot decode asset-bearing entries, so those skip the fallback, but that
+// degrades to an explicit evaluation error rather than a silently ignored
+// argument or an understated budget. Declining the capability instead made the
+// fallback unreachable, because callers gate on it and pass nil when it is
+// absent, which broke chained and indexing-lagged inputs outright.
 func (b *BlockFrostChainContext) Capabilities() backend.CapabilitySet {
-	return backend.CapabilitySet(backend.AllCapabilities) &^
-		backend.CapabilitySet(backend.CapabilityEvaluateTxAdditionalUtxos)
+	return backend.CapabilitySet(backend.AllCapabilities)
 }
 
 const (
@@ -807,7 +812,7 @@ func (b *BlockFrostChainContext) UtxoByRefContext(
 	}
 
 	for _, raw := range txUtxos.Outputs {
-		if int64(raw.OutputIndex) == int64(index) {
+		if raw.OutputIndex == int64(index) {
 			if raw.TxHash == "" {
 				raw.TxHash = fallbackHash
 			}
@@ -1045,8 +1050,11 @@ type bfGenesisParams struct {
 }
 
 type bfAddressUTxO struct {
-	TxHash              string            `json:"tx_hash"`
-	OutputIndex         int               `json:"output_index"`
+	TxHash string `json:"tx_hash"`
+	// OutputIndex is int64 rather than int so the range guards in toUtxo stay
+	// meaningful on 32-bit platforms, where int tops out at 2^31-1 and could
+	// never hold an out-of-range uint32 to reject in the first place.
+	OutputIndex         int64             `json:"output_index"`
 	Address             string            `json:"address"`
 	Amount              []bfAddressAmount `json:"amount"`
 	DataHash            string            `json:"data_hash"`
@@ -1073,12 +1081,12 @@ func (raw *bfAddressUTxO) toUtxo(address common.Address) (common.Utxo, error) {
 	if raw.OutputIndex < 0 {
 		return common.Utxo{}, fmt.Errorf("negative output index: %d", raw.OutputIndex)
 	}
-	if uint64(raw.OutputIndex) > uint64(math.MaxUint32) {
+	if raw.OutputIndex > math.MaxUint32 {
 		return common.Utxo{}, fmt.Errorf("output index %d exceeds uint32 range", raw.OutputIndex)
 	}
 	input := shelley.ShelleyTransactionInput{
 		TxId:        txId,
-		OutputIndex: uint32(raw.OutputIndex),
+		OutputIndex: uint32(raw.OutputIndex), //nolint:gosec // range checked above
 	}
 
 	// Parse amounts

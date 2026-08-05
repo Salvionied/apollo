@@ -37,7 +37,7 @@ jobs:
       - run: go test -race ./...
 
   quality:
-    name: format, tidy, vet, and 386 build
+    name: format, tidy, vet, and 386 test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,11 +50,19 @@ jobs:
         run: go mod tidy -diff
       - name: Vet
         run: go vet ./...
-      - name: Compile Linux 386
+      # Vet, not just build: go build skips _test.go files, so a test tree that
+      # does not compile on a 32-bit platform would slip through. 386 binaries
+      # run natively on the amd64 runner, so the tests can also be executed.
+      - name: Vet Linux 386
         env:
           GOOS: linux
           GOARCH: "386"
-        run: go build ./...
+        run: go vet ./...
+      - name: Test Linux 386
+        env:
+          GOOS: linux
+          GOARCH: "386"
+        run: go test -count=1 ./...
 
   vulnerability:
     name: vulnerability scan
