@@ -2,6 +2,7 @@ package apollo
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -101,7 +102,14 @@ func (u *Unit) toMintValue() (Value, error) {
 // PaymentI is the interface for payment types.
 type PaymentI interface {
 	EnsureMinUTXO(cc backend.ChainContext) error
-	ToTxOut() (*babbage.BabbageTransactionOutput, error)
+	// ToTxOut builds the transaction output for this payment.
+	//
+	// The return type is era-neutral so that a future ledger era does not
+	// require changing this interface, which third parties implement. Apollo
+	// builds Conway bodies, whose outputs use the Babbage format, so the
+	// builder currently requires a *babbage.BabbageTransactionOutput and
+	// reports a clear error for anything else.
+	ToTxOut() (common.TransactionOutput, error)
 	ToValue() (Value, error)
 }
 
@@ -239,9 +247,9 @@ func (p *Payment) EnsureMinUTXO(cc backend.ChainContext) error {
 		return fmt.Errorf("failed to get protocol params: %w", err)
 	}
 	for range 3 {
-		txOut, err := p.ToTxOut()
+		txOut, err := p.babbageTxOut()
 		if err != nil {
-			return fmt.Errorf("failed to build tx output: %w", err)
+			return err
 		}
 		coins, err := MinLovelacePostAlonzo(txOut, pp.CoinsPerUtxoByteValue())
 		if err != nil {
@@ -253,9 +261,9 @@ func (p *Payment) EnsureMinUTXO(cc backend.ChainContext) error {
 		p.Lovelace = coins
 	}
 	// If we exhausted iterations without converging, verify one final time.
-	txOut, err := p.ToTxOut()
+	txOut, err := p.babbageTxOut()
 	if err != nil {
-		return fmt.Errorf("failed to build tx output: %w", err)
+		return err
 	}
 	coins, err := MinLovelacePostAlonzo(txOut, pp.CoinsPerUtxoByteValue())
 	if err != nil {
@@ -267,8 +275,46 @@ func (p *Payment) EnsureMinUTXO(cc backend.ChainContext) error {
 	return nil
 }
 
-// ToTxOut converts a Payment to a BabbageTransactionOutput.
-func (p *Payment) ToTxOut() (*babbage.BabbageTransactionOutput, error) {
+// babbageTxOut returns this payment's output in the Babbage format the Conway
+// body requires, or an error naming the type it got instead.
+func (p *Payment) babbageTxOut() (*babbage.BabbageTransactionOutput, error) {
+	txOut, err := p.ToTxOut()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build tx output: %w", err)
+	}
+	return babbageOutputOf(txOut)
+}
+
+// babbageOutputOf narrows an era-neutral output to the Babbage format used by
+// Conway transaction bodies.
+//
+// PaymentI.ToTxOut is deliberately era-neutral so the interface survives a new
+// ledger era, but Apollo builds Conway bodies today, so anything other than a
+// Babbage-format output cannot be placed in one. A third-party PaymentI that
+// returns some other implementation gets this error rather than a panic.
+func babbageOutputOf(
+	txOut common.TransactionOutput,
+) (*babbage.BabbageTransactionOutput, error) {
+	if txOut == nil {
+		return nil, errors.New("payment produced no transaction output")
+	}
+	out, ok := txOut.(*babbage.BabbageTransactionOutput)
+	if !ok {
+		return nil, fmt.Errorf(
+			"payment produced a %T output; Apollo builds Conway bodies, which "+
+				"require the Babbage output format",
+			txOut,
+		)
+	}
+	return out, nil
+}
+
+// ToTxOut converts a Payment to a transaction output.
+//
+// The concrete type is *babbage.BabbageTransactionOutput, which is the output
+// format Conway bodies use; the declared type is era-neutral so the PaymentI
+// contract survives a new era.
+func (p *Payment) ToTxOut() (common.TransactionOutput, error) {
 	val, err := p.ToValue()
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute payment value: %w", err)

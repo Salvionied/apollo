@@ -31,7 +31,7 @@ type cloneableTestPayment struct {
 }
 
 func (p *cloneableTestPayment) EnsureMinUTXO(backend.ChainContext) error { return nil }
-func (p *cloneableTestPayment) ToTxOut() (*babbage.BabbageTransactionOutput, error) {
+func (p *cloneableTestPayment) ToTxOut() (common.TransactionOutput, error) {
 	return nil, errors.New("not used")
 }
 func (p *cloneableTestPayment) ToValue() (Value, error) { return Value{}, nil }

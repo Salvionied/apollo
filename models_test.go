@@ -120,8 +120,20 @@ func TestPaymentToTxOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if txOut.OutputAmount.Amount != 3000000 {
-		t.Errorf("expected 3000000, got %d", txOut.OutputAmount.Amount)
+	if got := txOut.Amount().Uint64(); got != 3000000 {
+		t.Errorf("expected 3000000, got %d", got)
+	}
+	// ToTxOut is declared era-neutral; Conway bodies still need the Babbage
+	// format, so pin the concrete type too.
+	babbageOut, err := babbageOutputOf(txOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if babbageOut.OutputAmount.Amount != 3000000 {
+		t.Errorf(
+			"babbage amount = %d, want 3000000",
+			babbageOut.OutputAmount.Amount,
+		)
 	}
 }
 
