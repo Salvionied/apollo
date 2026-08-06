@@ -1,9 +1,13 @@
 package apollo
 
 import (
+	"context"
+	"errors"
 	"math/big"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -56,7 +60,7 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 			makeSelectorUtxo(t, 0x03, 0, 5_000_000, nil),
 		}
 		target := NewSimpleValue(12_000_000)
-		selected, err := newSelector().Select(pool, target)
+		selected, err := newSelector().Select(t.Context(), pool, target)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
@@ -72,7 +76,7 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 			makeSelectorUtxo(t, 0x03, 0, 2_000_000, makeTestAssets(0xBB, "tokenB", 7)),
 		}
 		target := NewValue(5_000_000, makeTestAssets(0xAA, "tokenA", 50))
-		selected, err := newSelector().Select(pool, target)
+		selected, err := newSelector().Select(t.Context(), pool, target)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
@@ -88,7 +92,7 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 			makeSelectorUtxo(t, 0x03, 0, 4_000_000, nil),
 		}
 		target := NewValue(8_000_000, makeTestAssets(0xAA, "tokenA", 100))
-		selected, err := newSelector().Select(pool, target)
+		selected, err := newSelector().Select(t.Context(), pool, target)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
@@ -106,7 +110,9 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 		pool := []common.Utxo{
 			makeSelectorUtxo(t, 0x01, 0, 1_000_000, nil),
 		}
-		_, err := newSelector().Select(pool, NewSimpleValue(100_000_000))
+		_, err := newSelector().Select(
+			t.Context(), pool, NewSimpleValue(100_000_000),
+		)
 		if err == nil {
 			t.Fatal("expected error for insufficient coin")
 		}
@@ -120,7 +126,7 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 			makeSelectorUtxo(t, 0x01, 0, 10_000_000, nil),
 		}
 		target := NewValue(1_000_000, makeTestAssets(0xAA, "tokenA", 1))
-		_, err := newSelector().Select(pool, target)
+		_, err := newSelector().Select(t.Context(), pool, target)
 		if err == nil {
 			t.Fatal("expected error for missing asset")
 		}
@@ -133,7 +139,7 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 		pool := []common.Utxo{
 			makeSelectorUtxo(t, 0x01, 0, 1_000_000, nil),
 		}
-		selected, err := newSelector().Select(pool, Value{})
+		selected, err := newSelector().Select(t.Context(), pool, Value{})
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
@@ -150,11 +156,11 @@ func runSelectorConformance(t *testing.T, newSelector func() CoinSelector) {
 			makeSelectorUtxo(t, 0x04, 0, 5_000_000, nil),
 		}
 		target := NewValue(6_000_000, makeTestAssets(0xAA, "tokenA", 40))
-		first, err := newSelector().Select(pool, target)
+		first, err := newSelector().Select(t.Context(), pool, target)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
-		second, err := newSelector().Select(pool, target)
+		second, err := newSelector().Select(t.Context(), pool, target)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
 		}
@@ -187,6 +193,7 @@ func TestCoinSelectorsRejectMalformedUTxOs(t *testing.T) {
 	for _, selector := range selectors {
 		t.Run(selector.Name(), func(t *testing.T) {
 			if _, err := selector.Select(
+				t.Context(),
 				[]common.Utxo{{}},
 				NewSimpleValue(1),
 			); err == nil {
@@ -207,7 +214,9 @@ func TestLargestFirstSelectorOrder(t *testing.T) {
 		makeSelectorUtxo(t, 0x02, 0, 10_000_000, nil),
 		makeSelectorUtxo(t, 0x03, 0, 5_000_000, nil),
 	}
-	selected, err := (&LargestFirstSelector{}).Select(pool, NewSimpleValue(12_000_000))
+	selected, err := (&LargestFirstSelector{}).Select(
+		t.Context(), pool, NewSimpleValue(12_000_000),
+	)
 	if err != nil {
 		t.Fatalf("Select failed: %v", err)
 	}
@@ -231,9 +240,13 @@ type recordingSelector struct {
 
 func (r *recordingSelector) Name() string { return "recording" }
 
-func (r *recordingSelector) Select(available []common.Utxo, target Value) ([]common.Utxo, error) {
+func (r *recordingSelector) Select(
+	ctx context.Context,
+	available []common.Utxo,
+	target Value,
+) ([]common.Utxo, error) {
 	r.called = true
-	return r.inner.Select(available, target)
+	return r.inner.Select(ctx, available, target)
 }
 
 func TestSetCoinSelectorUsedByComplete(t *testing.T) {
@@ -257,5 +270,156 @@ func TestSetCoinSelectorUsedByComplete(t *testing.T) {
 	}
 	if !rec.called {
 		t.Error("custom coin selector was not invoked by Complete")
+	}
+}
+
+// contextSelectors returns one instance of every in-tree selector, for the
+// context tests below.
+func contextSelectors() []CoinSelector {
+	return []CoinSelector{
+		&LargestFirstSelector{},
+		&MACSSelector{},
+		NewMACSSelector(),
+	}
+}
+
+// sweepSelectionPool builds n equal 1 ADA UTxOs and a target needing 90% of
+// them, so covering it takes thousands of picks: long enough that abandoning
+// the search early is observable.
+func sweepSelectionPool(tb testing.TB, n int) ([]common.Utxo, Value) {
+	tb.Helper()
+	addr := benchAddress(tb)
+	pool := make([]common.Utxo, 0, n)
+	var total uint64
+	for i := 0; i < n; i++ {
+		pool = append(pool, benchUtxo(addr, uint64(i)+1, 1_000_000, nil))
+		total += 1_000_000
+	}
+	return pool, NewSimpleValue(total / 10 * 9)
+}
+
+// TestSelectorsAbortOnCanceledContext verifies a cancelled context abandons
+// selection promptly, rather than after the whole pool has been searched.
+func TestSelectorsAbortOnCanceledContext(t *testing.T) {
+	pool, target := sweepSelectionPool(t, 10_000)
+	for _, selector := range contextSelectors() {
+		t.Run(selector.Name(), func(t *testing.T) {
+			start := time.Now()
+			if _, err := selector.Select(t.Context(), pool, target); err != nil {
+				t.Fatalf("uncancelled Select failed: %v", err)
+			}
+			whole := time.Since(start)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			start = time.Now()
+			selected, err := selector.Select(ctx, pool, target)
+			aborted := time.Since(start)
+
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Select() error = %v, want context.Canceled", err)
+			}
+			if selected != nil {
+				t.Errorf(
+					"abandoned selection returned %d UTxOs, want none",
+					len(selected),
+				)
+			}
+			if aborted > whole/4 {
+				t.Errorf(
+					"cancellation took %v, close to the full %v search",
+					aborted, whole,
+				)
+			}
+			t.Logf("full=%v cancelled=%v", whole, aborted)
+		})
+	}
+}
+
+// countdownContext reports itself done only after n calls to Err, so a test
+// can prove a selector rechecks the context while searching instead of only
+// on entry. Done is never closed: selectors poll Err.
+type countdownContext struct {
+	context.Context
+	mu sync.Mutex
+	n  int
+}
+
+func (c *countdownContext) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n > 0 {
+		c.n--
+		return nil
+	}
+	return context.Canceled
+}
+
+// TestSelectorsAbortMidSelection verifies the context is honoured inside the
+// selection loops: a context that only reports itself done after the first few
+// checks must still abort the search.
+func TestSelectorsAbortMidSelection(t *testing.T) {
+	pool, target := sweepSelectionPool(t, 4_000)
+	for _, selector := range contextSelectors() {
+		t.Run(selector.Name(), func(t *testing.T) {
+			ctx := &countdownContext{Context: context.Background(), n: 3}
+			selected, err := selector.Select(ctx, pool, target)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Select() error = %v, want context.Canceled", err)
+			}
+			if selected != nil {
+				t.Errorf(
+					"abandoned selection returned %d UTxOs, want none",
+					len(selected),
+				)
+			}
+		})
+	}
+}
+
+// TestSelectorsTolerateNilContext pins that a third-party caller passing no
+// context gets a selection rather than a panic.
+func TestSelectorsTolerateNilContext(t *testing.T) {
+	pool := []common.Utxo{
+		makeSelectorUtxo(t, 0x01, 0, 10_000_000, nil),
+	}
+	// Deliberately nil: Select is exported and must not dereference it.
+	var ctx context.Context
+	for _, selector := range contextSelectors() {
+		t.Run(selector.Name(), func(t *testing.T) {
+			selected, err := selector.Select(
+				ctx, pool, NewSimpleValue(1_000_000),
+			)
+			if err != nil {
+				t.Fatalf("Select failed: %v", err)
+			}
+			if len(selected) != 1 {
+				t.Fatalf("expected 1 input, got %d", len(selected))
+			}
+		})
+	}
+}
+
+// TestCompletePropagatesContextCancellation verifies WithContext reaches coin
+// selection through the builder.
+func TestCompletePropagatesContextCancellation(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AddPayment(p).
+		SetTtl(50000000).
+		WithContext(ctx)
+
+	if _, err := a.Complete(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Complete() error = %v, want context.Canceled", err)
 	}
 }

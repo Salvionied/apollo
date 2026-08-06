@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"strings"
@@ -22,7 +23,11 @@ type staticSelector struct {
 
 func (s *staticSelector) Name() string { return "static" }
 
-func (s *staticSelector) Select([]common.Utxo, Value) ([]common.Utxo, error) {
+func (s *staticSelector) Select(
+	context.Context,
+	[]common.Utxo,
+	Value,
+) ([]common.Utxo, error) {
 	return s.selected, s.err
 }
 
@@ -169,7 +174,7 @@ func TestCloneCopiesOwnedMutableStateAndSelector(t *testing.T) {
 	if clone.err != nil {
 		t.Fatalf("Clone() recorded error: %v", clone.err)
 	}
-	if clone.coinSelector != selector {
+	if clone.coinSelector != CoinSelector(selector) {
 		t.Fatal("Clone() did not preserve the configured coin selector")
 	}
 

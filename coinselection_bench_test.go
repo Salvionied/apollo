@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
+	"strconv"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -162,7 +163,9 @@ func BenchmarkCoinSelection(b *testing.B) {
 				var totalInputs, totalExcess float64
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					selected, err := sel.Select(sc.pool, sc.target)
+					selected, err := sel.Select(
+						b.Context(), sc.pool, sc.target,
+					)
 					if err != nil {
 						b.Fatalf("Select failed: %v", err)
 					}
@@ -175,6 +178,32 @@ func BenchmarkCoinSelection(b *testing.B) {
 				}
 				b.ReportMetric(totalInputs/float64(b.N), "inputs/op")
 				b.ReportMetric(totalExcess/float64(b.N)/1e6, "excessAda/op")
+			})
+		}
+	}
+}
+
+// BenchmarkCoinSelectionFullSweep is the near-full-sweep case: a pool of
+// equal UTxOs and a target needing 90% of them, so the number of picks scales
+// with the pool. It is the shape that made selection quadratic while every
+// pick rescanned the pool, so it is the one to watch for regressions.
+func BenchmarkCoinSelectionFullSweep(b *testing.B) {
+	selectors := []CoinSelector{&LargestFirstSelector{}, &MACSSelector{}}
+	for _, n := range []int{500, 1000, 2000, 4000} {
+		pool, target := sweepSelectionPool(b, n)
+		for _, sel := range selectors {
+			name := strconv.Itoa(n) + "/" + sel.Name()
+			b.Run(name, func(b *testing.B) {
+				var totalInputs float64
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					selected, err := sel.Select(b.Context(), pool, target)
+					if err != nil {
+						b.Fatalf("Select failed: %v", err)
+					}
+					totalInputs += float64(len(selected))
+				}
+				b.ReportMetric(totalInputs/float64(b.N), "inputs/op")
 			})
 		}
 	}
@@ -242,7 +271,7 @@ func TestCoinSelectionComparison(t *testing.T) {
 					}
 				}
 
-				selected, err := sel.Select(pool, target)
+				selected, err := sel.Select(t.Context(), pool, target)
 				if err != nil {
 					t.Fatalf("round %d: Select failed: %v", r, err)
 				}
