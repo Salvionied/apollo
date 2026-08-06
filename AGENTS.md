@@ -148,4 +148,10 @@ v1 `serialization/*` package tree.
 
 ## Go Version
 
-Requires Go 1.25+.
+Requires Go 1.25.7 or newer, matching the `go` directive in `go.mod`. That
+directive is a hard floor at patch granularity: a toolchain older than it
+refuses to build the module rather than warning. 1.25.7 is the lowest value
+the dependency graph allows — gouroboros declares `go 1.25.7` — so keep the
+directive, this line, and `readme.md` in step with each other. Raising the
+directive locks out every user on an older patch, so raise it only when
+something in the tree actually needs the newer toolchain.
