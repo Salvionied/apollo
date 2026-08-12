@@ -579,16 +579,12 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 		return unmarshalField(pair[1], elem.Field(valueFieldIdxs[0]), f)
 	}
 
-	// Multiple value fields - expect pair[1] to be a List or Constr
-	var items []data.PlutusData
-	switch v := pair[1].(type) {
-	case *data.List:
-		items = v.Items
-	case *data.Constr:
-		items = v.Fields
-	default:
+	// Multiple value fields must be a bare List; Constr tags are not discarded.
+	list, ok := pair[1].(*data.List)
+	if !ok {
 		return fmt.Errorf("expected List for multi-field map value, got %T", pair[1])
 	}
+	items := list.Items
 	if len(items) < len(valueFieldIdxs) {
 		return fmt.Errorf("map value has %d items but struct expects %d non-key fields", len(items), len(valueFieldIdxs))
 	}
