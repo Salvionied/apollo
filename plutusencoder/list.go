@@ -26,6 +26,13 @@ func marshalList(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr 
 		if ignored {
 			continue
 		}
+		omitEmpty, err := fieldOmitEmpty(field)
+		if err != nil {
+			return nil, err
+		}
+		if omitEmpty {
+			return nil, fmt.Errorf("field %s: omitempty is not supported on positional list fields", field.Name)
+		}
 
 		fieldVal := val.Field(i)
 		pd, err := marshalField(fieldVal, field)

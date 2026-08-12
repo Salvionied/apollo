@@ -56,12 +56,9 @@ func marshalValue(val reflect.Value) (data.PlutusData, error) {
 }
 
 func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.PlutusData, error) {
-	plutusType, options, err := parseFieldTag(field.Tag.Get("plutusType"))
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
 	if err != nil {
 		return nil, fmt.Errorf("field %s: %w", field.Name, err)
-	}
-	if _, omit := options["omitempty"]; omit {
-		return nil, fmt.Errorf("field %s: omitempty is not supported on positional list fields", field.Name)
 	}
 
 	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference

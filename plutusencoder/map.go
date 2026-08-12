@@ -25,6 +25,13 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr b
 		}
 
 		fieldVal := val.Field(i)
+		omitEmpty, err := fieldOmitEmpty(field)
+		if err != nil {
+			return nil, err
+		}
+		if omitEmpty && isEmptyField(fieldVal) {
+			continue
+		}
 
 		keyName := field.Tag.Get("plutusKey")
 		if keyName == "" {
@@ -194,6 +201,12 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 			optional, err := isOptionalField(field)
 			if err != nil {
 				return err
+			}
+			if !optional {
+				optional, err = fieldOmitEmpty(field)
+				if err != nil {
+					return err
+				}
 			}
 			if optional {
 				// Optional field absent from the map: leave the zero value.

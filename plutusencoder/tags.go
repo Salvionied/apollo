@@ -73,6 +73,55 @@ func isIgnoredField(field reflect.StructField) (bool, error) {
 	return false, nil
 }
 
+func fieldOmitEmpty(field reflect.StructField) (bool, error) {
+	_, options, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return false, fmt.Errorf("field %s: %w", field.Name, err)
+	}
+	_, omit := options["omitempty"]
+	return omit, nil
+}
+
+// isEmptyField uses Go's established encoding/json empty-value semantics:
+// false, numeric zero, nil pointer/interface, and zero-length strings,
+// arrays, slices, or maps. Types may override this with IsZero.
+func isEmptyField(fieldVal reflect.Value) bool {
+	for fieldVal.Kind() == reflect.Interface {
+		if fieldVal.IsNil() {
+			return true
+		}
+		fieldVal = fieldVal.Elem()
+	}
+
+	if fieldVal.CanInterface() {
+		if zeroer, ok := fieldVal.Interface().(interface{ IsZero() bool }); ok {
+			return zeroer.IsZero()
+		}
+	}
+
+	switch fieldVal.Kind() {
+	case reflect.Bool:
+		return !fieldVal.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fieldVal.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return fieldVal.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return fieldVal.Float() == 0
+	case reflect.Complex64, reflect.Complex128:
+		return fieldVal.Complex() == 0
+	case reflect.String, reflect.Array, reflect.Slice, reflect.Map:
+		return fieldVal.Len() == 0
+	case reflect.Pointer:
+		if fieldVal.IsNil() {
+			return true
+		}
+		return isEmptyField(fieldVal.Elem())
+	default:
+		return fieldVal.IsZero()
+	}
+}
+
 func splitPlutusType(raw string) (string, []string, error) {
 	parts := strings.Split(raw, ",")
 	tag := strings.TrimSpace(parts[0])
