@@ -14,6 +14,10 @@ func MarshalPlutus(v any) (data.PlutusData, error) {
 }
 
 func marshalValue(val reflect.Value) (data.PlutusData, error) {
+	return marshalValueWithContainer(val, containerIndefList, false)
+}
+
+func marshalValueWithContainer(val reflect.Value, fieldContainer containerTag, hasFieldContainer bool) (data.PlutusData, error) {
 	// Dereference pointers
 	for val.Kind() == reflect.Pointer {
 		if val.IsNil() {
@@ -41,6 +45,9 @@ func marshalValue(val reflect.Value) (data.PlutusData, error) {
 	container, constrTag, hasConstr, err := readContainerMetadata(typ)
 	if err != nil {
 		return nil, err
+	}
+	if !hasConstr && hasFieldContainer {
+		container = fieldContainer
 	}
 
 	switch container {

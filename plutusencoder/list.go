@@ -61,8 +61,13 @@ func marshalSliceOrNested(val reflect.Value, field reflect.StructField, useIndef
 		}
 		return data.NewListDefIndef(useIndef, items...), nil
 	}
-	// Nested struct
-	return marshalValue(val)
+	// Nested struct without its own container marker honors the field's
+	// DefList/IndefList tag. An explicit nested `_` container takes precedence.
+	fieldContainer := containerIndefList
+	if !useIndef {
+		fieldContainer = containerDefList
+	}
+	return marshalValueWithContainer(val, fieldContainer, true)
 }
 
 // marshalSliceElement marshals a single slice element, handling both struct and primitive types.
