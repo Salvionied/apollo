@@ -160,6 +160,62 @@ func TestUnmarshalMapDuplicateKey(t *testing.T) {
 	}
 }
 
+func TestMarshalMapDuplicatePlutusKey(t *testing.T) {
+	type duplicateKeyDatum struct {
+		_       struct{} `plutusType:"Map"`
+		Name    string   `plutusType:"StringBytes" plutusKey:"name"`
+		Alias   string   `plutusType:"StringBytes" plutusKey:"name"`
+		Version int64    `plutusType:"Int"`
+	}
+
+	_, err := MarshalPlutus(&duplicateKeyDatum{Name: "real", Alias: "shadow", Version: 1})
+	if err == nil {
+		t.Fatal("expected error for duplicate plutusKey")
+	}
+	if got := err.Error(); !strings.Contains(got, "duplicate map key") || !strings.Contains(got, "name") {
+		t.Fatalf("expected descriptive duplicate-key error, got: %s", got)
+	}
+}
+
+func TestMarshalMapPlutusKeyCollidesWithDefaultName(t *testing.T) {
+	type collidingKeyDatum struct {
+		_     struct{} `plutusType:"Map"`
+		Name  string   `plutusType:"StringBytes"`
+		Alias string   `plutusType:"StringBytes" plutusKey:"Name"`
+	}
+
+	_, err := MarshalPlutus(&collidingKeyDatum{Name: "real", Alias: "shadow"})
+	if err == nil {
+		t.Fatal("expected error for plutusKey/default-name collision")
+	}
+	if got := err.Error(); !strings.Contains(got, "duplicate map key") || !strings.Contains(got, "Name") {
+		t.Fatalf("expected descriptive duplicate-key error, got: %s", got)
+	}
+}
+
+func TestMarshalSliceMapDuplicateElementKey(t *testing.T) {
+	type mapEntry struct {
+		Key   string `plutusType:"StringBytes"`
+		Value int64  `plutusType:"Int"`
+	}
+	type duplicateSliceDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	original := duplicateSliceDatum{Entries: []mapEntry{
+		{Key: "same", Value: 1},
+		{Key: "same", Value: 2},
+	}}
+	_, err := MarshalPlutus(&original)
+	if err == nil {
+		t.Fatal("expected error for duplicate slice-map element key")
+	}
+	if got := err.Error(); !strings.Contains(got, "duplicate map key") {
+		t.Fatalf("expected descriptive duplicate-key error, got: %s", got)
+	}
+}
+
 func TestUnmarshalMapInvalidOptionalTag(t *testing.T) {
 	type badOptionalDatum struct {
 		_     struct{} `plutusType:"Map"`
