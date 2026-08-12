@@ -1,8 +1,10 @@
 package plutusencoder
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/blinklabs-io/plutigo/data"
 )
@@ -59,6 +61,9 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr b
 }
 
 func marshalSliceAsMap(val reflect.Value, field reflect.StructField) (data.PlutusData, error) {
+	if val.Kind() == reflect.Map {
+		return marshalNativeMap(val, field)
+	}
 	if val.Kind() == reflect.Slice {
 		var pairs [][2]data.PlutusData
 		seenKeys := make(map[string]struct{}, val.Len())
@@ -91,6 +96,142 @@ func marshalSliceAsMap(val reflect.Value, field reflect.StructField) (data.Plutu
 		return data.NewMap(pairs), nil
 	}
 	return marshalValue(val)
+}
+
+func marshalNativeMap(val reflect.Value, field reflect.StructField) (data.PlutusData, error) {
+	if val.IsNil() {
+		return nil, fmt.Errorf("field %s: nil native map cannot be encoded as Plutus Map", field.Name)
+	}
+
+	type encodedPair struct {
+		key     []byte
+		pair    [2]data.PlutusData
+		display string
+	}
+
+	pairs := make([]encodedPair, 0, val.Len())
+	seen := make(map[string]string, val.Len())
+	iterator := val.MapRange()
+	for iterator.Next() {
+		key, err := marshalNativeMapKey(iterator.Key(), field)
+		if err != nil {
+			return nil, fmt.Errorf("field %s key: %w", field.Name, err)
+		}
+		value, err := marshalNativeMapValue(iterator.Value(), field)
+		if err != nil {
+			return nil, fmt.Errorf("field %s value for key %s: %w", field.Name, key.String(), err)
+		}
+
+		encodedKey, err := data.Encode(key)
+		if err != nil {
+			return nil, fmt.Errorf("field %s key %s: %w", field.Name, key.String(), err)
+		}
+		keyString := string(encodedKey)
+		if previous, duplicate := seen[keyString]; duplicate {
+			return nil, fmt.Errorf("field %s: duplicate encoded map key %s for keys %q and %q", field.Name, key.String(), previous, key.String())
+		}
+		seen[keyString] = key.String()
+		pairs = append(pairs, encodedPair{key: encodedKey, pair: [2]data.PlutusData{key, value}, display: key.String()})
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		if cmp := bytes.Compare(pairs[i].key, pairs[j].key); cmp != 0 {
+			return cmp < 0
+		}
+		return pairs[i].display < pairs[j].display
+	})
+
+	result := make([][2]data.PlutusData, len(pairs))
+	for i, pair := range pairs {
+		result[i] = pair.pair
+	}
+	return data.NewMap(result), nil
+}
+
+func marshalNativeMapKey(key reflect.Value, field reflect.StructField) (data.PlutusData, error) {
+	for key.Kind() == reflect.Interface {
+		if key.IsNil() {
+			return nil, fmt.Errorf("nil native map key")
+		}
+		key = key.Elem()
+	}
+
+	if key.CanAddr() {
+		if m, ok := key.Addr().Interface().(PlutusMarshaler); ok {
+			return m.ToPlutusData()
+		}
+	}
+	if m, ok := key.Interface().(PlutusMarshaler); ok {
+		return m.ToPlutusData()
+	}
+
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return nil, fmt.Errorf("native map key: %w", err)
+	}
+	if plutusType != "" && plutusType != "Map" {
+		synthetic := reflect.StructField{Name: field.Name + "Key", Tag: field.Tag}
+		return marshalField(key, synthetic)
+	}
+
+	switch key.Kind() {
+	case reflect.String:
+		return data.NewByteString([]byte(key.String())), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return marshalInt(key)
+	case reflect.Slice:
+		if key.Type().Elem().Kind() == reflect.Uint8 {
+			return marshalBytes(key)
+		}
+	case reflect.Bool:
+		return marshalBool(key, false)
+	}
+	return nil, fmt.Errorf("unsupported native map key type %s", key.Type())
+}
+
+func marshalNativeMapValue(value reflect.Value, field reflect.StructField) (data.PlutusData, error) {
+	for value.Kind() == reflect.Interface {
+		if value.IsNil() {
+			return nil, fmt.Errorf("nil native map value")
+		}
+		value = value.Elem()
+	}
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return nil, fmt.Errorf("native map value: %w", err)
+	}
+	if plutusType == "" || plutusType == "Map" {
+		return marshalNativeMapScalar(value, field)
+	}
+	synthetic := reflect.StructField{Name: field.Name + "Value", Tag: field.Tag}
+	return marshalField(value, synthetic)
+}
+
+func marshalNativeMapScalar(value reflect.Value, field reflect.StructField) (data.PlutusData, error) {
+	if value.CanAddr() {
+		if m, ok := value.Addr().Interface().(PlutusMarshaler); ok {
+			return m.ToPlutusData()
+		}
+	}
+	if m, ok := value.Interface().(PlutusMarshaler); ok {
+		return m.ToPlutusData()
+	}
+
+	switch value.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return marshalInt(value)
+	case reflect.String:
+		return marshalStringBytes(value)
+	case reflect.Bool:
+		return marshalBool(value, false)
+	case reflect.Slice:
+		if value.Type().Elem().Kind() == reflect.Uint8 {
+			return marshalBytes(value)
+		}
+	}
+	return nil, fmt.Errorf("unsupported native map value type %s for field %s", value.Type(), field.Name)
 }
 
 // marshalMapValueFields marshals all exported fields of elem except the key field at keyIdx.
@@ -235,6 +376,9 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 }
 
 func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+	if fieldVal.Kind() == reflect.Map {
+		return unmarshalNativeMap(pd, fieldVal, field)
+	}
 	if fieldVal.Kind() == reflect.Slice {
 		mapData, ok := pd.(*data.Map)
 		if !ok {
@@ -263,6 +407,111 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 		return nil
 	}
 	return unmarshalValue(pd, fieldVal)
+}
+
+func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+	mapData, ok := pd.(*data.Map)
+	if !ok {
+		return fmt.Errorf("expected Map for native map field %s, got %T", field.Name, pd)
+	}
+
+	mapType := fieldVal.Type()
+	if mapType.Key().Kind() == reflect.Interface && mapType.Key().NumMethod() > 0 {
+		return fmt.Errorf("field %s: unsupported native map key type %s", field.Name, mapType.Key())
+	}
+
+	result := reflect.MakeMapWithSize(mapType, len(mapData.Pairs))
+	for i, pair := range mapData.Pairs {
+		key := reflect.New(mapType.Key()).Elem()
+		if err := unmarshalNativeMapKey(pair[0], key, field); err != nil {
+			return fmt.Errorf("field %s pair %d key: %w", field.Name, i, err)
+		}
+
+		value := reflect.New(mapType.Elem()).Elem()
+		if err := unmarshalNativeMapValue(pair[1], value, field); err != nil {
+			return fmt.Errorf("field %s pair %d value: %w", field.Name, i, err)
+		}
+		result.SetMapIndex(key, value)
+	}
+	fieldVal.Set(result)
+	return nil
+}
+
+func unmarshalNativeMapKey(pd data.PlutusData, key reflect.Value, field reflect.StructField) error {
+	if key.Kind() == reflect.Interface {
+		return fmt.Errorf("unsupported native map key type %s", key.Type())
+	}
+
+	if key.CanAddr() {
+		if m, ok := key.Addr().Interface().(PlutusMarshaler); ok {
+			return m.FromPlutusData(pd, key.Addr().Interface())
+		}
+	}
+	if m, ok := key.Interface().(PlutusMarshaler); ok {
+		return m.FromPlutusData(pd, key.Interface())
+	}
+
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return fmt.Errorf("native map key: %w", err)
+	}
+	if plutusType != "" && plutusType != "Map" {
+		synthetic := reflect.StructField{Name: field.Name + "Key", Tag: field.Tag}
+		return unmarshalField(pd, key, synthetic)
+	}
+
+	switch key.Kind() {
+	case reflect.String:
+		return unmarshalStringBytes(pd, key)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return unmarshalInt(pd, key)
+	case reflect.Slice:
+		if key.Type().Elem().Kind() == reflect.Uint8 {
+			return unmarshalBytes(pd, key)
+		}
+	case reflect.Bool:
+		return unmarshalBool(pd, key)
+	}
+	return fmt.Errorf("unsupported native map key type %s", key.Type())
+}
+
+func unmarshalNativeMapValue(pd data.PlutusData, value reflect.Value, field reflect.StructField) error {
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return fmt.Errorf("native map value: %w", err)
+	}
+	if plutusType == "" || plutusType == "Map" {
+		return unmarshalNativeMapScalar(pd, value, field)
+	}
+	synthetic := reflect.StructField{Name: field.Name + "Value", Tag: field.Tag}
+	return unmarshalField(pd, value, synthetic)
+}
+
+func unmarshalNativeMapScalar(pd data.PlutusData, value reflect.Value, field reflect.StructField) error {
+	if value.CanAddr() {
+		if m, ok := value.Addr().Interface().(PlutusMarshaler); ok {
+			return m.FromPlutusData(pd, value.Addr().Interface())
+		}
+	}
+	if m, ok := value.Interface().(PlutusMarshaler); ok {
+		return m.FromPlutusData(pd, value.Interface())
+	}
+
+	switch value.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return unmarshalInt(pd, value)
+	case reflect.String:
+		return unmarshalStringBytes(pd, value)
+	case reflect.Bool:
+		return unmarshalBool(pd, value)
+	case reflect.Slice:
+		if value.Type().Elem().Kind() == reflect.Uint8 {
+			return unmarshalBytes(pd, value)
+		}
+	}
+	return fmt.Errorf("unsupported native map value type %s for field %s", value.Type(), field.Name)
 }
 
 // unmarshalMapEntry restores a map entry into a struct by setting the key field

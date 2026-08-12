@@ -1,6 +1,7 @@
 package plutusencoder
 
 import (
+	"encoding/hex"
 	"math/big"
 	"strings"
 	"testing"
@@ -298,6 +299,77 @@ func TestRoundTripSliceMapIntegerKey(t *testing.T) {
 	if len(decoded.Entries) != 1 || decoded.Entries[0].Key != 7 || decoded.Entries[0].Value != 42 {
 		t.Fatalf("unexpected decoded entries: %+v", decoded.Entries)
 	}
+}
+
+func TestRoundTripNativeStringIntMap(t *testing.T) {
+	type nativeMapDatum struct {
+		_      struct{}         `plutusType:"DefList" plutusConstr:"0"`
+		Values map[string]int64 `plutusType:"Map"`
+	}
+
+	original := nativeMapDatum{Values: map[string]int64{
+		"beta":  2,
+		"alpha": 1,
+		"gamma": 3,
+	}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encoded, err := data.Encode(pd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sorted by encoded key bytes: "beta"(len4) before "alpha"/"gamma"(len5).
+	if got := hex.EncodeToString(encoded); got != "d87981a344626574610245616c706861014567616d6d6103" {
+		t.Fatalf("expected deterministic native map CBOR, got %s", got)
+	}
+
+	var decoded nativeMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Values) != 3 || decoded.Values["alpha"] != 1 || decoded.Values["beta"] != 2 || decoded.Values["gamma"] != 3 {
+		t.Fatalf("unexpected decoded map: %+v", decoded.Values)
+	}
+}
+
+func TestNativeMapUnsupportedKey(t *testing.T) {
+	type invalidMapDatum struct {
+		_      struct{}           `plutusType:"DefList" plutusConstr:"0"`
+		Values map[float64]string `plutusType:"Map"`
+	}
+
+	_, err := MarshalPlutus(&invalidMapDatum{Values: map[float64]string{1.5: "yes"}})
+	if err == nil {
+		t.Fatal("expected error for unsupported native map key")
+	}
+}
+
+func TestNativeMapDuplicateEncodedKeys(t *testing.T) {
+	type invalidMapDatum struct {
+		_      struct{}                     `plutusType:"DefList" plutusConstr:"0"`
+		Values map[duplicateNativeKey]int64 `plutusType:"Map"`
+	}
+
+	_, err := MarshalPlutus(&invalidMapDatum{Values: map[duplicateNativeKey]int64{
+		"first":  1,
+		"second": 2,
+	}})
+	if err == nil {
+		t.Fatal("expected error for duplicate encoded native map key")
+	}
+}
+
+type duplicateNativeKey string
+
+func (key duplicateNativeKey) ToPlutusData() (data.PlutusData, error) {
+	return data.NewByteString([]byte("duplicate")), nil
+}
+
+func (key duplicateNativeKey) FromPlutusData(pd data.PlutusData, res any) error {
+	return nil
 }
 
 func TestUnmarshalMapInvalidOptionalTag(t *testing.T) {
