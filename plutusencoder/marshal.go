@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/blinklabs-io/plutigo/data"
 )
@@ -39,40 +38,31 @@ func marshalValue(val reflect.Value) (data.PlutusData, error) {
 
 	typ := val.Type()
 
-	// Read container tags from the anonymous `_` field
-	containerType := ""
-	constrTag := uint(0)
-	hasConstr := false
-
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.Name == "_" {
-			containerType = field.Tag.Get("plutusType")
-			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-				c, err := strconv.ParseUint(constrStr, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
-				}
-				constrTag = uint(c)
-				hasConstr = true
-			}
-			break
-		}
+	container, constrTag, hasConstr, err := readContainerMetadata(typ)
+	if err != nil {
+		return nil, err
 	}
 
-	switch containerType {
-	case "Map":
+	switch container {
+	case containerMap:
 		return marshalMap(val, typ, constrTag, hasConstr)
+	case containerDefList:
+		return marshalList(val, typ, constrTag, hasConstr, false)
+	case containerIndefList:
+		return marshalList(val, typ, constrTag, hasConstr, true)
 	default:
-		// IndefList, DefList, or no tag. The reference Plutus encoder uses
-		// indefinite-length lists for the unannotated container form.
-		useIndef := containerType != "DefList"
-		return marshalList(val, typ, constrTag, hasConstr, useIndef)
+		return nil, fmt.Errorf("unknown plutus encoder container: %d", container)
 	}
 }
 
 func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.PlutusData, error) {
-	plutusType := field.Tag.Get("plutusType")
+	plutusType, options, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return nil, fmt.Errorf("field %s: %w", field.Name, err)
+	}
+	if _, omit := options["omitempty"]; omit {
+		return nil, fmt.Errorf("field %s: omitempty is not supported on positional list fields", field.Name)
+	}
 
 	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference
 	if plutusType == "BigInt" {

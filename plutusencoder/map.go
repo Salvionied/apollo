@@ -3,7 +3,6 @@ package plutusencoder
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/blinklabs-io/plutigo/data"
 )
@@ -120,22 +119,12 @@ func extractMapKey(elem reflect.Value) (data.PlutusData, int, error) {
 }
 
 func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) error {
-	// Read expected Constr tag from struct tag
-	var expectedConstr uint
-	hasExpectedConstr := false
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.Name == "_" {
-			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-				c, err := strconv.ParseUint(constrStr, 10, 32)
-				if err != nil {
-					return fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
-				}
-				expectedConstr = uint(c)
-				hasExpectedConstr = true
-			}
-			break
-		}
+	container, expectedConstr, hasExpectedConstr, err := readContainerMetadata(typ)
+	if err != nil {
+		return err
+	}
+	if container != containerMap {
+		return fmt.Errorf("unmarshalFromMap received non-map container: %d", container)
 	}
 
 	mapData, ok := pd.(*data.Map)
