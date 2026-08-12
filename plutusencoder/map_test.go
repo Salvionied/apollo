@@ -216,6 +216,90 @@ func TestMarshalSliceMapDuplicateElementKey(t *testing.T) {
 	}
 }
 
+func TestRoundTripSliceMapUntaggedStringKey(t *testing.T) {
+	type mapEntry struct {
+		Key   string
+		Value int64 `plutusType:"Int"`
+	}
+	type sliceMapDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	original := sliceMapDatum{Entries: []mapEntry{
+		{Key: "first", Value: 1},
+		{Key: "second", Value: 2},
+	}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded sliceMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(decoded.Entries))
+	}
+	if decoded.Entries[0].Key != "first" || decoded.Entries[0].Value != 1 {
+		t.Errorf("unexpected first entry: %+v", decoded.Entries[0])
+	}
+	if decoded.Entries[1].Key != "second" || decoded.Entries[1].Value != 2 {
+		t.Errorf("unexpected second entry: %+v", decoded.Entries[1])
+	}
+}
+
+func TestRoundTripSliceMapHexStringKey(t *testing.T) {
+	type mapEntry struct {
+		Key   string `plutusType:"HexString"`
+		Value int64  `plutusType:"Int"`
+	}
+	type sliceMapDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	original := sliceMapDatum{Entries: []mapEntry{{Key: "aabbccdd", Value: 7}}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded sliceMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Entries) != 1 || decoded.Entries[0].Key != "aabbccdd" || decoded.Entries[0].Value != 7 {
+		t.Fatalf("unexpected decoded entries: %+v", decoded.Entries)
+	}
+}
+
+func TestRoundTripSliceMapIntegerKey(t *testing.T) {
+	type mapEntry struct {
+		Key   int64 `plutusType:"Int"`
+		Value int64 `plutusType:"Int"`
+	}
+	type sliceMapDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	original := sliceMapDatum{Entries: []mapEntry{{Key: 7, Value: 42}}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded sliceMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Entries) != 1 || decoded.Entries[0].Key != 7 || decoded.Entries[0].Value != 42 {
+		t.Fatalf("unexpected decoded entries: %+v", decoded.Entries)
+	}
+}
+
 func TestUnmarshalMapInvalidOptionalTag(t *testing.T) {
 	type badOptionalDatum struct {
 		_     struct{} `plutusType:"Map"`
