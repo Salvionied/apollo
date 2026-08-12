@@ -222,8 +222,11 @@ func unmarshalBool(pd data.PlutusData, fieldVal reflect.Value) error {
 	if !ok {
 		return fmt.Errorf("expected Constr for Bool, got %T", pd)
 	}
-	if constr.Tag > 1 {
+	if constr.Tag != 0 && constr.Tag != 1 {
 		return fmt.Errorf("expected Constr tag 0 or 1 for Bool, got %d", constr.Tag)
+	}
+	if len(constr.Fields) != 0 {
+		return fmt.Errorf("expected empty Constr for Bool, got %d fields", len(constr.Fields))
 	}
 	if fieldVal.Kind() != reflect.Bool {
 		return fmt.Errorf("bool tag requires bool, got %s", fieldVal.Kind())
