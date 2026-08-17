@@ -496,16 +496,12 @@ func NewVkeyWitnessFromSkey(
 // and every hash Apollo derives from the datum all agree.
 //
 // A datum decoded from CBOR keeps its original bytes, and those bytes are what
-// the datum hash on chain was computed over. gouroboros re-encodes datums
-// through plutigo whenever it marshals them, and plutigo emits the canonical
-// Plutus form (minimal integers, definite-length collections, byte strings
-// chunked above 64 bytes), so a datum whose stored CBOR is not already
-// canonical cannot be put back on the wire byte for byte. Hashing the stored
-// bytes anyway would declare a datum hash that no longer matches the datum in
-// the witness set, so the ledger would reject the transaction with
-// NotAllowedSupplementalDatums or MissingRequiredDatums. Apollo reports that
-// up front instead. Callers willing to accept the canonical re-encoding, and
-// the different datum hash that comes with it, can clear the stored bytes with
+// the datum hash on chain was computed over. Recent gouroboros versions
+// preserve those bytes when marshaling, while older versions re-encoded
+// through plutigo. If the active encoder cannot reproduce the stored bytes,
+// hashing them anyway would declare a datum hash that no longer matches the
+// datum in the witness set, so Apollo reports that mismatch up front. Callers
+// willing to accept a canonical re-encoding can clear the stored bytes with
 // datum.SetCbor(nil); callers that only need an output to carry a datum hash
 // somebody else computed can use PayToContractAsHash, which does not put the
 // datum in the witness set at all.

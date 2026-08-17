@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/btcsuite/btcd/btcutil/bech32"
 )
 
 // Every address in this file is synthetic: the payment and staking
@@ -35,6 +36,19 @@ func syntheticAddress(t *testing.T, addrType, network uint8) common.Address {
 		t.Fatal(err)
 	}
 	return addr
+}
+
+func syntheticBech32(t *testing.T, hrp string, raw []byte) string {
+	t.Helper()
+	data, err := bech32.ConvertBits(raw, 8, 5, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := bech32.Encode(hrp, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
 }
 
 // mainnetSweepAddress is the synthetic mainnet base address the corruption
@@ -278,11 +292,7 @@ func TestAddressEntryPointsRejectTrailingPayloadBytes(t *testing.T) {
 	if len(raw) != 1+2*common.AddressHashSize {
 		t.Fatalf("unexpected base address length %d", len(raw))
 	}
-	withTrailing, err := common.NewAddressFromBytes(append(raw, 0xcc))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := withTrailing.String()
+	text := syntheticBech32(t, "addr", append(raw, 0xcc))
 	for _, entry := range addressEntryPoints() {
 		if err := entry.parse(text); err == nil {
 			t.Errorf("%s accepted a 58-byte address payload %q",
@@ -321,16 +331,12 @@ func TestAddressEntryPointsAcceptPointerAddress(t *testing.T) {
 // TestAddressEntryPointsRejectPointerAddressTrailingBytes covers trailing
 // bytes after a pointer address's variable-length staking payload.
 func TestAddressEntryPointsRejectPointerAddressTrailingBytes(t *testing.T) {
-	addr, err := common.NewAddressFromParts(
-		common.AddressTypeKeyPointer,
-		common.AddressNetworkMainnet,
-		bytes.Repeat([]byte{0xaa}, common.AddressHashSize),
-		[]byte{0, 0, 0, 0xcc},
+	raw := append(
+		[]byte{common.AddressTypeKeyPointer<<4 | common.AddressNetworkMainnet},
+		bytes.Repeat([]byte{0xaa}, common.AddressHashSize)...,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := addr.String()
+	raw = append(raw, 0, 0, 0, 0xcc)
+	text := syntheticBech32(t, "addr", raw)
 	for _, entry := range addressEntryPoints() {
 		if err := entry.parse(text); err == nil {
 			t.Errorf("%s accepted trailing bytes in pointer address %q",
@@ -349,11 +355,7 @@ func TestAddressEntryPointsRejectUnknownAddressType(t *testing.T) {
 			raw[1+i] = 0xaa
 			raw[1+common.AddressHashSize+i] = 0xbb
 		}
-		addr, err := common.NewAddressFromBytes(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := addr.String()
+		text := syntheticBech32(t, "addr", raw)
 		for _, entry := range addressEntryPoints() {
 			if err := entry.parse(text); err == nil {
 				t.Errorf("%s accepted unknown address type %d in %q",
@@ -373,11 +375,7 @@ func TestAddressEntryPointsRejectUnknownNetworkId(t *testing.T) {
 			raw[1+i] = 0xaa
 			raw[1+common.AddressHashSize+i] = 0xbb
 		}
-		addr, err := common.NewAddressFromBytes(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := addr.String()
+		text := syntheticBech32(t, "addr", raw)
 		for _, entry := range addressEntryPoints() {
 			if err := entry.parse(text); err == nil {
 				t.Errorf("%s accepted network id %d in %q",

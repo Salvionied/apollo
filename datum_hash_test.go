@@ -95,48 +95,23 @@ func TestDatumWireCborKeepsCanonicalStoredBytes(t *testing.T) {
 	}
 }
 
-// TestDatumWireCborRejectsNonCanonicalStoredBytes covers datum encodings that
-// plutigo cannot reproduce. Hashing the stored bytes while the witness set
-// carries the re-encoded bytes is what silently locks funds, so Apollo refuses
-// the datum instead.
-func TestDatumWireCborRejectsNonCanonicalStoredBytes(t *testing.T) {
+// TestDatumWireCborPreservesNonCanonicalStoredBytes covers datum encodings
+// that must remain byte-for-byte stable when they are re-encoded.
+func TestDatumWireCborPreservesNonCanonicalStoredBytes(t *testing.T) {
 	tests := []struct {
-		name     string
-		cborHex  string
-		wantWire string
+		name    string
+		cborHex string
 	}{
 		{
 			name: "definite byte string above the 64 byte chunk limit",
 			cborHex: "d8799f5864" +
 				strings.Repeat("ab", 100) + "ff",
-			wantWire: "d8799f5f5840" + strings.Repeat("ab", 64) +
-				"5824" + strings.Repeat("ab", 36) + "ffff",
 		},
-		{
-			name:     "non-minimal integer",
-			cborHex:  "1801",
-			wantWire: "01",
-		},
-		{
-			name:     "two byte integer holding a small value",
-			cborHex:  "190001",
-			wantWire: "01",
-		},
-		{
-			name:     "bignum tag around a small value",
-			cborHex:  "c24101",
-			wantWire: "01",
-		},
-		{
-			name:     "indefinite length byte string",
-			cborHex:  "5f4161ff",
-			wantWire: "4161",
-		},
-		{
-			name:     "indefinite length constr fields",
-			cborHex:  "d8669f18809f01ffff",
-			wantWire: "d8668218809f01ff",
-		},
+		{name: "non-minimal integer", cborHex: "1801"},
+		{name: "two byte integer holding a small value", cborHex: "190001"},
+		{name: "bignum tag around a small value", cborHex: "c24101"},
+		{name: "indefinite length byte string", cborHex: "5f4161ff"},
+		{name: "indefinite length constr fields", cborHex: "d8669f18809f01ffff"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -145,59 +120,40 @@ func TestDatumWireCborRejectsNonCanonicalStoredBytes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if hex.EncodeToString(wire) != test.wantWire {
+			if hex.EncodeToString(wire) != test.cborHex {
 				t.Fatalf(
 					"wire bytes = %x, want %s",
 					wire,
-					test.wantWire,
+					test.cborHex,
 				)
 			}
 			storedHash := common.Blake2b256Hash(datum.Cbor())
 			wireHash := common.Blake2b256Hash(wire)
-			if storedHash == wireHash {
-				t.Fatalf(
-					"stored and wire bytes hash alike (%x); not a divergent case",
-					storedHash.Bytes(),
-				)
+			if storedHash != wireHash {
+				t.Fatalf("stored and wire hashes differ: %x != %x", storedHash.Bytes(), wireHash.Bytes())
 			}
 
-			if _, err := DatumWireCbor(&datum); err == nil {
-				t.Fatal("expected DatumWireCbor to reject the datum")
-			} else {
-				if !strings.Contains(err.Error(), storedHash.String()) {
-					t.Errorf(
-						"error does not name the original hash %s: %v",
-						storedHash.String(),
-						err,
-					)
-				}
-				if !strings.Contains(err.Error(), wireHash.String()) {
-					t.Errorf(
-						"error does not name the wire hash %s: %v",
-						wireHash.String(),
-						err,
-					)
-				}
+			if got, err := DatumWireCbor(&datum); err != nil {
+				t.Fatal(err)
+			} else if hex.EncodeToString(got) != test.cborHex {
+				t.Fatalf("DatumWireCbor = %x, want %s", got, test.cborHex)
 			}
 
-			if _, err := DatumHash(&datum); err == nil {
-				t.Fatal("expected DatumHash to reject the datum")
+			if got, err := DatumHash(&datum); err != nil {
+				t.Fatal(err)
+			} else if got != storedHash {
+				t.Fatalf("DatumHash = %x, want %x", got.Bytes(), storedHash.Bytes())
 			}
 		})
 	}
 }
 
-func TestAddDatumRejectsNonCanonicalStoredBytes(t *testing.T) {
+func TestAddDatumPreservesNonCanonicalStoredBytes(t *testing.T) {
 	datum := decodeDatum(t, "d8799f5864"+strings.Repeat("ab", 100)+"ff")
 	cc := setupFixedContext()
 	a := New(cc).AddDatum(&datum)
-	if len(a.datums) != 0 {
-		t.Fatalf("expected the datum to be rejected, got %d", len(a.datums))
-	}
-	if _, err := a.Complete(); err == nil {
-		t.Fatal("expected Complete to report the datum error")
-	} else if !strings.Contains(err.Error(), "AddDatum") {
-		t.Fatalf("unexpected error: %v", err)
+	if len(a.datums) != 1 {
+		t.Fatalf("expected the datum to be preserved, got %d", len(a.datums))
 	}
 }
 
@@ -236,16 +192,23 @@ func TestPayToContractWithDatumHashPreservesDatumIdentity(t *testing.T) {
 	}
 }
 
-func TestPayToContractWithDatumHashRejectsNonCanonicalDatum(t *testing.T) {
+func TestPayToContractWithDatumHashPreservesNonCanonicalDatum(t *testing.T) {
 	datum := decodeDatum(t, "d8799f5864"+strings.Repeat("ab", 100)+"ff")
 	cc := setupFixedContext()
 	addr := testAddress(t)
-	_, err := New(cc).PayToContractWithDatumHash(addr, &datum, 2_000_000)
-	if err == nil {
-		t.Fatal("expected PayToContractWithDatumHash to reject the datum")
+	a, err := New(cc).PayToContractWithDatumHash(addr, &datum, 2_000_000)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "canonical Plutus form") {
-		t.Fatalf("unexpected error: %v", err)
+	if len(a.datums) != 1 || len(a.payments) != 1 {
+		t.Fatalf("expected one datum and one payment, got %d and %d", len(a.datums), len(a.payments))
+	}
+	txOut, err := a.payments[0].ToTxOut()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := txOut.DatumHash(); got == nil || *got != common.Blake2b256Hash(datum.Cbor()) {
+		t.Fatalf("datum hash = %v, want %x", got, common.Blake2b256Hash(datum.Cbor()).Bytes())
 	}
 }
 
