@@ -130,10 +130,10 @@ func extractMapKey(elem reflect.Value) (data.PlutusData, int, error) {
 				continue
 			}
 			fv := elem.Field(j)
-			if fv.Kind() == reflect.String {
+			if fv.Kind() == reflect.String && f.Tag.Get("plutusType") == "" {
 				return data.NewByteString([]byte(fv.String())), j, nil
 			}
-			// For non-string first fields, marshal it
+			// For tagged and non-string first fields, marshal it
 			pd, err := marshalField(fv, f)
 			if err != nil {
 				return nil, -1, err
@@ -273,6 +273,23 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 	}
 	typ := elem.Type()
 
+	unmarshalKey := func(keyPD data.PlutusData, field reflect.StructField, fieldVal reflect.Value) error {
+		plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+		if err != nil {
+			return fmt.Errorf("key field %s: %w", field.Name, err)
+		}
+		if plutusType == "" && fieldVal.Kind() == reflect.String {
+			if err := unmarshalStringBytes(keyPD, fieldVal); err != nil {
+				return fmt.Errorf("key field %s: %w", field.Name, err)
+			}
+			return nil
+		}
+		if err := unmarshalField(keyPD, fieldVal, field); err != nil {
+			return fmt.Errorf("key field %s: %w", field.Name, err)
+		}
+		return nil
+	}
+
 	// Find the first exported field (the key field)
 	keyIdx := -1
 	for j := 0; j < typ.NumField(); j++ {
@@ -289,8 +306,8 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 
 	// Unmarshal the key into the key field
 	keyField := typ.Field(keyIdx)
-	if err := unmarshalField(pair[0], elem.Field(keyIdx), keyField); err != nil {
-		return fmt.Errorf("key field %s: %w", keyField.Name, err)
+	if err := unmarshalKey(pair[0], keyField, elem.Field(keyIdx)); err != nil {
+		return err
 	}
 
 	// Collect non-key exported fields
