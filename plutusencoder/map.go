@@ -9,6 +9,7 @@ import (
 
 func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr bool) (data.PlutusData, error) {
 	var pairs [][2]data.PlutusData
+	seenKeys := make(map[string]struct{}, typ.NumField())
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -37,6 +38,10 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr b
 		if keyName == "" {
 			keyName = field.Name
 		}
+		if _, duplicate := seenKeys[keyName]; duplicate {
+			return nil, fmt.Errorf("field %s: duplicate map key %q", field.Name, keyName)
+		}
+		seenKeys[keyName] = struct{}{}
 
 		key := data.NewByteString([]byte(keyName))
 		value, err := marshalField(fieldVal, field)
@@ -56,6 +61,7 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr b
 func marshalSliceAsMap(val reflect.Value, field reflect.StructField) (data.PlutusData, error) {
 	if val.Kind() == reflect.Slice {
 		var pairs [][2]data.PlutusData
+		seenKeys := make(map[string]struct{}, val.Len())
 		for i := 0; i < val.Len(); i++ {
 			elem := val.Index(i)
 			for elem.Kind() == reflect.Pointer {
@@ -69,6 +75,11 @@ func marshalSliceAsMap(val reflect.Value, field reflect.StructField) (data.Plutu
 			if err != nil {
 				return nil, fmt.Errorf("element %d key: %w", i, err)
 			}
+			keyString := key.String()
+			if _, duplicate := seenKeys[keyString]; duplicate {
+				return nil, fmt.Errorf("element %d: duplicate map key %s", i, keyString)
+			}
+			seenKeys[keyString] = struct{}{}
 			// Marshal only non-key fields as the value to avoid duplicating
 			// the key in both the map key and the value.
 			pd, err := marshalMapValueFields(elem, keyIdx)
