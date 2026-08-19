@@ -83,7 +83,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		return err
 	}
 	if container == containerMap {
-		return fmt.Errorf("unmarshalFromList received map container")
+		return errors.New("unmarshalFromList received map container")
 	}
 
 	var fields []data.PlutusData
