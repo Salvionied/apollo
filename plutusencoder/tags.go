@@ -4,7 +4,109 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
+
+// containerTag is the normalized form of the anonymous `_` field's
+// `plutusType` marker. Empty preserves the historical IndefList behavior;
+// unknown values are rejected so a typo cannot silently change the schema.
+type containerTag int
+
+const (
+	containerIndefList containerTag = iota
+	containerDefList
+	containerMap
+)
+
+func parseContainerTag(raw string) (containerTag, error) {
+	tag, options, err := splitPlutusType(raw)
+	if err != nil {
+		return containerIndefList, err
+	}
+	if len(options) > 0 {
+		return containerIndefList, fmt.Errorf("unknown container plutusType option %q in %q", options[0], raw)
+	}
+
+	switch tag {
+	case "", "IndefList":
+		return containerIndefList, nil
+	case "DefList":
+		return containerDefList, nil
+	case "Map":
+		return containerMap, nil
+	default:
+		return containerIndefList, fmt.Errorf("unknown container plutusType %q", tag)
+	}
+}
+
+// parseFieldTag normalizes a field's `plutusType` tag. Options are parsed
+// after the first comma, with surrounding whitespace ignored.
+func parseFieldTag(raw string) (string, map[string]struct{}, error) {
+	tag, options, err := splitPlutusType(raw)
+	if err != nil {
+		return "", nil, err
+	}
+
+	optionSet := make(map[string]struct{}, len(options))
+	for _, option := range options {
+		if option != "omitempty" {
+			return "", nil, fmt.Errorf("unknown field plutusType option %q in %q", option, raw)
+		}
+		optionSet[option] = struct{}{}
+	}
+	return tag, optionSet, nil
+}
+
+func splitPlutusType(raw string) (string, []string, error) {
+	parts := strings.Split(raw, ",")
+	tag := strings.TrimSpace(parts[0])
+	if tag == "" && len(parts) > 1 {
+		return "", nil, fmt.Errorf("invalid plutusType tag %q: missing field type", raw)
+	}
+
+	options := make([]string, 0, len(parts)-1)
+	seen := make(map[string]struct{}, len(parts)-1)
+	for _, part := range parts[1:] {
+		option := strings.TrimSpace(part)
+		if option == "" {
+			return "", nil, fmt.Errorf("invalid plutusType tag %q: empty option", raw)
+		}
+		lowerOption := strings.ToLower(option)
+		if _, duplicate := seen[lowerOption]; duplicate {
+			return "", nil, fmt.Errorf("invalid plutusType tag %q: duplicate option %q", raw, option)
+		}
+		seen[lowerOption] = struct{}{}
+		options = append(options, option)
+	}
+	return tag, options, nil
+}
+
+func readContainerMetadata(typ reflect.Type) (containerTag, uint, bool, error) {
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.Name != "_" {
+			continue
+		}
+
+		container, err := parseContainerTag(field.Tag.Get("plutusType"))
+		if err != nil {
+			return containerIndefList, 0, false, err
+		}
+
+		var constrTag uint
+		hasConstr := false
+		if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
+			c, err := strconv.ParseUint(constrStr, 10, 32)
+			if err != nil {
+				return containerIndefList, 0, false, fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
+			}
+			constrTag = uint(c)
+			hasConstr = true
+		}
+		return container, constrTag, hasConstr, nil
+	}
+	return containerIndefList, 0, false, nil
+}
 
 // isOptionalField reports whether a struct field is marked optional via the
 // `plutusOptional:"true"` tag. Optional fields may be absent from an input

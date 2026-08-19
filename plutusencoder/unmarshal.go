@@ -34,26 +34,26 @@ func unmarshalValue(pd data.PlutusData, val reflect.Value) error {
 
 	typ := val.Type()
 
-	// Read container type
-	containerType := ""
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.Name == "_" {
-			containerType = field.Tag.Get("plutusType")
-			break
-		}
+	container, _, _, err := readContainerMetadata(typ)
+	if err != nil {
+		return err
 	}
 
-	switch containerType {
-	case "Map":
+	switch container {
+	case containerMap:
 		return unmarshalFromMap(pd, val, typ)
-	default:
+	case containerDefList, containerIndefList:
 		return unmarshalFromList(pd, val, typ)
+	default:
+		return fmt.Errorf("unknown plutus encoder container: %d", container)
 	}
 }
 
 func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
-	plutusType := field.Tag.Get("plutusType")
+	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return fmt.Errorf("field %s: %w", field.Name, err)
+	}
 
 	// BigInt handles *big.Int directly, so dispatch before pointer dereference
 	if plutusType == "BigInt" {
