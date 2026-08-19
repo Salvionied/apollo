@@ -1,14 +1,15 @@
 module github.com/Salvionied/apollo/v2
 
-go 1.25.7
+go 1.25.13
 
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
-	github.com/blinklabs-io/bursa v0.16.0
-	github.com/blinklabs-io/gouroboros v0.190.0
+	github.com/blinklabs-io/bursa v0.16.1-0.20260817190501-1183ee5d009f
+	github.com/blinklabs-io/gouroboros v0.192.2
 	github.com/blinklabs-io/plutigo v0.3.0
+	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.1.0
@@ -21,7 +22,6 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/blinklabs-io/go-bip39 v0.2.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.2.0 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/btcsuite/btcutil v1.0.2 // indirect
