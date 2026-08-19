@@ -49,12 +49,28 @@ func parseFieldTag(raw string) (string, map[string]struct{}, error) {
 
 	optionSet := make(map[string]struct{}, len(options))
 	for _, option := range options {
-		if option != "omitempty" {
+		switch option {
+		case "omitempty":
+			optionSet[option] = struct{}{}
+		default:
 			return "", nil, fmt.Errorf("unknown field plutusType option %q in %q", option, raw)
 		}
-		optionSet[option] = struct{}{}
 	}
 	return tag, optionSet, nil
+}
+
+func isIgnoredField(field reflect.StructField) (bool, error) {
+	tag, options, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		return false, fmt.Errorf("field %s: %w", field.Name, err)
+	}
+	if tag == "Ignore" {
+		if len(options) > 0 {
+			return false, fmt.Errorf("field %s: Ignore does not accept options", field.Name)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func splitPlutusType(raw string) (string, []string, error) {

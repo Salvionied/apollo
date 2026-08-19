@@ -16,6 +16,14 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr b
 			continue
 		}
 
+		ignored, err := isIgnoredField(field)
+		if err != nil {
+			return nil, err
+		}
+		if ignored {
+			continue
+		}
+
 		fieldVal := val.Field(i)
 
 		keyName := field.Tag.Get("plutusKey")
@@ -166,6 +174,13 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		if field.Name == "_" || !field.IsExported() {
+			continue
+		}
+		ignored, err := isIgnoredField(field)
+		if err != nil {
+			return err
+		}
+		if ignored {
 			continue
 		}
 

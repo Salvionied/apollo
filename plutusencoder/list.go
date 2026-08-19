@@ -19,6 +19,14 @@ func marshalList(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr 
 			continue
 		}
 
+		ignored, err := isIgnoredField(field)
+		if err != nil {
+			return nil, err
+		}
+		if ignored {
+			continue
+		}
+
 		fieldVal := val.Field(i)
 		pd, err := marshalField(fieldVal, field)
 		if err != nil {
@@ -103,11 +111,18 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		return fmt.Errorf("expected Constr or List, got %T", pd)
 	}
 
-	// Count exported fields (excluding the "_" tag field).
+	// Count exported wire fields (excluding the "_" tag field and ignored fields).
 	exportedCount := 0
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
-		if f.Name != "_" && f.IsExported() {
+		if f.Name == "_" || !f.IsExported() {
+			continue
+		}
+		ignored, err := isIgnoredField(f)
+		if err != nil {
+			return err
+		}
+		if !ignored {
 			exportedCount++
 		}
 	}
@@ -121,6 +136,13 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		if field.Name == "_" || !field.IsExported() {
+			continue
+		}
+		ignored, err := isIgnoredField(field)
+		if err != nil {
+			return err
+		}
+		if ignored {
 			continue
 		}
 
