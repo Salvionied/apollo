@@ -7,7 +7,7 @@ require (
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/bursa v0.16.1-0.20260817190501-1183ee5d009f
-	github.com/blinklabs-io/gouroboros v0.192.2
+	github.com/blinklabs-io/gouroboros v0.193.1
 	github.com/blinklabs-io/plutigo v0.3.0
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/maestro-org/go-sdk v1.2.1
