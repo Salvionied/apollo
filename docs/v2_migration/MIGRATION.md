@@ -2,6 +2,14 @@
 
 Apollo v2 replaces all custom serialization code with [gouroboros](https://github.com/blinklabs-io/gouroboros) types, reducing the codebase from ~13,000+ lines to ~3,500. The API has been simplified with unified methods, while convenience wrappers preserve familiar calling patterns.
 
+The compiler walks you through renamed types and signatures. Read
+[validation and pitfalls](../validation/README.md) for the cases that still
+compile and behave differently (addresses, networks, datum hashes, `GetBurns`,
+coin selection, fees). New user guides live under
+[getting started](../getting_started/README.md), [backends](../backends/README.md),
+[wallets](../wallets/README.md), and [building transactions](../transaction_building/README.md).
+
+
 ## Import Path
 
 ```go
