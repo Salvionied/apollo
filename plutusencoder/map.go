@@ -2,6 +2,7 @@ package plutusencoder
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -151,7 +152,7 @@ func marshalNativeMap(val reflect.Value, field reflect.StructField) (data.Plutus
 func marshalNativeMapKey(key reflect.Value, field reflect.StructField) (data.PlutusData, error) {
 	for key.Kind() == reflect.Interface {
 		if key.IsNil() {
-			return nil, fmt.Errorf("nil native map key")
+			return nil, errors.New("nil native map key")
 		}
 		key = key.Elem()
 	}
@@ -193,7 +194,7 @@ func marshalNativeMapKey(key reflect.Value, field reflect.StructField) (data.Plu
 func marshalNativeMapValue(value reflect.Value, field reflect.StructField) (data.PlutusData, error) {
 	for value.Kind() == reflect.Interface {
 		if value.IsNil() {
-			return nil, fmt.Errorf("nil native map value")
+			return nil, errors.New("nil native map value")
 		}
 		value = value.Elem()
 	}
