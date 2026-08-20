@@ -1,6 +1,7 @@
 package plutusencoder
 
 import (
+	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -177,6 +178,53 @@ func TestUnmarshalTooFewFields(t *testing.T) {
 	err := UnmarshalPlutus(tooFew, &decoded)
 	if err == nil {
 		t.Error("expected error when PlutusData has fewer fields than struct expects")
+	}
+}
+
+func TestMarshalNestedFieldHonorsDefListTag(t *testing.T) {
+	type innerWithoutContainer struct {
+		Value int64 `plutusType:"Int"`
+	}
+	type outerDatum struct {
+		_     struct{}              `plutusType:"DefList" plutusConstr:"0"`
+		Inner innerWithoutContainer `plutusType:"DefList"`
+	}
+
+	pd, err := MarshalPlutus(&outerDatum{Inner: innerWithoutContainer{Value: 42}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encoded, err := data.Encode(pd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hex.EncodeToString(encoded); got != "d8798181182a" {
+		t.Fatalf("expected nested definite list CBOR d8798181182a, got %s", got)
+	}
+}
+
+func TestMarshalNestedExplicitContainerPrecedence(t *testing.T) {
+	type innerWithContainer struct {
+		_     struct{} `plutusType:"IndefList" plutusConstr:"1"`
+		Value int64    `plutusType:"Int"`
+	}
+	type outerDatum struct {
+		_     struct{}           `plutusType:"DefList" plutusConstr:"0"`
+		Inner innerWithContainer `plutusType:"DefList"`
+	}
+
+	pd, err := MarshalPlutus(&outerDatum{Inner: innerWithContainer{Value: 42}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encoded, err := data.Encode(pd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hex.EncodeToString(encoded); got != "d87981d87a9f182aff" {
+		t.Fatalf("expected nested explicit container CBOR d87981d87a9f182aff, got %s", got)
 	}
 }
 
