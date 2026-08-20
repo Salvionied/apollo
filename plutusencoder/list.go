@@ -73,6 +73,16 @@ func marshalSliceElement(elem reflect.Value) (data.PlutusData, error) {
 		}
 		elem = elem.Elem()
 	}
+
+	if elem.CanAddr() {
+		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
+			return m.ToPlutusData()
+		}
+	}
+	if m, ok := elem.Interface().(PlutusMarshaler); ok {
+		return m.ToPlutusData()
+	}
+
 	switch elem.Kind() {
 	case reflect.Struct:
 		return marshalValue(elem)
@@ -201,6 +211,15 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 
 // unmarshalSliceElement unmarshals a single slice element, handling both struct and primitive types.
 func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value) error {
+	if elem.CanAddr() {
+		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
+			return m.FromPlutusData(pd, elem.Addr().Interface())
+		}
+	}
+	if m, ok := elem.Interface().(PlutusMarshaler); ok {
+		return m.FromPlutusData(pd, elem.Interface())
+	}
+
 	switch elem.Kind() {
 	case reflect.Struct:
 		return unmarshalValue(pd, elem)
