@@ -215,3 +215,41 @@ func TestRoundTripNegativeBigInt(t *testing.T) {
 		t.Errorf("round-trip failed: expected %s, got %s", negVal.String(), decoded.Value.String())
 	}
 }
+
+func TestUnmarshalBoolRejectsFields(t *testing.T) {
+	pd := data.NewConstr(0, data.NewConstr(1, data.NewInteger(big.NewInt(1))))
+	var decoded BoolDatum
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected error for Bool Constr carrying fields")
+	}
+}
+
+func TestUnmarshalBoolRejectsOutOfRangeTag(t *testing.T) {
+	pd := data.NewConstr(0, data.NewConstr(2))
+	var decoded BoolDatum
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected error for Bool Constr tag outside 0/1")
+	}
+}
+
+func TestRoundTripEmptyBoolConstructors(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		original := BoolDatum{Active: active}
+		pd, err := MarshalPlutus(&original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		constr := pd.(*data.Constr)
+		boolConstr := constr.Fields[0].(*data.Constr)
+		if len(boolConstr.Fields) != 0 {
+			t.Fatalf("expected empty Bool Constr, got %d fields", len(boolConstr.Fields))
+		}
+		var decoded BoolDatum
+		if err := UnmarshalPlutus(pd, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.Active != active {
+			t.Fatalf("expected Active=%v, got %v", active, decoded.Active)
+		}
+	}
+}

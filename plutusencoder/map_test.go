@@ -406,6 +406,54 @@ func TestUnmarshalMapExtraKeysIgnored(t *testing.T) {
 	}
 }
 
+func TestUnmarshalMultiFieldMapValueRejectsConstr(t *testing.T) {
+	type mapEntry struct {
+		Key   string `plutusType:"StringBytes"`
+		Left  int64  `plutusType:"Int"`
+		Right int64  `plutusType:"Int"`
+	}
+	type sliceMapDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	pd := data.NewConstr(0, data.NewMap([][2]data.PlutusData{
+		{
+			data.NewByteString([]byte("k")),
+			data.NewConstr(0, data.NewInteger(big.NewInt(1)), data.NewInteger(big.NewInt(2))),
+		},
+	}))
+	var decoded sliceMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected error when Constr is provided where List is required for multi-field map values")
+	}
+}
+
+func TestRoundTripMultiFieldMapValueList(t *testing.T) {
+	type mapEntry struct {
+		Key   string `plutusType:"StringBytes"`
+		Left  int64  `plutusType:"Int"`
+		Right int64  `plutusType:"Int"`
+	}
+	type sliceMapDatum struct {
+		_       struct{}   `plutusType:"DefList" plutusConstr:"0"`
+		Entries []mapEntry `plutusType:"Map"`
+	}
+
+	original := sliceMapDatum{Entries: []mapEntry{{Key: "k", Left: 1, Right: 2}}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded sliceMapDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Entries) != 1 || decoded.Entries[0] != (mapEntry{Key: "k", Left: 1, Right: 2}) {
+		t.Fatalf("unexpected decoded entries: %+v", decoded.Entries)
+	}
+}
+
 func TestRoundTripOptionalMapDatum(t *testing.T) {
 	// A well-formed map with all keys present still round-trips, including
 	// structs that carry optional tags.

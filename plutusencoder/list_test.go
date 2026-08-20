@@ -270,3 +270,36 @@ func TestMarshalIndefVsDefEncoding(t *testing.T) {
 		t.Logf("warning: String() representations are equal; if plutigo merges them, verify CBOR bytes differ")
 	}
 }
+
+func TestUnmarshalSliceRejectsConstr(t *testing.T) {
+	type sliceDatum struct {
+		_     struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Items []int64  `plutusType:"DefList"`
+	}
+
+	pd := data.NewConstr(0, data.NewConstr(0, data.NewInteger(big.NewInt(1)), data.NewInteger(big.NewInt(2))))
+	var decoded sliceDatum
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected error when Constr is provided where List is required for a slice")
+	}
+}
+
+func TestRoundTripSliceListShape(t *testing.T) {
+	type sliceDatum struct {
+		_     struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Items []int64  `plutusType:"DefList"`
+	}
+
+	original := sliceDatum{Items: []int64{1, 2, 3}}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded sliceDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Items) != 3 || decoded.Items[0] != 1 || decoded.Items[1] != 2 || decoded.Items[2] != 3 {
+		t.Fatalf("unexpected decoded slice: %+v", decoded.Items)
+	}
+}

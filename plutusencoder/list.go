@@ -179,15 +179,11 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 
 func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
 	if fieldVal.Kind() == reflect.Slice {
-		var items []data.PlutusData
-		switch v := pd.(type) {
-		case *data.List:
-			items = v.Items
-		case *data.Constr:
-			items = v.Fields
-		default:
-			return fmt.Errorf("expected List or Constr for slice, got %T", pd)
+		list, ok := pd.(*data.List)
+		if !ok {
+			return fmt.Errorf("expected List for slice field %s, got %T", field.Name, pd)
 		}
+		items := list.Items
 
 		elemType := fieldVal.Type().Elem()
 		result := reflect.MakeSlice(fieldVal.Type(), len(items), len(items))
