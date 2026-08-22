@@ -10,7 +10,6 @@ require (
 	github.com/blinklabs-io/gouroboros v0.193.1
 	github.com/blinklabs-io/plutigo v0.3.0
 	github.com/btcsuite/btcd/btcutil v1.2.0
-	github.com/maestro-org/go-sdk v1.2.1
 	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.1.0
 	google.golang.org/protobuf v1.36.12
