@@ -4,7 +4,16 @@ All notable changes to Apollo are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [Unreleased]
+
+### Removed
+
+- The Maestro backend, `backend/maestro`, along with its
+  `github.com/maestro-org/go-sdk` dependency. Point Maestro users at another
+  backend, or keep the package out of tree against the `backend.ChainContext`
+  interface, which is unchanged.
+
+## [2.0.0] - 2026-08-07
 
 Apollo v2 replaces the hand-written `serialization/*` tree with the Blink Labs
 ledger packages — [gouroboros](https://github.com/blinklabs-io/gouroboros) for
