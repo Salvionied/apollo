@@ -6,6 +6,41 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `plutusType:"Ignore"` skips a struct field entirely, in both directions. It
+  takes no options.
+- `omitempty` is honored on map fields, dropping a field whose value is empty
+  from the encoded map. Empty follows `encoding/json` semantics — false,
+  numeric zero, nil pointer or interface, and zero-length string, array, slice
+  or map — and a type may override it by implementing `IsZero() bool`. The
+  option is still rejected on positional list fields, where dropping an element
+  would shift the ones after it.
+- Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
+  scalar key and value codecs. Entries are sorted by encoded key bytes, so the
+  output is deterministic, and duplicate encoded keys are rejected.
+- Custom `Marshaler` implementations are honored on slice elements, not just on
+  whole fields.
+
+### Fixed
+
+- Nested list encoding tags are honored, so an inner list keeps its own
+  `DefList`/`IndefList` form instead of inheriting the outer one.
+- Map keys held in a slice-backed map round-trip: string and byte key fields
+  now decode, where the pair decoder previously mishandled them.
+- Duplicate map keys are rejected when encoding, both for struct fields and for
+  slice elements, rather than emitting a map the ledger would read with one key
+  shadowing another.
+- A `Constr` is rejected where a bare Plutus `List` is required — slice fields
+  and multi-field map values — instead of silently discarding the constructor
+  tag.
+- `Bool` requires a constructor tag of 0 or 1 carrying no fields; out-of-range
+  tags and constructors with fields are rejected.
+
+### Changed
+
+- gouroboros 0.192.2 to 0.193.1.
+
 ### Removed
 
 - The Maestro backend, `backend/maestro`, and its
