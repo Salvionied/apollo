@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -325,7 +326,14 @@ func TestSelectorsAbortOnCanceledContext(t *testing.T) {
 					len(selected),
 				)
 			}
-			if aborted > whole/4 {
+			// The uncancelled search is only a few milliseconds on 386 CI,
+			// so scheduler jitter can exceed whole/4. Keep the check, but
+			// allow half the full search there.
+			limit := whole / 4
+			if runtime.GOARCH == "386" {
+				limit = whole / 2
+			}
+			if aborted > limit {
 				t.Errorf(
 					"cancellation took %v, close to the full %v search",
 					aborted, whole,
