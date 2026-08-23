@@ -53,7 +53,6 @@ golangci-lint run
 |---------|---------|
 | `backend/` | ChainContext interface and shared backend helpers |
 | `backend/blockfrost/` | Blockfrost backend |
-| `backend/maestro/` | Maestro backend |
 | `backend/ogmios/` | Ogmios/Kupo backend |
 | `backend/utxorpc/` | UTxO RPC backend |
 | `backend/fixed/` | Deterministic in-memory test backend |
