@@ -371,7 +371,7 @@ import "github.com/Salvionied/apollo/txBuilding/Backend/Base"
 import "github.com/Salvionied/apollo/v2/backend"
 ```
 
-Supported backends: `blockfrost`, `ogmios`, `maestro`, `utxorpc`, `fixed` (testing).
+Supported backends: `blockfrost`, `ogmios`, `utxorpc`, `fixed` (testing).
 
 **Ogmios takes a config, not clients.** `NewOgmiosChainContext` no longer
 accepts `*ogmigo.Client` and `*kugo.Client`, and it now returns an error. No
