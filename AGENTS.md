@@ -34,7 +34,7 @@ github.com/Salvionied/apollo/v2
 
 The repository has one Go module. Its current hard toolchain floor is Go
 1.25.13, as declared by `go.mod`; an older patch release will refuse to build
-the module. Keep the version in `go.mod`, `readme.md`, `CONTRIBUTING.md`, CI,
+the module. Keep the version in `go.mod`, `README.md`, `CONTRIBUTING.md`, CI,
 and this guide synchronized. Raise it only when the source or dependency graph
 requires the newer toolchain.
 
@@ -69,7 +69,6 @@ replacements or substitute forks merely to make a build pass.
 | --- | --- |
 | `backend/` | `ChainContext`, capability reporting, and common backend types |
 | `backend/blockfrost/` | Blockfrost adapter |
-| `backend/maestro/` | Maestro adapter |
 | `backend/ogmios/` | Ogmios and Kupo adapter |
 | `backend/utxorpc/` | UTxO RPC adapter |
 | `backend/fixed/` | deterministic in-memory backend for tests |
@@ -265,7 +264,7 @@ required even when an automated reviewer approves the change.
 ## Documentation Expectations
 
 Repository-local commands, APIs, and architecture belong here, in
-`readme.md`, package documentation, or `docs/`. Prefer links to the owning
+`README.md`, package documentation, or `docs/`. Prefer links to the owning
 source or test over copying explanations that can drift.
 
 Update user documentation and examples when behavior, supported APIs,

@@ -12,7 +12,6 @@
 * [Chain backends](backends/README.md)
 * [Capabilities](backends/capabilities.md)
 * [Blockfrost](backends/blockfrost.md)
-* [Maestro](backends/maestro.md)
 * [Ogmios and Kupo](backends/ogmios.md)
 * [UTxO RPC](backends/utxorpc.md)
 * [Fixed and cache](backends/fixed_and_cache.md)
@@ -79,6 +78,7 @@
 ## Migration
 
 * [v1 to v2](v2_migration/MIGRATION.md)
+* [SundaeSwap fork](sundaeswap-fork-migration.md)
 
 ## Validation and pitfalls
 

@@ -16,7 +16,7 @@ path must be updated even where the call sites do not change.
 
 The [v1 to v2 migration guide](docs/v2_migration/MIGRATION.md) carries the
 method-by-method mapping; this file records what changed and why. Building
-against Apollo v2 requires Go 1.25.13 or newer.
+against Apollo v2 requires Go 1.25.7 or newer.
 
 Everything in this release is breaking with respect to 1.8.x — the import path
 changes, so individual entries below are not marked. Because the path changes,
