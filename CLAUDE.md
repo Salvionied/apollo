@@ -11,8 +11,8 @@ small Claude Code operating checklist so the two guides do not drift.
    untracked changes, including work created by another developer or agent.
 2. Build context from the current source and tests. Apollo v2 uses `apollo.go`,
    `backend/`, and gouroboros ledger types; ignore advice that refers to the
-   removed v1 `ApolloBuilder.go`, `serialization/`, `txBuilding/`, or `crypto/`
-   trees.
+   removed `backend/maestro/` package or the v1 `ApolloBuilder.go`,
+   `serialization/`, `txBuilding/`, and `crypto/` trees.
 3. Search for all callers and implementations before changing an interface,
    response shape, CBOR representation, wallet behavior, or fluent builder
    method.

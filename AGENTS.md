@@ -69,7 +69,6 @@ replacements or substitute forks merely to make a build pass.
 | --- | --- |
 | `backend/` | `ChainContext`, capability reporting, and common backend types |
 | `backend/blockfrost/` | Blockfrost adapter |
-| `backend/maestro/` | Maestro adapter |
 | `backend/ogmios/` | Ogmios and Kupo adapter |
 | `backend/utxorpc/` | UTxO RPC adapter |
 | `backend/fixed/` | deterministic in-memory backend for tests |
