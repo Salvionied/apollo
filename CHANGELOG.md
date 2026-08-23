@@ -4,7 +4,40 @@ All notable changes to Apollo are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [Unreleased]
+
+### Removed
+
+- The Maestro backend, `backend/maestro`, and its
+  `github.com/maestro-org/go-sdk` dependency. Migrate to `backend/blockfrost`,
+  `backend/ogmios` or `backend/utxorpc`; `backend.ChainContext` is unchanged,
+  so an out-of-tree context still compiles against it.
+
+## [2.0.1] - 2026-08-19
+
+### Changed
+
+- The Go floor is 1.25.13, raised from 1.25.7 to pick up toolchain
+  vulnerability fixes.
+- Dependencies: gouroboros 0.190.0 to 0.192.2, bursa 0.16.0 to
+  0.16.1-0.20260817190501-1183ee5d009f, plutigo 0.2.0 to 0.3.0, and protobuf
+  1.36.11 to 1.36.12. `github.com/btcsuite/btcd/btcutil` is now a direct
+  requirement.
+- A datum whose stored CBOR is not canonical is rejected in fewer cases. The
+  gouroboros bump preserves a datum's original bytes when marshaling, where it
+  previously re-encoded through plutigo; the mismatch is still reported when
+  the active encoder cannot reproduce the stored bytes. `SetCbor(nil)` and
+  `PayToContractAsHash` remain the ways out.
+
+### Fixed
+
+- `plutusencoder` struct tags are validated rather than silently ignored. An
+  unknown `plutusType` on the anonymous `_` container field or on a regular
+  field, an unknown option, an empty or duplicate option, and a malformed
+  `plutusConstr` are all errors now, so a typo can no longer change the encoded
+  schema without saying so.
+
+## [2.0.0] - 2026-08-07
 
 Apollo v2 replaces the hand-written `serialization/*` tree with the Blink Labs
 ledger packages — [gouroboros](https://github.com/blinklabs-io/gouroboros) for

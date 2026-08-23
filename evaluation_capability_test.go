@@ -21,7 +21,7 @@ type capabilityEvalContext struct {
 	*fixed.FixedChainContext
 
 	// supportsAdditionalUtxos adds CapabilityEvaluateTxAdditionalUtxos to the
-	// reported set, as Maestro and Ogmios do.
+	// reported set, as Ogmios does.
 	supportsAdditionalUtxos bool
 	// rejectAdditionalUtxos fails on a non-empty set, as backend/utxorpc does.
 	rejectAdditionalUtxos bool
