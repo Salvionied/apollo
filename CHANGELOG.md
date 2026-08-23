@@ -6,8 +6,6 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Everything below is `plutusencoder`; no other package changed.
-
 ### Added
 
 - `plutusType:"Ignore"` skips a struct field entirely, in both directions. It
@@ -42,6 +40,13 @@ Everything below is `plutusencoder`; no other package changed.
 ### Changed
 
 - gouroboros 0.192.2 to 0.193.1.
+
+### Removed
+
+- The Maestro backend, `backend/maestro`, and its
+  `github.com/maestro-org/go-sdk` dependency. Migrate to `backend/blockfrost`,
+  `backend/ogmios` or `backend/utxorpc`; `backend.ChainContext` is unchanged,
+  so an out-of-tree context still compiles against it.
 
 ## [2.0.1] - 2026-08-19
 
