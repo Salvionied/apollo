@@ -43,7 +43,7 @@ Upgrading from v1? See the [migration guide](docs/v2_migration/MIGRATION.md).
 - HD wallets via bursa (mnemonic, optional passphrase, watch-only)
 - Fluent Conway transaction builder (`Complete` → `Sign` → `Submit`)
 - Automatic coin selection (MACS by default, pluggable)
-- Chain backends: Blockfrost, Maestro, Ogmios/Kupo, UTxO RPC, plus `fixed` and cache
+- Chain backends: Blockfrost, Ogmios/Kupo, UTxO RPC, plus `fixed` and cache
 - Plutus V1–V3 scripts, datums, redeemers, and reference inputs
 - Struct-tag Plutus encoding (`plutusencoder`)
 - Staking certificates, withdrawals, and CIP-1694 governance
@@ -91,7 +91,6 @@ UTxOs for transaction chaining.
 | Backend | Package |
 |---------|---------|
 | Blockfrost | `backend/blockfrost` |
-| Maestro | `backend/maestro` |
 | Ogmios + Kupo | `backend/ogmios` |
 | UTxO RPC | `backend/utxorpc` |
 | In-memory tests | `backend/fixed` |

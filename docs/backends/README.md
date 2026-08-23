@@ -32,7 +32,6 @@ Network ID is `1` for mainnet and `0` for testnets. There is no
 | Backend | Package | Typical use |
 |---------|---------|-------------|
 | [Blockfrost](blockfrost.md) | `backend/blockfrost` | Hosted HTTP; reports full capabilities including additional UTxOs |
-| [Maestro](maestro.md) | `backend/maestro` | Hosted HTTP; no genesis-parameter query |
 | [Ogmios + Kupo](ogmios.md) | `backend/ogmios` | Self-hosted node; Kupo optional for address UTxOs and script CBOR |
 | [UTxO RPC](utxorpc.md) | `backend/utxorpc` | gRPC/`connect`; prefers `utxorpc.v1beta`, falls back to v1alpha |
 | [Fixed](fixed_and_cache.md) | `backend/fixed` | Deterministic tests; no live chain |
