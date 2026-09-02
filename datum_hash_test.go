@@ -103,9 +103,9 @@ func TestDatumWireCborPreservesNonCanonicalStoredBytes(t *testing.T) {
 		cborHex string
 	}{
 		{
-			name: "definite byte string above the 64 byte chunk limit",
-			cborHex: "d8799f5864" +
-				strings.Repeat("ab", 100) + "ff",
+			name: "indefinite byte string with multiple chunks",
+			cborHex: "d8799f5f5840" + strings.Repeat("ab", 64) +
+				"5824" + strings.Repeat("ab", 36) + "ffff",
 		},
 		{name: "non-minimal integer", cborHex: "1801"},
 		{name: "two byte integer holding a small value", cborHex: "190001"},
@@ -149,7 +149,7 @@ func TestDatumWireCborPreservesNonCanonicalStoredBytes(t *testing.T) {
 }
 
 func TestAddDatumPreservesNonCanonicalStoredBytes(t *testing.T) {
-	datum := decodeDatum(t, "d8799f5864"+strings.Repeat("ab", 100)+"ff")
+	datum := decodeDatum(t, "d8799f5f5840"+strings.Repeat("ab", 64)+"5824"+strings.Repeat("ab", 36)+"ffff")
 	cc := setupFixedContext()
 	a := New(cc).AddDatum(&datum)
 	if len(a.datums) != 1 {
@@ -162,7 +162,7 @@ func TestAddDatumPreservesNonCanonicalStoredBytes(t *testing.T) {
 // the payment. Silently declaring some other hash creates an output at a script
 // address whose datum the counterparty cannot match, locking the funds.
 func TestPayToContractWithDatumHashPreservesDatumIdentity(t *testing.T) {
-	datum := decodeDatum(t, "d8799f5864"+strings.Repeat("ab", 100)+"ff")
+	datum := decodeDatum(t, "d8799f5f5840"+strings.Repeat("ab", 64)+"5824"+strings.Repeat("ab", 36)+"ffff")
 	want := common.Blake2b256Hash(datum.Cbor())
 
 	cc := setupFixedContext()
@@ -193,7 +193,7 @@ func TestPayToContractWithDatumHashPreservesDatumIdentity(t *testing.T) {
 }
 
 func TestPayToContractWithDatumHashPreservesNonCanonicalDatum(t *testing.T) {
-	datum := decodeDatum(t, "d8799f5864"+strings.Repeat("ab", 100)+"ff")
+	datum := decodeDatum(t, "d8799f5f5840"+strings.Repeat("ab", 64)+"5824"+strings.Repeat("ab", 36)+"ffff")
 	cc := setupFixedContext()
 	addr := testAddress(t)
 	a, err := New(cc).PayToContractWithDatumHash(addr, &datum, 2_000_000)
