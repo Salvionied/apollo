@@ -22,8 +22,8 @@ func TestMarshalSimpleDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	if constr.Tag != 0 {
-		t.Errorf("expected tag 0, got %d", constr.Tag)
+	if !constrTagEqual(constr.Tag, 0) {
+		t.Errorf("expected tag 0, got %s", constr.Tag)
 	}
 	if len(constr.Fields) != 2 {
 		t.Fatalf("expected 2 fields, got %d", len(constr.Fields))
@@ -62,8 +62,8 @@ func TestMarshalIndefDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	if constr.Tag != 1 {
-		t.Errorf("expected tag 1, got %d", constr.Tag)
+	if !constrTagEqual(constr.Tag, 1) {
+		t.Errorf("expected tag 1, got %s", constr.Tag)
 	}
 }
 
@@ -254,8 +254,8 @@ func TestMarshalIndefVsDefEncoding(t *testing.T) {
 	}
 
 	// Tags must be the same (both constr 0) - we're testing encoding, not schema.
-	if defConstr.Tag != indefConstr.Tag {
-		t.Errorf("expected same tags, got def=%d indef=%d", defConstr.Tag, indefConstr.Tag)
+	if !constrTagEqual(defConstr.Tag, 0) || !constrTagEqual(indefConstr.Tag, 0) {
+		t.Errorf("expected same tags, got def=%s indef=%s", defConstr.Tag, indefConstr.Tag)
 	}
 
 	// Fields must be the same.

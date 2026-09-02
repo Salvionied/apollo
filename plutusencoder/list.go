@@ -10,7 +10,7 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 )
 
-func marshalList(val reflect.Value, typ reflect.Type, constrTag uint, hasConstr bool, useIndef bool) (data.PlutusData, error) {
+func marshalList(val reflect.Value, typ reflect.Type, constrTag uint64, hasConstr bool, useIndef bool) (data.PlutusData, error) {
 	var fields []data.PlutusData
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -120,8 +120,8 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 
 	switch v := pd.(type) {
 	case *data.Constr:
-		if hasExpectedConstr && v.Tag != expectedConstr {
-			return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, v.Tag)
+		if hasExpectedConstr && !constrTagEqual(v.Tag, expectedConstr) {
+			return fmt.Errorf("expected Constr tag %d, got %s", expectedConstr, v.Tag)
 		}
 		fields = v.Fields
 	case *data.List:

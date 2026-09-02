@@ -25,8 +25,8 @@ func TestMarshalBoolDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr for bool, got %T", constr.Fields[0])
 	}
-	if boolConstr.Tag != 1 {
-		t.Errorf("expected tag 1 for true, got %d", boolConstr.Tag)
+	if !constrTagEqual(boolConstr.Tag, 1) {
+		t.Errorf("expected tag 1 for true, got %s", boolConstr.Tag)
 	}
 }
 
@@ -45,8 +45,8 @@ func TestMarshalBoolFalse(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr for bool field, got %T", constr.Fields[0])
 	}
-	if boolConstr.Tag != 0 {
-		t.Errorf("expected tag 0 for false, got %d", boolConstr.Tag)
+	if !constrTagEqual(boolConstr.Tag, 0) {
+		t.Errorf("expected tag 0 for false, got %s", boolConstr.Tag)
 	}
 }
 

@@ -40,8 +40,8 @@ func TestIgnoreListField(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	if constr.Tag != 1 {
-		t.Fatalf("expected tag 1, got %d", constr.Tag)
+	if !constrTagEqual(constr.Tag, 1) {
+		t.Fatalf("expected tag 1, got %s", constr.Tag)
 	}
 	if len(constr.Fields) != 2 {
 		t.Fatalf("ignored field consumed a wire slot: expected 2 fields, got %d", len(constr.Fields))
