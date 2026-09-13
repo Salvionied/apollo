@@ -6,7 +6,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
-	github.com/blinklabs-io/bursa v0.16.1-0.20260817190501-1183ee5d009f
+	github.com/blinklabs-io/bursa v0.17.0
 	github.com/blinklabs-io/gouroboros v0.202.5
 	github.com/blinklabs-io/plutigo v0.5.1
 	github.com/btcsuite/btcd/btcutil v1.2.0
@@ -36,7 +36,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
