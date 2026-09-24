@@ -230,7 +230,7 @@ Formatting commands mutate files. Run them only when appropriate, then inspect
 the diff for unrelated churn. Do not claim a check passed unless you ran it and
 read its exit status. List every skipped expected check and the concrete reason.
 
-CI currently tests Go 1.26.8 and the floating Go 1.27 release, runs race
+CI currently tests Go 1.26.x and the floating Go 1.27 release, runs race
 detection, checks formatting and module tidiness, vets and tests `linux/386`,
 runs `golangci-lint`, scans with `govulncheck`, and performs CodeQL analysis.
 Read `.github/workflows/` before changing CI assumptions.
