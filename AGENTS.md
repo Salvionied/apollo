@@ -33,7 +33,7 @@ github.com/Salvionied/apollo/v2
 ```
 
 The repository has one Go module. Its current hard toolchain floor is Go
-1.25.13, as declared by `go.mod`; an older patch release will refuse to build
+1.26.8, as declared by `go.mod`; an older patch release will refuse to build
 the module. Keep the version in `go.mod`, `README.md`, `CONTRIBUTING.md`, CI,
 and this guide synchronized. Raise it only when the source or dependency graph
 requires the newer toolchain.
@@ -230,7 +230,7 @@ Formatting commands mutate files. Run them only when appropriate, then inspect
 the diff for unrelated churn. Do not claim a check passed unless you ran it and
 read its exit status. List every skipped expected check and the concrete reason.
 
-CI currently tests Go 1.25.13 and the floating Go 1.26 release, runs race
+CI currently tests Go 1.26.x and the floating Go 1.27 release, runs race
 detection, checks formatting and module tidiness, vets and tests `linux/386`,
 runs `golangci-lint`, scans with `govulncheck`, and performs CodeQL analysis.
 Read `.github/workflows/` before changing CI assumptions.

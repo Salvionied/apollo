@@ -28,8 +28,8 @@ Ready to learn? Start with the [documentation](docs/README.md) or jump to the
 
 ## Install
 
-Apollo v2 requires Go 1.25.13 or newer — the `go` directive in `go.mod` is a
-hard floor, so an older 1.25 patch release fails to build:
+Apollo v2 requires Go 1.26.8 or newer — the `go` directive in `go.mod` is a
+hard floor, so older toolchains fail to build:
 
 ```bash
 go get github.com/Salvionied/apollo/v2
