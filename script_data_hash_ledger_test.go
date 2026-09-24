@@ -76,7 +76,7 @@ func buildWitnessDatumTx(
 
 	redeemer := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
-	unit := NewUnit(strings.Repeat("ab", 28), "746f6b656e", 1)
+	unit := NewUnit(hex.EncodeToString(script.Hash().Bytes()), "746f6b656e", 1)
 
 	a := New(cc).
 		SetWallet(NewExternalWallet(addr)).
