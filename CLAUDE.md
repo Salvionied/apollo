@@ -40,5 +40,5 @@ that could not be run.
 
 Finish with a concise evidence-based handoff: changed paths, behavior affected,
 commands and exit codes, skipped checks with reasons, and remaining risks. The
-module currently requires Go 1.25.13 or newer; verify `go.mod` rather than
+module currently requires Go 1.26.8 or newer; verify `go.mod` rather than
 relying on this sentence if the toolchain floor is relevant to the task.
