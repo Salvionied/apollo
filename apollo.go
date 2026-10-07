@@ -2634,7 +2634,12 @@ func (a *Apollo) estimateExecutionUnits(
 	if err != nil {
 		return nil, err
 	}
-	ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+	// An empty vkey witness set is encoded as witness-set map field 0 with an
+	// empty value. Recent gouroboros versions reject empty witness-set fields,
+	// so leave the optional field unset when evaluation needs no signatures.
+	if len(witnesses) > 0 {
+		ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+	}
 
 	prelimTx := conway.ConwayTransaction{
 		Body:       body,
