@@ -3,7 +3,7 @@ module github.com/Salvionied/apollo/v2
 go 1.26.8
 
 require (
-	connectrpc.com/connect v1.21.0
+	connectrpc.com/connect v1.21.1
 	github.com/SundaeSwap-finance/kugo v1.3.1
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/bursa v0.18.0
