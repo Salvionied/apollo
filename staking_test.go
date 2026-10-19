@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -376,7 +377,10 @@ func TestCertificateDepositAdjustment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adj := a.certificateDepositAdjustment(StakeDeposit)
+	adj, err := a.certificateDepositAdjustment(StakeDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if adj != StakeDeposit {
 		t.Errorf("expected deposit of %d, got %d", StakeDeposit, adj)
 	}
@@ -386,7 +390,10 @@ func TestCertificateDepositAdjustment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adj = a.certificateDepositAdjustment(StakeDeposit)
+	adj, err = a.certificateDepositAdjustment(StakeDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if adj != 0 {
 		t.Errorf("expected net 0 (reg+dereg), got %d", adj)
 	}
@@ -402,7 +409,10 @@ func TestCertificateDepositAdjustmentDeregOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adj := a.certificateDepositAdjustment(StakeDeposit)
+	adj, err := a.certificateDepositAdjustment(StakeDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if adj != -StakeDeposit {
 		t.Errorf("expected deposit refund of %d, got %d", -StakeDeposit, adj)
 	}
@@ -414,8 +424,88 @@ func TestCertificateDepositAdjustmentUsesPoolAndExplicitAmounts(t *testing.T) {
 		{Type: uint(common.CertificateTypePoolRegistration), Certificate: &common.PoolRegistrationCertificate{}},
 		{Type: uint(common.CertificateTypeRegistration), Certificate: &common.RegistrationCertificate{Amount: 1234567}},
 	}
-	if got, want := a.certificateDepositAdjustment(2_000_000, 500_000_000), int64(501_234_567); got != want {
+	got, err := a.certificateDepositAdjustment(2_000_000, 500_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(501_234_567); got != want {
 		t.Fatalf("certificate deposit adjustment = %d, want %d", got, want)
+	}
+}
+
+func TestCertificateDepositAdjustmentRejectsOverflow(t *testing.T) {
+	tests := []struct {
+		name  string
+		certs []common.CertificateWrapper
+	}{
+		{
+			name: "deposit exceeds int64",
+			certs: []common.CertificateWrapper{
+				{Type: uint(common.CertificateTypeRegistration), Certificate: &common.RegistrationCertificate{Amount: math.MaxInt64 + 1}},
+			},
+		},
+		{
+			name: "refund exceeds int64",
+			certs: []common.CertificateWrapper{
+				{Type: uint(common.CertificateTypeDeregistration), Certificate: &common.DeregistrationCertificate{Amount: math.MaxInt64 + 1}},
+			},
+		},
+		{
+			name: "deposit total exceeds uint64",
+			certs: []common.CertificateWrapper{
+				{Type: uint(common.CertificateTypeRegistrationDrep), Certificate: &common.RegistrationDrepCertificate{Amount: math.MaxUint64}},
+				{Type: uint(common.CertificateTypeRegistration), Certificate: &common.RegistrationCertificate{Amount: 1}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := New(setupFixedContext()).SetCertificates(tt.certs)
+			if _, err := a.certificateDepositAdjustment(StakeDeposit); err == nil {
+				t.Fatal("expected overflow error")
+			}
+		})
+	}
+}
+
+func TestCertificateDepositAdjustmentAtInt64Boundary(t *testing.T) {
+	a := New(setupFixedContext()).SetCertificates([]common.CertificateWrapper{
+		{Type: uint(common.CertificateTypeDeregistrationDrep), Certificate: &common.DeregistrationDrepCertificate{Amount: math.MaxInt64}},
+	})
+	got, err := a.certificateDepositAdjustment(StakeDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != -math.MaxInt64 {
+		t.Fatalf("certificate deposit adjustment = %d, want %d", got, int64(-math.MaxInt64))
+	}
+}
+
+func TestRegisterAndDelegateRejectsNegativeCoin(t *testing.T) {
+	tAddr := testAddress(t)
+	cred := common.Credential{CredType: 0, Credential: tAddr.StakeKeyHash()}
+	var poolHash common.Blake2b224
+	drep := common.Drep{Type: common.DrepTypeAbstain}
+	tests := []struct {
+		name string
+		call func(*Apollo) (*Apollo, error)
+	}{
+		{"stake", func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateStake(cred, poolHash, -1) }},
+		{"vote", func(a *Apollo) (*Apollo, error) { return a.RegisterAndDelegateVote(cred, drep, -1) }},
+		{"stake and vote", func(a *Apollo) (*Apollo, error) {
+			return a.RegisterAndDelegateStakeAndVote(cred, poolHash, drep, -1)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := tt.call(New(setupFixedContext()))
+			if err == nil {
+				t.Fatal("expected error for negative coin")
+			}
+			if len(a.certificates) != 0 {
+				t.Fatalf("expected no certificates, got %d", len(a.certificates))
+			}
+		})
 	}
 }
 
