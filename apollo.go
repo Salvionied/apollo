@@ -741,6 +741,9 @@ func (a *Apollo) DelegateStake(credOrAddr any, poolHash common.Blake2b224) (*Apo
 // RegisterAndDelegateStake creates a combined stake registration and delegation certificate.
 // credOrAddr can be: *common.Credential, common.Credential, common.Address, string (bech32), or nil (uses wallet).
 func (a *Apollo) RegisterAndDelegateStake(credOrAddr any, poolHash common.Blake2b224, coin int64) (*Apollo, error) {
+	if coin < 0 {
+		return a, errors.New("RegisterAndDelegateStake: coin must be non-negative")
+	}
 	cred, err := a.resolveCredential(credOrAddr)
 	if err != nil {
 		return a, err
@@ -749,7 +752,7 @@ func (a *Apollo) RegisterAndDelegateStake(credOrAddr any, poolHash common.Blake2
 		CertType:        uint(common.CertificateTypeStakeRegistrationDelegation),
 		StakeCredential: cred,
 		PoolKeyHash:     poolHash,
-		Amount:          coin,
+		Amount:          uint64(coin), //nolint:gosec // validated non-negative above
 	}
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypeStakeRegistrationDelegation),
@@ -802,6 +805,9 @@ func (a *Apollo) DelegateStakeAndVote(credOrAddr any, poolHash common.Blake2b224
 // RegisterAndDelegateVote creates a combined registration+vote delegation certificate.
 // credOrAddr can be: *common.Credential, common.Credential, common.Address, string (bech32), or nil (uses wallet).
 func (a *Apollo) RegisterAndDelegateVote(credOrAddr any, drep common.Drep, coin int64) (*Apollo, error) {
+	if coin < 0 {
+		return a, errors.New("RegisterAndDelegateVote: coin must be non-negative")
+	}
 	cred, err := a.resolveCredential(credOrAddr)
 	if err != nil {
 		return a, err
@@ -810,7 +816,7 @@ func (a *Apollo) RegisterAndDelegateVote(credOrAddr any, drep common.Drep, coin 
 		CertType:        uint(common.CertificateTypeVoteRegistrationDelegation),
 		StakeCredential: cred,
 		Drep:            drep,
-		Amount:          coin,
+		Amount:          uint64(coin), //nolint:gosec // validated non-negative above
 	}
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypeVoteRegistrationDelegation),
@@ -822,6 +828,9 @@ func (a *Apollo) RegisterAndDelegateVote(credOrAddr any, drep common.Drep, coin 
 // RegisterAndDelegateStakeAndVote creates a combined registration+stake+vote delegation certificate.
 // credOrAddr can be: *common.Credential, common.Credential, common.Address, string (bech32), or nil (uses wallet).
 func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common.Blake2b224, drep common.Drep, coin int64) (*Apollo, error) {
+	if coin < 0 {
+		return a, errors.New("RegisterAndDelegateStakeAndVote: coin must be non-negative")
+	}
 	cred, err := a.resolveCredential(credOrAddr)
 	if err != nil {
 		return a, err
@@ -831,7 +840,7 @@ func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common
 		StakeCredential: cred,
 		PoolKeyHash:     poolHash,
 		Drep:            drep,
-		Amount:          coin,
+		Amount:          uint64(coin), //nolint:gosec // validated non-negative above
 	}
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypeStakeVoteRegistrationDelegation),
@@ -865,7 +874,7 @@ func (a *Apollo) RegisterDRep(cred common.Credential, coin int64, anchor *common
 	cert := common.RegistrationDrepCertificate{
 		CertType:       uint(common.CertificateTypeRegistrationDrep),
 		DrepCredential: cred,
-		Amount:         coin,
+		Amount:         uint64(coin), //nolint:gosec // validated non-negative above
 		Anchor:         cloneGovAnchor(anchor),
 	}
 	a.certificates = append(a.certificates, common.CertificateWrapper{
@@ -884,7 +893,7 @@ func (a *Apollo) RetireDRep(cred common.Credential, coin int64) *Apollo {
 	cert := common.DeregistrationDrepCertificate{
 		CertType:       uint(common.CertificateTypeDeregistrationDrep),
 		DrepCredential: cred,
-		Amount:         coin,
+		Amount:         uint64(coin), //nolint:gosec // validated non-negative above
 	}
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypeDeregistrationDrep),
@@ -1669,7 +1678,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		}
 	}
 	// Certificate deregistration refunds are implicit inputs
-	refundValue := a.certificateRefundValue(stakeDeposit, poolDeposit)
+	refundValue, err := a.certificateRefundValue(stakeDeposit, poolDeposit)
+	if err != nil {
+		return a, fmt.Errorf("certificate deposit overflow: %w", err)
+	}
 	if refundValue.Coin > 0 {
 		totalInput, err = totalInput.Add(refundValue)
 		if err != nil {
@@ -2913,7 +2925,7 @@ func (a *Apollo) buildBody(
 		body.TxProposalProcedures = a.proposalProcedures
 	}
 	if a.currentTreasury > 0 {
-		body.TxCurrentTreasuryValue = a.currentTreasury
+		body.TxCurrentTreasuryValue = uint64(a.currentTreasury) //nolint:gosec // validated non-negative in SetCurrentTreasuryValue
 	}
 	if a.treasuryDonation > 0 {
 		body.TxDonation = uint64(a.treasuryDonation) //nolint:gosec // validated non-negative above
@@ -3780,7 +3792,10 @@ func (a *Apollo) validateCollateral() error {
 
 // adjustForCertificateDeposits adjusts the total required value for certificate deposits.
 func (a *Apollo) adjustForCertificateDeposits(required Value, stakeDeposit, poolDeposit int64) (Value, error) {
-	adj := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
+	adj, err := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
+	if err != nil {
+		return required, err
+	}
 	if adj > 0 {
 		deposit := NewSimpleValue(uint64(adj))
 		return required.Add(deposit)
@@ -3790,37 +3805,52 @@ func (a *Apollo) adjustForCertificateDeposits(required Value, stakeDeposit, pool
 
 // certificateRefundValue returns the total deposit refund from deregistration certificates.
 // These refunds are implicit inputs in Cardano's balance equation.
-func (a *Apollo) certificateRefundValue(stakeDeposit, poolDeposit int64) Value {
-	adj := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
-	if adj < 0 {
-		return NewSimpleValue(uint64(-adj))
+func (a *Apollo) certificateRefundValue(stakeDeposit, poolDeposit int64) (Value, error) {
+	adj, err := a.certificateDepositAdjustment(stakeDeposit, poolDeposit)
+	if err != nil {
+		return Value{}, err
 	}
-	return NewSimpleValue(0)
+	if adj < 0 {
+		return NewSimpleValue(uint64(-adj)), nil
+	}
+	return NewSimpleValue(0), nil
 }
 
 // certificateDepositAdjustment calculates the net deposit change from certificates.
-// Positive means deposits needed, negative means refunds.
-func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits ...int64) int64 {
+// Positive means deposits needed, negative means refunds. Certificate amounts
+// are unsigned and may come from SetCertificates, so totals are overflow-checked.
+func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits ...int64) (int64, error) {
 	poolDeposit := int64(0)
 	if len(poolDeposits) > 0 {
 		poolDeposit = poolDeposits[0]
 	}
-	var adjustment int64
+	if stakeDeposit < 0 || poolDeposit < 0 {
+		return 0, errors.New("protocol deposits must be non-negative")
+	}
+	var deposits, refunds uint64
+	add := func(total *uint64, amount uint64) error {
+		if amount > math.MaxUint64-*total {
+			return errors.New("certificate deposit total overflows uint64")
+		}
+		*total += amount
+		return nil
+	}
 	for _, cert := range a.certificates {
+		var err error
 		switch cert.Type {
 		case uint(common.CertificateTypeStakeRegistration):
-			adjustment += stakeDeposit
+			err = add(&deposits, uint64(stakeDeposit))
 		case uint(common.CertificateTypePoolRegistration):
-			adjustment += poolDeposit
+			err = add(&deposits, uint64(poolDeposit))
 		case uint(common.CertificateTypeStakeDeregistration):
-			adjustment -= stakeDeposit
+			err = add(&refunds, uint64(stakeDeposit))
 		case uint(common.CertificateTypeDeregistration):
 			if c, ok := cert.Certificate.(*common.DeregistrationCertificate); ok {
-				adjustment -= c.Amount
+				err = add(&refunds, c.Amount)
 			}
 		case uint(common.CertificateTypeRegistration):
 			if c, ok := cert.Certificate.(*common.RegistrationCertificate); ok {
-				adjustment += c.Amount
+				err = add(&deposits, c.Amount)
 			}
 		case uint(common.CertificateTypeStakeRegistrationDelegation),
 			uint(common.CertificateTypeVoteRegistrationDelegation),
@@ -3828,23 +3858,37 @@ func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits .
 			// These certificates carry their explicit deposit in Amount.
 			switch c := cert.Certificate.(type) {
 			case *common.StakeRegistrationDelegationCertificate:
-				adjustment += c.Amount
+				err = add(&deposits, c.Amount)
 			case *common.VoteRegistrationDelegationCertificate:
-				adjustment += c.Amount
+				err = add(&deposits, c.Amount)
 			case *common.StakeVoteRegistrationDelegationCertificate:
-				adjustment += c.Amount
+				err = add(&deposits, c.Amount)
 			}
 		case uint(common.CertificateTypeRegistrationDrep):
 			if c, ok := cert.Certificate.(*common.RegistrationDrepCertificate); ok {
-				adjustment += c.Amount
+				err = add(&deposits, c.Amount)
 			}
 		case uint(common.CertificateTypeDeregistrationDrep):
 			if c, ok := cert.Certificate.(*common.DeregistrationDrepCertificate); ok {
-				adjustment -= c.Amount
+				err = add(&refunds, c.Amount)
 			}
 		}
+		if err != nil {
+			return 0, err
+		}
 	}
-	return adjustment
+	if deposits >= refunds {
+		net := deposits - refunds
+		if net > math.MaxInt64 {
+			return 0, errors.New("certificate deposit adjustment overflows int64")
+		}
+		return int64(net), nil
+	}
+	net := refunds - deposits
+	if net > math.MaxInt64 {
+		return 0, errors.New("certificate refund adjustment overflows int64")
+	}
+	return -int64(net), nil
 }
 
 func (a *Apollo) setErrOnce(err error) {
