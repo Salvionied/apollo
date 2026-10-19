@@ -27,6 +27,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Pinned inputs (`AddInput`) that cover the payment no longer skip coin
+  selection when the change they leave is below min-UTxO. Selection now draws
+  enough from the loaded UTxOs to emit that change, instead of folding it into
+  the fee or failing with "insufficient funds for asset change min UTxO" when
+  the change carries tokens. With nothing else to spend, the remainder still
+  becomes fee.
 - Nested list encoding tags are honored, so an inner list keeps its own
   `DefList`/`IndefList` form instead of inheriting the outer one.
 - Map keys held in a slice-backed map round-trip: string and byte key fields
