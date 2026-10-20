@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,18 +64,27 @@ const (
 )
 
 // NewBlockFrostChainContext creates a new BlockFrost backend.
+//
+// A bare host URL gets Blockfrost's /api/v0 version path appended. A URL that
+// already carries a path, such as the constants.BlockfrostBaseUrl* values or a
+// Blockfrost-compatible server like Yaci Store's /api/v1, is used as given.
 func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string) *BlockFrostChainContext {
-	// Ensure base URL ends with version path
-	baseUrl = strings.TrimRight(baseUrl, "/")
-	if !strings.HasSuffix(baseUrl, "/api/v0") && !strings.HasSuffix(baseUrl, "/v0") {
-		baseUrl += "/api/v0"
-	}
 	return &BlockFrostChainContext{
-		baseUrl:   baseUrl,
+		baseUrl:   normalizeBaseUrl(baseUrl),
 		projectId: projectId,
 		networkId: networkId,
 		client:    &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// normalizeBaseUrl trims trailing slashes and appends /api/v0 only when the
+// URL has no path of its own.
+func normalizeBaseUrl(baseUrl string) string {
+	baseUrl = strings.TrimRight(baseUrl, "/")
+	if u, err := url.Parse(baseUrl); err == nil && u.Path != "" {
+		return baseUrl
+	}
+	return baseUrl + "/api/v0"
 }
 
 func (b *BlockFrostChainContext) requestContext(

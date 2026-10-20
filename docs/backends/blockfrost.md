@@ -13,8 +13,10 @@ ctx := blockfrost.NewBlockFrostChainContext(
 )
 ```
 
-The constructor appends `/api/v0` when the base URL does not already end with
-`/api/v0` or `/v0`.
+The constructor appends `/api/v0` only when the base URL is a bare host such as
+`https://cardano-mainnet.blockfrost.io`. A URL that already has a path is used
+as given, so a Blockfrost-compatible server on another version path, for
+example Yaci Store's `http://localhost:8080/api/v1`, works unchanged.
 
 ## Capabilities
 

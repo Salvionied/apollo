@@ -27,6 +27,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `blockfrost.NewBlockFrostChainContext` uses a base URL that already has a
+  path as given and appends `/api/v0` only to a bare host. Blockfrost-compatible
+  servers on another version path, such as Yaci Store's `/api/v1`, previously
+  received `/api/v1/api/v0/...` requests. A path prefix without a version, such
+  as a proxy's `/blockfrost`, now needs `/api/v0` spelled out.
 - Nested list encoding tags are honored, so an inner list keeps its own
   `DefList`/`IndefList` form instead of inheriting the outer one.
 - Map keys held in a slice-backed map round-trip: string and byte key fields

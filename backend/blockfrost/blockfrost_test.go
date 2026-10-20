@@ -24,6 +24,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/constants"
 )
 
 type contextRoundTripperFunc func(*http.Request) (*http.Response, error)
@@ -59,6 +60,51 @@ func TestBlockfrostCapabilities(t *testing.T) {
 	// declining it would make that fallback unreachable.
 	if !backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
 		t.Fatal("Blockfrost must report additional-UTxO evaluation support")
+	}
+}
+
+func TestNewBlockFrostChainContextBaseUrl(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseUrl string
+		want    string
+	}{
+		{"bare host gets version path", "https://cardano-preprod.blockfrost.io", "https://cardano-preprod.blockfrost.io/api/v0"},
+		{"bare host with trailing slash", "https://cardano-preprod.blockfrost.io/", "https://cardano-preprod.blockfrost.io/api/v0"},
+		{"bare host with port", "http://localhost:3000", "http://localhost:3000/api/v0"},
+		{"hosted constant kept", constants.BlockfrostBaseUrlPreprod, constants.BlockfrostBaseUrlPreprod},
+		{"short version path kept", "http://localhost:3000/v0", "http://localhost:3000/v0"},
+		{"compatible server path kept", "http://localhost:8080/api/v1", "http://localhost:8080/api/v1"},
+		{"compatible server trailing slash trimmed", "http://localhost:8080/api/v1/", "http://localhost:8080/api/v1"},
+		{"proxy prefix kept", "https://proxy.example/blockfrost", "https://proxy.example/blockfrost"},
+		{"unparseable url gets version path", "http://[::1", "http://[::1/api/v0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewBlockFrostChainContext(tt.baseUrl, 0, "").baseUrl
+			if got != tt.want {
+				t.Fatalf("baseUrl = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBlockfrostCompatibleServerPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/blocks/latest" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"slot":42}`))
+	}))
+	defer server.Close()
+
+	slot, err := NewBlockFrostChainContext(server.URL+"/api/v1", 0, "").Tip()
+	if err != nil {
+		t.Fatalf("Tip() error = %v", err)
+	}
+	if slot != 42 {
+		t.Fatalf("Tip() = %d, want 42", slot)
 	}
 }
 
