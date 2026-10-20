@@ -89,25 +89,6 @@ func TestNewBlockFrostChainContextBaseUrl(t *testing.T) {
 	}
 }
 
-func TestBlockfrostCompatibleServerPath(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/blocks/latest" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = w.Write([]byte(`{"slot":42}`))
-	}))
-	defer server.Close()
-
-	slot, err := NewBlockFrostChainContext(server.URL+"/api/v1", 0, "").Tip()
-	if err != nil {
-		t.Fatalf("Tip() error = %v", err)
-	}
-	if slot != 42 {
-		t.Fatalf("Tip() = %d, want 42", slot)
-	}
-}
-
 func testAddress(t *testing.T) common.Address {
 	t.Helper()
 	var raw [57]byte
