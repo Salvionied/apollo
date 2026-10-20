@@ -8,6 +8,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `ApplyParamsToScript` applies Plutus data parameters to a parameterized
+  Plutus V1, V2, or V3 script, such as an Aiken blueprint's `compiledCode`.
 - `SetTransactionBodySetTagPolicy` supports a uniform untagged encoding for
   Conway body inputs, collateral, required signers, and reference inputs while
   preserving Apollo's historical mixed encoding as the default.
