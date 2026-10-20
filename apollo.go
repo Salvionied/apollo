@@ -1145,6 +1145,12 @@ func (a *Apollo) AddVerificationKeyWitness(witness common.VkeyWitness) (*Apollo,
 	}
 	witnesses = append(witnesses, witness)
 	a.tx.WitnessSet.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+	// A decoded transaction keeps its original CBOR, which the encoders prefer
+	// over the struct fields. Drop the transaction and witness-set copies so
+	// the new witness is encoded; the body copy is kept because it fixes the
+	// transaction hash that witnesses sign.
+	a.tx.WitnessSet.SetCbor(nil)
+	a.tx.SetCbor(nil)
 	return a, nil
 }
 
@@ -1191,7 +1197,7 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 		return a, fmt.Errorf("invalid hex: %w", err)
 	}
 	var tx conway.ConwayTransaction
-	if _, err := cbor.Decode(txBytes, &tx); err != nil {
+	if _, err := cbor.DecodeExact(txBytes, &tx); err != nil {
 		return a, fmt.Errorf("failed to decode transaction: %w", err)
 	}
 	a.tx = &tx
@@ -2071,14 +2077,7 @@ func (a *Apollo) Sign() (*Apollo, error) {
 	if err != nil {
 		return a, fmt.Errorf("signing failed: %w", err)
 	}
-
-	var witnesses []common.VkeyWitness
-	if existing := a.tx.WitnessSet.VkeyWitnesses.Items(); existing != nil {
-		witnesses = existing
-	}
-	witnesses = append(witnesses, witness)
-	a.tx.WitnessSet.VkeyWitnesses = cbor.NewSetType(witnesses, true)
-	return a, nil
+	return a.AddVerificationKeyWitness(witness)
 }
 
 // GetTx returns the built transaction.
