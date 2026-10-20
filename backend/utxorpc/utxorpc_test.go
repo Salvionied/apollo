@@ -2,6 +2,7 @@ package utxorpc
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"reflect"
 	"strings"
@@ -644,5 +645,28 @@ func testRedeemerValue() common.RedeemerValue {
 	return common.RedeemerValue{
 		Data:    common.Datum{Data: data.NewInteger(big.NewInt(0))},
 		ExUnits: common.ExUnits{Memory: 1, Steps: 1},
+	}
+}
+
+func TestSetProtocolVersion(t *testing.T) {
+	var pp backend.ProtocolParameters
+	if err := setProtocolVersion(&pp, &cardano.ProtocolVersion{Major: 12, Minor: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if pp.ProtocolMajorVersion != 12 || pp.ProtocolMinorVersion != 1 {
+		t.Fatalf("protocol version = %d.%d, want 12.1", pp.ProtocolMajorVersion, pp.ProtocolMinorVersion)
+	}
+	if err := setProtocolVersion(&pp, nil); err != nil {
+		t.Fatal(err)
+	}
+	if pp.ProtocolMajorVersion != 12 {
+		t.Fatal("a missing protocol version must leave the parameters unchanged")
+	}
+}
+
+func TestSetProtocolVersionRejectsOutOfRange(t *testing.T) {
+	var pp backend.ProtocolParameters
+	if err := setProtocolVersion(&pp, &cardano.ProtocolVersion{Major: math.MaxUint32}); err == nil {
+		t.Fatal("expected an error for an out-of-range major version")
 	}
 }

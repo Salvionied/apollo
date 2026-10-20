@@ -1120,3 +1120,29 @@ func TestGenesisParamsRejectInvalidStartTime(t *testing.T) {
 		t.Fatal("expected an error for an unparseable start time")
 	}
 }
+
+func TestProtocolParamsParseProtocolVersion(t *testing.T) {
+	pp := decodeProtocolParams(t, protocolParamsBody(adaLovelace))
+	if pp.ProtocolMajorVersion != 10 || pp.ProtocolMinorVersion != 0 {
+		t.Fatalf("protocol version = %d.%d, want 10.0", pp.ProtocolMajorVersion, pp.ProtocolMinorVersion)
+	}
+}
+
+func TestProtocolParamsRejectNegativeProtocolVersion(t *testing.T) {
+	body := strings.Replace(
+		protocolParamsBody(adaLovelace),
+		`"version": {"major": 10, "minor": 0}`,
+		`"version": {"major": -1, "minor": 0}`,
+		1,
+	)
+	if body == protocolParamsBody(adaLovelace) {
+		t.Fatal("fixture no longer contains the protocol version")
+	}
+	var raw ogmiosProtocolParams
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.toProtocolParams(); err == nil {
+		t.Fatal("expected an error for a negative protocol version")
+	}
+}

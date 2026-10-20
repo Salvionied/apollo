@@ -510,6 +510,7 @@ type ogmiosProtocolParams struct {
 	MaxBlockExUnits    ogmiosExUnits   `json:"maxExecutionUnitsPerBlock"`
 	MinUtxoDeposit     *int64          `json:"minUtxoDepositCoefficient"`
 	CostModels         json.RawMessage `json:"plutusCostModels"`
+	Version            *ogmiosVersion  `json:"version"`
 	// Ogmios v6 exposes Conway reference-script pricing as a structured object
 	// {base, range, multiplier}; base is the lovelace-per-byte first-tier price.
 	MinFeeReferenceScripts *ogmiosRefScripts `json:"minFeeReferenceScripts"`
@@ -518,6 +519,11 @@ type ogmiosProtocolParams struct {
 	// optional: Ogmios before v6.5 sends neither.
 	MaxRefScriptsSize   *ogmiosBytes `json:"maxReferenceScriptsSize"`
 	MaxRefScriptsSizeTx *ogmiosBytes `json:"maxReferenceScriptsSizePerTransaction"`
+}
+
+type ogmiosVersion struct {
+	Major int `json:"major"`
+	Minor int `json:"minor"`
 }
 
 type ogmiosRefScripts struct {
@@ -636,6 +642,16 @@ func (p *ogmiosProtocolParams) toProtocolParams() (backend.ProtocolParameters, e
 		CollateralPercent:   p.CollateralPercent,
 		MaxCollateralInputs: p.MaxCollateral,
 		CoinsPerUtxoByte:    strconv.FormatInt(*p.MinUtxoDeposit, 10),
+	}
+
+	if p.Version != nil {
+		if p.Version.Major < 0 || p.Version.Minor < 0 {
+			return backend.ProtocolParameters{}, fmt.Errorf(
+				"invalid protocol version %d.%d", p.Version.Major, p.Version.Minor,
+			)
+		}
+		pp.ProtocolMajorVersion = p.Version.Major
+		pp.ProtocolMinorVersion = p.Version.Minor
 	}
 
 	switch {
