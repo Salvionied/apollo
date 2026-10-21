@@ -29,6 +29,10 @@
 * [Metadata](transaction_building/metadata.md)
 * [Complete, sign, and submit](transaction_building/complete_sign_submit.md)
 
+## Dijkstra
+
+* [Dijkstra transactions](dijkstra/README.md)
+
 ## Coin selection
 
 * [MACS and selectors](coin_selection/README.md)

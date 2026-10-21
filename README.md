@@ -28,7 +28,7 @@ Ready to learn? Start with the [documentation](docs/README.md) or jump to the
 
 ## Install
 
-Apollo v2 requires Go 1.26.8 or newer — the `go` directive in `go.mod` is a
+Apollo v2 requires Go 1.26.9 or newer — the `go` directive in `go.mod` is a
 hard floor, so older toolchains fail to build:
 
 ```bash
@@ -191,9 +191,33 @@ func main() {
 }
 ```
 
-## Conway Era Support
+## Transaction eras
 
-Apollo builds Conway-era transactions, including CIP-1694 governance. You can:
+Apollo builds Conway transactions by default, preserving the typed `GetTx()`
+contract. To request a Dijkstra transaction, select the era before building:
+
+```go
+builder, err := apollo.New(chainContext).
+    SetTargetEra(apollo.EraDijkstra).
+    AddPayment(payment).
+    Complete()
+if err != nil {
+    return err
+}
+dijkstraTx := builder.GetDijkstraTx()
+```
+
+Dijkstra selection requires protocol major version 12 or newer. Use
+`GetDijkstraTx()` for the concrete Dijkstra type; `GetTx()` returns nil for a
+Dijkstra build. Current Dijkstra support includes the transaction envelope,
+direct account deposits, account balance intervals, guards (including Plutus
+guard scripts), Dijkstra governance proposals, and Dijkstra reference-script
+pricing. Plutus V4 scripts are supplied through reference inputs; they cannot
+be included in the witness set. Nested transactions (CIP-118) and CIP-159
+Phase 2 native-asset withdrawals and whitelist certificates are not yet
+supported. See [Dijkstra transactions](docs/dijkstra/README.md).
+
+Conway transactions support CIP-1694 governance. You can:
 
 - Register, update, and retire DReps
 - Authorize or resign constitutional committee keys

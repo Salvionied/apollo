@@ -1353,3 +1353,32 @@ func decodeSingleTxOut(t *testing.T, body []byte) map[string]json.RawMessage {
 	}
 	return txOut
 }
+
+func TestProtocolParamsParsesProtocolVersion(t *testing.T) {
+	var raw bfProtocolParams
+	if err := json.Unmarshal([]byte(`{"protocol_major_ver": 12, "protocol_minor_ver": 1}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	pp, err := raw.toProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pp.ProtocolMajorVersion != 12 || pp.ProtocolMinorVersion != 1 {
+		t.Fatalf("protocol version = %d.%d, want 12.1", pp.ProtocolMajorVersion, pp.ProtocolMinorVersion)
+	}
+}
+
+func TestProtocolParamsRejectsOutOfRangeProtocolVersion(t *testing.T) {
+	for _, body := range []string{
+		`{"protocol_major_ver": -1}`,
+		`{"protocol_minor_ver": 2147483648}`,
+	} {
+		var raw bfProtocolParams
+		if err := json.Unmarshal([]byte(body), &raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := raw.toProtocolParams(); err == nil {
+			t.Fatalf("expected an error for %s", body)
+		}
+	}
+}

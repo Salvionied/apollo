@@ -912,6 +912,8 @@ type bfProtocolParams struct {
 	MaxBlockSize       int64           `json:"max_block_size"`
 	MaxTxSize          int64           `json:"max_tx_size"`
 	MaxBlockHeaderSize int64           `json:"max_block_header_size"`
+	ProtocolMajorVer   int64           `json:"protocol_major_ver"`
+	ProtocolMinorVer   int64           `json:"protocol_minor_ver"`
 	KeyDeposit         string          `json:"key_deposit"`
 	PoolDeposit        string          `json:"pool_deposit"`
 	Decentralisation   float64         `json:"decentralisation_param"`
@@ -959,25 +961,35 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
+	protocolMajor, err := backendutil.BoundedInt(p.ProtocolMajorVer, "protocol_major_ver")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	protocolMinor, err := backendutil.BoundedInt(p.ProtocolMinorVer, "protocol_minor_ver")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
 	pp := backend.ProtocolParameters{
-		MinFeeConstant:      p.MinFeeB,
-		MinFeeCoefficient:   p.MinFeeA,
-		MaxBlockSize:        maxBlockSize,
-		MaxTxSize:           maxTxSize,
-		MaxBlockHeaderSize:  maxBlockHeaderSize,
-		KeyDeposits:         p.KeyDeposit,
-		PoolDeposits:        p.PoolDeposit,
-		MinPoolCost:         p.MinPoolCost,
-		PriceMem:            p.PriceMem,
-		PriceStep:           p.PriceStep,
-		MaxTxExMem:          p.MaxTxExMem,
-		MaxTxExSteps:        p.MaxTxExSteps,
-		MaxBlockExMem:       p.MaxBlockExMem,
-		MaxBlockExSteps:     p.MaxBlockExSteps,
-		MaxValSize:          p.MaxValSize,
-		CollateralPercent:   collateralPercent,
-		MaxCollateralInputs: maxCollateralInputs,
-		CoinsPerUtxoByte:    p.CoinsPerUtxoSize,
+		MinFeeConstant:       p.MinFeeB,
+		MinFeeCoefficient:    p.MinFeeA,
+		MaxBlockSize:         maxBlockSize,
+		MaxTxSize:            maxTxSize,
+		MaxBlockHeaderSize:   maxBlockHeaderSize,
+		ProtocolMajorVersion: protocolMajor,
+		ProtocolMinorVersion: protocolMinor,
+		KeyDeposits:          p.KeyDeposit,
+		PoolDeposits:         p.PoolDeposit,
+		MinPoolCost:          p.MinPoolCost,
+		PriceMem:             p.PriceMem,
+		PriceStep:            p.PriceStep,
+		MaxTxExMem:           p.MaxTxExMem,
+		MaxTxExSteps:         p.MaxTxExSteps,
+		MaxBlockExMem:        p.MaxBlockExMem,
+		MaxBlockExSteps:      p.MaxBlockExSteps,
+		MaxValSize:           p.MaxValSize,
+		CollateralPercent:    collateralPercent,
+		MaxCollateralInputs:  maxCollateralInputs,
+		CoinsPerUtxoByte:     p.CoinsPerUtxoSize,
 	}
 	if p.MinFeeRefScriptCostPerByte != "" {
 		price, err := backendutil.ParseRational(p.MinFeeRefScriptCostPerByte.String())

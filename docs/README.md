@@ -8,7 +8,7 @@ CBOR, scripts, addresses, and transaction bodies come from
 [struct-tag encoder](plutusencoder/README.md).
 
 The module path is `github.com/Salvionied/apollo/v2`. Apollo v2 requires Go
-1.26.8 or newer — the `go` directive in `go.mod` is a hard floor.
+1.26.9 or newer — the `go` directive in `go.mod` is a hard floor.
 
 ## Start here
 

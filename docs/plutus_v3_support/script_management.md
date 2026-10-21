@@ -90,5 +90,5 @@ This recognizes all script types - the reference script type is determined autom
 - `PlutusV1Script` -> type 1
 - `PlutusV2Script` -> type 2
 - `PlutusV3Script` -> type 3
-- `PlutusV4Script` -> type 4 (Dijkstra only; Conway payment methods return `ErrPlutusV4RequiresDijkstra`)
+- `PlutusV4Script` -> type 4 (Dijkstra only; a Conway build returns `ErrPlutusV4RequiresDijkstra`, see [Dijkstra transactions](../dijkstra/README.md#plutus-v4))
 - `NativeScript` -> type 0

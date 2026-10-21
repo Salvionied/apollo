@@ -33,7 +33,7 @@ github.com/Salvionied/apollo/v2
 ```
 
 The repository has one Go module. Its current hard toolchain floor is Go
-1.26.8, as declared by `go.mod`; an older patch release will refuse to build
+1.26.9, as declared by `go.mod`; an older patch release will refuse to build
 the module. Keep the version in `go.mod`, `README.md`, `CONTRIBUTING.md`, CI,
 and this guide synchronized. Raise it only when the source or dependency graph
 requires the newer toolchain.
