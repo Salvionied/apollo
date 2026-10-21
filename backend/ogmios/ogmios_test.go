@@ -24,6 +24,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/ogmiosutil"
 )
 
 func TestOgmiosCapabilitiesWithoutKupo(t *testing.T) {
@@ -331,7 +332,7 @@ func sampleCommonUtxo(t *testing.T) common.Utxo {
 }
 
 func TestCommonUtxoToShared(t *testing.T) {
-	su, err := commonUtxoToShared(sampleCommonUtxo(t))
+	su, err := ogmiosutil.UtxoToShared(sampleCommonUtxo(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +424,7 @@ func TestCommonUtxoToSharedRejectsMissingFields(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := commonUtxoToShared(test.utxo); err == nil {
+			if _, err := ogmiosutil.UtxoToShared(test.utxo); err == nil {
 				t.Fatal("expected malformed UTxO error")
 			} else if !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("error = %q, want substring %q", err, test.wantErr)
@@ -487,7 +488,7 @@ func TestCommonUtxoToSharedInlineDatum(t *testing.T) {
 		Output: &output,
 	}
 
-	su, err := commonUtxoToShared(utxo)
+	su, err := ogmiosutil.UtxoToShared(utxo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +530,7 @@ func TestCommonUtxoToSharedHashOnlyDatum(t *testing.T) {
 		Output: &output,
 	}
 
-	su, err := commonUtxoToShared(utxo)
+	su, err := ogmiosutil.UtxoToShared(utxo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -553,7 +554,7 @@ func TestOgmiosScriptRefJSONLanguageDetection(t *testing.T) {
 		{common.PlutusV4Script(raw), "plutus:v4"},
 		{common.NativeScript{}, "native"},
 	} {
-		out, err := ogmiosScriptRefJSON(tc.script)
+		out, err := ogmiosutil.ScriptRefJSON(tc.script)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.language, err)
 		}
