@@ -62,6 +62,67 @@ func TestApplyParamsToScriptKnownVector(t *testing.T) {
 	}
 }
 
+// aikenParamsScriptHex is the compiledCode Aiken v1.1.24 generates for this
+// parameterized PlutusV3 validator:
+//
+//	pub type Config {
+//	  Config { owner: ByteArray, threshold: Int, tags: List<Int> }
+//	  Disabled
+//	}
+//
+//	validator params(owner: ByteArray, amount: Int, config: Config, extra: Data) {
+//	  else(_ctx: Data) {
+//	    when config is {
+//	      Config { owner: o, threshold: t, tags } ->
+//	        o == owner && t <= amount && tags != [] && extra != extra
+//	      Disabled -> False
+//	    }
+//	  }
+//	}
+const aikenParamsScriptHex = "588b010100222229800aba2aba1aab9eaab9dab9a9bae0059bad0044888888966002b30013370e900018021baa00a899192cc004cdc79bae30080020048acc004cdc49bad30080010038acc006600266ebd30101800030083009001a50a5140151980099baf00b00ba50a51401514a0802a29410054528200a30080013005375401514a0801a29344d95900301"
+
+// aikenAppliedScriptHex is the compiledCode produced by applying the
+// parameters in TestApplyParamsToScriptMatchesAiken, one at a time, with
+// `aiken blueprint apply` (Aiken v1.1.24).
+const aikenAppliedScriptHex = "5901230101003333222229800aba2aba1aab9eaab9dab9a9bae0059bad0044888888966002b30013370e900018021baa00a899192cc004cdc79bae30080020048acc004cdc49bad30080010038acc006600266ebd30101800030083009001a50a5140151980099baf00b00ba50a51401514a0802a29410054528200a30080013005375401514a0801a29344d95900313010544deadbeef004c01053a000f423f004c0117d8799f42cafec2494000000000000000009f010203ffff004c0165a3018040d9050080d8668218c89f5f58400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000046000000000000ffffc3493fffffffffffffffff0001"
+
+func TestApplyParamsToScriptMatchesAiken(t *testing.T) {
+	big70 := new(big.Int).Lsh(big.NewInt(1), 70)
+	params := []data.PlutusData{
+		data.NewByteString(mustHex(t, "deadbeef")),
+		data.NewInteger(big.NewInt(-1_000_000)),
+		data.NewConstr(0,
+			data.NewByteString(mustHex(t, "cafe")),
+			data.NewInteger(big70),
+			data.NewList(
+				data.NewInteger(big.NewInt(1)),
+				data.NewInteger(big.NewInt(2)),
+				data.NewInteger(big.NewInt(3)),
+			),
+		),
+		data.NewMap([][2]data.PlutusData{
+			{data.NewInteger(big.NewInt(1)), data.NewList()},
+			{data.NewByteString(nil), data.NewConstr(7)},
+			{
+				data.NewConstr(200, data.NewByteString(make([]byte, 70))),
+				data.NewInteger(new(big.Int).Neg(big70)),
+			},
+		}),
+	}
+	script := common.PlutusV3Script(mustHex(t, aikenParamsScriptHex))
+	got, err := ApplyParamsToScript(script, params...)
+	if err != nil {
+		t.Fatalf("ApplyParamsToScript: %v", err)
+	}
+	want := common.PlutusV3Script(mustHex(t, aikenAppliedScriptHex))
+	if !bytes.Equal(got, want) {
+		t.Fatalf("applied script = %x, want %x", []byte(got), []byte(want))
+	}
+	if got.Hash().String() != "326be20547d05261f3a22c051e55b69651dae73a4dbd57645936ca16" {
+		t.Fatalf("applied script hash = %s", got.Hash().String())
+	}
+}
+
 func TestApplyParamsToScriptMatchesParsedProgram(t *testing.T) {
 	params := []data.PlutusData{
 		data.NewByteString(mustHex(t, "deadbeef")),
