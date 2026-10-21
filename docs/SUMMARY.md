@@ -12,6 +12,7 @@
 * [Chain backends](backends/README.md)
 * [Capabilities](backends/capabilities.md)
 * [Blockfrost](backends/blockfrost.md)
+* [Koios](backends/koios.md)
 * [Ogmios and Kupo](backends/ogmios.md)
 * [UTxO RPC](backends/utxorpc.md)
 * [Fixed and cache](backends/fixed_and_cache.md)
