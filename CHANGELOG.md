@@ -12,6 +12,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
   an optional bearer token.
+- `ApplyParamsToScript` applies Plutus data parameters to a parameterized
+  Plutus V1, V2, or V3 script, such as an Aiken blueprint's `compiledCode`.
 - `SetTransactionBodySetTagPolicy` supports a uniform untagged encoding for
   Conway body inputs, collateral, required signers, and reference inputs while
   preserving Apollo's historical mixed encoding as the default.
@@ -31,6 +33,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Pinned inputs (`AddInput`) that cover the payment no longer skip coin
+  selection when the change they leave is below min-UTxO. Selection now draws
+  enough from the loaded UTxOs to emit that change, instead of folding it into
+  the fee or failing with "insufficient funds for asset change min UTxO" when
+  the change carries tokens. With nothing else to spend, the remainder still
+  becomes fee.
 - Nested list encoding tags are honored, so an inner list keeps its own
   `DefList`/`IndefList` form instead of inheriting the outer one.
 - Map keys held in a slice-backed map round-trip: string and byte key fields
@@ -46,6 +54,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** `blockfrost.NewBlockFrostChainContext` uses the base URL as
+  given and no longer appends `/api/v0` when the URL does not end with `/v0`.
+  This supports Blockfrost-compatible providers that serve the API under
+  another path, such as `/api/v1`. Pass the full API base URL, including the
+  version path; the `constants.BlockfrostBaseUrl*` values already do.
+  Trailing slashes are still removed.
 - gouroboros 0.192.2 to 0.193.1.
 
 ### Removed

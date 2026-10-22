@@ -1,9 +1,11 @@
 package apollo_test
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/plutigo/data"
 
 	apollo "github.com/Salvionied/apollo/v2"
 	"github.com/Salvionied/apollo/v2/backend/fixed"
@@ -43,4 +45,29 @@ func ExampleNewScriptRef() {
 	_ = scriptRef
 	fmt.Println(scriptRef != nil)
 	// Output: true
+}
+
+// ExampleApplyParamsToScript applies a byte-string parameter to a
+// parameterized script, such as the compiledCode of an Aiken blueprint
+// validator.
+func ExampleApplyParamsToScript() {
+	// (program 1.1.0 (lam x x)), CBOR-wrapped flat.
+	compiledCode, err := hex.DecodeString("46010100200101")
+	if err != nil {
+		panic(err)
+	}
+	ownerKeyHash, err := hex.DecodeString("deadbeef")
+	if err != nil {
+		panic(err)
+	}
+
+	script, err := apollo.ApplyParamsToScript(
+		common.PlutusV3Script(compiledCode),
+		data.NewByteString(ownerKeyHash),
+	)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(hex.EncodeToString(script))
+	// Output: 4f010100320014c10544deadbeef0001
 }

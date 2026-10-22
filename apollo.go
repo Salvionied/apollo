@@ -2546,8 +2546,23 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	// uniqueness. If the caller pinned an input we are already satisfied;
 	// otherwise selection must contribute one even though no value is needed.
 	covered := currentInput.GreaterOrEqual(required)
+	topUp := false
 	if covered && len(a.preselectedUtxos) > 0 {
-		return nil, nil
+		// Pinned inputs that cover the target can still leave change too small
+		// to emit, which balancing then folds into the fee. While the pool can
+		// fund a change output, select for the shortfall instead.
+		changeMinimum, err := a.unemittableChangeMinimum(required, currentInput)
+		if err != nil {
+			return nil, err
+		}
+		if changeMinimum == 0 {
+			return nil, nil
+		}
+		required, err = required.Add(NewSimpleValue(changeMinimum))
+		if err != nil {
+			return nil, fmt.Errorf("selection target overflow: %w", err)
+		}
+		covered, topUp = false, true
 	}
 
 	// Compute remaining using saturating subtraction rather than Sub,
@@ -2597,6 +2612,11 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			remaining,
 		)
 		if selErr != nil {
+			if topUp {
+				// Nothing left to fund the change; the pinned inputs still
+				// cover the payment and the remainder becomes fee.
+				return nil, nil
+			}
 			return nil, selErr
 		}
 	}
@@ -2634,6 +2654,51 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 		a.markUsed(utxoRef(utxo))
 	}
 	return canonical, nil
+}
+
+// unemittableChangeMinimum reports the min-UTxO of the change left after
+// required when that change is too small to be emitted as an output, and 0
+// when there is no change or it already clears min-UTxO.
+func (a *Apollo) unemittableChangeMinimum(required, currentInput Value) (uint64, error) {
+	change := Value{}
+	if currentInput.Coin > required.Coin {
+		change.Coin = currentInput.Coin - required.Coin
+	}
+	if currentInput.Assets != nil {
+		change.Assets = CloneMultiAsset(currentInput.Assets)
+		if required.Assets != nil {
+			subtractAssetsSaturating(change.Assets, required.Assets)
+		}
+		if MultiAssetIsEmpty(change.Assets) {
+			change.Assets = nil
+		}
+	}
+	if change.Coin == 0 && change.Assets == nil {
+		return 0, nil
+	}
+	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get protocol params: %w", err)
+	}
+	output := NewBabbageOutput(a.getChangeAddress(), change, nil, nil)
+	// Size the output at its minimum, not at the leftover: the coin's own
+	// encoding grows with its value.
+	var minimum uint64
+	for range 3 {
+		coins, err := MinLovelacePostAlonzo(&output, pp.CoinsPerUtxoByteValue())
+		if err != nil {
+			return 0, err
+		}
+		if coins < 0 {
+			return 0, fmt.Errorf("negative min UTxO: %d", coins)
+		}
+		minimum = uint64(coins) //nolint:gosec // checked non-negative above
+		output.OutputAmount.Amount = minimum
+	}
+	if change.Coin >= minimum {
+		return 0, nil
+	}
+	return minimum, nil
 }
 
 // estimatedWitnessCount reports how many vkey witnesses the transaction is
