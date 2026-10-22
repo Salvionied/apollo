@@ -60,6 +60,43 @@ func main() {
 }
 ```
 
+## Applying Script Parameters
+
+Parameterized validators, such as Aiken validators that take parameters, must
+have their parameters applied before the script can be hashed, attached, or
+used as a reference script. `ApplyParamsToScript` applies Plutus data
+parameters to a `PlutusV1Script`, `PlutusV2Script`, or `PlutusV3Script` and
+returns a new script of the same type:
+
+```go
+func ApplyParamsToScript[
+    S common.PlutusV1Script | common.PlutusV2Script | common.PlutusV3Script,
+](script S, params ...data.PlutusData) (S, error)
+```
+
+The script must be a CBOR byte string wrapping the flat-encoded UPLC program,
+which is the form of an Aiken blueprint's `compiledCode` and of gouroboros
+script types. Parameters are applied in order, and applying them one call at
+a time gives the same result as applying them together. Build parameters with
+`github.com/blinklabs-io/plutigo/data` or the
+[Plutus encoder](../plutusencoder/README.md).
+
+```go
+compiledCode, err := hex.DecodeString("59...") // Aiken blueprint compiledCode
+if err != nil {
+    panic(err)
+}
+script, err := apollo.ApplyParamsToScript(
+    common.PlutusV3Script(compiledCode),
+    data.NewByteString(ownerKeyHash),
+    data.NewInteger(big.NewInt(1_000_000)),
+)
+if err != nil {
+    panic(err)
+}
+fmt.Printf("Script hash: %s\n", script.Hash().String())
+```
+
 ## Script Hashing
 
 The `Hash()` method on any script type returns a `ScriptHash` (alias for `Blake2b224`):
