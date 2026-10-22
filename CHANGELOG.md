@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `backend/koios`: a Koios chain backend built on the current Koios v1 API,
+  with `constants.KoiosBaseUrl*` for the public instances. It reports every
+  capability, evaluates scripts through the Koios Ogmios proxy, and accepts
+  an optional bearer token.
 - `ApplyParamsToScript` applies Plutus data parameters to a parameterized
   Plutus V1, V2, or V3 script, such as an Aiken blueprint's `compiledCode`.
 - `SetTransactionBodySetTagPolicy` supports a uniform untagged encoding for

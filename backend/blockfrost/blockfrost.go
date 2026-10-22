@@ -25,6 +25,7 @@ import (
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
+	"github.com/Salvionied/apollo/v2/internal/ogmiosutil"
 )
 
 // BlockFrostChainContext implements backend.ChainContext using the BlockFrost API.
@@ -674,55 +675,9 @@ func parseEvaluateTxResponse(data []byte) (map[common.RedeemerKey]common.ExUnits
 		return nil, fmt.Errorf("unrecognized evaluate response (no result or error): %s", evalErrorSnippet(data))
 	}
 	if strings.HasPrefix(strings.TrimSpace(string(envelope.Result)), "[") {
-		return parseOgmiosV6EvaluationResult(envelope.Result)
+		return ogmiosutil.ParseEvaluationResult(envelope.Result)
 	}
 	return parseOgmiosV5EvaluationResult(envelope.Result)
-}
-
-// parseOgmiosV6EvaluationResult parses the Ogmios v6 evaluateTransaction result
-// array: [{"validator":{"purpose":...,"index":...},"budget":{"memory":...,"cpu":...}}].
-func parseOgmiosV6EvaluationResult(raw json.RawMessage) (map[common.RedeemerKey]common.ExUnits, error) {
-	var items []struct {
-		Validator struct {
-			Purpose string `json:"purpose"`
-			Index   uint64 `json:"index"`
-		} `json:"validator"`
-		Budget struct {
-			Memory uint64 `json:"memory"`
-			Cpu    uint64 `json:"cpu"`
-		} `json:"budget"`
-		Error json.RawMessage `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, fmt.Errorf("failed to parse evaluation result: %w", err)
-	}
-	if len(items) == 0 {
-		return nil, errors.New("script evaluation returned no results")
-	}
-	result := make(map[common.RedeemerKey]common.ExUnits, len(items))
-	for _, item := range items {
-		if jsonValuePresent(item.Error) {
-			return nil, fmt.Errorf("script evaluation failed for validator %s:%d: %s",
-				item.Validator.Purpose, item.Validator.Index, string(item.Error))
-		}
-		if item.Validator.Purpose == "" {
-			return nil, fmt.Errorf("malformed evaluation result entry: %s", evalErrorSnippet(raw))
-		}
-		tag, err := backendutil.ParseRedeemerTag(item.Validator.Purpose)
-		if err != nil {
-			return nil, fmt.Errorf("invalid redeemer purpose %q: %w", item.Validator.Purpose, err)
-		}
-		if item.Validator.Index > math.MaxUint32 {
-			return nil, fmt.Errorf("redeemer index %d exceeds uint32 range", item.Validator.Index)
-		}
-		if item.Budget.Memory > math.MaxInt64 || item.Budget.Cpu > math.MaxInt64 {
-			return nil, fmt.Errorf("ExUnits overflow for validator %s:%d: memory=%d cpu=%d",
-				item.Validator.Purpose, item.Validator.Index, item.Budget.Memory, item.Budget.Cpu)
-		}
-		key := common.RedeemerKey{Tag: tag, Index: uint32(item.Validator.Index)}
-		result[key] = common.ExUnits{Memory: int64(item.Budget.Memory), Steps: int64(item.Budget.Cpu)}
-	}
-	return result, nil
 }
 
 // parseOgmiosV5EvaluationResult parses the legacy Ogmios v5 jsonwsp result
