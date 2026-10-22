@@ -63,12 +63,12 @@ const (
 )
 
 // NewBlockFrostChainContext creates a new BlockFrost backend.
+//
+// baseUrl is the full API base URL, including any version path, such as
+// constants.BlockfrostBaseUrlMainnet. It is used as given; only trailing
+// slashes are removed before request paths are appended.
 func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string) *BlockFrostChainContext {
-	// Ensure base URL ends with version path
 	baseUrl = strings.TrimRight(baseUrl, "/")
-	if !strings.HasSuffix(baseUrl, "/api/v0") && !strings.HasSuffix(baseUrl, "/v0") {
-		baseUrl += "/api/v0"
-	}
 	return &BlockFrostChainContext{
 		baseUrl:   baseUrl,
 		projectId: projectId,

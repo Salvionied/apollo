@@ -50,6 +50,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** `blockfrost.NewBlockFrostChainContext` uses the base URL as
+  given and no longer appends `/api/v0` when the URL does not end with `/v0`.
+  This supports Blockfrost-compatible providers that serve the API under
+  another path, such as `/api/v1`. Pass the full API base URL, including the
+  version path; the `constants.BlockfrostBaseUrl*` values already do.
+  Trailing slashes are still removed.
 - gouroboros 0.192.2 to 0.193.1.
 
 ### Removed

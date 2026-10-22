@@ -49,6 +49,47 @@ func TestRequestContextPropagatesCancellation(t *testing.T) {
 	}
 }
 
+// TestBaseUrlUsedAsGiven checks that the configured base URL is used as given.
+// Some Blockfrost-compatible providers serve the v0 API under another path,
+// such as /api/v1, so the constructor must not add or require a version
+// suffix.
+func TestBaseUrlUsedAsGiven(t *testing.T) {
+	tests := []struct {
+		name     string
+		basePath string
+		wantPath string
+	}{
+		{name: "no path", basePath: "", wantPath: "/blocks/latest"},
+		{name: "root slash", basePath: "/", wantPath: "/blocks/latest"},
+		{name: "v0 path", basePath: "/api/v0", wantPath: "/api/v0/blocks/latest"},
+		{name: "v1 path", basePath: "/api/v1", wantPath: "/api/v1/blocks/latest"},
+		{name: "arbitrary path", basePath: "/proxy/blockfrost", wantPath: "/proxy/blockfrost/blocks/latest"},
+		{name: "path ending in v0", basePath: "/custom/v0", wantPath: "/custom/v0/blocks/latest"},
+		{name: "trailing slash", basePath: "/api/v1/", wantPath: "/api/v1/blocks/latest"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				_, _ = w.Write([]byte(`{"slot":42}`))
+			}))
+			defer server.Close()
+
+			slot, err := NewBlockFrostChainContext(server.URL+tc.basePath, 0, "").Tip()
+			if err != nil {
+				t.Fatalf("Tip() error = %v", err)
+			}
+			if slot != 42 {
+				t.Fatalf("Tip() = %d, want 42", slot)
+			}
+			if gotPath != tc.wantPath {
+				t.Fatalf("request path = %q, want %q", gotPath, tc.wantPath)
+			}
+		})
+	}
+}
+
 func TestBlockfrostCapabilities(t *testing.T) {
 	ctx := NewBlockFrostChainContext("http://localhost", 0, "")
 	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityScriptCbor) {
@@ -90,7 +131,7 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	defer server.Close()
 
 	addr := testAddress(t)
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	// BlockFrost returns inline_datum as a CBOR-encoded hex string.
 	// 0x182a is the CBOR encoding of the integer 42.
 	wantDatumCbor := []byte{0x18, 0x2a}
@@ -165,7 +206,7 @@ func TestUtxosHydratesDuplicateReferenceScriptsOnce(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	utxos, err := ctx.Utxos(addr)
 	if err != nil {
 		t.Fatalf("Utxos: %v", err)
@@ -241,7 +282,7 @@ func TestUtxosHydratesReferenceScriptsConcurrentlyInResponseOrder(t *testing.T) 
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	type result struct {
 		utxos []common.Utxo
 		err   error
@@ -305,7 +346,7 @@ func TestUtxosReferenceScriptFailureIncludesUtxoContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr)
+	_, err := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "").Utxos(addr)
 	if err == nil {
 		t.Fatal("expected Utxos to fail")
 	}
@@ -338,7 +379,7 @@ func TestUtxoByRefFillsMissingTxHashOnTxUtxosOutputs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "test-project")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "test-project")
 	hashBytes, err := hex.DecodeString(txHashHex)
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +429,7 @@ func TestEvaluateTxRejectsRedeemerIndexOverflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	_, err := ctx.EvaluateTx([]byte{0x84}, nil)
 	if err == nil {
 		t.Fatal("expected redeemer index overflow error")
@@ -416,7 +457,7 @@ func TestEvaluateTxSendsHexEncodedBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	result, err := ctx.EvaluateTx(txCbor, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1093,7 +1134,7 @@ func TestEvaluateTxPrefersSimpleEndpointWhenAdditionalUtxosProvided(t *testing.T
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
 	if err != nil {
 		t.Fatal(err)
@@ -1133,7 +1174,7 @@ func TestEvaluateTxRejectsMalformedAdditionalUtxosBeforeRequest(t *testing.T) {
 		},
 	}
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{test.utxo}); err == nil {
@@ -1170,7 +1211,7 @@ func TestEvaluateTxFallsBackToUtxosOnMissingInputs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	// ADA-only additional UTxO: fallback to /evaluate/utxos is allowed.
 	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleAdaOnlyUtxo(t)})
 	if err != nil {
@@ -1223,7 +1264,7 @@ func TestEvaluateTxAdditionalUtxosReachableThroughCapabilityGate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 
 	// Mirror the caller-side gate in Apollo's execution-unit estimation.
 	additionalUtxos := []common.Utxo{sampleAdaOnlyUtxo(t)}
@@ -1267,7 +1308,7 @@ func TestEvaluateTxRetriesSimpleWhenAdditionalUtxosHaveAssets(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
 	result, err := ctx.EvaluateTx([]byte{0x84}, []common.Utxo{sampleCommonUtxo(t)})
 	if err != nil {
 		t.Fatal(err)
