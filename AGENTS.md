@@ -69,11 +69,13 @@ replacements or substitute forks merely to make a build pass.
 | --- | --- |
 | `backend/` | `ChainContext`, capability reporting, and common backend types |
 | `backend/blockfrost/` | Blockfrost adapter |
+| `backend/koios/` | Koios adapter |
 | `backend/ogmios/` | Ogmios and Kupo adapter |
 | `backend/utxorpc/` | UTxO RPC adapter |
 | `backend/fixed/` | deterministic in-memory backend for tests |
 | `backend/cache/` | cached `ChainContext` wrapper |
 | `internal/backendutil/` | internal provider-response parsing helpers |
+| `internal/ogmiosutil/` | Ogmios v6 encoders and decoders shared by backends |
 | `plutusencoder/` | struct-tag-driven Plutus data marshaling |
 | `constants/` | network constants |
 | `docs/` | version-specific feature and migration documentation |
