@@ -1,6 +1,6 @@
 # Contributing
 
-Use Go 1.26.9 or newer. Before opening a pull request, run:
+Use Go 1.26.10 or newer. Before opening a pull request, run:
 
 ```bash
 gofmt -w $(find . -name '*.go' -not -path './.worktrees/*')
