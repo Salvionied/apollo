@@ -605,7 +605,8 @@ func TestScriptRefFromKoiosAcceptsBothWrappings(t *testing.T) {
 		"wrapped":   doubleWrapped,
 	} {
 		t.Run(name, func(t *testing.T) {
-			ref, err := scriptRefFromKoios("plutusV3", hex.EncodeToString(scriptBytes), testScript.Hash().String())
+			bytesHex := hex.EncodeToString(scriptBytes)
+			ref, err := scriptRefFromKoios("plutusV3", &bytesHex, nil, testScript.Hash().String())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -627,12 +628,81 @@ func TestScriptRefFromKoiosNativeScript(t *testing.T) {
 	if _, err := cbor.Decode(native, &script); err != nil {
 		t.Fatal(err)
 	}
-	ref, err := scriptRefFromKoios("timelock", hex.EncodeToString(native), script.Hash().String())
+	nativeHex := hex.EncodeToString(native)
+	ref, err := scriptRefFromKoios("timelock", &nativeHex, nil, script.Hash().String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ref.Type != common.ScriptRefTypeNativeScript {
 		t.Fatalf("type = %d, want native", ref.Type)
+	}
+}
+
+// liveTimelockJSON is the JSON form Koios returns, with null bytes, for the
+// timelock reference script 7c169ca1... on preprod (output 2004673b...#0).
+const liveTimelockJSON = `{"type": "all", "scripts": [{"type": "any", "scripts": [{"type": "sig",
+"keyHash": "da0eb5ed7611482ec5089b69d870e0c56c1c45180256112398e0835b"}]}, {"type": "atLeast",
+"scripts": [{"slot": 1000, "type": "after"}, {"slot": 999999999999999, "type": "before"}], "required": 1}]}`
+
+const liveTimelockHash = "7c169ca1dfa6220de314daefc1c49b5111e3eb0eebe150fb2cfce774"
+
+func TestUtxosNativeReferenceScriptFromJSON(t *testing.T) {
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/address_utxos", http.StatusOK, mustJSON(t, []any{utxoRow(t, 0, map[string]any{
+		"reference_script": map[string]any{
+			"hash": liveTimelockHash, "size": nil, "type": "timelock", "bytes": nil,
+			"value": json.RawMessage(liveTimelockJSON),
+		},
+	})}))
+	utxos, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t))
+	if err != nil {
+		t.Fatalf("Utxos() error = %v", err)
+	}
+	ref := utxos[0].Output.ScriptRef()
+	if ref == nil || hex.EncodeToString(ref.Hash().Bytes()) != liveTimelockHash {
+		t.Fatalf("reference script = %v, want native script %s", ref, liveTimelockHash)
+	}
+	if _, ok := ref.(common.NativeScript); !ok {
+		t.Fatalf("reference script type = %T, want common.NativeScript", ref)
+	}
+}
+
+func TestNativeScriptFromKoiosJSONRejectsBadInput(t *testing.T) {
+	tests := map[string]struct {
+		value, hash string
+	}{
+		"hash mismatch":     {liveTimelockJSON, strings.Repeat("00", 28)},
+		"unknown type":      {`{"type":"maybe"}`, liveTimelockHash},
+		"bad key hash":      {`{"type":"sig","keyHash":"abcd"}`, liveTimelockHash},
+		"missing required":  {`{"type":"atLeast","scripts":[]}`, liveTimelockHash},
+		"negative slot":     {`{"type":"after","slot":-1}`, liveTimelockHash},
+		"not an object":     {`[1,2]`, liveTimelockHash},
+		"null value":        {`null`, liveTimelockHash},
+		"required too high": {`{"type":"atLeast","required":2,"scripts":[{"type":"after","slot":1}]}`, liveTimelockHash},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := scriptRefFromKoios("timelock", nil, json.RawMessage(tc.value), tc.hash); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestScriptCborNativeScriptFromJSON(t *testing.T) {
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/script_info", http.StatusOK, `[{"script_hash":"`+liveTimelockHash+
+		`","creation_tx_hash":"79253d463401982e8ca3271ad5769562f0c7cc5e0dd8c2ce0f05643930fd8880","type":"timelock","value":`+
+		liveTimelockJSON+`,"bytes":null,"size":null}]`)
+	var hash common.Blake2b224
+	copy(hash[:], mustDecodeHex(t, liveTimelockHash))
+	scriptCbor, err := NewKoiosChainContext(server.URL, 0, "").ScriptCbor(hash)
+	if err != nil {
+		t.Fatalf("ScriptCbor() error = %v", err)
+	}
+	var native common.NativeScript
+	if _, err := cbor.Decode(scriptCbor, &native); err != nil || native.Hash() != hash {
+		t.Fatalf("ScriptCbor() = %x, want native script CBOR hashing to %s (decode error %v)", scriptCbor, liveTimelockHash, err)
 	}
 }
 
@@ -860,6 +930,57 @@ func TestEvaluateTxDropsOverlappingAdditionalUtxos(t *testing.T) {
 	retry := decodeEvaluateRequest(t, requests[1].body)
 	if len(retry.Params.AdditionalUtxo) != 1 || retry.Params.AdditionalUtxo[0].Transaction.ID != strings.Repeat("33", 32) {
 		t.Fatalf("retry additionalUtxo = %+v, want only the off-chain UTxO", retry.Params.AdditionalUtxo)
+	}
+}
+
+// TestEvaluateTxRetriesOverlapReportedWithHTTP400 mirrors live Koios, which
+// returns Ogmios JSON-RPC errors with HTTP status 400.
+func TestEvaluateTxRetriesOverlapReportedWithHTTP400(t *testing.T) {
+	onChain := sampleUtxo(t, 0x22, 0)
+	offChain := sampleUtxo(t, 0x33, 1)
+	overlap := fmt.Sprintf(`{"jsonrpc":"2.0","method":"evaluateTransaction","error":{"code":3002,
+"message":"Some user-provided additional UTxO entries overlap with those that exist in the ledger.",
+"data":{"overlappingOutputReferences":[{"transaction":{"id":"%s"},"index":0}]}},"id":null}`, strings.Repeat("22", 32))
+	rs, server := newRecordingServer(t)
+	calls := 0
+	rs.handleFunc(http.MethodPost, "/ogmios", func(*http.Request, []byte) (int, string) {
+		calls++
+		if calls == 1 {
+			return http.StatusBadRequest, overlap
+		}
+		return http.StatusOK, evaluateResult
+	})
+	result, err := NewKoiosChainContext(server.URL, 0, "").EvaluateTx([]byte{0x84}, []common.Utxo{onChain, offChain})
+	if err != nil {
+		t.Fatalf("EvaluateTx() error = %v", err)
+	}
+	if len(result) != 2 || len(rs.recorded()) != 2 {
+		t.Fatalf("EvaluateTx() = %v after %d requests, want a result after one retry", result, len(rs.recorded()))
+	}
+}
+
+func TestEvaluateTxParsesErrorReportedWithHTTP400(t *testing.T) {
+	scriptFailure := `{"jsonrpc":"2.0","method":"evaluateTransaction","error":{"code":3010,
+"message":"Some scripts of the transactions terminated with error(s).",
+"data":[{"validator":{"index":1,"purpose":"spend"},"error":{"code":3110,"message":"Extraneous redeemer"}}]},"id":null}`
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/ogmios", http.StatusBadRequest, scriptFailure)
+	_, err := NewKoiosChainContext(server.URL, 0, "").EvaluateTx([]byte{0x84}, nil)
+	var rpcErr *ogmiosRPCError
+	if !errors.As(err, &rpcErr) || rpcErr.Code != 3010 {
+		t.Fatalf("error = %v, want a parsed Ogmios error with code 3010", err)
+	}
+	if strings.Contains(err.Error(), "koios API error") {
+		t.Fatalf("error = %v, want the Ogmios error rather than the HTTP status", err)
+	}
+}
+
+func TestEvaluateTxNonJSONRPCErrorKeepsHTTPStatus(t *testing.T) {
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/ogmios", http.StatusBadGateway, `<html>bad gateway</html>`)
+	_, err := NewKoiosChainContext(server.URL, 0, "").EvaluateTx([]byte{0x84}, nil)
+	if err == nil || !strings.Contains(err.Error(), "koios API error 502") {
+		t.Fatalf("error = %v, want the HTTP status", err)
 	}
 }
 

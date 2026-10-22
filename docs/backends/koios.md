@@ -34,14 +34,18 @@ Koios reports `AllCapabilities`, including
 - Address UTxOs come from `/address_utxos` with extended output, paginated in
   stable `tx_hash`, `tx_index` order. Inline datums keep their original CBOR,
   and reference scripts are taken from the response and verified against
-  their hash. No extra request is made per script.
+  their hash. No extra request is made per script. Koios reports native
+  (timelock) scripts as JSON without bytes, so they are re-encoded from that
+  JSON and accepted only when the hash matches.
 - `UtxoByRef` uses `/utxo_info`. Like Blockfrost, it returns an output that
   exists on chain even if it has since been spent.
 - `ScriptCbor` uses `/script_info` and returns the script in the gouroboros
   script-type form, verified against the requested hash.
 - Script evaluation uses the Koios Ogmios proxy (`/ogmios`,
-  `evaluateTransaction`). Apollo passes every spending input as an additional
-  UTxO, and Ogmios rejects entries that already exist on chain. When Ogmios
-  reports that overlap, the overlapping entries are dropped and evaluation is
-  retried once.
+  `evaluateTransaction`). Koios returns Ogmios errors with HTTP status 400; the
+  JSON-RPC error is still parsed and reported. Apollo passes every spending
+  input as an additional UTxO. Ogmios accepts an entry identical to the
+  ledger's but rejects one that differs from it. When Ogmios reports such an
+  overlap, the overlapping entries are dropped, so the ledger's versions are
+  used, and evaluation is retried once.
 - Submission posts raw CBOR to `/submittx`.

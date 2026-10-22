@@ -122,9 +122,20 @@ func (k *KoiosChainContext) requestContext(
 		return nil, fmt.Errorf("koios response body exceeds %d bytes", maxKoiosResponseBytes)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("koios API error %d: %s", resp.StatusCode, errorSnippet(data))
+		return nil, &apiError{status: resp.StatusCode, body: data}
 	}
 	return data, nil
+}
+
+// apiError is a non-2xx Koios response. The body is kept because the Ogmios
+// proxy reports JSON-RPC errors, which callers must inspect, with status 400.
+type apiError struct {
+	status int
+	body   []byte
+}
+
+func (e *apiError) Error() string {
+	return fmt.Sprintf("koios API error %d: %s", e.status, errorSnippet(e.body))
 }
 
 func (k *KoiosChainContext) postJSON(ctx context.Context, path string, payload any) ([]byte, error) {
@@ -378,9 +389,10 @@ func (k *KoiosChainContext) EvaluateTx(
 
 // EvaluateTxContext evaluates the transaction through the Koios Ogmios proxy.
 //
-// Ogmios rejects additional UTxOs that already exist on chain, and Apollo
-// supplies every spending input whether or not it is on chain. When Ogmios
-// reports such an overlap, the overlapping entries are dropped and the
+// Apollo supplies every spending input as an additional UTxO whether or not
+// it is on chain. Ogmios accepts an entry identical to the ledger's but
+// rejects one that differs from it. When Ogmios reports such an overlap, the
+// overlapping entries are dropped, so the ledger's versions are used, and the
 // evaluation is retried once with the remainder.
 func (k *KoiosChainContext) EvaluateTxContext(
 	ctx context.Context,
@@ -492,13 +504,19 @@ func (k *KoiosChainContext) evaluateOnce(
 		Params  params `json:"params"`
 	}{JSONRPC: "2.0", Method: "evaluateTransaction", Params: p}
 
-	data, err := k.postJSON(ctx, "/ogmios", request)
-	if err != nil {
-		return nil, nil, err
-	}
 	var response struct {
 		Result json.RawMessage `json:"result"`
 		Error  *ogmiosRPCError `json:"error"`
+	}
+	data, err := k.postJSON(ctx, "/ogmios", request)
+	if err != nil {
+		// Koios returns Ogmios JSON-RPC errors with status 400. Report the
+		// JSON-RPC error when the body holds one, and the HTTP error otherwise.
+		var httpErr *apiError
+		if errors.As(err, &httpErr) && json.Unmarshal(httpErr.body, &response) == nil && response.Error != nil {
+			return nil, response.Error, nil
+		}
+		return nil, nil, err
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse koios ogmios response: %w", err)
@@ -573,9 +591,10 @@ func (k *KoiosChainContext) ScriptCborContext(
 		return nil, err
 	}
 	var rows []struct {
-		ScriptHash *string `json:"script_hash"`
-		Type       string  `json:"type"`
-		Bytes      *string `json:"bytes"`
+		ScriptHash *string         `json:"script_hash"`
+		Type       string          `json:"type"`
+		Bytes      *string         `json:"bytes"`
+		Value      json.RawMessage `json:"value"`
 	}
 	if err := json.Unmarshal(data, &rows); err != nil {
 		return nil, fmt.Errorf("failed to parse koios script_info: %w", err)
@@ -584,10 +603,7 @@ func (k *KoiosChainContext) ScriptCborContext(
 		if row.ScriptHash == nil || !strings.EqualFold(*row.ScriptHash, hashHex) {
 			continue
 		}
-		if row.Bytes == nil || *row.Bytes == "" {
-			return nil, fmt.Errorf("koios has no bytes for script %s", hashHex)
-		}
-		scriptRef, err := scriptRefFromKoios(row.Type, *row.Bytes, hashHex)
+		scriptRef, err := scriptRefFromKoios(row.Type, row.Bytes, row.Value, hashHex)
 		if err != nil {
 			return nil, err
 		}
@@ -888,9 +904,10 @@ type koiosInlineDatum struct {
 }
 
 type koiosReferenceScript struct {
-	Hash  string  `json:"hash"`
-	Type  string  `json:"type"`
-	Bytes *string `json:"bytes"`
+	Hash  string          `json:"hash"`
+	Type  string          `json:"type"`
+	Bytes *string         `json:"bytes"`
+	Value json.RawMessage `json:"value"`
 }
 
 type koiosAsset struct {
@@ -972,11 +989,8 @@ func (raw *koiosUtxo) toUtxo() (common.Utxo, error) {
 	}
 
 	if raw.ReferenceScript != nil {
-		if raw.ReferenceScript.Bytes == nil || *raw.ReferenceScript.Bytes == "" {
-			return common.Utxo{}, fmt.Errorf("reference script %s has no bytes", raw.ReferenceScript.Hash)
-		}
 		scriptRef, err := scriptRefFromKoios(
-			raw.ReferenceScript.Type, *raw.ReferenceScript.Bytes, raw.ReferenceScript.Hash,
+			raw.ReferenceScript.Type, raw.ReferenceScript.Bytes, raw.ReferenceScript.Value, raw.ReferenceScript.Hash,
 		)
 		if err != nil {
 			return common.Utxo{}, err
@@ -1056,15 +1070,29 @@ func datumHashOption(hashHex string) (*babbage.BabbageTransactionOutputDatumOpti
 // hex bytes, verifying it against hashHex. Koios reports Plutus script bytes
 // from db-sync, so they are tried both as given and with one CBOR byte-string
 // wrapper added or removed; only a form whose hash matches is accepted.
-func scriptRefFromKoios(scriptType, bytesHex, hashHex string) (*common.ScriptRef, error) {
-	scriptBytes, err := hex.DecodeString(bytesHex)
+// Koios reports native scripts with null bytes and only their JSON form, so
+// a native script is rebuilt from value when bytes are absent.
+func scriptRefFromKoios(scriptType string, bytesHex *string, value json.RawMessage, hashHex string) (*common.ScriptRef, error) {
+	native := false
+	switch strings.ToLower(scriptType) {
+	case "timelock", "multisig", "native":
+		native = true
+	}
+	if bytesHex == nil || *bytesHex == "" {
+		if native {
+			return nativeScriptRefFromJSON(value, hashHex)
+		}
+		return nil, fmt.Errorf("koios returned no bytes for %s script %s", scriptType, hashHex)
+	}
+	scriptBytes, err := hex.DecodeString(*bytesHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid script bytes hex: %w", err)
 	}
+	if native {
+		return backendutil.ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptBytes, hashHex)
+	}
 	var refType uint
 	switch strings.ToLower(scriptType) {
-	case "timelock", "multisig", "native":
-		return backendutil.ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptBytes, hashHex)
 	case "plutusv1":
 		refType = common.ScriptRefTypePlutusV1
 	case "plutusv2":
@@ -1093,4 +1121,108 @@ func scriptRefFromKoios(scriptType, bytesHex, hashHex string) (*common.ScriptRef
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+// koiosNativeScript is the cardano-cli simple-script JSON form Koios returns
+// for native scripts.
+type koiosNativeScript struct {
+	Type     string              `json:"type"`
+	KeyHash  string              `json:"keyHash"`
+	Slot     *uint64             `json:"slot"`
+	Required *uint64             `json:"required"`
+	Scripts  []koiosNativeScript `json:"scripts"`
+}
+
+// maxNativeScriptDepth bounds recursion over provider-supplied JSON.
+const maxNativeScriptDepth = 64
+
+// nativeScriptRefFromJSON encodes a native script from its JSON form and
+// accepts it only if its hash matches hashHex.
+func nativeScriptRefFromJSON(value json.RawMessage, hashHex string) (*common.ScriptRef, error) {
+	var script koiosNativeScript
+	if err := json.Unmarshal(value, &script); err != nil {
+		return nil, fmt.Errorf("invalid native script JSON: %w", err)
+	}
+	if script.Type == "" {
+		return nil, fmt.Errorf("koios returned neither bytes nor JSON for native script %s", hashHex)
+	}
+	encoded, err := script.toCBORValue(0)
+	if err != nil {
+		return nil, fmt.Errorf("invalid native script %s: %w", hashHex, err)
+	}
+	scriptCbor, err := cbor.Encode(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode native script %s: %w", hashHex, err)
+	}
+	return backendutil.ScriptRefFromBytes(common.ScriptRefTypeNativeScript, scriptCbor, hashHex)
+}
+
+// toCBORValue returns the ledger CBOR structure of a native script:
+// [0, keyhash] | [1, [scripts]] | [2, [scripts]] | [3, n, [scripts]] |
+// [4, slot] (valid from slot) | [5, slot] (valid before slot).
+func (s *koiosNativeScript) toCBORValue(depth int) ([]any, error) {
+	if depth > maxNativeScriptDepth {
+		return nil, fmt.Errorf("nesting exceeds %d levels", maxNativeScriptDepth)
+	}
+	children := func() ([]any, error) {
+		out := make([]any, 0, len(s.Scripts))
+		for i := range s.Scripts {
+			child, err := s.Scripts[i].toCBORValue(depth + 1)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, child)
+		}
+		return out, nil
+	}
+	slot := func() (uint64, error) {
+		if s.Slot == nil {
+			return 0, fmt.Errorf("%s script has no slot", s.Type)
+		}
+		return *s.Slot, nil
+	}
+	switch s.Type {
+	case "sig":
+		keyHash, err := hex.DecodeString(s.KeyHash)
+		if err != nil || len(keyHash) != common.Blake2b224Size {
+			return nil, fmt.Errorf("invalid key hash %q", s.KeyHash)
+		}
+		return []any{0, keyHash}, nil
+	case "all", "any":
+		scripts, err := children()
+		if err != nil {
+			return nil, err
+		}
+		tag := 1
+		if s.Type == "any" {
+			tag = 2
+		}
+		return []any{tag, scripts}, nil
+	case "atLeast":
+		if s.Required == nil {
+			return nil, errors.New("atLeast script has no required count")
+		}
+		if *s.Required > uint64(len(s.Scripts)) {
+			return nil, fmt.Errorf("atLeast requires %d of %d scripts", *s.Required, len(s.Scripts))
+		}
+		scripts, err := children()
+		if err != nil {
+			return nil, err
+		}
+		return []any{3, *s.Required, scripts}, nil
+	case "after":
+		v, err := slot()
+		if err != nil {
+			return nil, err
+		}
+		return []any{4, v}, nil
+	case "before":
+		v, err := slot()
+		if err != nil {
+			return nil, err
+		}
+		return []any{5, v}, nil
+	default:
+		return nil, fmt.Errorf("unsupported native script type %q", s.Type)
+	}
 }
