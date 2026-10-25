@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Salvionied/apollo/v2/constants"
 )
 
 // containerTag is the normalized form of the anonymous `_` field's
@@ -224,14 +226,12 @@ func parseCachedField(field reflect.StructField) parsedField {
 	return parsed
 }
 
-const maxUnmarshalPrealloc = 1024
-
 func unmarshalPrealloc(n int) int {
 	if n < 0 {
 		return 0
 	}
-	if n > maxUnmarshalPrealloc {
-		return maxUnmarshalPrealloc
+	if n > constants.MaxContainerPrealloc {
+		return constants.MaxContainerPrealloc
 	}
 	return n
 }
