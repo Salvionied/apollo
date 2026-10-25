@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -55,9 +56,27 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return fmt.Errorf("field %s: %w", field.Name, err)
 	}
 
-	// BigInt handles *big.Int directly, so dispatch before pointer dereference
-	if plutusType == "BigInt" {
+	// BigInt and Address are dispatched before pointer allocation.
+	// Address writes a common.Address value.
+	switch plutusType {
+	case "BigInt":
 		return unmarshalBigInt(pd, fieldVal)
+	case "Address":
+		if fieldVal.Kind() == reflect.Pointer {
+			if fieldVal.IsNil() {
+				fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
+			}
+			fieldVal = fieldVal.Elem()
+		}
+		if fieldVal.Type() != reflect.TypeOf(common.Address{}) {
+			return fmt.Errorf("field %s: Address requires common.Address, got %s", field.Name, fieldVal.Type())
+		}
+		addr, err := unmarshalAddress(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(addr))
+		return nil
 	}
 
 	// Dereference / allocate pointers

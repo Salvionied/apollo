@@ -25,6 +25,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or map — and a type may override it by implementing `IsZero() bool`.
   Omitting an empty list field that is followed by a present field is an
   error, because a positional list cannot represent a hole.
+- `plutusType:"Address"` encodes `common.Address` as a Plutus ledger address:
+  a payment key or script credential, and a stake hash, stake script,
+  pointer, or no stake credential. Byron addresses are rejected.
 - Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
   scalar key and value codecs. Entries are sorted by encoded key bytes, so the
   output is deterministic, and duplicate encoded keys are rejected.

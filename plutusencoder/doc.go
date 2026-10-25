@@ -40,6 +40,7 @@
 //	DefList      a slice, or a nested struct forced definite-length
 //	IndefList    a slice, or a nested struct forced indefinite-length
 //	Map          a native Go map, or a slice of key-value structs
+//	Address      common.Address as a Plutus ledger address
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -66,6 +67,12 @@
 // decodes back as zero. Omitting an empty field that is followed by a
 // present field is an error, because a positional list cannot represent a
 // hole. Ignore accepts no options at all.
+//
+// Address encodes common.Address as Plutus Address: constructor 0 of a
+// payment credential and a Maybe staking credential. Key and script
+// credentials and stake pointers are supported. Byron addresses and
+// stake-only reward accounts are rejected. Plutus data does not carry a
+// network id, so decoding uses the testnet id.
 //
 // # Naming and optional fields
 //
