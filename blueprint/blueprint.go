@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 )
 
@@ -187,6 +188,24 @@ func Parse(raw []byte) (*Blueprint, error) {
 	return &bp, nil
 }
 
+// ParseFile reads a CIP-57 blueprint JSON file from path and validates it.
+func ParseFile(path string) (*Blueprint, error) {
+	raw, err := os.ReadFile(path) //nolint:gosec // caller-supplied blueprint file path
+	if err != nil {
+		return nil, err
+	}
+	return Parse(raw)
+}
+
+// ValidatorNames returns the validator titles in declaration order.
+func (bp *Blueprint) ValidatorNames() []string {
+	names := make([]string, len(bp.Validators))
+	for i := range bp.Validators {
+		names[i] = bp.Validators[i].Title
+	}
+	return names
+}
+
 // Validator returns the validator with the given title.
 func (bp *Blueprint) Validator(title string) (*Validator, error) {
 	for i := range bp.Validators {
@@ -243,7 +262,7 @@ func (bp *Blueprint) validate() error {
 	}
 	if strings.TrimSpace(bp.Preamble.PlutusVersion) != "" {
 		switch strings.ToLower(bp.Preamble.PlutusVersion) {
-		case "v1", "v2", "v3":
+		case "v1", "v2", "v3", "v4":
 		default:
 			return fmt.Errorf("unsupported preamble.plutusVersion %q", bp.Preamble.PlutusVersion)
 		}
@@ -334,7 +353,7 @@ func validatePurposes(purposes []string, loc string) error {
 	seen := make(map[string]struct{}, len(purposes))
 	for _, p := range purposes {
 		switch p {
-		case "spend", "mint", "withdraw", "publish":
+		case "spend", "mint", "withdraw", "publish", "vote", "propose", "guard":
 		default:
 			return fmt.Errorf("%s: invalid purpose %q", loc, p)
 		}
@@ -490,6 +509,8 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 			}
 		}
 		return nil
+	case "value":
+		return rejectKeywordsFor(s, loc, "value")
 	default:
 		return fmt.Errorf("%s: unknown dataType %q", loc, s.DataType)
 	}

@@ -746,6 +746,175 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	}
 }
 
+func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
+	bp, err := ParseFile(filepath.Join("testdata", "spend_record.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := bp.ValidatorNames()
+	if len(names) != 1 || names[0] != "escrow.spend" {
+		t.Fatalf("ValidatorNames = %v", names)
+	}
+
+	v4Raw := []byte(`{
+		"preamble": {"title": "dijkstra/guard", "version": "1.0.0", "plutusVersion": "v4"},
+		"validators": [{
+			"title": "guard.observe",
+			"datum": {"purpose": "guard", "schema": {"dataType": "value"}},
+			"redeemer": {
+				"oneOf": [
+					{"purpose": "guard", "schema": {"dataType": "integer"}},
+					{"purpose": "vote", "schema": {"dataType": "bytes"}},
+					{"purpose": "propose", "schema": {"dataType": "integer"}}
+				]
+			},
+			"parameters": [{"title": "nonce", "purpose": "guard", "schema": {"dataType": "integer"}}],
+			"compiledCode": "46010100200101"
+		}]
+	}`)
+	v4Bp, err := Parse(v4Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseScript, err := v4Bp.Script("guard.observe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedHash, err := baseScript.HashHex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v4Bp.Validators[0].Hash = expectedHash
+	if err := baseScript.VerifyHash(); err != nil {
+		t.Fatalf("VerifyHash: %v", err)
+	}
+
+	appliedV4, err := baseScript.ApplyParamsData(data.NewInteger(big.NewInt(42)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appliedV4.VerifyHash(); err == nil {
+		t.Fatal("expected VerifyHash to fail after ApplyParamsData")
+	}
+	if appliedV4.CborHex() != "4c010100320014c102182a0001" {
+		t.Fatalf("unexpected V4 applied CborHex: %s", appliedV4.CborHex())
+	}
+	if _, err := appliedV4.V4(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appliedV4.SpendAddressBech32(common.AddressNetworkTestnet, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appliedV4.RewardAddressBech32(common.AddressNetworkTestnet); err != nil {
+		t.Fatal(err)
+	}
+
+	// Encode and decode Plutus V4 data.Value (CBOR tag 1401) through datum helpers.
+	v4Val := &data.Value{
+		Inner: data.NewMap([][2]data.PlutusData{
+			{
+				data.NewByteString(bytes.Repeat([]byte{0xaa}, 28)),
+				data.NewMap([][2]data.PlutusData{{data.NewByteString([]byte("T")), data.NewInteger(big.NewInt(5))}}),
+			},
+		}).(*data.Map),
+	}
+	datumVal, err := v4Bp.EncodeDatumValue("guard.observe", v4Val)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decodedV4 data.Value
+	if err := v4Bp.DecodeDatumValue("guard.observe", datumVal, &decodedV4); err != nil {
+		t.Fatal(err)
+	}
+	if !decodedV4.Equal(v4Val) {
+		t.Fatal("decoded V4 data.Value does not equal input")
+	}
+
+	// Build a Dijkstra transaction guarded by the V4 validator via reference input.
+	guardCred, err := appliedV4.GuardCredential()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptRef, err := appliedV4.ScriptRef()
+	if err != nil {
+		t.Fatal(err)
+	}
+	guardRedeemer, err := v4Bp.EncodeRedeemerValue("guard.observe", "guard", int64(9))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decodedGuardRedeemer int64
+	if err := v4Bp.DecodeRedeemerValue("guard.observe", "guard", guardRedeemer, &decodedGuardRedeemer); err != nil {
+		t.Fatal(err)
+	}
+	if decodedGuardRedeemer != 9 {
+		t.Fatalf("decoded guard redeemer = %d, want 9", decodedGuardRedeemer)
+	}
+
+	cc, walletAddr := newBlueprintTxContext(t)
+	pp, err := cc.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pp.ProtocolMajorVersion = 12
+	pp.MinFeeRefScriptCostPerByte = 15
+	pp.MinFeeReferenceScriptsRange = 1000
+	pp.MinFeeReferenceScriptsMultiplierRational = big.NewRat(2, 1)
+	costModel := make([]int64, 300)
+	for i := range costModel {
+		costModel[i] = 10
+	}
+	pp.CostModels["PlutusV4"] = costModel
+	cc = fixed.NewFixedChainContext(pp, backend.GenesisParameters{NetworkMagic: 1}, 0)
+	var feeTx, collTx, refTx common.Blake2b256
+	feeTx[0] = 0x10
+	collTx[0] = 0x20
+	refTx[0] = 0x40
+	feeOut := babbage.BabbageTransactionOutput{
+		OutputAddress: walletAddr,
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 50_000_000},
+	}
+	collOut := babbage.BabbageTransactionOutput{
+		OutputAddress: walletAddr,
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 10_000_000},
+	}
+	cc.AddUtxo(walletAddr, common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: feeTx, OutputIndex: 0},
+		Output: &feeOut,
+	})
+	cc.AddUtxo(walletAddr, common.Utxo{
+		Id:     shelley.ShelleyTransactionInput{TxId: collTx, OutputIndex: 0},
+		Output: &collOut,
+	})
+	cc.AddUtxoByRef(common.Utxo{
+		Id: shelley.ShelleyTransactionInput{TxId: refTx, OutputIndex: 0},
+		Output: &babbage.BabbageTransactionOutput{
+			OutputAddress:  walletAddr,
+			OutputAmount:   mary.MaryTransactionOutputValue{Amount: 5_000_000},
+			TxOutScriptRef: scriptRef,
+		},
+	})
+
+	exUnits := common.ExUnits{Memory: 1000, Steps: 1000}
+	dijkstraBuilder, err := apollo.New(cc).
+		SetWallet(apollo.NewExternalWallet(walletAddr)).
+		SetTargetEra(apollo.EraDijkstra).
+		DisableExecutionUnitsEstimation().
+		AddGuard(guardCred, guardRedeemer, &exUnits).
+		AddRequiredTopLevelGuard(guardCred, datumVal).
+		AddReferenceInput(hex.EncodeToString(refTx[:]), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dijkstraBuilder, err = dijkstraBuilder.Complete()
+	if err != nil {
+		t.Fatalf("Dijkstra guard Complete: %v", err)
+	}
+	if dijkstraBuilder.GetDijkstraTx() == nil {
+		t.Fatal("expected completed Dijkstra transaction")
+	}
+}
+
 func newBlueprintTxContext(t *testing.T) (*fixed.FixedChainContext, common.Address) {
 	t.Helper()
 	pp := backend.ProtocolParameters{

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -84,6 +85,44 @@ func (bp *Blueprint) DecodeRedeemer(validatorTitle, purpose string, pd data.Plut
 		return err
 	}
 	return bp.Decode(s, pd, dst)
+}
+
+// EncodeDatumValue encodes v against the named validator's datum schema and
+// wraps the result in a *common.Datum ready for Apollo transaction builders.
+func (bp *Blueprint) EncodeDatumValue(validatorTitle string, v any) (*common.Datum, error) {
+	pd, err := bp.EncodeDatum(validatorTitle, v)
+	if err != nil {
+		return nil, err
+	}
+	return &common.Datum{Data: pd}, nil
+}
+
+// DecodeDatumValue decodes d into dst against the named validator's datum
+// schema.
+func (bp *Blueprint) DecodeDatumValue(validatorTitle string, d *common.Datum, dst any) error {
+	if d == nil || d.Data == nil {
+		return errors.New("datum is nil")
+	}
+	return bp.DecodeDatum(validatorTitle, d.Data, dst)
+}
+
+// EncodeRedeemerValue encodes v against the named validator's redeemer schema
+// for purpose and wraps the result in a *common.Datum.
+func (bp *Blueprint) EncodeRedeemerValue(validatorTitle, purpose string, v any) (*common.Datum, error) {
+	pd, err := bp.EncodeRedeemer(validatorTitle, purpose, v)
+	if err != nil {
+		return nil, err
+	}
+	return &common.Datum{Data: pd}, nil
+}
+
+// DecodeRedeemerValue decodes d into dst against the named validator's
+// redeemer schema for purpose.
+func (bp *Blueprint) DecodeRedeemerValue(validatorTitle, purpose string, d *common.Datum, dst any) error {
+	if d == nil || d.Data == nil {
+		return errors.New("redeemer datum is nil")
+	}
+	return bp.DecodeRedeemer(validatorTitle, purpose, d.Data, dst)
 }
 
 func rootName(s *Schema) string {
@@ -161,9 +200,51 @@ func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string) (data
 		return bp.encodeMap(s, val, loc)
 	case "constructor":
 		return bp.encodeConstructor(s, val, loc)
+	case "value":
+		return encodeV4Value(val, loc)
 	default:
 		return nil, fmt.Errorf("%s: unsupported dataType %q", loc, s.DataType)
 	}
+}
+
+func encodeV4Value(val reflect.Value, loc string) (data.PlutusData, error) {
+	if val.Type() == reflect.TypeOf(data.Value{}) {
+		v := val.Interface().(data.Value)
+		if err := v.Validate(); err != nil {
+			return nil, fmt.Errorf("%s: %w", loc, err)
+		}
+		return &v, nil
+	}
+	if val.Type() == reflect.TypeOf((*data.Value)(nil)) {
+		v := val.Interface().(*data.Value)
+		if v == nil {
+			return nil, fmt.Errorf("%s: nil *data.Value", loc)
+		}
+		if err := v.Validate(); err != nil {
+			return nil, fmt.Errorf("%s: %w", loc, err)
+		}
+		return v, nil
+	}
+	return nil, fmt.Errorf("%s: value schema requires *data.Value or data.Value, got %s", loc, val.Type())
+}
+
+func decodeV4Value(pd data.PlutusData, dst reflect.Value, loc string) error {
+	v, ok := pd.(*data.Value)
+	if !ok || v == nil {
+		return fmt.Errorf("%s: expected *data.Value, got %T", loc, pd)
+	}
+	if err := v.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", loc, err)
+	}
+	if dst.Type() == reflect.TypeOf(data.Value{}) {
+		dst.Set(reflect.ValueOf(*v))
+		return nil
+	}
+	if dst.Type() == reflect.TypeOf((*data.Value)(nil)).Elem() || dst.Type().Implements(reflect.TypeOf((*data.PlutusData)(nil)).Elem()) {
+		dst.Set(reflect.ValueOf(v))
+		return nil
+	}
+	return fmt.Errorf("%s: cannot decode V4 Value into %s", loc, dst.Type())
 }
 
 func encodeOpaqueData(val reflect.Value, loc string) (data.PlutusData, error) {
@@ -605,6 +686,8 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 		return bp.decodeMap(s, pd, dst, loc)
 	case "constructor":
 		return bp.decodeConstructor(s, pd, dst, loc)
+	case "value":
+		return decodeV4Value(pd, dst, loc)
 	default:
 		return fmt.Errorf("%s: unsupported dataType %q", loc, s.DataType)
 	}
