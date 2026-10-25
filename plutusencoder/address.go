@@ -115,7 +115,7 @@ func stakingReference(pd data.PlutusData) (stakeRef, error) {
 	}
 	if constrTagEqual(maybe.Tag, 1) {
 		if len(maybe.Fields) != 0 {
-			return stakeRef{}, errors.New("Nothing staking credential must have no fields")
+			return stakeRef{}, errors.New("nothing staking credential must have no fields")
 		}
 		return stakeRef{kind: stakeNone}, nil
 	}
@@ -231,7 +231,7 @@ func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
 	}
 	if constrTagEqual(constr.Tag, 1) {
 		if len(constr.Fields) != 0 {
-			return errors.New("Nothing must have no fields")
+			return errors.New("nothing must have no fields")
 		}
 		fieldVal.SetZero()
 		return nil
