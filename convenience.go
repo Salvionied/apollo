@@ -108,6 +108,11 @@ func (a *Apollo) PayToContractWithV3ReferenceScript(addr common.Address, datum *
 	return a.PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)
 }
 
+// PayToContractWithV4ReferenceScript pays to a script address with an inline datum and a Plutus V4 reference script.
+func (a *Apollo) PayToContractWithV4ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV4Script, units ...Unit) (*Apollo, error) {
+	return a.PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)
+}
+
 // --- Staking FromAddress / FromBech32 Convenience Methods ---
 
 // RegisterStakeFromAddress creates a stake registration certificate from an address.

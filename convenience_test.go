@@ -369,6 +369,26 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 	}
 }
 
+func TestPayToContractWithV4ReferenceScript(t *testing.T) {
+	cc := setupFixedContext()
+	a := New(cc)
+	addr := testAddress(t)
+	datum := common.Datum{}
+	script := common.PlutusV4Script([]byte{0x04})
+
+	a, err := a.PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.payments) != 1 {
+		t.Fatalf("expected 1 payment, got %d", len(a.payments))
+	}
+	p := a.payments[0].(*Payment)
+	if p.ScriptRef.Type != 4 {
+		t.Errorf("expected script ref type 4 (V4), got %d", p.ScriptRef.Type)
+	}
+}
+
 // --- Staking FromAddress Convenience Tests ---
 // Note: The existing staking_test.go tests the unified methods with bech32 strings
 // passed directly. These tests exercise the explicit typed convenience wrappers.
