@@ -60,6 +60,7 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Map` | a native Go map, or a slice of key-value structs |
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
+| `Value` | `Value` as a map of policy id to asset map, with lovelace under the empty policy |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
 
@@ -68,6 +69,18 @@ under its own container marker. Unexported fields are always skipped.
 
 Unknown types, unknown options, empty or duplicate options, and a malformed
 `plutusConstr` are errors.
+
+```go
+type Datum struct {
+    _      struct{}            `plutusType:"DefList" plutusConstr:"0"`
+    Locked plutusencoder.Value `plutusType:"Value"`
+}
+```
+
+`Value` encodes the Plutus ledger `Value`: a map of policy id to a map of
+asset name to quantity, with keys sorted by their bytes. Lovelace uses the
+empty policy id and the empty asset name. Duplicate policy or asset names and
+non-positive quantities are errors.
 
 ## Options
 

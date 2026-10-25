@@ -43,6 +43,7 @@
 //	Map          a native Go map, or a slice of key-value structs
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
+//	Value        Value as the Plutus ledger map of policy id to asset map
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -51,6 +52,15 @@
 //
 // When DefList or IndefList names a nested struct, the struct takes the
 // field's shape unless it carries its own `_` container marker, which wins.
+//
+// Value encodes the Plutus ledger Value: a map of policy id to a map of asset
+// name to quantity. Lovelace is stored under the empty policy id and the
+// empty asset name:
+//
+//	type Datum struct {
+//		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+//		Locked Value    `plutusType:"Value"`
+//	}
 //
 // # Options
 //
