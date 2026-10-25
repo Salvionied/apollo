@@ -1,6 +1,7 @@
 package plutusencoder
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -114,16 +115,16 @@ func stakingReference(pd data.PlutusData) (stakeRef, error) {
 	}
 	if constrTagEqual(maybe.Tag, 1) {
 		if len(maybe.Fields) != 0 {
-			return stakeRef{}, fmt.Errorf("Nothing staking credential must have no fields")
+			return stakeRef{}, errors.New("Nothing staking credential must have no fields")
 		}
 		return stakeRef{kind: stakeNone}, nil
 	}
 	if !constrTagEqual(maybe.Tag, 0) || len(maybe.Fields) != 1 {
-		return stakeRef{}, fmt.Errorf("expected Just StakingCredential")
+		return stakeRef{}, errors.New("expected Just StakingCredential")
 	}
 	staking, ok := maybe.Fields[0].(*data.Constr)
 	if !ok || len(staking.Fields) == 0 {
-		return stakeRef{}, fmt.Errorf("expected StakingCredential constructor")
+		return stakeRef{}, errors.New("expected StakingCredential constructor")
 	}
 	switch {
 	case constrTagEqual(staking.Tag, 0) && len(staking.Fields) == 1:
@@ -151,7 +152,7 @@ func stakingReference(pd data.PlutusData) (stakeRef, error) {
 		}
 		return stakeRef{kind: stakePointer, pointer: encodePointer(slot, txIndex, certIndex)}, nil
 	default:
-		return stakeRef{}, fmt.Errorf("expected StakingHash or StakingPtr")
+		return stakeRef{}, errors.New("expected StakingHash or StakingPtr")
 	}
 }
 
@@ -171,7 +172,7 @@ func encodePointer(slot, txIndex, certIndex uint64) []byte {
 		val /= 128
 		for val > 0 {
 			i--
-			tmp[i] = byte((val & 0x7F) | 0x80)
+			tmp[i] = byte(val&0x7F) | 0x80
 			val /= 128
 		}
 		return append([]byte(nil), tmp[i:]...)
@@ -184,7 +185,7 @@ func encodePointer(slot, txIndex, certIndex uint64) []byte {
 
 func marshalMaybe(fieldVal reflect.Value) (data.PlutusData, error) {
 	if fieldVal.Kind() != reflect.Pointer {
-		return nil, fmt.Errorf("Maybe requires a pointer, got %s", fieldVal.Kind())
+		return nil, fmt.Errorf("maybe requires a pointer, got %s", fieldVal.Kind())
 	}
 	if fieldVal.IsNil() {
 		return data.NewConstr(1), nil
@@ -222,7 +223,7 @@ func marshalMaybeInner(elem reflect.Value) (data.PlutusData, error) {
 
 func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
 	if fieldVal.Kind() != reflect.Pointer {
-		return fmt.Errorf("Maybe requires a pointer, got %s", fieldVal.Kind())
+		return fmt.Errorf("maybe requires a pointer, got %s", fieldVal.Kind())
 	}
 	constr, ok := pd.(*data.Constr)
 	if !ok {
@@ -230,13 +231,13 @@ func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
 	}
 	if constrTagEqual(constr.Tag, 1) {
 		if len(constr.Fields) != 0 {
-			return fmt.Errorf("Nothing must have no fields")
+			return errors.New("Nothing must have no fields")
 		}
 		fieldVal.SetZero()
 		return nil
 	}
 	if !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 1 {
-		return fmt.Errorf("expected Just with 1 field")
+		return errors.New("expected Just with 1 field")
 	}
 	ptr := reflect.New(fieldVal.Type().Elem())
 	if err := unmarshalMaybeInner(constr.Fields[0], ptr.Elem()); err != nil {

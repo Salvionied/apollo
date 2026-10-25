@@ -31,7 +31,7 @@ func TestAddressRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cases := []common.Address{}
+	cases := make([]common.Address, 0, 8)
 	for _, built := range []struct {
 		kind  uint8
 		pay   []byte

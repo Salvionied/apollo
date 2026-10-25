@@ -91,7 +91,8 @@ func TestMaybeAddressCoversShelleyForms(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cases := []common.Address{pointerAddr}
+	cases := make([]common.Address, 1, 7)
+	cases[0] = pointerAddr
 	for _, built := range []struct {
 		kind  uint8
 		pay   []byte
