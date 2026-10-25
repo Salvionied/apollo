@@ -12,6 +12,7 @@ import (
 
 func marshalList(val reflect.Value, typ reflect.Type, constrTag uint64, hasConstr bool, useIndef bool) (data.PlutusData, error) {
 	var fields []data.PlutusData
+	omittedField := ""
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -30,11 +31,17 @@ func marshalList(val reflect.Value, typ reflect.Type, constrTag uint64, hasConst
 		if err != nil {
 			return nil, err
 		}
-		if omitEmpty {
-			return nil, fmt.Errorf("field %s: omitempty is not supported on positional list fields", field.Name)
+		fieldVal := val.Field(i)
+		if omitEmpty && isEmptyField(fieldVal) {
+			if omittedField == "" {
+				omittedField = field.Name
+			}
+			continue
+		}
+		if omittedField != "" {
+			return nil, fmt.Errorf("field %s: omitempty omitted %s before a present field; put omitempty fields last or use Ignore", field.Name, omittedField)
 		}
 
-		fieldVal := val.Field(i)
 		pd, err := marshalField(fieldVal, field)
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
@@ -133,8 +140,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		return fmt.Errorf("expected Constr or List, got %T", pd)
 	}
 
-	// Count exported wire fields (excluding the "_" tag field and ignored fields).
-	exportedCount := 0
+	requiredCount := 0
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		if f.Name == "_" || !f.IsExported() {
@@ -144,15 +150,23 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		if err != nil {
 			return err
 		}
-		if !ignored {
-			exportedCount++
+		if ignored {
+			continue
+		}
+		omitEmpty, err := fieldOmitEmpty(f)
+		if err != nil {
+			return err
+		}
+		if !omitEmpty {
+			requiredCount++
 		}
 	}
-	if len(fields) < exportedCount {
-		return fmt.Errorf("plutus data has %d fields, struct %s expects %d", len(fields), typ.Name(), exportedCount)
+	if len(fields) < requiredCount {
+		return fmt.Errorf("plutus data has %d fields, struct %s expects at least %d", len(fields), typ.Name(), requiredCount)
 	}
-	// Extra fields in the PlutusData (len(fields) > exportedCount) are intentionally
-	// ignored for forward-compatibility with newer datum schemas.
+	// Extra fields in the PlutusData are intentionally ignored for
+	// forward-compatibility with newer datum schemas. Trailing omitempty
+	// fields may be absent and stay at their zero value.
 
 	fieldIdx := 0
 	for i := 0; i < typ.NumField(); i++ {
@@ -166,6 +180,16 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		}
 		if ignored {
 			continue
+		}
+		omitEmpty, err := fieldOmitEmpty(field)
+		if err != nil {
+			return err
+		}
+		if fieldIdx >= len(fields) {
+			if omitEmpty {
+				continue
+			}
+			return fmt.Errorf("plutus data has %d fields, struct %s field %s is required", len(fields), typ.Name(), field.Name)
 		}
 
 		fieldVal := val.Field(i)

@@ -19,12 +19,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preserving Apollo's historical mixed encoding as the default.
 - `plutusType:"Ignore"` skips a struct field entirely, in both directions. It
   takes no options.
-- `omitempty` is honored on map fields, dropping a field whose value is empty
-  from the encoded map. Empty follows `encoding/json` semantics — false,
+- `omitempty` drops an empty field from a Map, and from the end of a
+  `DefList` or `IndefList`. Empty follows `encoding/json` semantics — false,
   numeric zero, nil pointer or interface, and zero-length string, array, slice
-  or map — and a type may override it by implementing `IsZero() bool`. The
-  option is still rejected on positional list fields, where dropping an element
-  would shift the ones after it.
+  or map — and a type may override it by implementing `IsZero() bool`.
+  Omitting an empty list field that is followed by a present field is an
+  error, because a positional list cannot represent a hole.
 - Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
   scalar key and value codecs. Entries are sorted by encoded key bytes, so the
   output is deterministic, and duplicate encoded keys are rejected.

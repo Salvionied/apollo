@@ -53,8 +53,7 @@
 //
 // plutusType accepts comma-separated options after the type name. Surrounding
 // whitespace is ignored, and a repeated option is an error. There is one
-// option, omitempty, which drops a field whose value is empty from an encoded
-// Map:
+// option, omitempty, which drops a field whose value is empty:
 //
 //	Memo string `plutusType:"StringBytes,omitempty"`
 //
@@ -62,9 +61,11 @@
 // pointer or interface, and a zero-length string, array, slice or map — and a
 // type may override them by implementing IsZero() bool.
 //
-// omitempty is rejected on the fields of a list container, where dropping one
-// element would shift the position of every element after it. Ignore accepts
-// no options at all.
+// On a Map, the empty field is left out of the map. On a DefList or
+// IndefList, an empty omitempty field is left off the end of the list and
+// decodes back as zero. Omitting an empty field that is followed by a
+// present field is an error, because a positional list cannot represent a
+// hole. Ignore accepts no options at all.
 //
 // # Naming and optional fields
 //

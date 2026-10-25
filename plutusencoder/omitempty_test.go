@@ -79,15 +79,105 @@ func TestMapOmitEmptyKeepsNonZeroValues(t *testing.T) {
 	}
 }
 
-func TestOmitEmptyOnListFieldReturnsError(t *testing.T) {
-	type invalidListDatum struct {
-		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
-		Amount int64    `plutusType:"Int,omitempty"`
+type trailingOmitList struct {
+	_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+	Name   string   `plutusType:"StringBytes"`
+	Amount int64    `plutusType:"Int,omitempty"`
+}
+
+func TestListOmitEmptyDropsTrailingZero(t *testing.T) {
+	pd, err := MarshalPlutus(&trailingOmitList{Name: "order"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	constr, ok := pd.(*data.Constr)
+	if !ok || len(constr.Fields) != 1 {
+		t.Fatalf("expected one field, got %#v", pd)
 	}
 
-	_, err := MarshalPlutus(&invalidListDatum{Amount: 0})
+	var decoded trailingOmitList
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Name != "order" || decoded.Amount != 0 {
+		t.Fatalf("unexpected decoded value: %+v", decoded)
+	}
+}
+
+func TestListOmitEmptyKeepsTrailingValue(t *testing.T) {
+	original := trailingOmitList{Name: "order", Amount: 7}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	constr, ok := pd.(*data.Constr)
+	if !ok || len(constr.Fields) != 2 {
+		t.Fatalf("expected two fields, got %#v", pd)
+	}
+	var decoded trailingOmitList
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded != original {
+		t.Fatalf("round trip = %+v, want %+v", decoded, original)
+	}
+}
+
+func TestListOmitEmptyHoleReturnsError(t *testing.T) {
+	type holed struct {
+		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Amount int64    `plutusType:"Int,omitempty"`
+		Name   string   `plutusType:"StringBytes"`
+	}
+	_, err := MarshalPlutus(&holed{Name: "order"})
 	if err == nil {
-		t.Fatal("expected schema-safety error for omitempty on positional list field")
+		t.Fatal("expected error when omitempty would leave a hole")
+	}
+}
+
+func TestIndefListOmitEmptyDropsTrailingZero(t *testing.T) {
+	type trailing struct {
+		_      struct{} `plutusType:"IndefList" plutusConstr:"0"`
+		Name   string   `plutusType:"StringBytes"`
+		Amount int64    `plutusType:"Int,omitempty"`
+	}
+	pd, err := MarshalPlutus(&trailing{Name: "order"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	constr, ok := pd.(*data.Constr)
+	if !ok || len(constr.Fields) != 1 {
+		t.Fatalf("expected one field, got %#v", pd)
+	}
+	var decoded trailing
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Name != "order" || decoded.Amount != 0 {
+		t.Fatalf("unexpected decoded value: %+v", decoded)
+	}
+}
+
+func TestListWithoutOmitEmptyKeepsZeroFields(t *testing.T) {
+	type required struct {
+		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Name   string   `plutusType:"StringBytes"`
+		Amount int64    `plutusType:"Int"`
+	}
+	pd, err := MarshalPlutus(&required{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	constr, ok := pd.(*data.Constr)
+	if !ok || len(constr.Fields) != 2 {
+		t.Fatalf("zero fields must stay on the wire, got %#v", pd)
+	}
+	var decoded required
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Name != "" || decoded.Amount != 0 {
+		t.Fatalf("unexpected decoded value: %+v", decoded)
 	}
 }
 

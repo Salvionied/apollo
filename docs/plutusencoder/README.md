@@ -72,11 +72,15 @@ Unknown types, unknown options, empty or duplicate options, and a malformed
 `plutusType` accepts comma-separated options after the type name. Surrounding
 whitespace is ignored; a repeated option is an error.
 
-`omitempty` drops a field whose value is empty from an encoded **Map**. Empty
-follows `encoding/json` — false, numeric zero, nil pointer or interface, and
-zero-length string, array, slice, or map — and a type may override that with
-`IsZero() bool`. The option is rejected on positional list fields, where
-dropping an element would shift the ones after it.
+`omitempty` drops a field whose value is empty. Empty follows `encoding/json`
+— false, numeric zero, nil pointer or interface, and zero-length string,
+array, slice, or map — and a type may override that with `IsZero() bool`.
+
+On a Map, the field is left out of the map. On a `DefList` or `IndefList`,
+an empty field is left off the end of the list and decodes back as zero.
+Omitting an empty field that still has a present field after it is an error:
+a positional list cannot represent that hole. Put `omitempty` fields last, or
+use `Ignore` when the field must never be encoded.
 
 ## Naming and optional fields
 
