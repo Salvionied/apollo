@@ -61,29 +61,6 @@ func parseFieldTag(raw string) (string, map[string]struct{}, error) {
 	return tag, optionSet, nil
 }
 
-func isIgnoredField(field reflect.StructField) (bool, error) {
-	tag, options, err := parseFieldTag(field.Tag.Get("plutusType"))
-	if err != nil {
-		return false, fmt.Errorf("field %s: %w", field.Name, err)
-	}
-	if tag == "Ignore" {
-		if len(options) > 0 {
-			return false, fmt.Errorf("field %s: Ignore does not accept options", field.Name)
-		}
-		return true, nil
-	}
-	return false, nil
-}
-
-func fieldOmitEmpty(field reflect.StructField) (bool, error) {
-	_, options, err := parseFieldTag(field.Tag.Get("plutusType"))
-	if err != nil {
-		return false, fmt.Errorf("field %s: %w", field.Name, err)
-	}
-	_, omit := options["omitempty"]
-	return omit, nil
-}
-
 // isEmptyField uses Go's established encoding/json empty-value semantics:
 // false, numeric zero, nil pointer/interface, and zero-length strings,
 // arrays, slices, or maps. Types may override this with IsZero.
@@ -261,21 +238,4 @@ func unmarshalPrealloc(n int) int {
 
 func constrTagEqual(tag *big.Int, expected uint64) bool {
 	return tag != nil && tag.IsUint64() && tag.Uint64() == expected
-}
-
-// isOptionalField reports whether a struct field is marked optional via the
-// `plutusOptional:"true"` tag. Optional fields may be absent from an input
-// map and are left at their zero value. Tag values are parsed with
-// strconv.ParseBool; an invalid value is an error rather than being silently
-// treated as required.
-func isOptionalField(field reflect.StructField) (bool, error) {
-	tagVal := field.Tag.Get("plutusOptional")
-	if tagVal == "" {
-		return false, nil
-	}
-	optional, err := strconv.ParseBool(tagVal)
-	if err != nil {
-		return false, fmt.Errorf("invalid plutusOptional tag %q on field %s: %w", tagVal, field.Name, err)
-	}
-	return optional, nil
 }
