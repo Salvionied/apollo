@@ -41,6 +41,7 @@
 //	IndefList    a slice, or a nested struct forced indefinite-length
 //	Map          a native Go map, or a slice of key-value structs
 //	Address      common.Address as a Plutus ledger address
+//	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -73,6 +74,10 @@
 // credentials and stake pointers are supported. Byron addresses and
 // stake-only reward accounts are rejected. Plutus data does not carry a
 // network id, so decoding uses the testnet id.
+//
+// Maybe encodes a pointer as PlutusTx Maybe. Nil is constructor 1 with no
+// fields. A value is constructor 0 around the element, using the Address
+// codec for *common.Address and the struct codec for a pointer to a struct.
 //
 // # Naming and optional fields
 //

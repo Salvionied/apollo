@@ -70,10 +70,12 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 	}
 
 	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference.
-	// Address likewise accepts a non-pointer value.
+	// Maybe and Address likewise accept a nil pointer or a non-pointer value.
 	switch plutusType {
 	case "BigInt":
 		return marshalBigInt(fieldVal)
+	case "Maybe":
+		return marshalMaybe(fieldVal)
 	case "Address":
 		if fieldVal.Kind() == reflect.Pointer {
 			if fieldVal.IsNil() {

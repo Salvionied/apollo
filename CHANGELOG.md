@@ -28,6 +28,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `plutusType:"Address"` encodes `common.Address` as a Plutus ledger address:
   a payment key or script credential, and a stake hash, stake script,
   pointer, or no stake credential. Byron addresses are rejected.
+- `plutusType:"Maybe"` encodes a pointer as PlutusTx `Maybe`: nil is
+  constructor 1, and a value is constructor 0 around the element.
 - Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
   scalar key and value codecs. Entries are sorted by encoded key bytes, so the
   output is deterministic, and duplicate encoded keys are rejected.

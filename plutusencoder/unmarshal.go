@@ -56,11 +56,13 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return fmt.Errorf("field %s: %w", field.Name, err)
 	}
 
-	// BigInt and Address are dispatched before pointer allocation.
-	// Address writes a common.Address value.
+	// BigInt, Maybe, and Address are dispatched before pointer allocation.
+	// Maybe Nothing must stay nil, and Address writes a common.Address value.
 	switch plutusType {
 	case "BigInt":
 		return unmarshalBigInt(pd, fieldVal)
+	case "Maybe":
+		return unmarshalMaybe(pd, fieldVal)
 	case "Address":
 		if fieldVal.Kind() == reflect.Pointer {
 			if fieldVal.IsNil() {

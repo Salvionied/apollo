@@ -2,6 +2,8 @@ package plutusencoder
 
 import (
 	"fmt"
+	"math/big"
+	"reflect"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
@@ -178,4 +180,97 @@ func encodePointer(slot, txIndex, certIndex uint64) []byte {
 	out = append(out, writeVar(txIndex)...)
 	out = append(out, writeVar(certIndex)...)
 	return out
+}
+
+func marshalMaybe(fieldVal reflect.Value) (data.PlutusData, error) {
+	if fieldVal.Kind() != reflect.Pointer {
+		return nil, fmt.Errorf("Maybe requires a pointer, got %s", fieldVal.Kind())
+	}
+	if fieldVal.IsNil() {
+		return data.NewConstr(1), nil
+	}
+	inner, err := marshalMaybeInner(fieldVal.Elem())
+	if err != nil {
+		return nil, err
+	}
+	return data.NewConstr(0, inner), nil
+}
+
+func marshalMaybeInner(elem reflect.Value) (data.PlutusData, error) {
+	if elem.Type() == reflect.TypeOf(common.Address{}) {
+		return marshalAddress(elem.Interface().(common.Address))
+	}
+	if elem.Kind() == reflect.Struct {
+		return marshalValue(elem)
+	}
+	switch elem.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return data.NewInteger(big.NewInt(elem.Int())), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return data.NewInteger(new(big.Int).SetUint64(elem.Uint())), nil
+	case reflect.String:
+		return data.NewByteString([]byte(elem.String())), nil
+	case reflect.Slice:
+		if elem.Type().Elem().Kind() == reflect.Uint8 {
+			return data.NewByteString(elem.Bytes()), nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported Maybe element type %s", elem.Type())
+	}
+	return nil, fmt.Errorf("unsupported Maybe element type %s", elem.Type())
+}
+
+func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
+	if fieldVal.Kind() != reflect.Pointer {
+		return fmt.Errorf("Maybe requires a pointer, got %s", fieldVal.Kind())
+	}
+	constr, ok := pd.(*data.Constr)
+	if !ok {
+		return fmt.Errorf("expected Maybe constructor, got %T", pd)
+	}
+	if constrTagEqual(constr.Tag, 1) {
+		if len(constr.Fields) != 0 {
+			return fmt.Errorf("Nothing must have no fields")
+		}
+		fieldVal.SetZero()
+		return nil
+	}
+	if !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 1 {
+		return fmt.Errorf("expected Just with 1 field")
+	}
+	ptr := reflect.New(fieldVal.Type().Elem())
+	if err := unmarshalMaybeInner(constr.Fields[0], ptr.Elem()); err != nil {
+		return err
+	}
+	fieldVal.Set(ptr)
+	return nil
+}
+
+func unmarshalMaybeInner(pd data.PlutusData, elem reflect.Value) error {
+	if elem.Type() == reflect.TypeOf(common.Address{}) {
+		addr, err := unmarshalAddress(pd)
+		if err != nil {
+			return err
+		}
+		elem.Set(reflect.ValueOf(addr))
+		return nil
+	}
+	if elem.Kind() == reflect.Struct {
+		return unmarshalValue(pd, elem)
+	}
+	switch elem.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return unmarshalInt(pd, elem)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return unmarshalInt(pd, elem)
+	case reflect.String:
+		return unmarshalStringBytes(pd, elem)
+	case reflect.Slice:
+		if elem.Type().Elem().Kind() == reflect.Uint8 {
+			return unmarshalBytes(pd, elem)
+		}
+	default:
+		return fmt.Errorf("unsupported Maybe element type %s", elem.Type())
+	}
+	return fmt.Errorf("unsupported Maybe element type %s", elem.Type())
 }

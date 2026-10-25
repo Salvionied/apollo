@@ -59,6 +59,7 @@ field's shape unless it carries its own `_` marker, which wins.
 | `DefList` / `IndefList` | a slice, or a nested struct forced to that list form |
 | `Map` | a native Go map, or a slice of key-value structs |
 | `Address` | `common.Address` as a Plutus ledger address |
+| `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
 
@@ -89,6 +90,11 @@ credentials may each be a key or a script hash, the stake reference may be a
 pointer, and no stake reference is `Nothing`. Byron addresses and stake-only
 reward accounts are rejected. Plutus data does not carry a network id, so
 decoding uses the testnet id.
+
+`Maybe` encodes a pointer as PlutusTx `Maybe`. Nil is constructor 1 with no
+fields. A value is constructor 0 around the element. `*common.Address` uses
+the address codec, an integer pointer uses `Int`, and a pointer to a struct
+uses that struct's codec.
 
 ## Naming and optional fields
 
