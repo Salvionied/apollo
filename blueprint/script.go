@@ -23,6 +23,7 @@ type ValidatorScript struct {
 	raw           []byte
 	remaining     []Parameter
 	paramsApplied bool
+	program       *syn.Program[syn.DeBruijn]
 }
 
 // AppliedScript holds a parameterized ValidatorScript together with its newly
@@ -74,7 +75,7 @@ func (bp *Blueprint) Script(validatorTitle string) (*ValidatorScript, error) {
 		raw:       raw,
 		remaining: rem,
 	}
-	if _, err := vs.applyData(nil); err != nil {
+	if _, _, err := vs.applyData(nil); err != nil {
 		return nil, err
 	}
 	if err := vs.checkRecordedHashIfPresent(); err != nil {
@@ -131,7 +132,7 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 			return nil, fmt.Errorf("parameter %d: %w", i, err)
 		}
 	}
-	applied, err := vs.applyData(params)
+	applied, program, err := vs.applyData(params)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +145,7 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 		raw:           applied,
 		remaining:     rem,
 		paramsApplied: true,
+		program:       program,
 	}
 	h, err := next.Hash()
 	if err != nil {
@@ -156,59 +158,64 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 	}, nil
 }
 
-func (vs *ValidatorScript) applyData(params []data.PlutusData) ([]byte, error) {
-	switch vs.version {
-	case "v1":
-		s, err := apollo.ApplyParamsToScript(common.PlutusV1Script(vs.raw), params...)
-		return []byte(s), err
-	case "v2":
-		s, err := apollo.ApplyParamsToScript(common.PlutusV2Script(vs.raw), params...)
-		return []byte(s), err
-	case "v3":
-		s, err := apollo.ApplyParamsToScript(common.PlutusV3Script(vs.raw), params...)
-		return []byte(s), err
-	case "v4":
-		return applyRawPlutusParams(vs.raw, params...)
-	default:
-		return nil, fmt.Errorf("unsupported Plutus version %q", vs.version)
+func (vs *ValidatorScript) ensureProgram() (*syn.Program[syn.DeBruijn], error) {
+	if vs.program != nil {
+		return vs.program, nil
 	}
-}
-
-func applyRawPlutusParams(script []byte, params ...data.PlutusData) ([]byte, error) {
 	var inner []byte
-	bytesRead, err := cbor.Decode(script, &inner)
+	bytesRead, err := cbor.Decode(vs.raw, &inner)
 	if err != nil {
 		return nil, fmt.Errorf("decode script CBOR: %w", err)
 	}
-	if bytesRead != len(script) {
-		return nil, fmt.Errorf("decode script CBOR: %d trailing bytes", len(script)-bytesRead)
+	if bytesRead != len(vs.raw) {
+		return nil, fmt.Errorf("decode script CBOR: %d trailing bytes", len(vs.raw)-bytesRead)
 	}
 	program, err := syn.Decode[syn.DeBruijn](inner)
 	if err != nil {
 		return nil, fmt.Errorf("decode script program: %w", err)
 	}
-	if len(params) == 0 {
-		return bytes.Clone(script), nil
+	vs.program = program
+	return program, nil
+}
+
+func (vs *ValidatorScript) applyData(params []data.PlutusData) ([]byte, *syn.Program[syn.DeBruijn], error) {
+	switch vs.version {
+	case "v1", "v2", "v3", "v4":
+	default:
+		return nil, nil, fmt.Errorf("unsupported Plutus version %q", vs.version)
 	}
-	term := program.Term
+	if _, err := vs.ensureProgram(); err != nil {
+		return nil, nil, err
+	}
+	if len(params) == 0 {
+		return bytes.Clone(vs.raw), vs.program, nil
+	}
 	for i, param := range params {
 		if param == nil {
-			return nil, fmt.Errorf("parameter %d is nil", i)
+			return nil, nil, fmt.Errorf("parameter %d is nil", i)
 		}
 		if _, err := data.Encode(param); err != nil {
-			return nil, fmt.Errorf("parameter %d: %w", i, err)
+			return nil, nil, fmt.Errorf("parameter %d: %w", i, err)
 		}
+	}
+	prog := *vs.program
+	term := prog.Term
+	for _, param := range params {
 		term = &syn.Apply[syn.DeBruijn]{
 			Function: term,
 			Argument: &syn.Constant{Con: &syn.Data{Inner: param}},
 		}
 	}
-	program.Term = term
-	flat, err := syn.Encode(program)
+	prog.Term = term
+	flat, err := syn.Encode(&prog)
 	if err != nil {
-		return nil, fmt.Errorf("encode script program: %w", err)
+		return nil, nil, fmt.Errorf("encode script program: %w", err)
 	}
-	return cbor.Encode(flat)
+	wrapped, err := cbor.Encode(flat)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode script CBOR: %w", err)
+	}
+	return wrapped, &prog, nil
 }
 
 // Bytes returns the CBOR-wrapped flat UPLC bytes of the script.

@@ -16,6 +16,7 @@ err = bp.DecodeDatumValue("escrow.spend", datum, &out)
 `Parse` takes raw JSON bytes, `ParseFile` reads a file from disk,
 `ValidatorNames` lists the validator titles in declaration order, and
 `Marshal` / `WriteFile` write a blueprint back to formatted CIP-57 JSON.
+`Clone` returns a deep copy that does not share schema nodes with the original.
 
 ## Parsing and validation
 
@@ -28,7 +29,9 @@ and angle-bracket keys such as `Option<Int>`.
 
 - `preamble.title` or `validators` is missing, or two validators share a title
 - `preamble.plutusVersion` is not `v1`, `v2`, `v3`, or `v4`
-- a `$ref` does not resolve or forms a cycle
+- the document is larger than 16 MiB or contains trailing JSON tokens
+- a `$ref` does not resolve, or aliases cycle without passing through a constructor, list, or map
+- encoded, decoded, or validated data is nested deeper than 64 levels
 - a constructor omits `index` or `fields`
 - a keyword appears on the wrong `dataType` (for example `items` on `integer`)
 - `purpose` is not one of `spend`, `mint`, `withdraw`, `publish`, `vote`,
@@ -45,8 +48,9 @@ and angle-bracket keys such as `Option<Int>`.
 - `DecodeOutputDatum(validatorTitle, output, dst)` decodes the inline datum on
   a `common.TransactionOutput` against the validator's datum schema.
 - `DatumHash(validatorTitle, v)` and `DatumHashHex(validatorTitle, v)` return
-  the 32-byte Blake2b-256 hash of the encoded datum for `PayToContractAsHash`
-  and datum-hash UTxO lookups.
+  the 32-byte Blake2b-256 hash of the datum's canonical witness CBOR.
+  `EncodeDatumValue` and `EncodeRedeemerValue` record those bytes, so
+  `datum.Hash()` agrees with `DatumHash`.
 - `EncodeDefinition` / `DecodeDefinition` and `EncodeParameter` /
   `DecodeParameter` encode and decode named `definitions` entries and
   individual validator parameters.

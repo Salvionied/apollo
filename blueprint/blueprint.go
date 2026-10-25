@@ -5,9 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"strings"
+)
+
+const (
+	// MaxBlueprintBytes is the largest plutus.json document Parse and
+	// ParseFile will accept.
+	MaxBlueprintBytes = 16 << 20
+
+	// maxDataDepth is the deepest Plutus data tree encode, decode, and
+	// validation will walk. Guarded recursive schemas are legal; a value
+	// nested past this limit is rejected instead of overflowing the stack.
+	maxDataDepth = 64
 )
 
 // Blueprint is a parsed and validated CIP-57 Plutus contract blueprint.
@@ -218,14 +230,26 @@ type Schema struct {
 	Enum        []string   `json:"enum,omitempty"`
 	Minimum     *big.Int   `json:"minimum,omitempty"`
 	Maximum     *big.Int   `json:"maximum,omitempty"`
+
+	// resolved is the definition this $ref names. Parse fills it so later
+	// encode, decode, and validation steps follow the pointer directly.
+	resolved *Schema `json:"-"`
 }
 
 // Parse decodes and validates a CIP-57 blueprint JSON document.
+// Documents larger than MaxBlueprintBytes, and documents with trailing
+// non-whitespace tokens, are rejected.
 func Parse(raw []byte) (*Blueprint, error) {
+	if len(raw) > MaxBlueprintBytes {
+		return nil, fmt.Errorf("blueprint exceeds %d bytes", MaxBlueprintBytes)
+	}
 	var bp Blueprint
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&bp); err != nil {
 		return nil, fmt.Errorf("parse blueprint json: %w", err)
+	}
+	if err := rejectTrailingJSON(dec); err != nil {
+		return nil, err
 	}
 	if err := bp.validate(); err != nil {
 		return nil, err
@@ -234,12 +258,36 @@ func Parse(raw []byte) (*Blueprint, error) {
 }
 
 // ParseFile reads a CIP-57 blueprint JSON file from path and validates it.
+// The file must be at most MaxBlueprintBytes long.
 func ParseFile(path string) (*Blueprint, error) {
-	raw, err := os.ReadFile(path) //nolint:gosec // caller-supplied blueprint file path
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > MaxBlueprintBytes {
+		return nil, fmt.Errorf("blueprint exceeds %d bytes", MaxBlueprintBytes)
+	}
+	f, err := os.Open(path) //nolint:gosec // caller-supplied blueprint file path
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, MaxBlueprintBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	return Parse(raw)
+}
+
+func rejectTrailingJSON(dec *json.Decoder) error {
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("blueprint json has trailing tokens")
+		}
+		return fmt.Errorf("blueprint json has trailing tokens: %w", err)
+	}
+	return nil
 }
 
 // ValidatorNames returns the validator titles in declaration order.
@@ -283,14 +331,7 @@ func (bp *Blueprint) ApplyValidatorParams(validatorTitle string, params ...any) 
 	if err != nil {
 		return nil, err
 	}
-	raw, err := bp.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	cloned, err := Parse(raw)
-	if err != nil {
-		return nil, err
-	}
+	cloned := bp.Clone()
 	for i := range cloned.Validators {
 		if cloned.Validators[i].Title == validatorTitle {
 			cloned.Validators[i].CompiledCode = applied.Script.CborHex()
@@ -371,7 +412,11 @@ func (bp *Blueprint) validate() error {
 		if def == nil {
 			return fmt.Errorf("definitions/%s: schema is null", name)
 		}
-		if err := bp.validateSchema(def, "definitions/"+name, make(map[string]bool)); err != nil {
+		// Seed both sets with this definition so an alias that $refs itself,
+		// directly or through other aliases, is an unguarded cycle.
+		stack := map[string]bool{name: true}
+		sinceGuard := map[string]bool{name: true}
+		if err := bp.validateSchema(def, "definitions/"+name, sinceGuard, stack); err != nil {
 			return err
 		}
 	}
@@ -392,7 +437,7 @@ func (bp *Blueprint) validate() error {
 			if err := validatePurposes(v.Datum.Purpose.list(), loc+"/datum"); err != nil {
 				return err
 			}
-			if err := bp.validateSchema(&v.Datum.Schema, loc+"/datum", make(map[string]bool)); err != nil {
+			if err := bp.validateSchema(&v.Datum.Schema, loc+"/datum", map[string]bool{}, map[string]bool{}); err != nil {
 				return err
 			}
 		}
@@ -404,7 +449,7 @@ func (bp *Blueprint) validate() error {
 			if err := validatePurposes(v.Parameters[pIdx].Purpose.list(), pLoc); err != nil {
 				return err
 			}
-			if err := bp.validateSchema(&v.Parameters[pIdx].Schema, pLoc, make(map[string]bool)); err != nil {
+			if err := bp.validateSchema(&v.Parameters[pIdx].Schema, pLoc, map[string]bool{}, map[string]bool{}); err != nil {
 				return err
 			}
 		}
@@ -420,7 +465,7 @@ func (bp *Blueprint) validateRedeemer(spec *ArgumentSpec, loc string) error {
 		if err := validatePurposes(spec.Single.Purpose.list(), loc); err != nil {
 			return err
 		}
-		return bp.validateSchema(&spec.Single.Schema, loc, make(map[string]bool))
+		return bp.validateSchema(&spec.Single.Schema, loc, map[string]bool{}, map[string]bool{})
 	}
 	seenPurposes := make(map[string]struct{})
 	for i := range spec.OneOf {
@@ -438,7 +483,7 @@ func (bp *Blueprint) validateRedeemer(spec *ArgumentSpec, loc string) error {
 			}
 			seenPurposes[p] = struct{}{}
 		}
-		if err := bp.validateSchema(&arg.Schema, itemLoc, make(map[string]bool)); err != nil {
+		if err := bp.validateSchema(&arg.Schema, itemLoc, map[string]bool{}, map[string]bool{}); err != nil {
 			return err
 		}
 	}
@@ -479,7 +524,7 @@ func (bp *Blueprint) resolveRef(ref string) (string, *Schema, error) {
 	return key, target, nil
 }
 
-func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]bool) error {
+func (bp *Blueprint) validateSchema(s *Schema, loc string, sinceGuard, stack map[string]bool) error {
 	if s == nil {
 		return fmt.Errorf("%s: schema is null", loc)
 	}
@@ -491,12 +536,20 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 		if err != nil {
 			return fmt.Errorf("%s: %w", loc, err)
 		}
-		if visiting[key] {
+		s.resolved = target
+		if sinceGuard[key] {
 			return fmt.Errorf("%s: $ref cycle involving %q", loc, key)
 		}
-		visiting[key] = true
-		err = bp.validateSchema(target, "definitions/"+key, visiting)
-		delete(visiting, key)
+		if stack[key] {
+			// The cycle crosses a constructor, list, or map, which is a
+			// guarded recursive datum such as a linked list or a tree.
+			return nil
+		}
+		sinceGuard[key] = true
+		stack[key] = true
+		err = bp.validateSchema(target, "definitions/"+key, sinceGuard, stack)
+		delete(sinceGuard, key)
+		delete(stack, key)
 		return err
 	}
 
@@ -510,7 +563,7 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 			if variant == nil || variant.DataType != "constructor" {
 				return fmt.Errorf("%s: anyOf variants must have dataType constructor", vLoc)
 			}
-			if err := bp.validateSchema(variant, vLoc, visiting); err != nil {
+			if err := bp.validateSchema(variant, vLoc, sinceGuard, stack); err != nil {
 				return err
 			}
 			if _, dup := seenIndexes[*variant.Index]; dup {
@@ -567,10 +620,10 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 			return err
 		}
 		if s.Items.Single != nil {
-			return bp.validateSchema(s.Items.Single, loc+"/items", visiting)
+			return bp.validateSchema(s.Items.Single, loc+"/items", map[string]bool{}, stack)
 		}
 		for i, elem := range s.Items.Tuple {
-			if err := bp.validateSchema(elem, fmt.Sprintf("%s/items[%d]", loc, i), visiting); err != nil {
+			if err := bp.validateSchema(elem, fmt.Sprintf("%s/items[%d]", loc, i), map[string]bool{}, stack); err != nil {
 				return err
 			}
 		}
@@ -585,10 +638,10 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 		if err := validateItemBounds(s.MinItems, s.MaxItems, loc); err != nil {
 			return err
 		}
-		if err := bp.validateSchema(s.Keys, loc+"/keys", visiting); err != nil {
+		if err := bp.validateSchema(s.Keys, loc+"/keys", map[string]bool{}, stack); err != nil {
 			return err
 		}
-		return bp.validateSchema(s.Values, loc+"/values", visiting)
+		return bp.validateSchema(s.Values, loc+"/values", map[string]bool{}, stack)
 	case "constructor":
 		if err := rejectKeywordsFor(s, loc, "constructor"); err != nil {
 			return err
@@ -600,7 +653,7 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, visiting map[string]b
 			return fmt.Errorf("%s: constructor schema requires fields", loc)
 		}
 		for i, f := range s.Fields {
-			if err := bp.validateSchema(f, fmt.Sprintf("%s/fields[%d]", loc, i), visiting); err != nil {
+			if err := bp.validateSchema(f, fmt.Sprintf("%s/fields[%d]", loc, i), map[string]bool{}, stack); err != nil {
 				return err
 			}
 		}

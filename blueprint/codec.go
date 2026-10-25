@@ -10,16 +10,79 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Salvionied/apollo/v2"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
+
+const maxContainerPrealloc = 1024
+
+func checkDataDepth(depth int, loc string) error {
+	if depth > maxDataDepth {
+		return fmt.Errorf("%s: plutus data exceeds maximum depth %d", loc, maxDataDepth)
+	}
+	return nil
+}
+
+func containerCap(n int) int {
+	if n < 0 {
+		return 0
+	}
+	if n > maxContainerPrealloc {
+		return maxContainerPrealloc
+	}
+	return n
+}
+
+func clonePlutusData(pd data.PlutusData) data.PlutusData {
+	if pd == nil {
+		return nil
+	}
+	return pd.Clone()
+}
+
+// plutusIdentity is a stable equality key. Integers and byte strings skip
+// CBOR encoding; every other term uses its canonical encoding.
+func plutusIdentity(pd data.PlutusData) (string, error) {
+	switch v := pd.(type) {
+	case *data.ByteString:
+		if v == nil {
+			return "", errors.New("nil byte string")
+		}
+		return "b:" + string(v.Inner), nil
+	case *data.Integer:
+		if v == nil || v.Inner == nil {
+			return "", errors.New("nil integer")
+		}
+		return "i:" + v.Inner.String(), nil
+	default:
+		raw, err := data.Encode(pd)
+		if err != nil {
+			return "", err
+		}
+		return "c:" + string(raw), nil
+	}
+}
+
+// rememberPlutus records pd in seen. fresh is false when pd was already present.
+func rememberPlutus(seen map[string]struct{}, pd data.PlutusData) (fresh bool, err error) {
+	key, err := plutusIdentity(pd)
+	if err != nil {
+		return false, err
+	}
+	if _, exists := seen[key]; exists {
+		return false, nil
+	}
+	seen[key] = struct{}{}
+	return true, nil
+}
 
 // Encode encodes a Go value into PlutusData according to a schema from bp.
 func (bp *Blueprint) Encode(schema *Schema, v any) (data.PlutusData, error) {
 	if schema == nil {
 		return nil, errors.New("schema is nil")
 	}
-	return bp.encodeValue(schema, reflect.ValueOf(v), rootName(schema))
+	return bp.encodeValue(schema, reflect.ValueOf(v), rootName(schema), 0)
 }
 
 // Decode decodes PlutusData into dst (a non-nil pointer) according to a schema
@@ -32,7 +95,7 @@ func (bp *Blueprint) Decode(schema *Schema, pd data.PlutusData, dst any) error {
 	if val.Kind() != reflect.Pointer || val.IsNil() {
 		return errors.New("decode requires a non-nil pointer")
 	}
-	return bp.decodeValue(schema, pd, val.Elem(), rootName(schema))
+	return bp.decodeValue(schema, pd, val.Elem(), rootName(schema), 0)
 }
 
 // EncodeDatum encodes v against the named validator's datum schema.
@@ -94,7 +157,11 @@ func (bp *Blueprint) EncodeDatumValue(validatorTitle string, v any) (*common.Dat
 	if err != nil {
 		return nil, err
 	}
-	return &common.Datum{Data: pd}, nil
+	datum := &common.Datum{Data: pd}
+	if _, err := apollo.DatumWireCbor(datum); err != nil {
+		return nil, err
+	}
+	return datum, nil
 }
 
 // DecodeDatumValue decodes d into dst against the named validator's datum
@@ -113,7 +180,11 @@ func (bp *Blueprint) EncodeRedeemerValue(validatorTitle, purpose string, v any) 
 	if err != nil {
 		return nil, err
 	}
-	return &common.Datum{Data: pd}, nil
+	datum := &common.Datum{Data: pd}
+	if _, err := apollo.DatumWireCbor(datum); err != nil {
+		return nil, err
+	}
+	return datum, nil
 }
 
 // DecodeRedeemerValue decodes d into dst against the named validator's
@@ -145,11 +216,7 @@ func (bp *Blueprint) DatumHash(validatorTitle string, v any) (common.Blake2b256,
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	raw, err := data.Encode(d.Data)
-	if err != nil {
-		return common.Blake2b256{}, err
-	}
-	return common.Blake2b256Hash(raw), nil
+	return apollo.DatumHash(d)
 }
 
 // DatumHashHex encodes v against the named validator's datum schema and
@@ -213,7 +280,7 @@ func (bp *Blueprint) ValidateData(schema *Schema, pd data.PlutusData) error {
 	if schema == nil {
 		return errors.New("schema is nil")
 	}
-	return bp.validatePlutusData(schema, pd, rootName(schema))
+	return bp.validatePlutusData(schema, pd, rootName(schema), 0)
 }
 
 // ValidateDatum checks that pd conforms to the named validator's datum schema.
@@ -242,7 +309,10 @@ func (bp *Blueprint) ValidateRedeemer(validatorTitle, purpose string, pd data.Pl
 	return bp.ValidateData(s, pd)
 }
 
-func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc string) error {
+func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc string, depth int) error {
+	if err := checkDataDepth(depth, loc); err != nil {
+		return err
+	}
 	if pd == nil {
 		return fmt.Errorf("%s: nil PlutusData", loc)
 	}
@@ -263,7 +333,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		tag := constr.Tag.Uint64()
 		for _, v := range s.AnyOf {
 			if *v.Index == tag {
-				return bp.validatePlutusConstructor(v, constr, loc+"/"+v.Title)
+				return bp.validatePlutusConstructor(v, constr, loc+"/"+v.Title, depth)
 			}
 		}
 		return fmt.Errorf("%s: constructor index %d is not in anyOf schema", loc, tag)
@@ -293,29 +363,26 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if s.Items.Tuple != nil && len(list.Items) != len(s.Items.Tuple) {
 			return fmt.Errorf("%s: tuple expects %d elements, got %d", loc, len(s.Items.Tuple), len(list.Items))
 		}
-		var seen [][]byte
+		var seen map[string]struct{}
 		if s.UniqueItems {
-			seen = make([][]byte, 0, len(list.Items))
+			seen = make(map[string]struct{}, containerCap(len(list.Items)))
 		}
 		for i, item := range list.Items {
 			elemSchema := s.Items.Single
 			if s.Items.Tuple != nil {
 				elemSchema = s.Items.Tuple[i]
 			}
-			if err := bp.validatePlutusData(elemSchema, item, fmt.Sprintf("%s[%d]", loc, i)); err != nil {
+			if err := bp.validatePlutusData(elemSchema, item, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 				return err
 			}
 			if s.UniqueItems {
-				raw, err := data.Encode(item)
+				fresh, err := rememberPlutus(seen, item)
 				if err != nil {
 					return err
 				}
-				for _, prev := range seen {
-					if bytes.Equal(prev, raw) {
-						return fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
-					}
+				if !fresh {
+					return fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
 				}
-				seen = append(seen, raw)
 			}
 		}
 		return nil
@@ -327,22 +394,19 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if err := checkCountBounds(s.MinItems, s.MaxItems, len(m.Pairs), loc); err != nil {
 			return err
 		}
-		seenKeys := make([][]byte, 0, len(m.Pairs))
+		seenKeys := make(map[string]struct{}, containerCap(len(m.Pairs)))
 		for i, pair := range m.Pairs {
-			rawKey, err := data.Encode(pair[0])
+			fresh, err := rememberPlutus(seenKeys, pair[0])
 			if err != nil {
 				return err
 			}
-			for _, prev := range seenKeys {
-				if bytes.Equal(prev, rawKey) {
-					return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
-				}
+			if !fresh {
+				return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
 			}
-			seenKeys = append(seenKeys, rawKey)
-			if err := bp.validatePlutusData(s.Keys, pair[0], fmt.Sprintf("%s[%d]/key", loc, i)); err != nil {
+			if err := bp.validatePlutusData(s.Keys, pair[0], fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 				return err
 			}
-			if err := bp.validatePlutusData(s.Values, pair[1], fmt.Sprintf("%s[%d]/value", loc, i)); err != nil {
+			if err := bp.validatePlutusData(s.Values, pair[1], fmt.Sprintf("%s[%d]/value", loc, i), depth+1); err != nil {
 				return err
 			}
 		}
@@ -352,7 +416,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if !ok {
 			return fmt.Errorf("%s: expected Constr, got %T", loc, pd)
 		}
-		return bp.validatePlutusConstructor(s, constr, loc)
+		return bp.validatePlutusConstructor(s, constr, loc, depth)
 	case "value":
 		v, ok := pd.(*data.Value)
 		if !ok || v == nil {
@@ -364,7 +428,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 	}
 }
 
-func (bp *Blueprint) validatePlutusConstructor(s *Schema, constr *data.Constr, loc string) error {
+func (bp *Blueprint) validatePlutusConstructor(s *Schema, constr *data.Constr, loc string, depth int) error {
 	if constr.Tag == nil || !constr.Tag.IsUint64() || constr.Tag.Uint64() != *s.Index {
 		return fmt.Errorf("%s: constructor index %v does not match schema index %d", loc, constr.Tag, *s.Index)
 	}
@@ -372,7 +436,7 @@ func (bp *Blueprint) validatePlutusConstructor(s *Schema, constr *data.Constr, l
 		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, len(constr.Fields), len(s.Fields))
 	}
 	for i, fieldSchema := range s.Fields {
-		if err := bp.validatePlutusData(fieldSchema, constr.Fields[i], fmt.Sprintf("%s.%s", loc, fieldLabel(fieldSchema, i))); err != nil {
+		if err := bp.validatePlutusData(fieldSchema, constr.Fields[i], fmt.Sprintf("%s.%s", loc, fieldLabel(fieldSchema, i)), depth+1); err != nil {
 			return err
 		}
 	}
@@ -390,23 +454,34 @@ func rootName(s *Schema) string {
 }
 
 func (bp *Blueprint) deref(s *Schema) (*Schema, error) {
+	if s == nil {
+		return nil, errors.New("schema is nil")
+	}
 	cur := s
-	seen := make(map[string]bool)
-	for cur.Ref != "" {
-		key, target, err := bp.resolveRef(cur.Ref)
-		if err != nil {
-			return nil, err
+	for hops := 0; cur.Ref != ""; hops++ {
+		if hops > maxDataDepth {
+			return nil, fmt.Errorf("$ref cycle involving %q", cur.Ref)
 		}
-		if seen[key] {
-			return nil, fmt.Errorf("$ref cycle involving %q", key)
+		if cur.resolved == nil {
+			_, target, err := bp.resolveRef(cur.Ref)
+			if err != nil {
+				return nil, err
+			}
+			cur.resolved = target
 		}
-		seen[key] = true
-		cur = target
+		next := cur.resolved
+		if next == nil {
+			return nil, fmt.Errorf("unresolved $ref %q", cur.Ref)
+		}
+		cur = next
 	}
 	return cur, nil
 }
 
-func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string) (data.PlutusData, error) {
+func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string, depth int) (data.PlutusData, error) {
+	if err := checkDataDepth(depth, loc); err != nil {
+		return nil, err
+	}
 	resolved, err := bp.deref(s)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", loc, err)
@@ -436,7 +511,7 @@ func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string) (data
 	}
 
 	if len(s.AnyOf) > 0 {
-		return bp.encodeAnyOf(s, val, loc)
+		return bp.encodeAnyOf(s, val, loc, depth)
 	}
 
 	switch s.DataType {
@@ -449,11 +524,11 @@ func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string) (data
 	case "bytes":
 		return encodeBytes(s, val, loc)
 	case "list":
-		return bp.encodeList(s, val, loc)
+		return bp.encodeList(s, val, loc, depth)
 	case "map":
-		return bp.encodeMap(s, val, loc)
+		return bp.encodeMap(s, val, loc, depth)
 	case "constructor":
-		return bp.encodeConstructor(s, val, loc)
+		return bp.encodeConstructor(s, val, loc, depth)
 	case "value":
 		return encodeV4Value(val, loc)
 	default:
@@ -467,7 +542,7 @@ func encodeV4Value(val reflect.Value, loc string) (data.PlutusData, error) {
 		if err := v.Validate(); err != nil {
 			return nil, fmt.Errorf("%s: %w", loc, err)
 		}
-		return &v, nil
+		return v.Clone(), nil
 	}
 	if val.Type() == reflect.TypeOf((*data.Value)(nil)) {
 		v := val.Interface().(*data.Value)
@@ -477,7 +552,7 @@ func encodeV4Value(val reflect.Value, loc string) (data.PlutusData, error) {
 		if err := v.Validate(); err != nil {
 			return nil, fmt.Errorf("%s: %w", loc, err)
 		}
-		return v, nil
+		return v.Clone(), nil
 	}
 	return nil, fmt.Errorf("%s: value schema requires *data.Value or data.Value, got %s", loc, val.Type())
 }
@@ -490,12 +565,16 @@ func decodeV4Value(pd data.PlutusData, dst reflect.Value, loc string) error {
 	if err := v.Validate(); err != nil {
 		return fmt.Errorf("%s: %w", loc, err)
 	}
+	cloned, ok := v.Clone().(*data.Value)
+	if !ok || cloned == nil {
+		return fmt.Errorf("%s: expected *data.Value, got %T", loc, pd)
+	}
 	if dst.Type() == reflect.TypeOf(data.Value{}) {
-		dst.Set(reflect.ValueOf(*v))
+		dst.Set(reflect.ValueOf(*cloned))
 		return nil
 	}
 	if dst.Type() == reflect.TypeOf((*data.Value)(nil)).Elem() || dst.Type().Implements(reflect.TypeOf((*data.PlutusData)(nil)).Elem()) {
-		dst.Set(reflect.ValueOf(v))
+		dst.Set(reflect.ValueOf(cloned))
 		return nil
 	}
 	return fmt.Errorf("%s: cannot decode V4 Value into %s", loc, dst.Type())
@@ -510,12 +589,12 @@ func encodeOpaqueData(val reflect.Value, loc string) (data.PlutusData, error) {
 			return nil, fmt.Errorf("%s: nil PlutusData", loc)
 		}
 		if pd, ok := val.Interface().(data.PlutusData); ok {
-			return pd, nil
+			return clonePlutusData(pd), nil
 		}
 		val = val.Elem()
 	}
 	if pd, ok := val.Interface().(data.PlutusData); ok {
-		return pd, nil
+		return clonePlutusData(pd), nil
 	}
 	return nil, fmt.Errorf("%s: opaque Data schema requires data.PlutusData, got %s", loc, val.Type())
 }
@@ -606,7 +685,7 @@ func checkBytesBounds(s *Schema, raw []byte, loc string) error {
 	return nil
 }
 
-func (bp *Blueprint) encodeList(s *Schema, val reflect.Value, loc string) (data.PlutusData, error) {
+func (bp *Blueprint) encodeList(s *Schema, val reflect.Value, loc string, depth int) (data.PlutusData, error) {
 	if s.Items.Tuple != nil && val.Kind() == reflect.Struct {
 		fields := exportedFields(val)
 		if len(fields) != len(s.Items.Tuple) {
@@ -614,7 +693,7 @@ func (bp *Blueprint) encodeList(s *Schema, val reflect.Value, loc string) (data.
 		}
 		items := make([]data.PlutusData, len(fields))
 		for i, f := range fields {
-			pd, err := bp.encodeValue(s.Items.Tuple[i], f.val, fmt.Sprintf("%s[%d]", loc, i))
+			pd, err := bp.encodeValue(s.Items.Tuple[i], f.val, fmt.Sprintf("%s[%d]", loc, i), depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -635,30 +714,27 @@ func (bp *Blueprint) encodeList(s *Schema, val reflect.Value, loc string) (data.
 	}
 
 	items := make([]data.PlutusData, n)
-	var seenBytes [][]byte
+	var seen map[string]struct{}
 	if s.UniqueItems {
-		seenBytes = make([][]byte, 0, n)
+		seen = make(map[string]struct{}, containerCap(n))
 	}
 	for i := 0; i < n; i++ {
 		elemSchema := s.Items.Single
 		if s.Items.Tuple != nil {
 			elemSchema = s.Items.Tuple[i]
 		}
-		pd, err := bp.encodeValue(elemSchema, val.Index(i), fmt.Sprintf("%s[%d]", loc, i))
+		pd, err := bp.encodeValue(elemSchema, val.Index(i), fmt.Sprintf("%s[%d]", loc, i), depth+1)
 		if err != nil {
 			return nil, err
 		}
 		if s.UniqueItems {
-			raw, err := data.Encode(pd)
+			fresh, err := rememberPlutus(seen, pd)
 			if err != nil {
 				return nil, err
 			}
-			for _, prev := range seenBytes {
-				if bytes.Equal(prev, raw) {
-					return nil, fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
-				}
+			if !fresh {
+				return nil, fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
 			}
-			seenBytes = append(seenBytes, raw)
 		}
 		items[i] = pd
 	}
@@ -680,7 +756,7 @@ type encodedMapEntry struct {
 	pair     [2]data.PlutusData
 }
 
-func (bp *Blueprint) encodeMap(s *Schema, val reflect.Value, loc string) (data.PlutusData, error) {
+func (bp *Blueprint) encodeMap(s *Schema, val reflect.Value, loc string, depth int) (data.PlutusData, error) {
 	if val.Kind() != reflect.Map {
 		return nil, fmt.Errorf("%s: expected Go map, got %s", loc, val.Type())
 	}
@@ -692,11 +768,11 @@ func (bp *Blueprint) encodeMap(s *Schema, val reflect.Value, loc string) (data.P
 	entries := make([]encodedMapEntry, 0, n)
 	iter := val.MapRange()
 	for iter.Next() {
-		kPd, err := bp.encodeValue(s.Keys, iter.Key(), loc+"/key")
+		kPd, err := bp.encodeValue(s.Keys, iter.Key(), loc+"/key", depth+1)
 		if err != nil {
 			return nil, err
 		}
-		vPd, err := bp.encodeValue(s.Values, iter.Value(), loc+"/value")
+		vPd, err := bp.encodeValue(s.Values, iter.Value(), loc+"/value", depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -745,7 +821,7 @@ func normalizeName(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, "_", ""))
 }
 
-func (bp *Blueprint) encodeConstructor(s *Schema, val reflect.Value, loc string) (data.PlutusData, error) {
+func (bp *Blueprint) encodeConstructor(s *Schema, val reflect.Value, loc string, depth int) (data.PlutusData, error) {
 	if len(s.Fields) == 0 {
 		if val.Kind() == reflect.Struct && len(exportedFields(val)) == 0 {
 			return data.NewConstr(*s.Index), nil
@@ -754,7 +830,7 @@ func (bp *Blueprint) encodeConstructor(s *Schema, val reflect.Value, loc string)
 	}
 
 	if len(s.Fields) == 1 && shouldUnwrapSingleField(s.Fields[0], val.Type()) {
-		pd, err := bp.encodeValue(s.Fields[0], val, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)))
+		pd, err := bp.encodeValue(s.Fields[0], val, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)), depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -775,7 +851,7 @@ func (bp *Blueprint) encodeConstructor(s *Schema, val reflect.Value, loc string)
 		if schemaField.Title != "" && !fieldMatchesTitle(goField.meta, schemaField.Title) {
 			return nil, fmt.Errorf("%s: field %d is %q in Go struct but %q in blueprint schema", loc, i, goField.meta.Name, schemaField.Title)
 		}
-		pd, err := bp.encodeValue(schemaField, goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i)))
+		pd, err := bp.encodeValue(schemaField, goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i)), depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -819,9 +895,9 @@ func shouldUnwrapSingleField(fieldSchema *Schema, goType reflect.Type) bool {
 	return true
 }
 
-func (bp *Blueprint) encodeAnyOf(s *Schema, val reflect.Value, loc string) (data.PlutusData, error) {
+func (bp *Blueprint) encodeAnyOf(s *Schema, val reflect.Value, loc string, depth int) (data.PlutusData, error) {
 	if len(s.AnyOf) == 1 {
-		return bp.encodeConstructor(s.AnyOf[0], val, loc)
+		return bp.encodeConstructor(s.AnyOf[0], val, loc, depth)
 	}
 	if isBooleanAnyOf(s.AnyOf) && val.Kind() == reflect.Bool {
 		if val.Bool() {
@@ -856,7 +932,7 @@ func (bp *Blueprint) encodeAnyOf(s *Schema, val reflect.Value, loc string) (data
 	if chosen == nil {
 		return nil, fmt.Errorf("%s: no anyOf variant is set", loc)
 	}
-	return bp.encodeConstructor(chosen, chosenVal, loc+"/"+chosen.Title)
+	return bp.encodeConstructor(chosen, chosenVal, loc+"/"+chosen.Title, depth)
 }
 
 func isBooleanAnyOf(variants []*Schema) bool {
@@ -887,7 +963,10 @@ func findVariant(variants []*Schema, f reflect.StructField) *Schema {
 	return nil
 }
 
-func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) error {
+func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Value, loc string, depth int) error {
+	if err := checkDataDepth(depth, loc); err != nil {
+		return err
+	}
 	resolved, err := bp.deref(s)
 	if err != nil {
 		return fmt.Errorf("%s: %w", loc, err)
@@ -899,7 +978,7 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 			return fmt.Errorf("%s: nil PlutusData", loc)
 		}
 		if dst.Type() == reflect.TypeOf((*data.PlutusData)(nil)).Elem() || dst.Type().Implements(reflect.TypeOf((*data.PlutusData)(nil)).Elem()) {
-			dst.Set(reflect.ValueOf(pd))
+			dst.Set(reflect.ValueOf(clonePlutusData(pd)))
 			return nil
 		}
 		return fmt.Errorf("%s: opaque Data target must be data.PlutusData, got %s", loc, dst.Type())
@@ -922,7 +1001,7 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 	}
 
 	if len(s.AnyOf) > 0 {
-		return bp.decodeAnyOf(s, pd, dst, loc)
+		return bp.decodeAnyOf(s, pd, dst, loc, depth)
 	}
 
 	switch s.DataType {
@@ -935,11 +1014,11 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 	case "bytes":
 		return decodeBytes(s, pd, dst, loc)
 	case "list":
-		return bp.decodeList(s, pd, dst, loc)
+		return bp.decodeList(s, pd, dst, loc, depth)
 	case "map":
-		return bp.decodeMap(s, pd, dst, loc)
+		return bp.decodeMap(s, pd, dst, loc, depth)
 	case "constructor":
-		return bp.decodeConstructor(s, pd, dst, loc)
+		return bp.decodeConstructor(s, pd, dst, loc, depth)
 	case "value":
 		return decodeV4Value(pd, dst, loc)
 	default:
@@ -1004,7 +1083,7 @@ func decodeBytes(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) e
 	}
 }
 
-func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) error {
+func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value, loc string, depth int) error {
 	list, ok := pd.(*data.List)
 	if !ok {
 		return fmt.Errorf("%s: expected List, got %T", loc, pd)
@@ -1014,18 +1093,15 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 		return err
 	}
 	if s.UniqueItems {
-		seen := make([][]byte, 0, n)
+		seen := make(map[string]struct{}, containerCap(n))
 		for i, item := range list.Items {
-			raw, err := data.Encode(item)
+			fresh, err := rememberPlutus(seen, item)
 			if err != nil {
 				return err
 			}
-			for _, prev := range seen {
-				if bytes.Equal(prev, raw) {
-					return fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
-				}
+			if !fresh {
+				return fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
 			}
-			seen = append(seen, raw)
 		}
 	}
 
@@ -1039,7 +1115,7 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 				return fmt.Errorf("%s: tuple expects %d fields, struct has %d", loc, len(s.Items.Tuple), len(fields))
 			}
 			for i, f := range fields {
-				if err := bp.decodeValue(s.Items.Tuple[i], list.Items[i], f.val, fmt.Sprintf("%s[%d]", loc, i)); err != nil {
+				if err := bp.decodeValue(s.Items.Tuple[i], list.Items[i], f.val, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 					return err
 				}
 			}
@@ -1050,21 +1126,24 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 	if dst.Kind() != reflect.Slice {
 		return fmt.Errorf("%s: expected slice target for list, got %s", loc, dst.Type())
 	}
-	slice := reflect.MakeSlice(dst.Type(), n, n)
+	slice := reflect.MakeSlice(dst.Type(), 0, containerCap(n))
+	elemType := dst.Type().Elem()
 	for i := 0; i < n; i++ {
 		elemSchema := s.Items.Single
 		if s.Items.Tuple != nil {
 			elemSchema = s.Items.Tuple[i]
 		}
-		if err := bp.decodeValue(elemSchema, list.Items[i], slice.Index(i), fmt.Sprintf("%s[%d]", loc, i)); err != nil {
+		elem := reflect.New(elemType).Elem()
+		if err := bp.decodeValue(elemSchema, list.Items[i], elem, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 			return err
 		}
+		slice = reflect.Append(slice, elem)
 	}
 	dst.Set(slice)
 	return nil
 }
 
-func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) error {
+func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value, loc string, depth int) error {
 	m, ok := pd.(*data.Map)
 	if !ok {
 		return fmt.Errorf("%s: expected Map, got %T", loc, pd)
@@ -1077,26 +1156,23 @@ func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value,
 		return err
 	}
 
-	out := reflect.MakeMapWithSize(dst.Type(), n)
-	seenKeys := make([][]byte, 0, n)
+	out := reflect.MakeMapWithSize(dst.Type(), containerCap(n))
+	seenKeys := make(map[string]struct{}, containerCap(n))
 	for i, pair := range m.Pairs {
-		rawKey, err := data.Encode(pair[0])
+		fresh, err := rememberPlutus(seenKeys, pair[0])
 		if err != nil {
 			return err
 		}
-		for _, prev := range seenKeys {
-			if bytes.Equal(prev, rawKey) {
-				return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
-			}
+		if !fresh {
+			return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
 		}
-		seenKeys = append(seenKeys, rawKey)
 
 		kVal := reflect.New(dst.Type().Key()).Elem()
-		if err := bp.decodeValue(s.Keys, pair[0], kVal, fmt.Sprintf("%s[%d]/key", loc, i)); err != nil {
+		if err := bp.decodeValue(s.Keys, pair[0], kVal, fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 			return err
 		}
 		vVal := reflect.New(dst.Type().Elem()).Elem()
-		if err := bp.decodeValue(s.Values, pair[1], vVal, fmt.Sprintf("%s[%d]/value", loc, i)); err != nil {
+		if err := bp.decodeValue(s.Values, pair[1], vVal, fmt.Sprintf("%s[%d]/value", loc, i), depth+1); err != nil {
 			return err
 		}
 		out.SetMapIndex(kVal, vVal)
@@ -1105,7 +1181,7 @@ func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value,
 	return nil
 }
 
-func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) error {
+func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflect.Value, loc string, depth int) error {
 	constr, ok := pd.(*data.Constr)
 	if !ok {
 		return fmt.Errorf("%s: expected Constr, got %T", loc, pd)
@@ -1120,7 +1196,7 @@ func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflec
 		return nil
 	}
 	if len(s.Fields) == 1 && shouldUnwrapSingleField(s.Fields[0], dst.Type()) {
-		return bp.decodeValue(s.Fields[0], constr.Fields[0], dst, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)))
+		return bp.decodeValue(s.Fields[0], constr.Fields[0], dst, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)), depth+1)
 	}
 	if dst.Kind() != reflect.Struct {
 		return fmt.Errorf("%s: expected struct target for constructor, got %s", loc, dst.Type())
@@ -1134,16 +1210,16 @@ func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflec
 		if schemaField.Title != "" && !fieldMatchesTitle(goField.meta, schemaField.Title) {
 			return fmt.Errorf("%s: field %d is %q in Go struct but %q in blueprint schema", loc, i, goField.meta.Name, schemaField.Title)
 		}
-		if err := bp.decodeValue(schemaField, constr.Fields[i], goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i))); err != nil {
+		if err := bp.decodeValue(schemaField, constr.Fields[i], goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i)), depth+1); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (bp *Blueprint) decodeAnyOf(s *Schema, pd data.PlutusData, dst reflect.Value, loc string) error {
+func (bp *Blueprint) decodeAnyOf(s *Schema, pd data.PlutusData, dst reflect.Value, loc string, depth int) error {
 	if len(s.AnyOf) == 1 {
-		return bp.decodeConstructor(s.AnyOf[0], pd, dst, loc)
+		return bp.decodeConstructor(s.AnyOf[0], pd, dst, loc, depth)
 	}
 	constr, ok := pd.(*data.Constr)
 	if !ok || constr.Tag == nil || !constr.Tag.IsUint64() {
@@ -1188,7 +1264,7 @@ func (bp *Blueprint) decodeAnyOf(s *Schema, pd data.PlutusData, dst reflect.Valu
 		return fmt.Errorf("%s: no struct field matches variant %q (index %d)", loc, matchedVariant.Title, tag)
 	}
 	ptr := reflect.New(targetField.val.Type().Elem())
-	if err := bp.decodeConstructor(matchedVariant, pd, ptr.Elem(), loc+"/"+matchedVariant.Title); err != nil {
+	if err := bp.decodeConstructor(matchedVariant, pd, ptr.Elem(), loc+"/"+matchedVariant.Title, depth); err != nil {
 		return err
 	}
 	targetField.val.Set(ptr)
