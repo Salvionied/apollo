@@ -127,6 +127,20 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 		return marshalSliceOrNested(fieldVal, field, false)
 	case "Map":
 		return marshalSliceAsMap(fieldVal, field)
+	case "Either":
+		return marshalEither(fieldVal)
+	case "OutputDatum":
+		od, ok := fieldVal.Interface().(OutputDatum)
+		if !ok {
+			return nil, fmt.Errorf("field %s: OutputDatum requires plutusencoder.OutputDatum, got %s", field.Name, fieldVal.Type())
+		}
+		return marshalOutputDatum(od)
+	case "Interval":
+		iv, ok := fieldVal.Interface().(Interval)
+		if !ok {
+			return nil, fmt.Errorf("field %s: Interval requires plutusencoder.Interval, got %s", field.Name, fieldVal.Type())
+		}
+		return marshalInterval(iv)
 	case "Custom":
 		return nil, fmt.Errorf("field %s tagged Custom but doesn't implement PlutusMarshaler", field.Name)
 	default:

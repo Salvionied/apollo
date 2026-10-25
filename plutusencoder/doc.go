@@ -43,6 +43,9 @@
 //	Map          a native Go map, or a slice of key-value structs
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
+//	Either       a two-pointer struct: Left is constructor 0, Right is 1
+//	OutputDatum  OutputDatum: none is 0, inline is 1, datum hash is 2
+//	Interval     Interval with explicit NegInf, Finite, or PosInf bounds
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -51,6 +54,19 @@
 //
 // When DefList or IndefList names a nested struct, the struct takes the
 // field's shape unless it carries its own `_` container marker, which wins.
+//
+// Either encodes a struct with two exported pointer fields: the first is
+// Left (constructor 0) and the second is Right (constructor 1). Exactly one
+// side must be non-nil. OutputDatum encodes none as constructor 0, an inline
+// datum as constructor 1, and a 32-byte datum hash as constructor 2.
+// Interval encodes lower and upper bounds using BoundNegInf (0), BoundFinite
+// (1), and BoundPosInf (2) with the caller's closure flag:
+//
+//	type Datum struct {
+//		_      struct{}    `plutusType:"DefList" plutusConstr:"0"`
+//		Datum  OutputDatum `plutusType:"OutputDatum"`
+//		Window Interval    `plutusType:"Interval"`
+//	}
 //
 // # Options
 //

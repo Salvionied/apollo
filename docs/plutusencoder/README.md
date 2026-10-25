@@ -60,6 +60,9 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Map` | a native Go map, or a slice of key-value structs |
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
+| `Either` | a two-pointer struct: `Left` is constructor 0, `Right` is constructor 1 |
+| `OutputDatum` | `OutputDatum`: none is constructor 0, inline is 1, datum hash is 2 |
+| `Interval` | `Interval` with explicit `BoundNegInf`, `BoundFinite`, and `BoundPosInf` bounds |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
 
@@ -68,6 +71,27 @@ under its own container marker. Unexported fields are always skipped.
 
 Unknown types, unknown options, empty or duplicate options, and a malformed
 `plutusConstr` are errors.
+
+```go
+type Choice struct {
+    Left  *int64
+    Right *string
+}
+
+type Datum struct {
+    _      struct{}                  `plutusType:"DefList" plutusConstr:"0"`
+    Side   Choice                    `plutusType:"Either"`
+    Datum  plutusencoder.OutputDatum `plutusType:"OutputDatum"`
+    Window plutusencoder.Interval    `plutusType:"Interval"`
+}
+```
+
+`Either` encodes a struct with two exported pointer fields: the first is
+`Left` (constructor 0) and the second is `Right` (constructor 1). Setting
+both or neither is an error. `OutputDatum` uses constructor 0 when empty,
+constructor 1 for `Inline`, and constructor 2 for a 32-byte `Hash`.
+`Interval` encodes lower and upper bounds with `BoundNegInf` (0),
+`BoundFinite` (1), or `BoundPosInf` (2) and the closure flag the caller sets.
 
 ## Options
 

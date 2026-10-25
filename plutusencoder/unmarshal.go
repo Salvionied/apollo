@@ -119,6 +119,28 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return unmarshalSliceOrNested(pd, fieldVal, field, cfg)
 	case "Map":
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
+	case "Either":
+		return unmarshalEither(pd, fieldVal)
+	case "OutputDatum":
+		if fieldVal.Type() != reflect.TypeOf(OutputDatum{}) {
+			return fmt.Errorf("field %s: OutputDatum requires plutusencoder.OutputDatum, got %s", field.Name, fieldVal.Type())
+		}
+		od, err := unmarshalOutputDatum(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(od))
+		return nil
+	case "Interval":
+		if fieldVal.Type() != reflect.TypeOf(Interval{}) {
+			return fmt.Errorf("field %s: Interval requires plutusencoder.Interval, got %s", field.Name, fieldVal.Type())
+		}
+		iv, err := unmarshalInterval(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(iv))
+		return nil
 	case "Custom":
 		return fmt.Errorf("field %s tagged Custom but doesn't implement PlutusMarshaler", field.Name)
 	default:
