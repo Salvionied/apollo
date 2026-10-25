@@ -11,9 +11,19 @@ import (
 	"github.com/blinklabs-io/bursa"
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/plutigo/data"
 
 	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
+
+func TestCloneDatumDoesNotAliasPlutusData(t *testing.T) {
+	original := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	cloned := cloneDatum(original)
+	original.Data.(*data.Integer).Inner.SetInt64(9)
+	if cloned.Data.(*data.Integer).Inner.Int64() != 4 {
+		t.Fatal("clone shares plutus data with the caller")
+	}
+}
 
 func TestBufferExUnits(t *testing.T) {
 	tests := []struct {

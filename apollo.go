@@ -474,7 +474,7 @@ func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits
 		}
 		a.mintRedeemers[unit.PolicyId] = redeemerEntry{
 			Tag:     common.RedeemerTagMint,
-			Data:    *redeemer,
+			Data:    cloneDatumValue(*redeemer),
 			ExUnits: eu,
 		}
 		a.isEstimateRequired = true
@@ -547,7 +547,7 @@ func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits co
 	ref := utxoRef(utxo)
 	a.redeemers[ref] = redeemerEntry{
 		Tag:     common.RedeemerTagSpend,
-		Data:    redeemer,
+		Data:    cloneDatumValue(redeemer),
 		ExUnits: exUnits,
 	}
 	return a
@@ -559,7 +559,7 @@ func (a *Apollo) PayToContract(addr common.Address, datum *common.Datum, lovelac
 		Receiver: addr,
 		Lovelace: lovelace,
 		Units:    units,
-		Datum:    datum,
+		Datum:    cloneDatum(datum),
 		IsInline: true,
 	}
 	a.payments = append(a.payments, p)
@@ -576,13 +576,15 @@ func (a *Apollo) PayToContractWithDatumHash(addr common.Address, datum *common.D
 	}
 	if datum != nil {
 		// Hash the bytes the datum will occupy in the witness set, so the
-		// output's datum hash matches the datum the ledger sees.
-		hash, err := DatumHash(datum)
+		// output's datum hash matches the datum the ledger sees. Store a
+		// clone so later mutation of the caller's datum cannot change it.
+		stored := cloneDatum(datum)
+		hash, err := DatumHash(stored)
 		if err != nil {
 			return a, err
 		}
 		p.DatumHash = hash.Bytes()
-		a.datums = append(a.datums, *datum)
+		a.datums = append(a.datums, *stored)
 	}
 	a.payments = append(a.payments, p)
 	return a, nil
@@ -1037,7 +1039,7 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 		key := hex.EncodeToString(skh.Bytes())
 		entry := redeemerEntry{
 			Tag:  common.RedeemerTagReward,
-			Data: *redeemerData,
+			Data: cloneDatumValue(*redeemerData),
 		}
 		if exUnits != nil {
 			entry.ExUnits = *exUnits
@@ -1659,6 +1661,24 @@ func isNilPayment(payment PaymentI) bool {
 	default:
 		return false
 	}
+}
+
+func cloneDatum(datum *common.Datum) *common.Datum {
+	if datum == nil {
+		return nil
+	}
+	cloned := cloneDatumValue(*datum)
+	return &cloned
+}
+
+func cloneDatumValue(datum common.Datum) common.Datum {
+	if datum.Data != nil {
+		datum.Data = datum.Data.Clone()
+	}
+	if raw := datum.Cbor(); len(raw) > 0 {
+		datum.SetCbor(raw)
+	}
+	return datum
 }
 
 func cloneCBORValue(src, dst any) error {
@@ -3241,6 +3261,8 @@ func (a *Apollo) estimateExecutionUnits(
 // applyExecutionUnits is deliberately separate from estimateExecutionUnits:
 // callers only reach it after the complete evaluator response was validated.
 func (a *Apollo) applyExecutionUnits(units map[common.RedeemerKey]common.ExUnits, inputs []common.Utxo) {
+	sortedPolicies := a.sortedMintPolicyIds()
+	sortedWithdrawals := a.sortedWithdrawalKeys()
 	for key, exUnits := range units {
 		switch key.Tag {
 		case common.RedeemerTagSpend:
@@ -3249,12 +3271,12 @@ func (a *Apollo) applyExecutionUnits(units map[common.RedeemerKey]common.ExUnits
 			entry.ExUnits = exUnits
 			a.redeemers[ref] = entry
 		case common.RedeemerTagMint:
-			policy := a.sortedMintPolicyIds()[key.Index]
+			policy := sortedPolicies[key.Index]
 			entry := a.mintRedeemers[policy]
 			entry.ExUnits = exUnits
 			a.mintRedeemers[policy] = entry
 		case common.RedeemerTagReward:
-			wd := a.withdrawals[a.sortedWithdrawalKeys()[key.Index]]
+			wd := a.withdrawals[sortedWithdrawals[key.Index]]
 			stakeKey := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
 			entry := a.stakeRedeemers[stakeKey]
 			entry.ExUnits = exUnits
