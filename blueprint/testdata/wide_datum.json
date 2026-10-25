@@ -1,0 +1,65 @@
+{
+  "preamble": {
+    "title": "example/wide_datum",
+    "version": "1.0.0",
+    "plutusVersion": "v2"
+  },
+  "validators": [
+    {
+      "title": "wide.spend",
+      "datum": {
+        "title": "datum",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "constructor",
+          "index": 4,
+          "fields": [
+            {
+              "title": "huge",
+              "dataType": "integer"
+            },
+            {
+              "title": "buckets",
+              "dataType": "list",
+              "items": {
+                "dataType": "map",
+                "keys": {
+                  "dataType": "bytes"
+                },
+                "values": {
+                  "dataType": "integer"
+                }
+              }
+            },
+            {
+              "title": "extra",
+              "$ref": "#/definitions/Data"
+            },
+            {
+              "title": "unit_marker",
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            }
+          ]
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        }
+      },
+      "compiledCode": "46010100200101"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    }
+  }
+}
