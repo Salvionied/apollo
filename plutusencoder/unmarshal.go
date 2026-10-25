@@ -119,9 +119,9 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return unmarshalSliceOrNested(pd, fieldVal, field, cfg)
 	case "Map":
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
-	case "Value":
+	case "Value", "V4Value":
 		if fieldVal.Type() != reflect.TypeOf(Value{}) {
-			return fmt.Errorf("field %s: Value requires plutusencoder.Value, got %s", field.Name, fieldVal.Type())
+			return fmt.Errorf("field %s: %s requires plutusencoder.Value, got %s", field.Name, plutusType, fieldVal.Type())
 		}
 		v, err := unmarshalPlutusValue(pd)
 		if err != nil {

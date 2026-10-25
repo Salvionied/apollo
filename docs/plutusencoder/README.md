@@ -61,6 +61,7 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
 | `Value` | `Value` as a map of policy id to asset map, with lovelace under the empty policy |
+| `V4Value` | `Value` as the Plutus V4 tagged `data.Value` constructor (CBOR tag 1401) |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
 
@@ -79,8 +80,11 @@ type Datum struct {
 
 `Value` encodes the Plutus ledger `Value`: a map of policy id to a map of
 asset name to quantity, with keys sorted by their bytes. Lovelace uses the
-empty policy id and the empty asset name. Duplicate policy or asset names and
-non-positive quantities are errors.
+empty policy id and the empty asset name. `V4Value` encodes the same `Value`
+struct as the Plutus V4 `data.Value` constructor (CBOR tag 1401) and runs
+`data.Value.Validate()`. `UnmarshalPlutus` on both `Value` and `V4Value`
+accepts either `*data.Map` or `*data.Value`. Duplicate policy or asset names
+and non-positive quantities are errors.
 
 ## Options
 

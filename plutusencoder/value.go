@@ -22,7 +22,7 @@ type Value struct {
 	Assets   common.MultiAsset[uint64]
 }
 
-func marshalPlutusValue(v Value) (data.PlutusData, error) {
+func marshalPlutusValue(v Value, v4Tagged bool) (data.PlutusData, error) {
 	policies := v.Assets.Policies()
 	slices.SortFunc(policies, func(a, b common.Blake2b224) int {
 		return bytes.Compare(a.Bytes(), b.Bytes())
@@ -67,13 +67,29 @@ func marshalPlutusValue(v Value) (data.PlutusData, error) {
 		})
 	}
 
-	return data.NewMap(pairs), nil
+	m := data.NewMap(pairs).(*data.Map)
+	if !v4Tagged {
+		return m, nil
+	}
+	v4 := &data.Value{Inner: m}
+	if err := v4.Validate(); err != nil {
+		return nil, err
+	}
+	return v4, nil
 }
 
 func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
-	outer, ok := pd.(*data.Map)
-	if !ok {
-		return Value{}, fmt.Errorf("expected Plutus Value map, got %T", pd)
+	var outer *data.Map
+	switch v := pd.(type) {
+	case *data.Map:
+		outer = v
+	case *data.Value:
+		if err := v.Validate(); err != nil {
+			return Value{}, err
+		}
+		outer = v.Inner
+	default:
+		return Value{}, fmt.Errorf("expected Plutus Value map or V4 Value, got %T", pd)
 	}
 
 	assets := make(map[common.Blake2b224]map[cbor.ByteString]uint64, len(outer.Pairs))

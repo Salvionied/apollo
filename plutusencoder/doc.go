@@ -44,6 +44,7 @@
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Value        Value as the Plutus ledger map of policy id to asset map
+//	V4Value      Value as the Plutus V4 tagged Value (CBOR tag 1401)
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -55,7 +56,9 @@
 //
 // Value encodes the Plutus ledger Value: a map of policy id to a map of asset
 // name to quantity. Lovelace is stored under the empty policy id and the
-// empty asset name:
+// empty asset name. V4Value encodes the same Value struct as the Plutus V4
+// data.Value constructor (CBOR tag 1401), and UnmarshalPlutus on either tag
+// accepts both *data.Map and *data.Value:
 //
 //	type Datum struct {
 //		_      struct{} `plutusType:"DefList" plutusConstr:"0"`

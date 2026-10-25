@@ -77,6 +77,54 @@ func TestValueAdaOnlyNativeOnlyAndCombined(t *testing.T) {
 	}
 }
 
+func TestV4ValueTaggedRoundTrip(t *testing.T) {
+	type v4ValueDatum struct {
+		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Locked Value    `plutusType:"V4Value"`
+	}
+	policy, err := common.NewBlake2b224Checked(bytes.Repeat([]byte{0x44}, common.Blake2b224Size))
+	if err != nil {
+		t.Fatal(err)
+	}
+	multi := common.NewMultiAsset(map[common.Blake2b224]map[cbor.ByteString]uint64{
+		policy: {cbor.NewByteString([]byte("TOK")): 9},
+	})
+	original := v4ValueDatum{Locked: Value{Lovelace: 3_000_000, Assets: multi}}
+
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer := pd.(*data.Constr)
+	if _, ok := outer.Fields[0].(*data.Value); !ok {
+		t.Fatalf("expected *data.Value (CBOR tag 1401), got %T", outer.Fields[0])
+	}
+	raw, err := data.Encode(pd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire, err := data.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decodedV4 v4ValueDatum
+	if err := UnmarshalPlutus(wire, &decodedV4); err != nil {
+		t.Fatal(err)
+	}
+	if decodedV4.Locked.Lovelace != 3_000_000 || decodedV4.Locked.Assets.Asset(policy, []byte("TOK")) != 9 {
+		t.Fatalf("unexpected V4Value decode: %+v", decodedV4.Locked)
+	}
+
+	var decodedMap valueDatum
+	if err := UnmarshalPlutus(wire, &decodedMap); err != nil {
+		t.Fatal(err)
+	}
+	if decodedMap.Locked.Lovelace != 3_000_000 {
+		t.Fatalf("Value tag must also decode *data.Value, got %+v", decodedMap.Locked)
+	}
+}
+
 func TestValueRejectsDuplicatesAndNegativeQuantity(t *testing.T) {
 	policyBytes := bytes.Repeat([]byte{0x33}, common.Blake2b224Size)
 	dupPolicy := data.NewConstr(0, data.NewMap([][2]data.PlutusData{
