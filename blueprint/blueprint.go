@@ -46,18 +46,18 @@ type Validator struct {
 
 // Parameter describes one compile-time validator parameter.
 type Parameter struct {
-	Title       string      `json:"title,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Purpose     PurposeSpec `json:"purpose,omitempty"`
-	Schema      Schema      `json:"schema"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Purpose     *PurposeSpec `json:"purpose,omitempty"`
+	Schema      Schema       `json:"schema"`
 }
 
 // Argument describes a datum or single redeemer specification.
 type Argument struct {
-	Title       string      `json:"title,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Purpose     PurposeSpec `json:"purpose,omitempty"`
-	Schema      Schema      `json:"schema"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Purpose     *PurposeSpec `json:"purpose,omitempty"`
+	Schema      Schema       `json:"schema"`
 }
 
 // ArgumentSpec holds either one Argument or a oneOf list of purpose-specific
@@ -65,6 +65,20 @@ type Argument struct {
 type ArgumentSpec struct {
 	Single *Argument
 	OneOf  []Argument
+}
+
+// MarshalJSON encodes either a single argument or a {"oneOf": [...]} argument
+// set.
+func (a ArgumentSpec) MarshalJSON() ([]byte, error) {
+	if len(a.OneOf) > 0 {
+		return json.Marshal(struct {
+			OneOf []Argument `json:"oneOf"`
+		}{OneOf: a.OneOf})
+	}
+	if a.Single != nil {
+		return json.Marshal(a.Single)
+	}
+	return []byte("null"), nil
 }
 
 // UnmarshalJSON decodes a single argument or a {"oneOf": [...]} argument set.
@@ -92,6 +106,26 @@ func (a *ArgumentSpec) UnmarshalJSON(raw []byte) error {
 // PurposeSpec holds either one purpose string or a oneOf list of purposes.
 type PurposeSpec struct {
 	Purposes []string
+}
+
+func (p *PurposeSpec) list() []string {
+	if p == nil {
+		return nil
+	}
+	return p.Purposes
+}
+
+// MarshalJSON encodes a single purpose string or {"oneOf": [...]}.
+func (p PurposeSpec) MarshalJSON() ([]byte, error) {
+	if len(p.Purposes) == 0 {
+		return []byte("null"), nil
+	}
+	if len(p.Purposes) == 1 {
+		return json.Marshal(p.Purposes[0])
+	}
+	return json.Marshal(struct {
+		OneOf []string `json:"oneOf"`
+	}{OneOf: p.Purposes})
 }
 
 // UnmarshalJSON decodes a string purpose or {"oneOf": [...]}.
@@ -126,6 +160,17 @@ func (p *PurposeSpec) UnmarshalJSON(raw []byte) error {
 type ItemsSpec struct {
 	Single *Schema
 	Tuple  []*Schema
+}
+
+// MarshalJSON encodes either a single schema or a tuple array of schemas.
+func (it ItemsSpec) MarshalJSON() ([]byte, error) {
+	if len(it.Tuple) > 0 {
+		return json.Marshal(it.Tuple)
+	}
+	if it.Single != nil {
+		return json.Marshal(it.Single)
+	}
+	return []byte("null"), nil
 }
 
 // UnmarshalJSON decodes a schema object or an array of schema objects.
@@ -206,6 +251,57 @@ func (bp *Blueprint) ValidatorNames() []string {
 	return names
 }
 
+// Marshal serializes the blueprint to formatted CIP-57 JSON bytes.
+func (bp *Blueprint) Marshal() ([]byte, error) {
+	if err := bp.validate(); err != nil {
+		return nil, err
+	}
+	return json.MarshalIndent(bp, "", "  ")
+}
+
+// WriteFile serializes the blueprint to path as formatted CIP-57 JSON.
+func (bp *Blueprint) WriteFile(path string) error {
+	raw, err := bp.Marshal()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o600)
+}
+
+// ApplyValidatorParams applies 1..len(parameters) values to the named
+// validator and returns a cloned Blueprint where that validator's
+// compiledCode is replaced with the applied script CBOR hex, its hash is
+// replaced with the new script hash, and the consumed prefix of parameters is
+// removed while any remaining parameter schemas stay in place, matching `aiken
+// blueprint apply`.
+func (bp *Blueprint) ApplyValidatorParams(validatorTitle string, params ...any) (*Blueprint, error) {
+	vs, err := bp.Script(validatorTitle)
+	if err != nil {
+		return nil, err
+	}
+	applied, err := vs.ApplyParams(params...)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := bp.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned, err := Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	for i := range cloned.Validators {
+		if cloned.Validators[i].Title == validatorTitle {
+			cloned.Validators[i].CompiledCode = applied.Script.CborHex()
+			cloned.Validators[i].Hash = applied.HashHex
+			cloned.Validators[i].Parameters = applied.Script.RemainingParameters()
+			break
+		}
+	}
+	return cloned, nil
+}
+
 // Validator returns the validator with the given title.
 func (bp *Blueprint) Validator(title string) (*Validator, error) {
 	for i := range bp.Validators {
@@ -233,14 +329,14 @@ func (bp *Blueprint) Definition(name string) (*Schema, error) {
 // empty.
 func (v *Validator) RedeemerSchema(purpose string) (*Schema, error) {
 	if v.Redeemer.Single != nil {
-		if purpose != "" && len(v.Redeemer.Single.Purpose.Purposes) > 0 && !containsPurpose(v.Redeemer.Single.Purpose.Purposes, purpose) {
+		if purpose != "" && len(v.Redeemer.Single.Purpose.list()) > 0 && !containsPurpose(v.Redeemer.Single.Purpose.list(), purpose) {
 			return nil, fmt.Errorf("validator %q redeemer does not support purpose %q", v.Title, purpose)
 		}
 		return &v.Redeemer.Single.Schema, nil
 	}
 	for i := range v.Redeemer.OneOf {
 		arg := &v.Redeemer.OneOf[i]
-		if containsPurpose(arg.Purpose.Purposes, purpose) {
+		if containsPurpose(arg.Purpose.list(), purpose) {
 			return &arg.Schema, nil
 		}
 	}
@@ -293,7 +389,7 @@ func (bp *Blueprint) validate() error {
 		titles[v.Title] = struct{}{}
 
 		if v.Datum != nil {
-			if err := validatePurposes(v.Datum.Purpose.Purposes, loc+"/datum"); err != nil {
+			if err := validatePurposes(v.Datum.Purpose.list(), loc+"/datum"); err != nil {
 				return err
 			}
 			if err := bp.validateSchema(&v.Datum.Schema, loc+"/datum", make(map[string]bool)); err != nil {
@@ -305,7 +401,7 @@ func (bp *Blueprint) validate() error {
 		}
 		for pIdx := range v.Parameters {
 			pLoc := fmt.Sprintf("%s/parameters[%d]", loc, pIdx)
-			if err := validatePurposes(v.Parameters[pIdx].Purpose.Purposes, pLoc); err != nil {
+			if err := validatePurposes(v.Parameters[pIdx].Purpose.list(), pLoc); err != nil {
 				return err
 			}
 			if err := bp.validateSchema(&v.Parameters[pIdx].Schema, pLoc, make(map[string]bool)); err != nil {
@@ -321,7 +417,7 @@ func (bp *Blueprint) validateRedeemer(spec *ArgumentSpec, loc string) error {
 		return fmt.Errorf("%s: redeemer is required", loc)
 	}
 	if spec.Single != nil {
-		if err := validatePurposes(spec.Single.Purpose.Purposes, loc); err != nil {
+		if err := validatePurposes(spec.Single.Purpose.list(), loc); err != nil {
 			return err
 		}
 		return bp.validateSchema(&spec.Single.Schema, loc, make(map[string]bool))
@@ -330,13 +426,13 @@ func (bp *Blueprint) validateRedeemer(spec *ArgumentSpec, loc string) error {
 	for i := range spec.OneOf {
 		arg := &spec.OneOf[i]
 		itemLoc := fmt.Sprintf("%s/oneOf[%d]", loc, i)
-		if len(arg.Purpose.Purposes) == 0 {
+		if len(arg.Purpose.list()) == 0 {
 			return fmt.Errorf("%s: purpose is required inside redeemer oneOf", itemLoc)
 		}
-		if err := validatePurposes(arg.Purpose.Purposes, itemLoc); err != nil {
+		if err := validatePurposes(arg.Purpose.list(), itemLoc); err != nil {
 			return err
 		}
-		for _, p := range arg.Purpose.Purposes {
+		for _, p := range arg.Purpose.list() {
 			if _, dup := seenPurposes[p]; dup {
 				return fmt.Errorf("%s: overlapping purpose %q in redeemer oneOf", itemLoc, p)
 			}

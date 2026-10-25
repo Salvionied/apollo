@@ -1,8 +1,8 @@
 # Plutus blueprint (`CIP-57`)
 
 Package `blueprint` parses CIP-57 `plutus.json` files, validates their
-schemas, encodes and decodes Plutus data against those schemas, and prepares
-validator scripts for Conway and Dijkstra transactions.
+schemas, encodes, decodes, and validates Plutus data against those schemas,
+and prepares validator scripts for Conway and Dijkstra transactions.
 
 ```go
 import "github.com/Salvionied/apollo/v2/blueprint"
@@ -13,8 +13,9 @@ var out EscrowDatum
 err = bp.DecodeDatumValue("escrow.spend", datum, &out)
 ```
 
-`Parse` takes raw JSON bytes, `ParseFile` reads a file from disk, and
-`ValidatorNames` lists the validator titles in declaration order.
+`Parse` takes raw JSON bytes, `ParseFile` reads a file from disk,
+`ValidatorNames` lists the validator titles in declaration order, and
+`Marshal` / `WriteFile` write a blueprint back to formatted CIP-57 JSON.
 
 ## Parsing and validation
 
@@ -35,13 +36,23 @@ and angle-bracket keys such as `Option<Int>`.
 - a UPLC builtin type (`#unit`, `#integer`, `#bytes`, `#string`, `#boolean`,
   `#pair`, `#list`) appears on a datum, redeemer, or parameter boundary
 
-## Encoding and decoding
+## Encoding, decoding, and raw-data validation
 
-`Encode`, `Decode`, `EncodeDatum`, `DecodeDatum`, `EncodeRedeemer`, and
-`DecodeRedeemer` convert between a Go value and `data.PlutusData`.
-`EncodeDatumValue`, `DecodeDatumValue`, `EncodeRedeemerValue`, and
-`DecodeRedeemerValue` wrap and unwrap `*common.Datum` directly for Apollo
-transaction builders:
+- `Encode`, `Decode`, `EncodeDatum`, `DecodeDatum`, `EncodeRedeemer`, and
+  `DecodeRedeemer` convert between a Go value and `data.PlutusData`.
+- `EncodeDatumValue`, `DecodeDatumValue`, `EncodeRedeemerValue`, and
+  `DecodeRedeemerValue` wrap and unwrap `*common.Datum` directly.
+- `DecodeOutputDatum(validatorTitle, output, dst)` decodes the inline datum on
+  a `common.TransactionOutput` against the validator's datum schema.
+- `DatumHash(validatorTitle, v)` and `DatumHashHex(validatorTitle, v)` return
+  the 32-byte Blake2b-256 hash of the encoded datum for `PayToContractAsHash`
+  and datum-hash UTxO lookups.
+- `EncodeDefinition` / `DecodeDefinition` and `EncodeParameter` /
+  `DecodeParameter` encode and decode named `definitions` entries and
+  individual validator parameters.
+- `ValidateData`, `ValidateDatum`, and `ValidateRedeemer` check raw on-chain
+  `data.PlutusData` against a blueprint schema without decoding into a Go
+  struct.
 
 | Schema `dataType` | Go value |
 |-------------------|----------|
@@ -54,11 +65,6 @@ transaction builders:
 | `anyOf` | a struct with one exported pointer field per variant, matched by `title` |
 | `value` | `*data.Value` or `data.Value` (Plutus V4 CBOR tag 1401, validated with `Validate()`) |
 | empty (`Data`) | `data.PlutusData` |
-
-When a validator's redeemer uses `oneOf` over `purpose`, pass `"spend"`,
-`"mint"`, `"withdraw"`, `"publish"`, `"vote"`, `"propose"`, or `"guard"` to
-`EncodeRedeemer` / `EncodeRedeemerValue` and `DecodeRedeemer` /
-`DecodeRedeemerValue`.
 
 ## Governance schemas
 
@@ -74,57 +80,59 @@ matching pointer field on the Go struct:
   for a DRep credential, and 2 for a stake-pool key hash.
 - `VoteDecision` uses constructor 0 for no, 1 for yes, and 2 for abstain.
 
-Setting zero or two variant pointers returns an error, and decoding rejects
-any constructor index not listed in `anyOf`.
+When building a transaction that both submits a ledger vote (`AddVote`) and
+spends or guards with a governance redeemer, construct both from the same Go
+voter, action ID, and decision values so the ledger vote and redeemer cannot
+drift.
 
 ## Script and transaction helpers
 
 `bp.Script(title)` decodes `compiledCode` using `preamble.plutusVersion`
-(`v1`, `v2`, `v3`, or `v4`) and exposes:
+(`v1`, `v2`, `v3`, or `v4`). When an unparameterized validator declares a
+`hash` in `plutus.json`, `Script`, `ScriptRef`, `SpendAddress`,
+`RewardAddress`, `Credential`, `GuardCredential`, and `PolicyId` verify that
+the computed script hash matches it and return an error on mismatch.
 
-- `Bytes()` and `CborHex()` for the CBOR-wrapped flat UPLC script
-- `Hash()`, `HashHex()`, `PolicyId()`, and `VerifyHash()` (which compares the
-  unparameterized script hash to the validator's `hash` field in `plutus.json`)
-- `V1()`, `V2()`, `V3()`, `V4()`, `Script()` (`common.Script`), and
-  `ScriptRef()` (`*common.ScriptRef`)
-- `SpendAddress(networkId, stakeKeyHash)` and `SpendAddressBech32(...)`
-- `RewardAddress(networkId)` and `RewardAddressBech32(...)`
-- `Credential()` and `GuardCredential()` (`common.Credential` with
-  `CredentialTypeScriptHash`)
-- `ApplyParams(params ...any)` and `ApplyParamsData(params ...data.PlutusData)`
+`ApplyParams` and `ApplyParamsData` accept `1..len(RemainingParameters)`
+arguments so parameters can be applied in one call or step by step, matching
+`aiken blueprint apply`. They return an `*AppliedScript` carrying the new
+`Script`, `Hash`, and `HashHex`. `bp.ApplyValidatorParams(title, params...)`
+returns a cloned `*Blueprint` with the updated `compiledCode`, the new `hash`,
+and the remaining unapplied `parameters`, ready for `Marshal()` or
+`WriteFile(path)`.
 
 ### Spend, mint, and withdraw
 
 ```go
 script, err := bp.Script("token.mint")
 applied, err := script.ApplyParams(int64(7))
-policyId, err := applied.PolicyId()
-v3, err := applied.V3()
+unit, err := applied.Script.Unit([]byte("nft"), 1)
+v3, err := applied.Script.V3()
 
 redeemer, err := bp.EncodeRedeemerValue("token.mint", "mint", int64(1))
 tx, err := apollo.New(cc).
     SetWallet(wallet).
     AttachScript(v3).
-    Mint(apollo.NewUnit(policyId, "6e6674", 1), redeemer, nil).
+    Mint(unit, redeemer, nil).
     Complete()
 ```
 
-### Dijkstra Plutus V4 guard with a reference script
+### Dijkstra Plutus V4 guard with `PrepareGuard`
 
-In the Dijkstra era, Plutus V4 scripts are supplied through reference inputs
-and can guard the transaction under the `"guard"` purpose:
+`PrepareGuard(redeemer)` bundles the guard `Credential`, `ScriptRef`, optional
+`WitnessScript` (nil for Plutus V4 so it cannot be attached as a witness), and
+encoded `"guard"` redeemer:
 
 ```go
 guardScript, err := bp.Script("guard.observe")
 applied, err := guardScript.ApplyParams(int64(42))
-guardCred, err := applied.GuardCredential()
-redeemer, err := bp.EncodeRedeemerValue("guard.observe", "guard", int64(9))
+bundle, err := applied.Script.PrepareGuard(int64(9))
 datum, err := bp.EncodeDatumValue("guard.observe", v4Value)
 
 tx, err := apollo.New(cc).
     SetWallet(wallet).
     SetTargetEra(apollo.EraDijkstra).
-    AddGuard(guardCred, redeemer, nil).
-    AddRequiredTopLevelGuard(guardCred, datum).
+    AddGuard(bundle.Credential, bundle.Redeemer, nil).
+    AddRequiredTopLevelGuard(bundle.Credential, datum).
     AddReferenceInput(refTxHash, refIdx)
 ```

@@ -125,6 +125,260 @@ func (bp *Blueprint) DecodeRedeemerValue(validatorTitle, purpose string, d *comm
 	return bp.DecodeRedeemer(validatorTitle, purpose, d.Data, dst)
 }
 
+// DecodeOutputDatum reads the inline datum from output and decodes it into dst
+// against the named validator's datum schema.
+func (bp *Blueprint) DecodeOutputDatum(validatorTitle string, output common.TransactionOutput, dst any) error {
+	if output == nil {
+		return errors.New("transaction output is nil")
+	}
+	d := output.Datum()
+	if d == nil || d.Data == nil {
+		return fmt.Errorf("output has no inline datum for validator %q", validatorTitle)
+	}
+	return bp.DecodeDatum(validatorTitle, d.Data, dst)
+}
+
+// DatumHash encodes v against the named validator's datum schema and returns
+// its 32-byte Blake2b-256 datum hash.
+func (bp *Blueprint) DatumHash(validatorTitle string, v any) (common.Blake2b256, error) {
+	d, err := bp.EncodeDatumValue(validatorTitle, v)
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	raw, err := data.Encode(d.Data)
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	return common.Blake2b256Hash(raw), nil
+}
+
+// DatumHashHex encodes v against the named validator's datum schema and
+// returns its hex-encoded 32-byte Blake2b-256 datum hash.
+func (bp *Blueprint) DatumHashHex(validatorTitle string, v any) (string, error) {
+	h, err := bp.DatumHash(validatorTitle, v)
+	if err != nil {
+		return "", err
+	}
+	return h.String(), nil
+}
+
+// EncodeDefinition encodes v against the named schema under definitions.
+func (bp *Blueprint) EncodeDefinition(name string, v any) (data.PlutusData, error) {
+	s, err := bp.Definition(name)
+	if err != nil {
+		return nil, err
+	}
+	return bp.Encode(s, v)
+}
+
+// DecodeDefinition decodes pd into dst against the named schema under
+// definitions.
+func (bp *Blueprint) DecodeDefinition(name string, pd data.PlutusData, dst any) error {
+	s, err := bp.Definition(name)
+	if err != nil {
+		return err
+	}
+	return bp.Decode(s, pd, dst)
+}
+
+// EncodeParameter encodes v against validators[validatorTitle].parameters[index].Schema
+// without applying it to compiledCode.
+func (bp *Blueprint) EncodeParameter(validatorTitle string, index int, v any) (data.PlutusData, error) {
+	val, err := bp.Validator(validatorTitle)
+	if err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= len(val.Parameters) {
+		return nil, fmt.Errorf("validator %q parameter index %d out of range [0,%d)", validatorTitle, index, len(val.Parameters))
+	}
+	return bp.Encode(&val.Parameters[index].Schema, v)
+}
+
+// DecodeParameter decodes pd into dst against
+// validators[validatorTitle].parameters[index].Schema.
+func (bp *Blueprint) DecodeParameter(validatorTitle string, index int, pd data.PlutusData, dst any) error {
+	val, err := bp.Validator(validatorTitle)
+	if err != nil {
+		return err
+	}
+	if index < 0 || index >= len(val.Parameters) {
+		return fmt.Errorf("validator %q parameter index %d out of range [0,%d)", validatorTitle, index, len(val.Parameters))
+	}
+	return bp.Decode(&val.Parameters[index].Schema, pd, dst)
+}
+
+// ValidateData checks that pd conforms to schema without decoding into a Go
+// struct.
+func (bp *Blueprint) ValidateData(schema *Schema, pd data.PlutusData) error {
+	if schema == nil {
+		return errors.New("schema is nil")
+	}
+	return bp.validatePlutusData(schema, pd, rootName(schema))
+}
+
+// ValidateDatum checks that pd conforms to the named validator's datum schema.
+func (bp *Blueprint) ValidateDatum(validatorTitle string, pd data.PlutusData) error {
+	val, err := bp.Validator(validatorTitle)
+	if err != nil {
+		return err
+	}
+	if val.Datum == nil {
+		return fmt.Errorf("validator %q has no datum schema", validatorTitle)
+	}
+	return bp.ValidateData(&val.Datum.Schema, pd)
+}
+
+// ValidateRedeemer checks that pd conforms to the named validator's redeemer
+// schema for purpose.
+func (bp *Blueprint) ValidateRedeemer(validatorTitle, purpose string, pd data.PlutusData) error {
+	val, err := bp.Validator(validatorTitle)
+	if err != nil {
+		return err
+	}
+	s, err := val.RedeemerSchema(purpose)
+	if err != nil {
+		return err
+	}
+	return bp.ValidateData(s, pd)
+}
+
+func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc string) error {
+	if pd == nil {
+		return fmt.Errorf("%s: nil PlutusData", loc)
+	}
+	resolved, err := bp.deref(s)
+	if err != nil {
+		return fmt.Errorf("%s: %w", loc, err)
+	}
+	s = resolved
+
+	if s.DataType == "" && len(s.AnyOf) == 0 {
+		return nil
+	}
+	if len(s.AnyOf) > 0 {
+		constr, ok := pd.(*data.Constr)
+		if !ok || constr.Tag == nil || !constr.Tag.IsUint64() {
+			return fmt.Errorf("%s: expected Constr for anyOf, got %T", loc, pd)
+		}
+		tag := constr.Tag.Uint64()
+		for _, v := range s.AnyOf {
+			if *v.Index == tag {
+				return bp.validatePlutusConstructor(v, constr, loc+"/"+v.Title)
+			}
+		}
+		return fmt.Errorf("%s: constructor index %d is not in anyOf schema", loc, tag)
+	}
+
+	switch s.DataType {
+	case "integer":
+		integer, ok := pd.(*data.Integer)
+		if !ok || integer.Inner == nil {
+			return fmt.Errorf("%s: expected Integer, got %T", loc, pd)
+		}
+		return checkIntegerBounds(s, integer.Inner, loc)
+	case "bytes":
+		bs, ok := pd.(*data.ByteString)
+		if !ok {
+			return fmt.Errorf("%s: expected ByteString, got %T", loc, pd)
+		}
+		return checkBytesBounds(s, bs.Inner, loc)
+	case "list":
+		list, ok := pd.(*data.List)
+		if !ok {
+			return fmt.Errorf("%s: expected List, got %T", loc, pd)
+		}
+		if err := checkCountBounds(s.MinItems, s.MaxItems, len(list.Items), loc); err != nil {
+			return err
+		}
+		if s.Items.Tuple != nil && len(list.Items) != len(s.Items.Tuple) {
+			return fmt.Errorf("%s: tuple expects %d elements, got %d", loc, len(s.Items.Tuple), len(list.Items))
+		}
+		var seen [][]byte
+		if s.UniqueItems {
+			seen = make([][]byte, 0, len(list.Items))
+		}
+		for i, item := range list.Items {
+			elemSchema := s.Items.Single
+			if s.Items.Tuple != nil {
+				elemSchema = s.Items.Tuple[i]
+			}
+			if err := bp.validatePlutusData(elemSchema, item, fmt.Sprintf("%s[%d]", loc, i)); err != nil {
+				return err
+			}
+			if s.UniqueItems {
+				raw, err := data.Encode(item)
+				if err != nil {
+					return err
+				}
+				for _, prev := range seen {
+					if bytes.Equal(prev, raw) {
+						return fmt.Errorf("%s[%d]: duplicate list item violates uniqueItems", loc, i)
+					}
+				}
+				seen = append(seen, raw)
+			}
+		}
+		return nil
+	case "map":
+		m, ok := pd.(*data.Map)
+		if !ok {
+			return fmt.Errorf("%s: expected Map, got %T", loc, pd)
+		}
+		if err := checkCountBounds(s.MinItems, s.MaxItems, len(m.Pairs), loc); err != nil {
+			return err
+		}
+		seenKeys := make([][]byte, 0, len(m.Pairs))
+		for i, pair := range m.Pairs {
+			rawKey, err := data.Encode(pair[0])
+			if err != nil {
+				return err
+			}
+			for _, prev := range seenKeys {
+				if bytes.Equal(prev, rawKey) {
+					return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
+				}
+			}
+			seenKeys = append(seenKeys, rawKey)
+			if err := bp.validatePlutusData(s.Keys, pair[0], fmt.Sprintf("%s[%d]/key", loc, i)); err != nil {
+				return err
+			}
+			if err := bp.validatePlutusData(s.Values, pair[1], fmt.Sprintf("%s[%d]/value", loc, i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "constructor":
+		constr, ok := pd.(*data.Constr)
+		if !ok {
+			return fmt.Errorf("%s: expected Constr, got %T", loc, pd)
+		}
+		return bp.validatePlutusConstructor(s, constr, loc)
+	case "value":
+		v, ok := pd.(*data.Value)
+		if !ok || v == nil {
+			return fmt.Errorf("%s: expected *data.Value, got %T", loc, pd)
+		}
+		return v.Validate()
+	default:
+		return fmt.Errorf("%s: unsupported dataType %q", loc, s.DataType)
+	}
+}
+
+func (bp *Blueprint) validatePlutusConstructor(s *Schema, constr *data.Constr, loc string) error {
+	if constr.Tag == nil || !constr.Tag.IsUint64() || constr.Tag.Uint64() != *s.Index {
+		return fmt.Errorf("%s: constructor index %v does not match schema index %d", loc, constr.Tag, *s.Index)
+	}
+	if len(constr.Fields) != len(s.Fields) {
+		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, len(constr.Fields), len(s.Fields))
+	}
+	for i, fieldSchema := range s.Fields {
+		if err := bp.validatePlutusData(fieldSchema, constr.Fields[i], fmt.Sprintf("%s.%s", loc, fieldLabel(fieldSchema, i))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func rootName(s *Schema) string {
 	if s.Title != "" {
 		return s.Title

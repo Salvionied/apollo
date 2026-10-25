@@ -636,7 +636,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 		t.Fatal("expected attached V3 spend script in witness set")
 	}
 
-	// 2. Mint: apply seed parameter, derive policy id, and build a mint transaction.
+	// 2. Mint: apply seed parameter, derive unit/policy id, and build a mint transaction.
 	mintBase, err := bp.Script("token.mint")
 	if err != nil {
 		t.Fatal(err)
@@ -645,7 +645,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policyId, err := mintApplied.PolicyId()
+	unit, err := mintApplied.Script.Unit([]byte("nft"), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -653,7 +653,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v3Mint, err := mintApplied.V3()
+	v3Mint, err := mintApplied.Script.V3()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -662,7 +662,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		DisableExecutionUnitsEstimation().
 		AttachScript(v3Mint).
-		Mint(apollo.NewUnit(policyId, "6e6674", 1), &common.Datum{Data: mintRedeemerPd}, &common.ExUnits{Memory: 1000, Steps: 1000}).
+		Mint(unit, &common.Datum{Data: mintRedeemerPd}, &common.ExUnits{Memory: 1000, Steps: 1000}).
 		Complete()
 	if err != nil {
 		t.Fatalf("mint tx Complete: %v", err)
@@ -727,6 +727,21 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Stepwise ApplyParams must produce the exact same bytes and hash.
+	step1, err := paramScript.ApplyParams([]byte{0xde, 0xad, 0xbe, 0xef}, int64(-1_000_000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(step1.Script.RemainingParameters()) != 2 {
+		t.Fatalf("remaining params after step1 = %d, want 2", len(step1.Script.RemainingParameters()))
+	}
+	step2, err := step1.Script.ApplyParams(cfg, extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if step2.HashHex != applied.HashHex || !bytes.Equal(step2.Script.Bytes(), applied.Script.Bytes()) {
+		t.Fatal("stepwise ApplyParams does not match single-call ApplyParams")
+	}
 	direct, err := apollo.ApplyParamsToScript(
 		common.PlutusV3Script(paramScript.Bytes()),
 		data.NewByteString([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -741,7 +756,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(applied.Bytes(), []byte(direct)) {
+	if !bytes.Equal(applied.Script.Bytes(), []byte(direct)) {
 		t.Fatal("blueprint ApplyParams bytes differ from apollo.ApplyParamsToScript")
 	}
 }
@@ -788,24 +803,33 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 	if err := baseScript.VerifyHash(); err != nil {
 		t.Fatalf("VerifyHash: %v", err)
 	}
+	// A mismatched hash in plutus.json must make Script() fail automatically.
+	v4Bp.Validators[0].Hash = "00000000000000000000000000000000000000000000000000000000"
+	if _, err := v4Bp.Script("guard.observe"); err == nil {
+		t.Fatal("expected unparameterized validator with wrong hash to fail")
+	}
+	v4Bp.Validators[0].Hash = expectedHash
 
 	appliedV4, err := baseScript.ApplyParamsData(data.NewInteger(big.NewInt(42)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := appliedV4.VerifyHash(); err == nil {
+	if appliedV4.HashHex == expectedHash {
+		t.Fatal("expected parameter application to change script hash")
+	}
+	if err := appliedV4.Script.VerifyHash(); err == nil {
 		t.Fatal("expected VerifyHash to fail after ApplyParamsData")
 	}
-	if appliedV4.CborHex() != "4c010100320014c102182a0001" {
-		t.Fatalf("unexpected V4 applied CborHex: %s", appliedV4.CborHex())
+	if appliedV4.Script.CborHex() != "4c010100320014c102182a0001" {
+		t.Fatalf("unexpected V4 applied CborHex: %s", appliedV4.Script.CborHex())
 	}
-	if _, err := appliedV4.V4(); err != nil {
+	if _, err := appliedV4.Script.V4(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := appliedV4.SpendAddressBech32(common.AddressNetworkTestnet, nil); err != nil {
+	if _, err := appliedV4.Script.SpendAddressBech32(common.AddressNetworkTestnet, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := appliedV4.RewardAddressBech32(common.AddressNetworkTestnet); err != nil {
+	if _, err := appliedV4.Script.RewardAddressBech32(common.AddressNetworkTestnet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -830,21 +854,16 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 		t.Fatal("decoded V4 data.Value does not equal input")
 	}
 
-	// Build a Dijkstra transaction guarded by the V4 validator via reference input.
-	guardCred, err := appliedV4.GuardCredential()
+	// Build a Dijkstra transaction guarded by the V4 validator via PrepareGuard.
+	bundle, err := appliedV4.Script.PrepareGuard(int64(9))
 	if err != nil {
 		t.Fatal(err)
 	}
-	scriptRef, err := appliedV4.ScriptRef()
-	if err != nil {
-		t.Fatal(err)
-	}
-	guardRedeemer, err := v4Bp.EncodeRedeemerValue("guard.observe", "guard", int64(9))
-	if err != nil {
-		t.Fatal(err)
+	if bundle.WitnessScript != nil {
+		t.Fatal("Plutus V4 GuardBundle must leave WitnessScript nil")
 	}
 	var decodedGuardRedeemer int64
-	if err := v4Bp.DecodeRedeemerValue("guard.observe", "guard", guardRedeemer, &decodedGuardRedeemer); err != nil {
+	if err := v4Bp.DecodeRedeemerValue("guard.observe", "guard", bundle.Redeemer, &decodedGuardRedeemer); err != nil {
 		t.Fatal(err)
 	}
 	if decodedGuardRedeemer != 9 {
@@ -891,7 +910,7 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 		Output: &babbage.BabbageTransactionOutput{
 			OutputAddress:  walletAddr,
 			OutputAmount:   mary.MaryTransactionOutputValue{Amount: 5_000_000},
-			TxOutScriptRef: scriptRef,
+			TxOutScriptRef: bundle.ScriptRef,
 		},
 	})
 
@@ -900,8 +919,8 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		SetTargetEra(apollo.EraDijkstra).
 		DisableExecutionUnitsEstimation().
-		AddGuard(guardCred, guardRedeemer, &exUnits).
-		AddRequiredTopLevelGuard(guardCred, datumVal).
+		AddGuard(bundle.Credential, bundle.Redeemer, &exUnits).
+		AddRequiredTopLevelGuard(bundle.Credential, datumVal).
 		AddReferenceInput(hex.EncodeToString(refTx[:]), 0)
 	if err != nil {
 		t.Fatal(err)
@@ -912,6 +931,67 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 	}
 	if dijkstraBuilder.GetDijkstraTx() == nil {
 		t.Fatal("expected completed Dijkstra transaction")
+	}
+
+	// Test DecodeOutputDatum, DatumHash, EncodeDefinition, EncodeParameter, ApplyValidatorParams, and WriteFile.
+	spendUt, err := bp.EncodeDatum("escrow.spend", escrowDatum{
+		Owner:  bytes.Repeat([]byte{0x11}, 28),
+		Amount: 5,
+		Memo:   optionNote{None: &struct{}{}},
+		Steps:  []escrowNote{{Tag: []byte("s"), Weight: 1}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	utxo := makeScriptUtxo(t, walletAddr, spendUt, 2_000_000)
+	var fromOutput escrowDatum
+	if err := bp.DecodeOutputDatum("escrow.spend", utxo.Output, &fromOutput); err != nil {
+		t.Fatal(err)
+	}
+	if fromOutput.Amount != 5 {
+		t.Fatalf("DecodeOutputDatum amount = %d, want 5", fromOutput.Amount)
+	}
+	dh, err := bp.DatumHashHex("escrow.spend", fromOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dh) != 64 {
+		t.Fatalf("unexpected DatumHashHex: %s", dh)
+	}
+	notePd, err := bp.EncodeDefinition("escrow/Note", escrowNote{Tag: []byte("n"), Weight: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var noteOut escrowNote
+	if err := bp.DecodeDefinition("escrow/Note", notePd, &noteOut); err != nil {
+		t.Fatal(err)
+	}
+	paramPd, err := v4Bp.EncodeParameter("guard.observe", 0, int64(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paramOut int64
+	if err := v4Bp.DecodeParameter("guard.observe", 0, paramPd, &paramOut); err != nil {
+		t.Fatal(err)
+	}
+	appliedBp, err := v4Bp.ApplyValidatorParams("guard.observe", int64(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(t.TempDir(), "applied.plutus.json")
+	if err := appliedBp.WriteFile(outPath); err != nil {
+		t.Fatal(err)
+	}
+	reparsed, err := ParseFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reScript, err := reparsed.Script("guard.observe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reScript.RemainingParameters()) != 0 || reScript.CborHex() != appliedV4.Script.CborHex() {
+		t.Fatal("WriteFile/ParseFile after ApplyValidatorParams did not preserve applied script")
 	}
 }
 
