@@ -91,7 +91,7 @@ func TestPlutusDataDepthLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var pd data.PlutusData = data.NewInteger(big.NewInt(1))
+	pd := data.NewInteger(big.NewInt(1))
 	for range maxDataDepth + 5 {
 		pd = data.NewConstr(0, pd)
 	}
