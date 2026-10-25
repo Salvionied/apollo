@@ -9,18 +9,13 @@ import (
 	"math/big"
 	"os"
 	"strings"
+
+	"github.com/Salvionied/apollo/v2/constants"
 )
 
-const (
-	// MaxBlueprintBytes is the largest plutus.json document Parse and
-	// ParseFile will accept.
-	MaxBlueprintBytes = 16 << 20
-
-	// maxDataDepth is the deepest Plutus data tree encode, decode, and
-	// validation will walk. Guarded recursive schemas are legal; a value
-	// nested past this limit is rejected instead of overflowing the stack.
-	maxDataDepth = 64
-)
+// MaxBlueprintBytes is constants.MaxBlueprintBytes, kept on this package so
+// existing callers do not have to change imports.
+const MaxBlueprintBytes = constants.MaxBlueprintBytes
 
 // Blueprint is a parsed and validated CIP-57 Plutus contract blueprint.
 type Blueprint struct {

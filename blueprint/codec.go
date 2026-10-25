@@ -11,15 +11,14 @@ import (
 	"strings"
 
 	"github.com/Salvionied/apollo/v2"
+	"github.com/Salvionied/apollo/v2/constants"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
-const maxContainerPrealloc = 1024
-
 func checkDataDepth(depth int, loc string) error {
-	if depth > maxDataDepth {
-		return fmt.Errorf("%s: plutus data exceeds maximum depth %d", loc, maxDataDepth)
+	if depth > constants.MaxPlutusDataDepth {
+		return fmt.Errorf("%s: plutus data exceeds maximum depth %d", loc, constants.MaxPlutusDataDepth)
 	}
 	return nil
 }
@@ -28,8 +27,8 @@ func containerCap(n int) int {
 	if n < 0 {
 		return 0
 	}
-	if n > maxContainerPrealloc {
-		return maxContainerPrealloc
+	if n > constants.MaxContainerPrealloc {
+		return constants.MaxContainerPrealloc
 	}
 	return n
 }
@@ -459,7 +458,7 @@ func (bp *Blueprint) deref(s *Schema) (*Schema, error) {
 	}
 	cur := s
 	for hops := 0; cur.Ref != ""; hops++ {
-		if hops > maxDataDepth {
+		if hops > constants.MaxPlutusDataDepth {
 			return nil, fmt.Errorf("$ref cycle involving %q", cur.Ref)
 		}
 		if cur.resolved == nil {

@@ -5,11 +5,12 @@
 //
 // Parse and ParseFile read the plutus.json bytes and check the preamble
 // (including Plutus versions v1, v2, v3, and Dijkstra v4), validators, and
-// optional definitions registry. Documents larger than MaxBlueprintBytes, and
-// documents with trailing tokens, are rejected. A $ref cycle is rejected when
-// it does not pass through a constructor, list, or map; a guarded recursive
-// definition is accepted, and values nested deeper than 64 levels are
-// rejected. ValidatorNames returns the validator titles
+// optional definitions registry. Documents larger than
+// constants.MaxBlueprintBytes, and documents with trailing tokens, are
+// rejected. A $ref cycle is rejected when it does not pass through a
+// constructor, list, or map; a guarded recursive definition is accepted, and
+// values nested deeper than constants.MaxPlutusDataDepth are rejected.
+// ValidatorNames returns the validator titles
 // in declaration order. Marshal and WriteFile serialize a Blueprint back to
 // CIP-57 JSON, and ApplyValidatorParams applies 1..N compile-time parameters
 // step by step or all at once, updating compiledCode, hash, and the remaining

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Salvionied/apollo/v2/constants"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -92,7 +93,7 @@ func TestPlutusDataDepthLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	pd := data.NewInteger(big.NewInt(1))
-	for range maxDataDepth + 5 {
+	for range constants.MaxPlutusDataDepth + 5 {
 		pd = data.NewConstr(0, pd)
 	}
 	val, err := bp.Validator("v")
