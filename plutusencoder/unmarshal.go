@@ -119,6 +119,36 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return unmarshalSliceOrNested(pd, fieldVal, field, cfg)
 	case "Map":
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
+	case "Credential":
+		if fieldVal.Type() != reflect.TypeOf(common.Credential{}) {
+			return fmt.Errorf("field %s: Credential requires common.Credential, got %s", field.Name, fieldVal.Type())
+		}
+		cred, err := unmarshalCredential(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(cred))
+		return nil
+	case "TxOutRef":
+		if fieldVal.Type() != reflect.TypeOf(TxOutRef{}) {
+			return fmt.Errorf("field %s: TxOutRef requires plutusencoder.TxOutRef, got %s", field.Name, fieldVal.Type())
+		}
+		ref, err := unmarshalTxOutRef(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(ref))
+		return nil
+	case "AssetClass":
+		if fieldVal.Type() != reflect.TypeOf(AssetClass{}) {
+			return fmt.Errorf("field %s: AssetClass requires plutusencoder.AssetClass, got %s", field.Name, fieldVal.Type())
+		}
+		asset, err := unmarshalAssetClass(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(asset))
+		return nil
 	case "Custom":
 		return fmt.Errorf("field %s tagged Custom but doesn't implement PlutusMarshaler", field.Name)
 	default:

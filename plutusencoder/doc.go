@@ -43,6 +43,9 @@
 //	Map          a native Go map, or a slice of key-value structs
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
+//	Credential   common.Credential as a key or script credential
+//	TxOutRef     TxOutRef as constructor 0 of a 32-byte tx id and an index
+//	AssetClass   AssetClass as constructor 0 of a policy id and a token name
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -51,6 +54,17 @@
 //
 // When DefList or IndefList names a nested struct, the struct takes the
 // field's shape unless it carries its own `_` container marker, which wins.
+//
+// Credential encodes common.Credential as constructor 0 for a key hash and
+// constructor 1 for a script hash, carrying the 28-byte credential hash.
+// TxOutRef and AssetClass each encode constructor 0 of their two fields:
+//
+//	type Datum struct {
+//		_     struct{}          `plutusType:"DefList" plutusConstr:"0"`
+//		Owner common.Credential `plutusType:"Credential"`
+//		Utxo  TxOutRef          `plutusType:"TxOutRef"`
+//		Asset AssetClass        `plutusType:"AssetClass"`
+//	}
 //
 // # Options
 //

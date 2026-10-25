@@ -42,6 +42,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   output is deterministic, and duplicate encoded keys are rejected.
 - Custom `Marshaler` implementations are honored on slice elements, not just on
   whole fields.
+- `plutusType:"Credential"`, `plutusType:"TxOutRef"`, and
+  `plutusType:"AssetClass"` encode a key or script credential, a transaction
+  output reference, and a policy-id/token-name pair.
 
 ### Fixed
 

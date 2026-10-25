@@ -1,0 +1,140 @@
+package plutusencoder
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"math/big"
+
+	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/plutigo/data"
+)
+
+// TxOutRef is a Plutus transaction output reference: a 32-byte transaction id
+// and a zero-based output index, encoded as constructor 0 of those two fields.
+type TxOutRef struct {
+	TxId  []byte
+	Index uint32
+}
+
+// AssetClass is a Plutus asset class: a policy id and a token name, encoded as
+// constructor 0 of those two byte strings. A zero-length policy id and token
+// name represent lovelace.
+type AssetClass struct {
+	PolicyId  []byte
+	TokenName []byte
+}
+
+func marshalCredential(cred common.Credential) (data.PlutusData, error) {
+	switch cred.CredType {
+	case common.CredentialTypeAddrKeyHash, common.CredentialTypeScriptHash:
+		return cred.ToPlutusData(), nil
+	default:
+		return nil, fmt.Errorf("unsupported credential type %d", cred.CredType)
+	}
+}
+
+func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
+	constr, ok := pd.(*data.Constr)
+	if !ok || len(constr.Fields) != 1 {
+		return common.Credential{}, fmt.Errorf("expected credential constructor with 1 field, got %T", pd)
+	}
+	raw, ok := constr.Fields[0].(*data.ByteString)
+	if !ok || len(raw.Inner) != common.Blake2b224Size {
+		return common.Credential{}, fmt.Errorf("expected %d-byte credential hash", common.Blake2b224Size)
+	}
+	hash, err := common.NewBlake2b224Checked(raw.Inner)
+	if err != nil {
+		return common.Credential{}, err
+	}
+	switch {
+	case constrTagEqual(constr.Tag, 0):
+		return common.Credential{
+			CredType:   common.CredentialTypeAddrKeyHash,
+			Credential: hash,
+		}, nil
+	case constrTagEqual(constr.Tag, 1):
+		return common.Credential{
+			CredType:   common.CredentialTypeScriptHash,
+			Credential: hash,
+		}, nil
+	default:
+		return common.Credential{}, fmt.Errorf("expected credential constructor 0 or 1, got %s", constr.Tag)
+	}
+}
+
+func marshalTxOutRef(ref TxOutRef) (data.PlutusData, error) {
+	if len(ref.TxId) != common.Blake2b256Size {
+		return nil, fmt.Errorf("expected %d-byte transaction id, got %d", common.Blake2b256Size, len(ref.TxId))
+	}
+	txId := append([]byte(nil), ref.TxId...)
+	return data.NewConstr(
+		0,
+		data.NewByteString(txId),
+		data.NewInteger(big.NewInt(int64(ref.Index))),
+	), nil
+}
+
+func unmarshalTxOutRef(pd data.PlutusData) (TxOutRef, error) {
+	constr, ok := pd.(*data.Constr)
+	if !ok || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+		return TxOutRef{}, fmt.Errorf("expected TxOutRef constructor 0 with 2 fields, got %T", pd)
+	}
+	rawId, ok := constr.Fields[0].(*data.ByteString)
+	if !ok || len(rawId.Inner) != common.Blake2b256Size {
+		return TxOutRef{}, fmt.Errorf("expected %d-byte transaction id", common.Blake2b256Size)
+	}
+	idxInt, ok := constr.Fields[1].(*data.Integer)
+	if !ok || idxInt.Inner == nil || idxInt.Inner.Sign() < 0 || !idxInt.Inner.IsUint64() {
+		return TxOutRef{}, errors.New("expected unsigned output index")
+	}
+	idx := idxInt.Inner.Uint64()
+	if idx > math.MaxUint32 {
+		return TxOutRef{}, fmt.Errorf("output index %d overflows uint32", idx)
+	}
+	return TxOutRef{
+		TxId:  append([]byte(nil), rawId.Inner...),
+		Index: uint32(idx),
+	}, nil
+}
+
+const maxTokenNameSize = 32
+
+func marshalAssetClass(asset AssetClass) (data.PlutusData, error) {
+	if len(asset.PolicyId) != 0 && len(asset.PolicyId) != common.Blake2b224Size {
+		return nil, fmt.Errorf("expected empty or %d-byte policy id, got %d", common.Blake2b224Size, len(asset.PolicyId))
+	}
+	if len(asset.TokenName) > maxTokenNameSize {
+		return nil, fmt.Errorf("token name exceeds %d bytes: got %d", maxTokenNameSize, len(asset.TokenName))
+	}
+	if len(asset.PolicyId) == 0 && len(asset.TokenName) != 0 {
+		return nil, errors.New("lovelace policy id requires an empty token name")
+	}
+	return data.NewConstr(
+		0,
+		data.NewByteString(append([]byte(nil), asset.PolicyId...)),
+		data.NewByteString(append([]byte(nil), asset.TokenName...)),
+	), nil
+}
+
+func unmarshalAssetClass(pd data.PlutusData) (AssetClass, error) {
+	constr, ok := pd.(*data.Constr)
+	if !ok || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+		return AssetClass{}, fmt.Errorf("expected AssetClass constructor 0 with 2 fields, got %T", pd)
+	}
+	policy, ok := constr.Fields[0].(*data.ByteString)
+	if !ok || (len(policy.Inner) != 0 && len(policy.Inner) != common.Blake2b224Size) {
+		return AssetClass{}, fmt.Errorf("expected empty or %d-byte policy id", common.Blake2b224Size)
+	}
+	token, ok := constr.Fields[1].(*data.ByteString)
+	if !ok || len(token.Inner) > maxTokenNameSize {
+		return AssetClass{}, fmt.Errorf("expected token name of at most %d bytes", maxTokenNameSize)
+	}
+	if len(policy.Inner) == 0 && len(token.Inner) != 0 {
+		return AssetClass{}, errors.New("lovelace policy id requires an empty token name")
+	}
+	return AssetClass{
+		PolicyId:  append([]byte(nil), policy.Inner...),
+		TokenName: append([]byte(nil), token.Inner...),
+	}, nil
+}
