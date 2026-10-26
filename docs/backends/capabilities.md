@@ -24,7 +24,7 @@ Helpers:
 | Capability | Blockfrost | Koios | Ogmios | Ogmios (no Kupo) | UTxO RPC | Fixed |
 |------------|:----------:|:-----:|:------:|:----------------:|:--------:|:-----:|
 | Protocol params | yes | yes | yes | yes | yes | yes |
-| Genesis params | yes | yes | yes | yes | no | yes |
+| Genesis params | yes | yes | yes | yes | yes | yes |
 | Current epoch | yes | yes | yes | yes | no | no |
 | Max tx fee | yes | yes | yes | yes | yes | yes |
 | Tip | yes | yes | yes | yes | yes | no |
