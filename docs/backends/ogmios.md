@@ -24,6 +24,28 @@ queries Ogmios serves, but it reports neither `CapabilityUtxos` nor
 
 `KupoTimeout` bounds each Kupo HTTP request; zero leaves the client default.
 
+## Connection reuse
+
+Queries reuse Ogmios WebSocket connections instead of dialing one per query.
+Each connection carries one query at a time; concurrent queries dial extra
+connections, and up to `OgmiosMaxIdleConns` (default 4) stay open between
+queries. An idle connection is closed after `OgmiosIdleTimeout` (default 30
+seconds); keep it below the idle timeout of any proxy in front of Ogmios. A
+negative `OgmiosMaxIdleConns` dials a new connection for every query, as
+earlier releases did.
+
+Call `CloseIdleConnections` when you are done with a context to close its idle
+connections right away:
+
+```go
+defer ctx.CloseIdleConnections()
+```
+
+A query on a reused connection that the server has closed is retried once on a
+new connection. Transaction submission is never retried, so a submission that
+fails on a broken connection returns the error rather than risking a duplicate
+submission.
+
 ## Custom transports
 
 `NewOgmiosChainContextFromClients(ogmiosClient, kupoClient, networkId)` is the
