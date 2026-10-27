@@ -355,6 +355,8 @@ func (u *UtxoRpcChainContext) GenesisParams() (backend.GenesisParameters, error)
 // GenesisParamsContext reads the chain's genesis configuration with
 // ReadGenesis. A server that implements ReadGenesis in neither utxorpc.v1beta
 // nor utxorpc.v1alpha yields an error matching backend.ErrUnsupported.
+// ReadGenesis is newer than the other queries, so a server may serve it in a
+// different version from the one negotiated for them; both are tried.
 func (u *UtxoRpcChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
 	u.cacheMu.Lock()
 	if u.cachedGenesis != nil && time.Since(u.genesisCacheAt) < cacheExpiry {
@@ -364,7 +366,7 @@ func (u *UtxoRpcChainContext) GenesisParamsContext(ctx context.Context) (backend
 	}
 	u.cacheMu.Unlock()
 
-	msg, err := callWithVersionFallback(ctx, u,
+	msg, err := callEitherVersion(ctx, u,
 		func(ctx context.Context) (*query.ReadGenesisResponse, error) {
 			req := connect.NewRequest(&query.ReadGenesisRequest{})
 			u.client.AddHeadersToRequest(req)
@@ -416,7 +418,9 @@ func (u *UtxoRpcChainContext) GenesisParamsContext(ctx context.Context) (backend
 // value is treated as missing rather than passed on.
 func genesisFromRpc(g *cardano.Genesis) (backend.GenesisParameters, error) {
 	coeff := g.GetActiveSlotsCoeff()
-	if coeff == nil || coeff.GetDenominator() == 0 || coeff.GetNumerator() <= 0 {
+	// The coefficient is a probability in (0, 1].
+	if coeff == nil || coeff.GetDenominator() == 0 || coeff.GetNumerator() <= 0 ||
+		int64(coeff.GetNumerator()) > int64(coeff.GetDenominator()) {
 		return backend.GenesisParameters{}, fmt.Errorf("invalid active slots coefficient %v", coeff)
 	}
 	if g.GetEpochLength() == 0 {

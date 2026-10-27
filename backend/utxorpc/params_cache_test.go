@@ -271,6 +271,78 @@ func TestGenesisParamsFallsBackToV1Alpha(t *testing.T) {
 	}
 }
 
+// TestGenesisParamsIgnoresNegotiatedVersion covers servers whose versions
+// differ in which RPCs they implement: once another call has settled on one
+// version, ReadGenesis must still reach the other when only it serves
+// genesis, and doing so must not move the other calls to that version.
+func TestGenesisParamsIgnoresNegotiatedVersion(t *testing.T) {
+	alphaGenesis := &alphacardano.Genesis{}
+	if err := transcode(testGenesis(), alphaGenesis); err != nil {
+		t.Fatal(err)
+	}
+	alphaParams := &alphacardano.PParams{}
+	if err := transcode(testPParams(), alphaParams); err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string]struct {
+		replies       map[string]queryReply
+		paramsMethod  string
+		genesisMethod string
+	}{
+		"v1beta params, v1alpha genesis": {
+			replies: map[string]queryReply{
+				"ReadParams": paramsReply(),
+				"alpha.ReadGenesis": {msg: &alphaquery.ReadGenesisResponse{
+					Config: &alphaquery.ReadGenesisResponse_Cardano{Cardano: alphaGenesis},
+				}},
+			},
+			paramsMethod:  "ReadParams",
+			genesisMethod: "alpha.ReadGenesis",
+		},
+		"v1alpha params, v1beta genesis": {
+			replies: map[string]queryReply{
+				"alpha.ReadParams": {msg: &alphaquery.ReadParamsResponse{
+					Values: &alphaquery.AnyChainParams{
+						Params: &alphaquery.AnyChainParams_Cardano{Cardano: alphaParams},
+					},
+				}},
+				"ReadGenesis": genesisReply(testGenesis()),
+			},
+			paramsMethod:  "alpha.ReadParams",
+			genesisMethod: "ReadGenesis",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			server, ctx := newQueryServer(t, test.replies)
+			if _, err := ctx.ProtocolParams(); err != nil {
+				t.Fatal(err)
+			}
+			gp, err := ctx.GenesisParams()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gp.NetworkMagic != 764824073 {
+				t.Fatalf("GenesisParams() = %+v, want mainnet values", gp)
+			}
+			if n := server.callCount(test.genesisMethod); n != 1 {
+				t.Fatalf("%s called %d times, want 1", test.genesisMethod, n)
+			}
+
+			// Parameters still come from the version negotiated for them.
+			ctx.cacheMu.Lock()
+			ctx.cachedParams = nil
+			ctx.cacheMu.Unlock()
+			if _, err := ctx.ProtocolParams(); err != nil {
+				t.Fatal(err)
+			}
+			if n := server.callCount(test.paramsMethod); n != 2 {
+				t.Fatalf("%s called %d times, want 2", test.paramsMethod, n)
+			}
+		})
+	}
+}
+
 func TestGenesisParamsCached(t *testing.T) {
 	server, ctx := newQueryServer(t, map[string]queryReply{"ReadGenesis": genesisReply(testGenesis())})
 
@@ -302,6 +374,9 @@ func TestGenesisParamsRejectsMalformed(t *testing.T) {
 		},
 		"negative coefficient": func(g *cardano.Genesis) {
 			g.ActiveSlotsCoeff = &cardano.RationalNumber{Numerator: -1, Denominator: 20}
+		},
+		"coefficient above one": func(g *cardano.Genesis) {
+			g.ActiveSlotsCoeff = &cardano.RationalNumber{Numerator: 21, Denominator: 20}
 		},
 		"missing epoch length":    func(g *cardano.Genesis) { g.EpochLength = 0 },
 		"missing slot length":     func(g *cardano.Genesis) { g.SlotLength = 0 },
