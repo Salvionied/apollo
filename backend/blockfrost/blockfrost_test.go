@@ -49,6 +49,48 @@ func TestRequestContextPropagatesCancellation(t *testing.T) {
 	}
 }
 
+func TestRequestRejectsCrossOriginRedirect(t *testing.T) {
+	var forwarded atomic.Int32
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwarded.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer sink.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, sink.URL+"/capture", http.StatusFound)
+	}))
+	defer source.Close()
+
+	ctx := NewBlockFrostChainContext(source.URL, 0, "secret-project-id")
+	if _, err := ctx.requestContext(context.Background(), http.MethodGet, "/blocks/latest", nil, ""); err == nil {
+		t.Fatal("expected cross-origin redirect to fail")
+	}
+	if got := forwarded.Load(); got != 0 {
+		t.Fatalf("cross-origin destination received %d requests", got)
+	}
+}
+
+func TestRequestAllowsSameOriginRedirect(t *testing.T) {
+	var gotCredential string
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		gotCredential = r.Header.Get("project_id")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer source.Close()
+
+	ctx := NewBlockFrostChainContext(source.URL, 0, "secret-project-id")
+	if _, err := ctx.requestContext(context.Background(), http.MethodGet, "/start", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if gotCredential != "secret-project-id" {
+		t.Fatalf("redirected request credential = %q", gotCredential)
+	}
+}
+
 // TestBaseUrlUsedAsGiven checks that the configured base URL is used as given.
 // Some Blockfrost-compatible providers serve the v0 API under another path,
 // such as /api/v1, so the constructor must not add or require a version

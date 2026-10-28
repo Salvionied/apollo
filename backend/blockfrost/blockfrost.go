@@ -74,7 +74,7 @@ func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string
 		baseUrl:   baseUrl,
 		projectId: projectId,
 		networkId: networkId,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		client:    &http.Client{Timeout: 30 * time.Second, CheckRedirect: backendutil.SameOriginRedirect},
 	}
 }
 
