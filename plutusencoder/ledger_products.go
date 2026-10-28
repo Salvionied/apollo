@@ -45,8 +45,7 @@ func marshalCredential(cred common.Credential) (data.PlutusData, error) {
 
 func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
 	constr, ok := pd.(*data.Constr)
-	tagOK := ok && constr != nil && (constrTagEqual(constr.Tag, 0) || constrTagEqual(constr.Tag, 1))
-	if !tagOK || len(constr.Fields) != 1 {
+	if !ok || constr == nil || len(constr.Fields) != 1 || (!constrTagEqual(constr.Tag, 0) && !constrTagEqual(constr.Tag, 1)) {
 		return common.Credential{}, wrongConstrShape("credential constructor 0 or 1 with 1 field", pd)
 	}
 	raw, ok := constr.Fields[0].(*data.ByteString)
