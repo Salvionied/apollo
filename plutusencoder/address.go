@@ -1,6 +1,7 @@
 package plutusencoder
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -12,7 +13,7 @@ import (
 func marshalAddress(addr common.Address) (data.PlutusData, error) {
 	switch addr.Type() {
 	case common.AddressTypeByron:
-		return nil, fmt.Errorf("byron address has no Plutus data representation")
+		return nil, errors.New("byron address has no Plutus data representation")
 	case common.AddressTypeNoneKey, common.AddressTypeNoneScript:
 		return marshalRewardAddress(addr)
 	}
