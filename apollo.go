@@ -3183,6 +3183,12 @@ func (a *Apollo) estimateExecutionUnits(
 	maxMem, memErr := strconv.ParseInt(pp.MaxTxExMem, 10, 64)
 	maxSteps, stepsErr := strconv.ParseInt(pp.MaxTxExSteps, 10, 64)
 	for evalKey, evalUnits := range evalResult {
+		if evalUnits.Memory <= 0 || evalUnits.Steps <= 0 {
+			return nil, fmt.Errorf(
+				"EvaluateTx returned non-positive execution budget for redeemer %d:%d: memory=%d steps=%d",
+				evalKey.Tag, evalKey.Index, evalUnits.Memory, evalUnits.Steps,
+			)
+		}
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
 			Steps:  bufferExUnits(evalUnits.Steps, 1+ExStepBuffer),
