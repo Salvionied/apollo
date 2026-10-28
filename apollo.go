@@ -113,6 +113,7 @@ type Apollo struct {
 	wallet                     Wallet
 	evaluationWitnessProviders []EvaluationWitnessProvider
 	certificates               []common.CertificateWrapper
+	updatedPools               map[common.Blake2b224]struct{}
 	withdrawals                map[string]withdrawalEntry
 	auxiliaryData              *auxData
 	votingProcedures           common.VotingProcedures
@@ -901,18 +902,37 @@ func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common
 
 // --- Pool Operations ---
 
-// RegisterPool adds a pool registration certificate.
+// RegisterPool adds a pool registration certificate for a new pool, which
+// pays the pool deposit.
 func (a *Apollo) RegisterPool(params common.PoolRegistrationCertificate) *Apollo {
+	a.addPoolRegistration("RegisterPool", params)
+	return a
+}
+
+// UpdatePool adds a pool registration certificate for a pool that is already
+// registered. The ledger treats it as a parameter update and charges no pool
+// deposit.
+func (a *Apollo) UpdatePool(params common.PoolRegistrationCertificate) *Apollo {
+	if a.addPoolRegistration("UpdatePool", params) {
+		if a.updatedPools == nil {
+			a.updatedPools = make(map[common.Blake2b224]struct{})
+		}
+		a.updatedPools[params.Operator] = struct{}{}
+	}
+	return a
+}
+
+func (a *Apollo) addPoolRegistration(name string, params common.PoolRegistrationCertificate) bool {
 	if params.Margin.Rat == nil || params.Margin.Denom().Sign() == 0 {
-		a.setErrOnce(errors.New("RegisterPool: margin must not be nil or have a zero denominator"))
-		return a
+		a.setErrOnce(fmt.Errorf("%s: margin must not be nil or have a zero denominator", name))
+		return false
 	}
 	params.CertType = uint(common.CertificateTypePoolRegistration)
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypePoolRegistration),
 		Certificate: &params,
 	})
-	return a
+	return true
 }
 
 // RegisterDRep adds a DRep registration certificate.
@@ -1547,6 +1567,9 @@ func (a *Apollo) Clone() *Apollo {
 			continue
 		}
 		clone.certificates = append(clone.certificates, certificateCopy)
+	}
+	if a.updatedPools != nil {
+		clone.updatedPools = maps.Clone(a.updatedPools)
 	}
 	clone.scriptHashes = append(clone.scriptHashes, a.scriptHashes...)
 	for _, proposal := range a.proposalProcedures {
@@ -4294,6 +4317,9 @@ func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits .
 		return 0, errors.New("protocol deposits must be non-negative")
 	}
 	var deposits, refunds uint64
+	// the ledger charges the pool deposit once per operator that is not
+	// already registered
+	chargedPools := make(map[common.Blake2b224]struct{})
 	add := func(total *uint64, amount uint64) error {
 		if amount > math.MaxUint64-*total {
 			return errors.New("certificate deposit total overflows uint64")
@@ -4307,6 +4333,15 @@ func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits .
 		case uint(common.CertificateTypeStakeRegistration):
 			err = add(&deposits, uint64(stakeDeposit))
 		case uint(common.CertificateTypePoolRegistration):
+			if c, ok := cert.Certificate.(*common.PoolRegistrationCertificate); ok {
+				if _, updated := a.updatedPools[c.Operator]; updated {
+					break
+				}
+				if _, charged := chargedPools[c.Operator]; charged {
+					break
+				}
+				chargedPools[c.Operator] = struct{}{}
+			}
 			err = add(&deposits, uint64(poolDeposit))
 		case uint(common.CertificateTypeStakeDeregistration):
 			err = add(&refunds, uint64(stakeDeposit))
