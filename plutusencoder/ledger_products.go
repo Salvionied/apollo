@@ -28,6 +28,15 @@ type AssetClass struct {
 func marshalCredential(cred common.Credential) (data.PlutusData, error) {
 	switch cred.CredType {
 	case common.CredentialTypeAddrKeyHash, common.CredentialTypeScriptHash:
+		// A zero Credential is CredType 0 and a zero hash. ToPlutusData would
+		// emit that unset value as a key credential, so reject it first.
+		if cred.CredType == common.CredentialTypeAddrKeyHash && cred.Credential == (common.Blake2b224{}) {
+			return nil, errors.New("credential hash is empty")
+		}
+		hashLen := len(cred.Credential.Bytes())
+		if hashLen != common.Blake2b224Size {
+			return nil, fmt.Errorf("expected %d-byte credential hash, got %d", common.Blake2b224Size, hashLen)
+		}
 		return cred.ToPlutusData(), nil
 	default:
 		return nil, fmt.Errorf("unsupported credential type %d", cred.CredType)
@@ -36,8 +45,9 @@ func marshalCredential(cred common.Credential) (data.PlutusData, error) {
 
 func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || len(constr.Fields) != 1 {
-		return common.Credential{}, fmt.Errorf("expected credential constructor with 1 field, got %T", pd)
+	tagOK := ok && constr != nil && (constrTagEqual(constr.Tag, 0) || constrTagEqual(constr.Tag, 1))
+	if !tagOK || len(constr.Fields) != 1 {
+		return common.Credential{}, wrongConstrShape("credential constructor 0 or 1 with 1 field", pd)
 	}
 	raw, ok := constr.Fields[0].(*data.ByteString)
 	if !ok || len(raw.Inner) != common.Blake2b224Size {
@@ -47,20 +57,16 @@ func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
 	if err != nil {
 		return common.Credential{}, err
 	}
-	switch {
-	case constrTagEqual(constr.Tag, 0):
+	if constrTagEqual(constr.Tag, 0) {
 		return common.Credential{
 			CredType:   common.CredentialTypeAddrKeyHash,
 			Credential: hash,
 		}, nil
-	case constrTagEqual(constr.Tag, 1):
-		return common.Credential{
-			CredType:   common.CredentialTypeScriptHash,
-			Credential: hash,
-		}, nil
-	default:
-		return common.Credential{}, fmt.Errorf("expected credential constructor 0 or 1, got %s", constr.Tag)
 	}
+	return common.Credential{
+		CredType:   common.CredentialTypeScriptHash,
+		Credential: hash,
+	}, nil
 }
 
 func marshalTxOutRef(ref TxOutRef) (data.PlutusData, error) {
@@ -77,8 +83,8 @@ func marshalTxOutRef(ref TxOutRef) (data.PlutusData, error) {
 
 func unmarshalTxOutRef(pd data.PlutusData) (TxOutRef, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
-		return TxOutRef{}, fmt.Errorf("expected TxOutRef constructor 0 with 2 fields, got %T", pd)
+	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+		return TxOutRef{}, wrongConstrShape("TxOutRef constructor 0 with 2 fields", pd)
 	}
 	rawId, ok := constr.Fields[0].(*data.ByteString)
 	if !ok || len(rawId.Inner) != common.Blake2b256Size {
@@ -119,8 +125,8 @@ func marshalAssetClass(asset AssetClass) (data.PlutusData, error) {
 
 func unmarshalAssetClass(pd data.PlutusData) (AssetClass, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
-		return AssetClass{}, fmt.Errorf("expected AssetClass constructor 0 with 2 fields, got %T", pd)
+	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+		return AssetClass{}, wrongConstrShape("AssetClass constructor 0 with 2 fields", pd)
 	}
 	policy, ok := constr.Fields[0].(*data.ByteString)
 	if !ok || (len(policy.Inner) != 0 && len(policy.Inner) != common.Blake2b224Size) {
@@ -137,4 +143,15 @@ func unmarshalAssetClass(pd data.PlutusData) (AssetClass, error) {
 		PolicyId:  append([]byte(nil), policy.Inner...),
 		TokenName: append([]byte(nil), token.Inner...),
 	}, nil
+}
+
+// wrongConstrShape reports a product that is not the expected constructor.
+// A real constructor names its tag and field count. Any other Plutus value
+// keeps the concrete type, because there is no tag or width to report.
+func wrongConstrShape(expect string, pd data.PlutusData) error {
+	constr, ok := pd.(*data.Constr)
+	if !ok || constr == nil {
+		return fmt.Errorf("expected %s, got %T", expect, pd)
+	}
+	return fmt.Errorf("expected %s, got constructor %s with %d fields", expect, constr.Tag, len(constr.Fields))
 }
