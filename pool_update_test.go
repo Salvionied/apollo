@@ -111,3 +111,57 @@ func TestCompleteWithPoolUpdateConservesValue(t *testing.T) {
 		t.Fatalf("outputs + fee = %d, want consumed %d", produced, input)
 	}
 }
+
+func TestRegisterThenUpdateSameOperatorChargedOnce(t *testing.T) {
+	// the first registration of an unregistered pool pays; the second is an update
+	a := New(setupFixedContext()).RegisterPool(poolParams(1)).UpdatePool(poolParams(1))
+	got, err := a.certificateDepositAdjustment(2_000_000, 500_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 500_000_000 {
+		t.Fatalf("deposit = %d, want one pool deposit", got)
+	}
+}
+
+func TestUpdateThenRegisterSameOperatorChargesNothing(t *testing.T) {
+	// UpdatePool declares the pool registered, so later registrations of it
+	// in the same transaction are updates too
+	a := New(setupFixedContext()).UpdatePool(poolParams(1)).RegisterPool(poolParams(1))
+	got, err := a.certificateDepositAdjustment(2_000_000, 500_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 0 {
+		t.Fatalf("deposit = %d, want 0", got)
+	}
+}
+
+func TestSetCertificatesAfterUpdatePoolChargesNewRegistration(t *testing.T) {
+	a := New(setupFixedContext()).UpdatePool(poolParams(1))
+	p := poolParams(1)
+	a.SetCertificates([]common.CertificateWrapper{
+		{Type: uint(common.CertificateTypePoolRegistration), Certificate: &p},
+	})
+	got, err := a.certificateDepositAdjustment(2_000_000, 500_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 500_000_000 {
+		t.Fatalf("deposit = %d, want the replacement registration charged", got)
+	}
+}
+
+func TestPoolRegistrationTypedNilChargesDeposit(t *testing.T) {
+	a := New(setupFixedContext())
+	a.SetCertificates([]common.CertificateWrapper{
+		{Type: uint(common.CertificateTypePoolRegistration), Certificate: (*common.PoolRegistrationCertificate)(nil)},
+	})
+	got, err := a.certificateDepositAdjustment(2_000_000, 500_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 500_000_000 {
+		t.Fatalf("deposit = %d, want one pool deposit", got)
+	}
+}
