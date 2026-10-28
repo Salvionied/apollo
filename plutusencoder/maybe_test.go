@@ -2,6 +2,8 @@ package plutusencoder
 
 import (
 	"bytes"
+	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -153,5 +155,139 @@ func TestMaybeRejectsUnknownConstructor(t *testing.T) {
 	var decoded maybeDatum
 	if err := UnmarshalPlutus(bad, &decoded); err == nil {
 		t.Fatal("expected unknown Maybe constructor to fail")
+	}
+}
+
+type maybeValueQty int64
+
+func (q maybeValueQty) ToPlutusData() (data.PlutusData, error) {
+	return data.NewInteger(big.NewInt(int64(q) + 100)), nil
+}
+
+func (q maybeValueQty) FromPlutusData(pd data.PlutusData, res any) error {
+	integer, ok := pd.(*data.Integer)
+	if !ok {
+		return fmt.Errorf("expected Integer, got %T", pd)
+	}
+	target, ok := res.(*maybeValueQty)
+	if !ok {
+		return fmt.Errorf("expected *maybeValueQty, got %T", res)
+	}
+	*target = maybeValueQty(integer.Inner.Int64() - 100)
+	return nil
+}
+
+type maybePtrQty int64
+
+func (q *maybePtrQty) ToPlutusData() (data.PlutusData, error) {
+	return data.NewInteger(big.NewInt(int64(*q) + 100)), nil
+}
+
+func (q *maybePtrQty) FromPlutusData(pd data.PlutusData, res any) error {
+	integer, ok := pd.(*data.Integer)
+	if !ok {
+		return fmt.Errorf("expected Integer, got %T", pd)
+	}
+	target, ok := res.(*maybePtrQty)
+	if !ok {
+		return fmt.Errorf("expected *maybePtrQty, got %T", res)
+	}
+	*target = maybePtrQty(integer.Inner.Int64() - 100)
+	return nil
+}
+
+type maybeCustomDatum struct {
+	_   struct{}       `plutusType:"DefList" plutusConstr:"0"`
+	Val *maybeValueQty `plutusType:"Maybe"`
+	Ptr *maybePtrQty   `plutusType:"Maybe"`
+}
+
+func TestMaybeCustomCodecs(t *testing.T) {
+	val := maybeValueQty(1)
+	ptr := maybePtrQty(1)
+	pd, err := MarshalPlutus(&maybeCustomDatum{Val: &val, Ptr: &ptr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, field := range pd.(*data.Constr).Fields {
+		just := field.(*data.Constr)
+		integer := just.Fields[0].(*data.Integer)
+		if integer.Inner.Cmp(big.NewInt(101)) != 0 {
+			t.Fatalf("field %d encoded %s, want 101", i, integer.Inner)
+		}
+	}
+	var decoded maybeCustomDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Val == nil || *decoded.Val != 1 || decoded.Ptr == nil || *decoded.Ptr != 1 {
+		t.Fatalf("decoded %+v", decoded)
+	}
+}
+
+type maybeBigDatum struct {
+	_ struct{} `plutusType:"DefList" plutusConstr:"0"`
+	N *big.Int `plutusType:"Maybe"`
+}
+
+func TestMaybeBigInt(t *testing.T) {
+	for _, want := range []*big.Int{big.NewInt(5), big.NewInt(0), big.NewInt(-7)} {
+		original := maybeBigDatum{N: new(big.Int).Set(want)}
+		pd, err := MarshalPlutus(&original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		just := pd.(*data.Constr).Fields[0].(*data.Constr)
+		if !constrTagEqual(just.Tag, 0) || just.Fields[0].(*data.Integer).Inner.Cmp(want) != 0 {
+			t.Fatalf("Just %s encoded as %#v", want, just)
+		}
+		var decoded maybeBigDatum
+		if err := UnmarshalPlutus(pd, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.N == nil || decoded.N.Cmp(want) != 0 {
+			t.Fatalf("decoded %v, want %s", decoded.N, want)
+		}
+	}
+	pd, err := MarshalPlutus(&maybeBigDatum{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nothing := pd.(*data.Constr).Fields[0].(*data.Constr)
+	if !constrTagEqual(nothing.Tag, 1) || len(nothing.Fields) != 0 {
+		t.Fatalf("nil *big.Int: %#v", nothing)
+	}
+}
+
+type maybeScalarDatum struct {
+	_ struct{} `plutusType:"DefList" plutusConstr:"0"`
+	I *int64   `plutusType:"Maybe"`
+	U *uint64  `plutusType:"Maybe"`
+	S *string  `plutusType:"Maybe"`
+	B *[]byte  `plutusType:"Maybe"`
+}
+
+func TestMaybeScalarsIncludeZeroAndEmpty(t *testing.T) {
+	i := int64(0)
+	u := uint64(0)
+	s := ""
+	b := []byte{}
+	original := maybeScalarDatum{I: &i, U: &u, S: &s, B: &b}
+	pd, err := MarshalPlutus(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range pd.(*data.Constr).Fields {
+		just := field.(*data.Constr)
+		if !constrTagEqual(just.Tag, 0) || len(just.Fields) != 1 {
+			t.Fatalf("zero scalar was not Just: %#v", field)
+		}
+	}
+	var decoded maybeScalarDatum
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.I == nil || *decoded.I != 0 || decoded.U == nil || *decoded.U != 0 || decoded.S == nil || *decoded.S != "" || decoded.B == nil || len(*decoded.B) != 0 {
+		t.Fatalf("decoded %+v", decoded)
 	}
 }

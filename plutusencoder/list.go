@@ -114,7 +114,7 @@ func marshalSliceElement(elem reflect.Value) (data.PlutusData, error) {
 	}
 }
 
-func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) error {
+func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type, cfg decodeConfig) error {
 	container, expectedConstr, hasExpectedConstr, err := readContainerMetadata(typ)
 	if err != nil {
 		return err
@@ -187,13 +187,14 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		}
 		if fieldIdx >= len(fields) {
 			if omitEmpty {
+				val.Field(i).SetZero()
 				continue
 			}
 			return fmt.Errorf("plutus data has %d fields, struct %s field %s is required", len(fields), typ.Name(), field.Name)
 		}
 
 		fieldVal := val.Field(i)
-		if err := unmarshalField(fields[fieldIdx], fieldVal, field); err != nil {
+		if err := unmarshalField(fields[fieldIdx], fieldVal, field, cfg); err != nil {
 			return fmt.Errorf("field %s: %w", field.Name, err)
 		}
 		fieldIdx++
@@ -201,7 +202,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 	return nil
 }
 
-func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if fieldVal.Kind() == reflect.Slice {
 		list, ok := pd.(*data.List)
 		if !ok {
@@ -215,13 +216,13 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 			// Handle pointer element types (e.g. []*MyStruct)
 			if elemType.Kind() == reflect.Pointer {
 				ptr := reflect.New(elemType.Elem())
-				if err := unmarshalSliceElement(item, ptr.Elem()); err != nil {
+				if err := unmarshalSliceElement(item, ptr.Elem(), cfg); err != nil {
 					return fmt.Errorf("element %d: %w", i, err)
 				}
 				result.Index(i).Set(ptr)
 			} else {
 				elem := reflect.New(elemType).Elem()
-				if err := unmarshalSliceElement(item, elem); err != nil {
+				if err := unmarshalSliceElement(item, elem, cfg); err != nil {
 					return fmt.Errorf("element %d: %w", i, err)
 				}
 				result.Index(i).Set(elem)
@@ -231,11 +232,11 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 		return nil
 	}
 	// Nested struct
-	return unmarshalValue(pd, fieldVal)
+	return unmarshalValue(pd, fieldVal, cfg)
 }
 
 // unmarshalSliceElement unmarshals a single slice element, handling both struct and primitive types.
-func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value) error {
+func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeConfig) error {
 	if elem.CanAddr() {
 		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
 			return m.FromPlutusData(pd, elem.Addr().Interface())
@@ -247,7 +248,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value) error {
 
 	switch elem.Kind() {
 	case reflect.Struct:
-		return unmarshalValue(pd, elem)
+		return unmarshalValue(pd, elem, cfg)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		integer, ok := pd.(*data.Integer)
 		if !ok {

@@ -1,7 +1,6 @@
 package plutusencoder
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -12,8 +11,44 @@ import (
 
 func marshalAddress(addr common.Address) (data.PlutusData, error) {
 	switch addr.Type() {
-	case common.AddressTypeByron, common.AddressTypeNoneKey, common.AddressTypeNoneScript:
+	case common.AddressTypeByron:
+		return nil, fmt.Errorf("byron address has no Plutus data representation")
+	case common.AddressTypeNoneKey, common.AddressTypeNoneScript:
+		return marshalRewardAddress(addr)
+	}
+	if addr.PayloadPayload() == nil {
 		return nil, fmt.Errorf("plutus address requires a Shelley payment credential, got type %d", addr.Type())
+	}
+	encoded := addr.ToPlutusData()
+	if encoded == nil {
+		return nil, fmt.Errorf("address type %d has no Plutus data representation", addr.Type())
+	}
+	if constr, ok := encoded.(*data.Constr); ok {
+		for _, field := range constr.Fields {
+			if field == nil {
+				return nil, fmt.Errorf("plutus address requires a Shelley payment credential, got type %d", addr.Type())
+			}
+		}
+	}
+	return encoded, nil
+}
+
+func marshalRewardAddress(addr common.Address) (data.PlutusData, error) {
+	stake := addr.StakingPayload()
+	if stake == nil {
+		return nil, fmt.Errorf("reward address requires a %d-byte stake hash", common.AddressHashSize)
+	}
+	var hash []byte
+	switch p := stake.(type) {
+	case common.AddressPayloadKeyHash:
+		hash = p.Hash.Bytes()
+	case common.AddressPayloadScriptHash:
+		hash = p.Hash.Bytes()
+	default:
+		return nil, fmt.Errorf("reward address requires a stake key or script hash, got %T", stake)
+	}
+	if len(hash) != common.AddressHashSize {
+		return nil, fmt.Errorf("reward address requires a %d-byte stake hash, got %d", common.AddressHashSize, len(hash))
 	}
 	encoded := addr.ToPlutusData()
 	if encoded == nil {
@@ -22,10 +57,16 @@ func marshalAddress(addr common.Address) (data.PlutusData, error) {
 	return encoded, nil
 }
 
-func unmarshalAddress(pd data.PlutusData) (common.Address, error) {
+func unmarshalAddress(pd data.PlutusData, network byte) (common.Address, error) {
 	root, ok := pd.(*data.Constr)
-	if !ok || !constrTagEqual(root.Tag, 0) || len(root.Fields) != 2 {
-		return common.Address{}, fmt.Errorf("expected Address constructor 0 with 2 fields, got %T", pd)
+	if !ok {
+		return common.Address{}, fmt.Errorf("expected Address constructor, got %T", pd)
+	}
+	if (constrTagEqual(root.Tag, 0) || constrTagEqual(root.Tag, 1)) && len(root.Fields) == 1 {
+		return unmarshalRewardAddress(root, network)
+	}
+	if !constrTagEqual(root.Tag, 0) || len(root.Fields) != 2 {
+		return common.Address{}, fmt.Errorf("expected Address constructor 0 with 2 fields, got constructor %s with %d fields", root.Tag, len(root.Fields))
 	}
 	payType, payment, err := credentialHash(root.Fields[0])
 	if err != nil {
@@ -39,12 +80,31 @@ func unmarshalAddress(pd data.PlutusData) (common.Address, error) {
 	addrType := paymentAddressType(payType, stake.kind)
 	if stake.kind == stakePointer {
 		raw := make([]byte, 1, 1+common.AddressHashSize+len(stake.pointer))
-		raw[0] = (addrType << 4) | common.AddressNetworkTestnet
+		raw[0] = (addrType << 4) | network
 		raw = append(raw, payment...)
 		raw = append(raw, stake.pointer...)
-		return common.NewAddressFromBytes(raw)
+		addr, err := common.NewAddressFromBytes(raw)
+		if err != nil {
+			return common.Address{}, err
+		}
+		if err := common.CheckAddressPointerInRange(addr); err != nil {
+			return common.Address{}, err
+		}
+		return addr, nil
 	}
-	return common.NewAddressFromParts(addrType, common.AddressNetworkTestnet, payment, stake.hash)
+	return common.NewAddressFromParts(addrType, network, payment, stake.hash)
+}
+
+func unmarshalRewardAddress(root *data.Constr, network byte) (common.Address, error) {
+	raw, ok := root.Fields[0].(*data.ByteString)
+	if !ok || raw == nil || len(raw.Inner) != common.AddressHashSize {
+		return common.Address{}, fmt.Errorf("expected %d-byte stake hash, got constructor %s with %d fields", common.AddressHashSize, root.Tag, len(root.Fields))
+	}
+	var addrType uint8 = common.AddressTypeNoneKey
+	if constrTagEqual(root.Tag, 1) {
+		addrType = common.AddressTypeNoneScript
+	}
+	return common.NewAddressFromParts(addrType, network, nil, append([]byte(nil), raw.Inner...))
 }
 
 type stakeKind int
@@ -91,8 +151,11 @@ func paymentAddressType(script bool, stake stakeKind) uint8 {
 
 func credentialHash(pd data.PlutusData) (script bool, hash []byte, err error) {
 	cred, ok := pd.(*data.Constr)
-	if !ok || len(cred.Fields) != 1 {
+	if !ok {
 		return false, nil, fmt.Errorf("expected credential constructor with 1 field, got %T", pd)
+	}
+	if len(cred.Fields) != 1 {
+		return false, nil, fmt.Errorf("expected credential constructor with 1 field, got constructor %s with %d fields", cred.Tag, len(cred.Fields))
 	}
 	raw, ok := cred.Fields[0].(*data.ByteString)
 	if !ok || len(raw.Inner) != common.AddressHashSize {
@@ -104,7 +167,7 @@ func credentialHash(pd data.PlutusData) (script bool, hash []byte, err error) {
 	case constrTagEqual(cred.Tag, 1):
 		return true, append([]byte(nil), raw.Inner...), nil
 	default:
-		return false, nil, fmt.Errorf("expected credential constructor 0 or 1, got %s", cred.Tag)
+		return false, nil, fmt.Errorf("expected credential constructor 0 or 1, got constructor %s with %d fields", cred.Tag, len(cred.Fields))
 	}
 }
 
@@ -115,16 +178,16 @@ func stakingReference(pd data.PlutusData) (stakeRef, error) {
 	}
 	if constrTagEqual(maybe.Tag, 1) {
 		if len(maybe.Fields) != 0 {
-			return stakeRef{}, errors.New("nothing staking credential must have no fields")
+			return stakeRef{}, fmt.Errorf("nothing staking credential must have no fields, got constructor %s with %d fields", maybe.Tag, len(maybe.Fields))
 		}
 		return stakeRef{kind: stakeNone}, nil
 	}
 	if !constrTagEqual(maybe.Tag, 0) || len(maybe.Fields) != 1 {
-		return stakeRef{}, errors.New("expected Just StakingCredential")
+		return stakeRef{}, fmt.Errorf("expected Just StakingCredential, got constructor %s with %d fields", maybe.Tag, len(maybe.Fields))
 	}
 	staking, ok := maybe.Fields[0].(*data.Constr)
-	if !ok || len(staking.Fields) == 0 {
-		return stakeRef{}, errors.New("expected StakingCredential constructor")
+	if !ok {
+		return stakeRef{}, fmt.Errorf("expected StakingCredential constructor, got %T", maybe.Fields[0])
 	}
 	switch {
 	case constrTagEqual(staking.Tag, 0) && len(staking.Fields) == 1:
@@ -152,7 +215,7 @@ func stakingReference(pd data.PlutusData) (stakeRef, error) {
 		}
 		return stakeRef{kind: stakePointer, pointer: encodePointer(slot, txIndex, certIndex)}, nil
 	default:
-		return stakeRef{}, errors.New("expected StakingHash or StakingPtr")
+		return stakeRef{}, fmt.Errorf("expected StakingHash or StakingPtr, got constructor %s with %d fields", staking.Tag, len(staking.Fields))
 	}
 }
 
@@ -198,8 +261,21 @@ func marshalMaybe(fieldVal reflect.Value) (data.PlutusData, error) {
 }
 
 func marshalMaybeInner(elem reflect.Value) (data.PlutusData, error) {
+	if elem.CanAddr() {
+		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
+			return m.ToPlutusData()
+		}
+	}
+	if elem.CanInterface() {
+		if m, ok := elem.Interface().(PlutusMarshaler); ok {
+			return m.ToPlutusData()
+		}
+	}
 	if elem.Type() == reflect.TypeOf(common.Address{}) {
 		return marshalAddress(elem.Interface().(common.Address))
+	}
+	if elem.Type() == reflect.TypeOf(big.Int{}) || elem.Type() == reflect.TypeFor[*big.Int]() {
+		return marshalBigInt(elem)
 	}
 	if elem.Kind() == reflect.Struct {
 		return marshalValue(elem)
@@ -221,7 +297,7 @@ func marshalMaybeInner(elem reflect.Value) (data.PlutusData, error) {
 	return nil, fmt.Errorf("unsupported Maybe element type %s", elem.Type())
 }
 
-func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
+func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value, cfg decodeConfig) error {
 	if fieldVal.Kind() != reflect.Pointer {
 		return fmt.Errorf("maybe requires a pointer, got %s", fieldVal.Kind())
 	}
@@ -231,33 +307,46 @@ func unmarshalMaybe(pd data.PlutusData, fieldVal reflect.Value) error {
 	}
 	if constrTagEqual(constr.Tag, 1) {
 		if len(constr.Fields) != 0 {
-			return errors.New("nothing must have no fields")
+			return fmt.Errorf("nothing must have no fields, got constructor %s with %d fields", constr.Tag, len(constr.Fields))
 		}
 		fieldVal.SetZero()
 		return nil
 	}
 	if !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 1 {
-		return errors.New("expected Just with 1 field")
+		return fmt.Errorf("expected Just with 1 field, got constructor %s with %d fields", constr.Tag, len(constr.Fields))
 	}
 	ptr := reflect.New(fieldVal.Type().Elem())
-	if err := unmarshalMaybeInner(constr.Fields[0], ptr.Elem()); err != nil {
+	if err := unmarshalMaybeInner(constr.Fields[0], ptr.Elem(), cfg); err != nil {
 		return err
 	}
 	fieldVal.Set(ptr)
 	return nil
 }
 
-func unmarshalMaybeInner(pd data.PlutusData, elem reflect.Value) error {
+func unmarshalMaybeInner(pd data.PlutusData, elem reflect.Value, cfg decodeConfig) error {
+	if elem.CanAddr() {
+		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
+			return m.FromPlutusData(pd, elem.Addr().Interface())
+		}
+	}
+	if elem.CanInterface() {
+		if m, ok := elem.Interface().(PlutusMarshaler); ok {
+			return m.FromPlutusData(pd, elem.Interface())
+		}
+	}
 	if elem.Type() == reflect.TypeOf(common.Address{}) {
-		addr, err := unmarshalAddress(pd)
+		addr, err := unmarshalAddress(pd, cfg.network)
 		if err != nil {
 			return err
 		}
 		elem.Set(reflect.ValueOf(addr))
 		return nil
 	}
+	if elem.Type() == reflect.TypeOf(big.Int{}) || elem.Type() == reflect.TypeFor[*big.Int]() {
+		return unmarshalBigInt(pd, elem)
+	}
 	if elem.Kind() == reflect.Struct {
-		return unmarshalValue(pd, elem)
+		return unmarshalValue(pd, elem, cfg)
 	}
 	switch elem.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

@@ -77,24 +77,38 @@ whitespace is ignored; a repeated option is an error.
 `omitempty` drops a field whose value is empty. Empty follows `encoding/json`
 — false, numeric zero, nil pointer or interface, and zero-length string,
 array, slice, or map — and a type may override that with `IsZero() bool`.
+A non-nil pointer is present even when the pointed-to value is zero, unless
+that pointer's `IsZero` method returns true.
 
 On a Map, the field is left out of the map. On a `DefList` or `IndefList`,
 an empty field is left off the end of the list and decodes back as zero.
+Decoding into a struct that already has a value resets a missing trailing
+`omitempty` field, and an absent optional map key, to zero.
 Omitting an empty field that still has a present field after it is an error:
 a positional list cannot represent that hole. Put `omitempty` fields last, or
 use `Ignore` when the field must never be encoded.
 
-`Address` encodes `common.Address` as a Plutus ledger address: constructor 0
-of a payment credential and a Maybe staking credential. Payment and stake
-credentials may each be a key or a script hash, the stake reference may be a
-pointer, and no stake reference is `Nothing`. Byron addresses and stake-only
-reward accounts are rejected. Plutus data does not carry a network id, so
-decoding uses the testnet id.
+`Address` encodes `common.Address` as Plutus data. Shelley payment addresses
+are constructor 0 of a payment credential and a Maybe staking credential:
+
+- types 0–3, base: payment key or script, stake key or script
+- types 4 and 5, pointer: `StakingPtr` of a slot, a transaction index, and a certificate index
+- types 6 and 7, enterprise: payment key or script and `Nothing`
+
+A reward account uses the bytes `Address.ToPlutusData` already returns. A
+stake key (type 14) is constructor 0 of the 28-byte hash. A stake script
+(type 15) is constructor 1 of that hash. Byron addresses have no Plutus form
+and return an error. A pointer slot above 2^32-1, or a transaction or
+certificate index above 65535, returns an error. Plutus data does not carry
+a network id. `UnmarshalPlutus` decodes addresses as testnet.
+`WithAddressNetwork(common.AddressNetworkMainnet)` selects mainnet for that
+call, including an address nested in `Maybe`.
 
 `Maybe` encodes a pointer as PlutusTx `Maybe`. Nil is constructor 1 with no
-fields. A value is constructor 0 around the element. `*common.Address` uses
-the address codec, an integer pointer uses `Int`, and a pointer to a struct
-uses that struct's codec.
+fields. A value is constructor 0 around the element. A type that implements
+`PlutusMarshaler` is used first. `*big.Int` and `big.Int` use the integer
+codec. `*common.Address` uses the address codec. Any other struct uses that
+struct's codec. A non-nil pointer is `Just`, including `Just 0`.
 
 ## Naming and optional fields
 

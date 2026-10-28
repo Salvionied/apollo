@@ -192,3 +192,138 @@ func TestOmitEmptyWithLeadingCommaReturnsError(t *testing.T) {
 		t.Fatal("expected error for missing field type before omitempty")
 	}
 }
+
+func TestMaybeOmitEmptyKeepsJustZero(t *testing.T) {
+	zero := int64(0)
+	type last struct {
+		_    struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Name string   `plutusType:"StringBytes"`
+		N    *int64   `plutusType:"Maybe,omitempty"`
+	}
+	pd, err := MarshalPlutus(&last{Name: "order", N: &zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pd.(*data.Constr).Fields) != 2 {
+		t.Fatalf("Just 0 was dropped: %#v", pd)
+	}
+	var decoded last
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.N == nil || *decoded.N != 0 {
+		t.Fatalf("decoded %#v", decoded.N)
+	}
+
+	type before struct {
+		_    struct{} `plutusType:"DefList" plutusConstr:"0"`
+		N    *int64   `plutusType:"Maybe,omitempty"`
+		Name string   `plutusType:"StringBytes"`
+	}
+	pd, err = MarshalPlutus(&before{Name: "order", N: &zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pd.(*data.Constr).Fields) != 2 {
+		t.Fatalf("Just 0 before a required field was treated as a hole: %#v", pd)
+	}
+}
+
+type alwaysZero int64
+
+func (alwaysZero) IsZero() bool { return true }
+
+func TestOmitEmptyHonorsPointerIsZero(t *testing.T) {
+	kept := int64(0)
+	type row struct {
+		_    struct{}    `plutusType:"DefList" plutusConstr:"0"`
+		Name string      `plutusType:"StringBytes"`
+		N    *int64      `plutusType:"Maybe,omitempty"`
+		Z    *alwaysZero `plutusType:"Maybe,omitempty"`
+	}
+	z := alwaysZero(3)
+	pd, err := MarshalPlutus(&row{Name: "order", N: &kept, Z: &z})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pd.(*data.Constr).Fields) != 2 {
+		t.Fatalf("expected name and Just 0, got %d fields", len(pd.(*data.Constr).Fields))
+	}
+}
+
+func TestListOmitEmptyHoleAndShortRequired(t *testing.T) {
+	type hole struct {
+		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Amount int64    `plutusType:"Int,omitempty"`
+		Name   string   `plutusType:"StringBytes"`
+	}
+	if _, err := MarshalPlutus(&hole{Name: "order"}); err == nil {
+		t.Fatal("expected a hole error")
+	}
+
+	type required struct {
+		_    struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Name string   `plutusType:"StringBytes"`
+		Note string   `plutusType:"StringBytes"`
+	}
+	short := data.NewConstr(0, data.NewByteString([]byte("order")))
+	var decoded required
+	if err := UnmarshalPlutus(short, &decoded); err == nil {
+		t.Fatal("expected a short list to fail")
+	}
+
+	extra := data.NewConstr(0,
+		data.NewByteString([]byte("order")),
+		data.NewByteString([]byte("note")),
+		data.NewInteger(big.NewInt(9)),
+	)
+	if err := UnmarshalPlutus(extra, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Name != "order" || decoded.Note != "note" {
+		t.Fatalf("decoded %+v", decoded)
+	}
+}
+
+func TestReusedListAndMapClearMissingFields(t *testing.T) {
+	type row struct {
+		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
+		Name   string   `plutusType:"StringBytes"`
+		Amount int64    `plutusType:"Int,omitempty"`
+		Flag   *int64   `plutusType:"Maybe,omitempty"`
+	}
+	flag := int64(4)
+	pd, err := MarshalPlutus(&row{Name: "order"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := row{Amount: 7, Flag: &flag}
+	if err := UnmarshalPlutus(pd, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Name != "order" || decoded.Amount != 0 || decoded.Flag != nil {
+		t.Fatalf("list reuse: %+v", decoded)
+	}
+
+	type mapped struct {
+		_      struct{} `plutusType:"Map"`
+		Name   string   `plutusType:"StringBytes" plutusKey:"name"`
+		Amount int64    `plutusType:"Int,omitempty" plutusKey:"amount"`
+		Flag   *int64   `plutusType:"Maybe,omitempty" plutusKey:"flag"`
+	}
+	pd, err = MarshalPlutus(&mapped{Name: "order"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapData := pd.(*data.Map)
+	if len(mapData.Pairs) != 1 {
+		t.Fatalf("nil Maybe was encoded, pairs %d", len(mapData.Pairs))
+	}
+	mappedDecoded := mapped{Amount: 7, Flag: &flag}
+	if err := UnmarshalPlutus(pd, &mappedDecoded); err != nil {
+		t.Fatal(err)
+	}
+	if mappedDecoded.Name != "order" || mappedDecoded.Amount != 0 || mappedDecoded.Flag != nil {
+		t.Fatalf("map reuse: %+v", mappedDecoded)
+	}
+}
