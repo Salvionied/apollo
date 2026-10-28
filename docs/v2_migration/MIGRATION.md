@@ -626,7 +626,8 @@ documentation and exported declarations are the authoritative complete API.
 - `RegisterAndDelegateStakeAndVote(credOrAddr, poolHash, drep, coin) (*Apollo, error)`
 - `RegisterAndDelegateStakeAndVoteFromAddress(addr, poolHash, drep, coin) (*Apollo, error)`
 - `RegisterAndDelegateStakeAndVoteFromBech32(bech32, poolHash, drep, coin) (*Apollo, error)`
-- `RegisterPool(params) *Apollo`
+- `RegisterPool(params) *Apollo` (new pool, pays the pool deposit)
+- `UpdatePool(params) *Apollo` (re-registration of a registered pool, no deposit)
 - `DeregisterPool(poolHash, epoch) *Apollo`
 - `SetCertificates(certs) *Apollo`
 - `GetStakeCredentialFromWallet() (Credential, error)`
