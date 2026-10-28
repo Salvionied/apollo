@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
+	"github.com/blinklabs-io/gouroboros/ledger/babbage"
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/dijkstra"
 )
 
@@ -72,6 +75,59 @@ func TestSignLoadedDijkstraTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	signAndVerifyDijkstra(t, loaded)
+}
+
+func TestLoadedDijkstraBodyMutationIsRejected(t *testing.T) {
+	built := completedDijkstraPayment(t)
+	txCbor, err := built.GetTxCbor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded.GetDijkstraTx().Body.TxFee++
+	seed := bytes.Repeat([]byte{0x42}, ed25519.SeedSize)
+	if _, err := loaded.SignWithSkey(seed); err == nil || !strings.Contains(err.Error(), "body differs from preserved CBOR") {
+		t.Fatalf("SignWithSkey accepted a changed decoded body: %v", err)
+	}
+	if _, err := loaded.GetTxCbor(); err == nil || !strings.Contains(err.Error(), "body differs from preserved CBOR") {
+		t.Fatalf("GetTxCbor accepted a changed decoded body: %v", err)
+	}
+	if _, err := loaded.Clone().SignWithSkey(seed); err == nil || !strings.Contains(err.Error(), "body differs from preserved CBOR") {
+		t.Fatalf("Clone discarded the changed Dijkstra body and signed the original: %v", err)
+	}
+	loaded.GetDijkstraTx().Body.TxFee--
+	output, ok := loaded.GetDijkstraTx().Body.TxOutputs[0].Output.(*babbage.BabbageTransactionOutput)
+	if !ok {
+		t.Fatalf("unexpected Dijkstra output type %T", loaded.GetDijkstraTx().Body.TxOutputs[0].Output)
+	}
+	output.OutputAmount.Amount++
+	if _, err := loaded.SignWithSkey(seed); err == nil || !strings.Contains(err.Error(), "body differs from preserved CBOR") {
+		t.Fatalf("SignWithSkey accepted a changed nested output: %v", err)
+	}
+}
+
+func TestLoadedDijkstraInvalidWitnessReturnsError(t *testing.T) {
+	txCbor, err := completedDijkstraPayment(t).GetTxCbor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := bytes.Repeat([]byte{0x42}, ed25519.SeedSize)
+	if _, err := loaded.SignWithSkey(seed); err != nil {
+		t.Fatal(err)
+	}
+	loaded.GetDijkstraTx().WitnessSet.WsPlutusV4Scripts = cbor.NewSetType(
+		[]common.PlutusV4Script{{0x01}}, true,
+	)
+	if _, err := loaded.GetTxCbor(); err == nil || !strings.Contains(err.Error(), "Plutus V4") {
+		t.Fatalf("expected an encoding error for the invalid witness set, got %v", err)
+	}
 }
 
 // TestSignLoadedDijkstraTransactionPreservesBodyBytes signs a loaded
