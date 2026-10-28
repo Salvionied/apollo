@@ -68,7 +68,10 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 	if err != nil {
 		return nil, fmt.Errorf("field %s: %w", field.Name, err)
 	}
+	return marshalFieldWithType(fieldVal, field, plutusType)
+}
 
+func marshalFieldWithType(fieldVal reflect.Value, field reflect.StructField, plutusType string) (data.PlutusData, error) {
 	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference.
 	// Maybe and Address likewise accept a nil pointer or a non-pointer value.
 	switch plutusType {

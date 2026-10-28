@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // containerTag is the normalized form of the anonymous `_` field's
@@ -145,30 +146,117 @@ func splitPlutusType(raw string) (string, []string, error) {
 }
 
 func readContainerMetadata(typ reflect.Type) (containerTag, uint64, bool, error) {
+	meta := cachedStructMeta(typ)
+	if meta.err != nil {
+		return containerIndefList, 0, false, meta.err
+	}
+	return meta.container, meta.constrTag, meta.hasConstr, nil
+}
+
+// parsedField is the cached view of one struct field's plutus tags.
+type parsedField struct {
+	plutusType  string
+	omitempty   bool
+	ignore      bool
+	key         string
+	optional    bool
+	tagErr      error
+	optionalErr error
+}
+
+// structMeta is the cached container tag and per-field tags for one struct type.
+type structMeta struct {
+	container containerTag
+	constrTag uint64
+	hasConstr bool
+	err       error
+	fields    []parsedField
+}
+
+var structMetaCache sync.Map
+
+func cachedStructMeta(typ reflect.Type) *structMeta {
+	if cached, ok := structMetaCache.Load(typ); ok {
+		return cached.(*structMeta)
+	}
+	meta := buildStructMeta(typ)
+	actual, _ := structMetaCache.LoadOrStore(typ, meta)
+	return actual.(*structMeta)
+}
+
+func buildStructMeta(typ reflect.Type) *structMeta {
+	meta := &structMeta{fields: make([]parsedField, typ.NumField())}
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		if field.Name != "_" {
+		if field.Name == "_" {
+			container, err := parseContainerTag(field.Tag.Get("plutusType"))
+			if err != nil {
+				meta.err = err
+				return meta
+			}
+			meta.container = container
+			if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
+				parsed, err := strconv.ParseUint(constrStr, 10, 32)
+				if err != nil {
+					meta.err = fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
+					return meta
+				}
+				meta.constrTag = parsed
+				meta.hasConstr = true
+			}
 			continue
 		}
-
-		container, err := parseContainerTag(field.Tag.Get("plutusType"))
-		if err != nil {
-			return containerIndefList, 0, false, err
+		if !field.IsExported() {
+			continue
 		}
-
-		var constrTag uint64
-		hasConstr := false
-		if constrStr := field.Tag.Get("plutusConstr"); constrStr != "" {
-			c, err := strconv.ParseUint(constrStr, 10, 32)
-			if err != nil {
-				return containerIndefList, 0, false, fmt.Errorf("invalid plutusConstr tag %q: %w", constrStr, err)
-			}
-			constrTag = c
-			hasConstr = true
-		}
-		return container, constrTag, hasConstr, nil
+		meta.fields[i] = parseCachedField(field)
 	}
-	return containerIndefList, 0, false, nil
+	return meta
+}
+
+func parseCachedField(field reflect.StructField) parsedField {
+	parsed := parsedField{}
+	tag, options, err := parseFieldTag(field.Tag.Get("plutusType"))
+	if err != nil {
+		parsed.tagErr = fmt.Errorf("field %s: %w", field.Name, err)
+		return parsed
+	}
+	parsed.plutusType = tag
+	if tag == "Ignore" {
+		if len(options) > 0 {
+			parsed.tagErr = fmt.Errorf("field %s: Ignore does not accept options", field.Name)
+			return parsed
+		}
+		parsed.ignore = true
+	}
+	if _, ok := options["omitempty"]; ok {
+		parsed.omitempty = true
+	}
+	parsed.key = field.Tag.Get("plutusKey")
+	if parsed.key == "" {
+		parsed.key = field.Name
+	}
+	if opt := field.Tag.Get("plutusOptional"); opt != "" {
+		optional, err := strconv.ParseBool(opt)
+		if err != nil {
+			parsed.optionalErr = fmt.Errorf("invalid plutusOptional tag %q on field %s: %w", opt, field.Name, err)
+			return parsed
+		}
+		parsed.optional = optional
+	}
+	return parsed
+}
+
+const maxUnmarshalPrealloc = 1024
+
+func unmarshalPrealloc(n int) int {
+	if n < 0 {
+		return 0
+	}
+	if n > maxUnmarshalPrealloc {
+		return maxUnmarshalPrealloc
+	}
+	return n
 }
 
 func constrTagEqual(tag *big.Int, expected uint64) bool {

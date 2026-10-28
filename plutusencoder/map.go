@@ -11,7 +11,8 @@ import (
 )
 
 func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint64, hasConstr bool) (data.PlutusData, error) {
-	var pairs [][2]data.PlutusData
+	meta := cachedStructMeta(typ)
+	pairs := make([][2]data.PlutusData, 0, typ.NumField())
 	seenKeys := make(map[string]struct{}, typ.NumField())
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -19,35 +20,27 @@ func marshalMap(val reflect.Value, typ reflect.Type, constrTag uint64, hasConstr
 		if field.Name == "_" || !field.IsExported() {
 			continue
 		}
-
-		ignored, err := isIgnoredField(field)
-		if err != nil {
-			return nil, err
+		info := meta.fields[i]
+		if info.tagErr != nil {
+			return nil, info.tagErr
 		}
-		if ignored {
+		if info.ignore {
 			continue
 		}
 
 		fieldVal := val.Field(i)
-		omitEmpty, err := fieldOmitEmpty(field)
-		if err != nil {
-			return nil, err
-		}
-		if omitEmpty && isEmptyField(fieldVal) {
+		if info.omitempty && isEmptyField(fieldVal) {
 			continue
 		}
 
-		keyName := field.Tag.Get("plutusKey")
-		if keyName == "" {
-			keyName = field.Name
-		}
+		keyName := info.key
 		if _, duplicate := seenKeys[keyName]; duplicate {
 			return nil, fmt.Errorf("field %s: duplicate map key %q", field.Name, keyName)
 		}
 		seenKeys[keyName] = struct{}{}
 
 		key := data.NewByteString([]byte(keyName))
-		value, err := marshalField(fieldVal, field)
+		value, err := marshalFieldWithType(fieldVal, field, info.plutusType)
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
@@ -331,37 +324,27 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 		keyMap[mapKey] = pair[1]
 	}
 
+	meta := cachedStructMeta(typ)
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		if field.Name == "_" || !field.IsExported() {
 			continue
 		}
-		ignored, err := isIgnoredField(field)
-		if err != nil {
-			return err
+		info := meta.fields[i]
+		if info.tagErr != nil {
+			return info.tagErr
 		}
-		if ignored {
+		if info.ignore {
 			continue
 		}
 
-		keyName := field.Tag.Get("plutusKey")
-		if keyName == "" {
-			keyName = field.Name
-		}
-
+		keyName := info.key
 		value, exists := keyMap[keyName]
 		if !exists {
-			optional, err := isOptionalField(field)
-			if err != nil {
-				return err
+			if info.optionalErr != nil {
+				return info.optionalErr
 			}
-			if !optional {
-				optional, err = fieldOmitEmpty(field)
-				if err != nil {
-					return err
-				}
-			}
-			if optional {
+			if info.optional || info.omitempty {
 				// Optional field absent from the map: reset to the zero value.
 				val.Field(i).SetZero()
 				continue
@@ -370,7 +353,7 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 		}
 
 		fieldVal := val.Field(i)
-		if err := unmarshalField(value, fieldVal, field, cfg); err != nil {
+		if err := unmarshalFieldWithType(value, fieldVal, field, info.plutusType, cfg); err != nil {
 			return fmt.Errorf("field %s: %w", field.Name, err)
 		}
 	}
@@ -422,7 +405,7 @@ func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflec
 		return fmt.Errorf("field %s: unsupported native map key type %s", field.Name, mapType.Key())
 	}
 
-	result := reflect.MakeMapWithSize(mapType, len(mapData.Pairs))
+	result := reflect.MakeMapWithSize(mapType, unmarshalPrealloc(len(mapData.Pairs)))
 	for i, pair := range mapData.Pairs {
 		key := reflect.New(mapType.Key()).Elem()
 		if err := unmarshalNativeMapKey(pair[0], key, field, cfg); err != nil {

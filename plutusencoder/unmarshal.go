@@ -60,7 +60,10 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 	if err != nil {
 		return fmt.Errorf("field %s: %w", field.Name, err)
 	}
+	return unmarshalFieldWithType(pd, fieldVal, field, plutusType, cfg)
+}
 
+func unmarshalFieldWithType(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, plutusType string, cfg decodeConfig) error {
 	// BigInt, Maybe, and Address are dispatched before pointer allocation.
 	// Maybe Nothing must stay nil, and Address writes a common.Address value.
 	switch plutusType {
