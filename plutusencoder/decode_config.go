@@ -1,6 +1,7 @@
 package plutusencoder
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -36,7 +37,7 @@ func applyUnmarshalOptions(opts []UnmarshalOption) (decodeConfig, error) {
 	cfg := defaultDecodeConfig()
 	for _, opt := range opts {
 		if opt == nil {
-			return decodeConfig{}, fmt.Errorf("nil unmarshal option")
+			return decodeConfig{}, errors.New("nil unmarshal option")
 		}
 		if err := opt(&cfg); err != nil {
 			return decodeConfig{}, err
