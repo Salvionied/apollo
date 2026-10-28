@@ -113,6 +113,9 @@ type Apollo struct {
 	wallet                     Wallet
 	evaluationWitnessProviders []EvaluationWitnessProvider
 	certificates               []common.CertificateWrapper
+	// updatedPools marks the pool registration certificates added by
+	// UpdatePool, which re-register an already registered pool
+	updatedPools               map[*common.PoolRegistrationCertificate]struct{}
 	withdrawals                map[string]withdrawalEntry
 	auxiliaryData              *auxData
 	votingProcedures           common.VotingProcedures
@@ -901,18 +904,39 @@ func (a *Apollo) RegisterAndDelegateStakeAndVote(credOrAddr any, poolHash common
 
 // --- Pool Operations ---
 
-// RegisterPool adds a pool registration certificate.
+// RegisterPool adds a pool registration certificate for a new pool, which
+// pays the pool deposit.
 func (a *Apollo) RegisterPool(params common.PoolRegistrationCertificate) *Apollo {
+	a.addPoolRegistration("RegisterPool", params)
+	return a
+}
+
+// UpdatePool adds a pool registration certificate for a pool that is already
+// registered, including one with a pending retirement, which the
+// registration cancels. The ledger treats it as a parameter update and
+// charges no pool deposit. A pool whose retirement has taken effect is no
+// longer registered and needs RegisterPool.
+func (a *Apollo) UpdatePool(params common.PoolRegistrationCertificate) *Apollo {
+	if cert := a.addPoolRegistration("UpdatePool", params); cert != nil {
+		if a.updatedPools == nil {
+			a.updatedPools = make(map[*common.PoolRegistrationCertificate]struct{})
+		}
+		a.updatedPools[cert] = struct{}{}
+	}
+	return a
+}
+
+func (a *Apollo) addPoolRegistration(name string, params common.PoolRegistrationCertificate) *common.PoolRegistrationCertificate {
 	if params.Margin.Rat == nil || params.Margin.Denom().Sign() == 0 {
-		a.setErrOnce(errors.New("RegisterPool: margin must not be nil or have a zero denominator"))
-		return a
+		a.setErrOnce(fmt.Errorf("%s: margin must not be nil or have a zero denominator", name))
+		return nil
 	}
 	params.CertType = uint(common.CertificateTypePoolRegistration)
 	a.certificates = append(a.certificates, common.CertificateWrapper{
 		Type:        uint(common.CertificateTypePoolRegistration),
 		Certificate: &params,
 	})
-	return a
+	return &params
 }
 
 // RegisterDRep adds a DRep registration certificate.
@@ -1547,6 +1571,18 @@ func (a *Apollo) Clone() *Apollo {
 			continue
 		}
 		clone.certificates = append(clone.certificates, certificateCopy)
+		if orig, ok := certificate.Certificate.(*common.PoolRegistrationCertificate); ok {
+			if _, updated := a.updatedPools[orig]; updated {
+				if c, ok := certificateCopy.Certificate.(*common.PoolRegistrationCertificate); ok {
+					if clone.updatedPools == nil {
+						clone.updatedPools = make(map[*common.PoolRegistrationCertificate]struct{})
+					}
+					clone.updatedPools[c] = struct{}{}
+				} else {
+					clone.setErrOnce(errors.New("clone certificate: pool update lost its registration"))
+				}
+			}
+		}
 	}
 	clone.scriptHashes = append(clone.scriptHashes, a.scriptHashes...)
 	for _, proposal := range a.proposalProcedures {
@@ -4294,6 +4330,9 @@ func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits .
 		return 0, errors.New("protocol deposits must be non-negative")
 	}
 	var deposits, refunds uint64
+	// the ledger charges the pool deposit for the first registration of an
+	// operator that is not already registered; UpdatePool declares it is
+	seenPools := make(map[common.Blake2b224]struct{})
 	add := func(total *uint64, amount uint64) error {
 		if amount > math.MaxUint64-*total {
 			return errors.New("certificate deposit total overflows uint64")
@@ -4307,6 +4346,13 @@ func (a *Apollo) certificateDepositAdjustment(stakeDeposit int64, poolDeposits .
 		case uint(common.CertificateTypeStakeRegistration):
 			err = add(&deposits, uint64(stakeDeposit))
 		case uint(common.CertificateTypePoolRegistration):
+			if c, ok := cert.Certificate.(*common.PoolRegistrationCertificate); ok && c != nil {
+				_, seen := seenPools[c.Operator]
+				seenPools[c.Operator] = struct{}{}
+				if _, updated := a.updatedPools[c]; updated || seen {
+					break
+				}
+			}
 			err = add(&deposits, uint64(poolDeposit))
 		case uint(common.CertificateTypeStakeDeregistration):
 			err = add(&refunds, uint64(stakeDeposit))
