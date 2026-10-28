@@ -34,6 +34,7 @@ Network ID is `1` for mainnet and `0` for testnets. There is no
 | [Blockfrost](blockfrost.md) | `backend/blockfrost` | Hosted HTTP; reports full capabilities including additional UTxOs |
 | [Koios](koios.md) | `backend/koios` | Hosted or self-hosted HTTP; reports full capabilities including additional UTxOs |
 | [Ogmios + Kupo](ogmios.md) | `backend/ogmios` | Self-hosted node; Kupo optional for address UTxOs and script CBOR |
+| [Ouroboros](ouroboros.md) | `backend/ouroboros` | Local cardano-node over node-to-client; no script evaluation or script lookup |
 | [UTxO RPC](utxorpc.md) | `backend/utxorpc` | gRPC/`connect`; prefers `utxorpc.v1beta`, falls back to v1alpha |
 | [Fixed](fixed_and_cache.md) | `backend/fixed` | Deterministic tests; no live chain |
 | [Cache](fixed_and_cache.md) | `backend/cache` | TTL wrapper around another context |

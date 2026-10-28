@@ -8,6 +8,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `backend/ouroboros`: a chain backend that talks to a cardano-node directly
+  over the node-to-client mini-protocols, through its UNIX socket or a TCP
+  socket. It serves every query except script lookup by hash and script
+  evaluation, which the node does not offer, and reconnects after the node
+  closes or the connection fails.
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
