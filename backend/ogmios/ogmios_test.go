@@ -222,6 +222,17 @@ func TestKupoScriptToScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestMatchToUtxoRejectsScriptWithoutHash(t *testing.T) {
+	match := testMatch("", "")
+	match.Script = kugo.Script{
+		Language: kugo.ScriptLanguagePlutusV2,
+		Script:   "010203",
+	}
+	if _, err := matchToUtxo(t.Context(), match, testAddress(t), nil); err == nil {
+		t.Fatal("expected a script-bearing match without a hash to fail")
+	}
+}
+
 func TestKupoScriptToScriptRefPlutusV4(t *testing.T) {
 	scriptBytes := []byte{0x01, 0x02, 0x03}
 	script := kugo.Script{

@@ -769,6 +769,9 @@ func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, 
 	// Set script reference from kupo match data, verifying the script bytes
 	// against the script hash claimed by kupo.
 	if match.Script.Script != "" {
+		if match.ScriptHash == "" {
+			return common.Utxo{}, errors.New("kupo script is missing its hash")
+		}
 		ref, err := kupoScriptToScriptRef(match.Script, match.ScriptHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to parse script ref: %w", err)
