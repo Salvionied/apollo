@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	connectrpc.com/connect v1.21.1
-	github.com/SundaeSwap-finance/kugo v1.3.1
+	github.com/SundaeSwap-finance/kugo v1.3.2
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
 	github.com/blinklabs-io/bursa v0.21.0
 	github.com/blinklabs-io/gouroboros v0.215.0
