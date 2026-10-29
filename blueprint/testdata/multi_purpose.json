@@ -1,0 +1,92 @@
+{
+  "preamble": {
+    "title": "example/multi_purpose",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "pool.main",
+      "datum": {
+        "title": "state",
+        "purpose": "spend",
+        "schema": {
+          "$ref": "#/definitions/pkg~1level1~1State"
+        }
+      },
+      "redeemer": {
+        "oneOf": [
+          {
+            "title": "spend_redeemer",
+            "purpose": "spend",
+            "schema": {
+              "$ref": "#/definitions/pkg~1level1~1SpendRedeemer"
+            }
+          },
+          {
+            "title": "withdraw_redeemer",
+            "purpose": "withdraw",
+            "schema": {
+              "dataType": "integer"
+            }
+          }
+        ]
+      },
+      "compiledCode": "46010100200101"
+    },
+    {
+      "title": "pool.mint",
+      "redeemer": {
+        "title": "mint_redeemer",
+        "purpose": {
+          "oneOf": ["mint", "publish"]
+        },
+        "schema": {
+          "dataType": "bytes"
+        }
+      },
+      "compiledCode": "46010100200101"
+    }
+  ],
+  "definitions": {
+    "pkg/level3/Hash28": {
+      "dataType": "bytes",
+      "minLength": 28,
+      "maxLength": 28
+    },
+    "pkg/level2/Account": {
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "credential_hash",
+          "$ref": "#/definitions/pkg~1level3~1Hash28"
+        },
+        {
+          "title": "epoch",
+          "dataType": "integer"
+        }
+      ]
+    },
+    "pkg/level1/State": {
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "account",
+          "$ref": "#/definitions/pkg~1level2~1Account"
+        }
+      ]
+    },
+    "pkg/level1/SpendRedeemer": {
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "target",
+          "$ref": "#/definitions/pkg~1level3~1Hash28"
+        }
+      ]
+    }
+  }
+}

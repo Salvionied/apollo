@@ -25,7 +25,7 @@ import (
 // The input script is not modified. With no parameters, the script is still
 // validated and a copy of it is returned.
 func ApplyParamsToScript[
-	S common.PlutusV1Script | common.PlutusV2Script | common.PlutusV3Script,
+	S common.PlutusV1Script | common.PlutusV2Script | common.PlutusV3Script | common.PlutusV4Script,
 ](script S, params ...data.PlutusData) (S, error) {
 	var inner []byte
 	bytesRead, err := cbor.Decode([]byte(script), &inner)

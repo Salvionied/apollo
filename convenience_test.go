@@ -369,6 +369,33 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 	}
 }
 
+func TestPayToContractWithV4ReferenceScriptRequiresDijkstra(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	datum := common.Datum{}
+	script := common.PlutusV4Script([]byte{0x04})
+
+	a := New(cc)
+	if _, err := a.PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script); err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("Conway V4 contract payment error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+	if _, err := a.PayToContractWithReferenceScript(addr, &datum, 5_000_000, script); err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("Conway unified contract payment error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+
+	a, err := New(cc).SetTargetEra(EraDijkstra).PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.payments) != 1 {
+		t.Fatalf("expected 1 payment, got %d", len(a.payments))
+	}
+	p := a.payments[0].(*Payment)
+	if p.ScriptRef.Type != common.ScriptRefTypePlutusV4 {
+		t.Errorf("expected script ref type %d (V4), got %d", common.ScriptRefTypePlutusV4, p.ScriptRef.Type)
+	}
+}
+
 // --- Staking FromAddress Convenience Tests ---
 // Note: The existing staking_test.go tests the unified methods with bech32 strings
 // passed directly. These tests exercise the explicit typed convenience wrappers.
