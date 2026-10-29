@@ -5,11 +5,12 @@ go 1.26.10
 require (
 	connectrpc.com/connect v1.21.1
 	github.com/SundaeSwap-finance/kugo v1.3.2
-	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.1
+	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.2
 	github.com/blinklabs-io/bursa v0.21.0
 	github.com/blinklabs-io/gouroboros v0.215.0
 	github.com/blinklabs-io/plutigo v0.9.11
 	github.com/btcsuite/btcd/btcutil v1.2.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/utxorpc/go-codegen v0.19.2
 	github.com/utxorpc/go-sdk v0.2.0
 	google.golang.org/protobuf v1.36.12
@@ -29,7 +30,6 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.6 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect

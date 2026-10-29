@@ -11,7 +11,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
   reports `CapabilityGenesisParams`. A server that does not implement
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
-
+- `backend/ogmios` reuses WebSocket connections between queries instead of
+  dialing one per query. `Config.OgmiosMaxIdleConns` (default 4, negative to
+  disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
+  `OgmiosChainContext.CloseIdleConnections` closes idle connections. This
+  requires ogmigo v6.2.2.
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
