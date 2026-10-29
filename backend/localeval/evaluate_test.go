@@ -4,11 +4,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
+
+type misleadingInput struct {
+	common.TransactionInput
+	text string
+}
+
+func (i misleadingInput) String() string { return i.text }
 
 func TestLedgerParamsRejects(t *testing.T) {
 	valid := backend.ProtocolParameters{
@@ -111,5 +120,48 @@ func TestEvaluateWithoutRedeemers(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("got %v, want no results", got)
+	}
+}
+
+func TestEvaluateRejectsMissingScript(t *testing.T) {
+	tx := buildSyntheticTx(t, compileScript(t, syntheticV3Source))
+	decoded, err := conway.NewConwayTransactionFromCbor(tx.txCbor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded.WitnessSet.WsPlutusV2Scripts = cbor.SetType[common.PlutusV2Script]{}
+	decoded.WitnessSet.SetCbor(nil)
+	decoded.SetCbor(nil)
+
+	txCbor, err := cbor.Encode(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Evaluate(txCbor, tx.utxos, tx.params); err == nil {
+		t.Fatal("evaluation with a missing redeemer script succeeded")
+	}
+}
+
+func TestStaticResolverUsesInputIdentity(t *testing.T) {
+	tx := buildSyntheticTx(t, compileScript(t, syntheticV3Source))
+	target := tx.utxos[0].Id
+	otherID := target.Id()
+	otherID[0] ^= 0xff
+	other, err := shelley.NewShelleyTransactionInput(otherID.String(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve, err := staticResolver([]common.Utxo{{
+		Id: misleadingInput{
+			TransactionInput: other,
+			text:             target.String(),
+		},
+		Output: tx.utxos[0].Output,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolve(target); err == nil {
+		t.Fatal("resolved a UTxO whose identity did not match its display string")
 	}
 }

@@ -59,6 +59,9 @@ func evaluate(txCbor []byte, resolve utxoResolver, params Params) (map[common.Re
 		if err != nil {
 			return nil, fmt.Errorf("evaluate scripts: %w", err)
 		}
+		if err := validateRedeemerResults(tx, result); err != nil {
+			return nil, err
+		}
 		return result, nil
 	}
 
@@ -79,7 +82,26 @@ func evaluate(txCbor []byte, resolve utxoResolver, params Params) (map[common.Re
 		}
 		result[evaluation.Key] = evaluation.ExUnits
 	}
+	if err := validateRedeemerResults(tx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+func validateRedeemerResults(
+	tx common.Transaction,
+	result map[common.RedeemerKey]common.ExUnits,
+) error {
+	witnesses := tx.Witnesses()
+	if witnesses == nil || witnesses.Redeemers() == nil {
+		return nil
+	}
+	for key := range witnesses.Redeemers().Iter() {
+		if _, ok := result[key]; !ok {
+			return fmt.Errorf("redeemer %v was not evaluated", key)
+		}
+	}
+	return nil
 }
 
 // isDijkstraEnvelope reports whether txCbor uses Dijkstra's three-component

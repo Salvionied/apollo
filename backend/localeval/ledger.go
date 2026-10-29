@@ -19,6 +19,15 @@ var errNotForEvaluation = errors.New("ledger state is not available to local scr
 // utxoResolver returns the UTxO an input refers to.
 type utxoResolver func(common.TransactionInput) (common.Utxo, error)
 
+type utxoKey struct {
+	id    common.Blake2b256
+	index uint32
+}
+
+func keyForInput(input common.TransactionInput) utxoKey {
+	return utxoKey{id: input.Id(), index: input.Index()}
+}
+
 // evalLedgerState is the ledger view the gouroboros evaluator runs against.
 // It answers UTxO and slot queries and fails every other query, so a future
 // evaluator that starts depending on chain state reports an error instead of
@@ -122,15 +131,19 @@ func (s *evalLedgerState) GovActionExists(common.GovActionId) bool { return fals
 
 // staticResolver resolves inputs from a fixed set of UTxOs.
 func staticResolver(utxos []common.Utxo) (utxoResolver, error) {
-	byRef := make(map[string]common.Utxo, len(utxos))
+	byRef := make(map[utxoKey]common.Utxo, len(utxos))
 	for i, utxo := range utxos {
 		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
 			return nil, fmt.Errorf("utxo %d: %w", i, err)
 		}
-		byRef[utxo.Id.String()] = utxo
+		key := keyForInput(utxo.Id)
+		if _, exists := byRef[key]; exists {
+			return nil, fmt.Errorf("utxo %d duplicates %s", i, utxo.Id.String())
+		}
+		byRef[key] = utxo
 	}
 	return func(input common.TransactionInput) (common.Utxo, error) {
-		if utxo, ok := byRef[input.String()]; ok {
+		if utxo, ok := byRef[keyForInput(input)]; ok {
 			return utxo, nil
 		}
 		return common.Utxo{}, fmt.Errorf("utxo %s was not supplied", input.String())
