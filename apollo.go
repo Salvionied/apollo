@@ -112,6 +112,7 @@ type Apollo struct {
 	usedUtxos                  map[string]bool
 	wallet                     Wallet
 	evaluationWitnessProviders []EvaluationWitnessProvider
+	allowSignedEvaluation      bool
 	certificates               []common.CertificateWrapper
 	// updatedPools marks the pool registration certificates added by
 	// UpdatePool, which re-register an already registered pool
@@ -227,12 +228,19 @@ func (a *Apollo) SetWallet(w Wallet) *Apollo {
 }
 
 // AddEvaluationWitnessProvider registers an optional source of witnesses for
-// preliminary transaction evaluation. Registered witnesses are never added to
-// the completed transaction.
+// preliminary transaction evaluation. It is used only after AllowSignedEvaluation.
 func (a *Apollo) AddEvaluationWitnessProvider(provider EvaluationWitnessProvider) *Apollo {
 	if provider != nil {
 		a.evaluationWitnessProviders = append(a.evaluationWitnessProviders, provider)
 	}
+	return a
+}
+
+// AllowSignedEvaluation permits sending spend-authorizing witnesses to the
+// configured evaluator. Use this only when the evaluator is trusted to receive
+// a transaction it may be able to submit, including one that consumes collateral.
+func (a *Apollo) AllowSignedEvaluation() *Apollo {
+	a.allowSignedEvaluation = true
 	return a
 }
 
@@ -1473,6 +1481,7 @@ func (a *Apollo) Clone() *Apollo {
 		bodySetTagPolicy:           a.bodySetTagPolicy,
 		wallet:                     a.wallet,
 		evaluationWitnessProviders: append([]EvaluationWitnessProvider(nil), a.evaluationWitnessProviders...),
+		allowSignedEvaluation:      a.allowSignedEvaluation,
 		err:                        a.err,
 		redeemers:                  make(map[string]redeemerEntry),
 		stakeRedeemers:             make(map[string]redeemerEntry),
@@ -3092,15 +3101,14 @@ func (a *Apollo) estimateExecutionUnits(
 	}
 	ws := a.buildWitnessSet(inputs)
 
-	witnesses, err := a.evaluationWitnesses(&body)
-	if err != nil {
-		return nil, err
-	}
-	// An empty vkey witness set is encoded as witness-set map field 0 with an
-	// empty value. Recent gouroboros versions reject empty witness-set fields,
-	// so leave the optional field unset when evaluation needs no signatures.
-	if len(witnesses) > 0 {
-		ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+	if a.allowSignedEvaluation {
+		witnesses, witnessErr := a.evaluationWitnesses(&body)
+		if witnessErr != nil {
+			return nil, witnessErr
+		}
+		if len(witnesses) > 0 {
+			ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+		}
 	}
 
 	prelimTx := conway.ConwayTransaction{
