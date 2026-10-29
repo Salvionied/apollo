@@ -120,7 +120,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 	case "Map":
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
 	case "Either":
-		return unmarshalEither(pd, fieldVal)
+		return unmarshalEither(pd, fieldVal, cfg)
 	case "OutputDatum":
 		if fieldVal.Type() != reflect.TypeOf(OutputDatum{}) {
 			return fmt.Errorf("field %s: OutputDatum requires plutusencoder.OutputDatum, got %s", field.Name, fieldVal.Type())

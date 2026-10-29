@@ -75,7 +75,7 @@ func marshalEither(fieldVal reflect.Value) (data.PlutusData, error) {
 	return data.NewConstr(1, inner), nil
 }
 
-func unmarshalEither(pd data.PlutusData, fieldVal reflect.Value) error {
+func unmarshalEither(pd data.PlutusData, fieldVal reflect.Value, cfg decodeConfig) error {
 	if fieldVal.Kind() != reflect.Struct {
 		return fmt.Errorf("either requires a two-field struct, got %s", fieldVal.Kind())
 	}
@@ -95,14 +95,14 @@ func unmarshalEither(pd data.PlutusData, fieldVal reflect.Value) error {
 	switch {
 	case constrTagEqual(constr.Tag, 0):
 		ptr := reflect.New(leftField.Type().Elem())
-		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(leftIdx)); err != nil {
+		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(leftIdx), cfg); err != nil {
 			return err
 		}
 		leftField.Set(ptr)
 		return nil
 	case constrTagEqual(constr.Tag, 1):
 		ptr := reflect.New(rightField.Type().Elem())
-		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(rightIdx)); err != nil {
+		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(rightIdx), cfg); err != nil {
 			return err
 		}
 		rightField.Set(ptr)
@@ -167,9 +167,9 @@ func marshalSumElement(elem reflect.Value, field reflect.StructField) (data.Plut
 	return nil, fmt.Errorf("unsupported Either element type %s", elem.Type())
 }
 
-func unmarshalSumElement(pd data.PlutusData, elem reflect.Value, field reflect.StructField) error {
+func unmarshalSumElement(pd data.PlutusData, elem reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if field.Tag.Get("plutusType") != "" {
-		return unmarshalField(pd, elem, field)
+		return unmarshalField(pd, elem, field, cfg)
 	}
 	if elem.CanAddr() {
 		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
@@ -183,7 +183,7 @@ func unmarshalSumElement(pd data.PlutusData, elem reflect.Value, field reflect.S
 		return unmarshalBigInt(pd, elem)
 	}
 	if elem.Kind() == reflect.Struct {
-		return unmarshalValue(pd, elem)
+		return unmarshalValue(pd, elem, cfg)
 	}
 	switch elem.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
