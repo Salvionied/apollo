@@ -10,8 +10,10 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 )
 
-// TxOutRef is a Plutus transaction output reference: a 32-byte transaction id
-// and a zero-based output index, encoded as constructor 0 of those two fields.
+// TxOutRef is a Plutus V3 transaction output reference: constructor 0 of a
+// 32-byte transaction id and a zero-based output index. Plutus V1 and V2 wrap
+// the id again, as constructor 0 of [constructor 0 [txId], index]. A datum
+// built for a V1 or V2 validator encodes, then fails on chain.
 type TxOutRef struct {
 	TxId  []byte
 	Index uint32

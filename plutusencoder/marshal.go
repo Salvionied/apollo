@@ -130,19 +130,19 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 	case "Credential":
 		cred, ok := fieldVal.Interface().(common.Credential)
 		if !ok {
-			return nil, fmt.Errorf("field %s: Credential requires common.Credential, got %s", field.Name, fieldVal.Type())
+			return nil, fmt.Errorf("Credential requires common.Credential, got %s", fieldVal.Type())
 		}
 		return marshalCredential(cred)
 	case "TxOutRef":
 		ref, ok := fieldVal.Interface().(TxOutRef)
 		if !ok {
-			return nil, fmt.Errorf("field %s: TxOutRef requires plutusencoder.TxOutRef, got %s", field.Name, fieldVal.Type())
+			return nil, fmt.Errorf("TxOutRef requires plutusencoder.TxOutRef, got %s", fieldVal.Type())
 		}
 		return marshalTxOutRef(ref)
 	case "AssetClass":
 		asset, ok := fieldVal.Interface().(AssetClass)
 		if !ok {
-			return nil, fmt.Errorf("field %s: AssetClass requires plutusencoder.AssetClass, got %s", field.Name, fieldVal.Type())
+			return nil, fmt.Errorf("AssetClass requires plutusencoder.AssetClass, got %s", fieldVal.Type())
 		}
 		return marshalAssetClass(asset)
 	case "Custom":

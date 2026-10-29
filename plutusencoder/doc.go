@@ -44,7 +44,8 @@
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Credential   common.Credential as a key or script credential
-//	TxOutRef     TxOutRef as constructor 0 of a 32-byte tx id and an index
+//	TxOutRef     Plutus V3 TxOutRef: constructor 0 of a 32-byte tx id and an index.
+//	             V1 and V2 wrap the id as constructor 0 of [constructor 0 [txId], index].
 //	AssetClass   AssetClass as constructor 0 of a policy id and a token name
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
@@ -57,7 +58,9 @@
 //
 // Credential encodes common.Credential as constructor 0 for a key hash and
 // constructor 1 for a script hash, carrying the 28-byte credential hash.
-// TxOutRef and AssetClass each encode constructor 0 of their two fields:
+// TxOutRef is the Plutus V3 shape: constructor 0 of the 32-byte transaction id
+// and the index. Plutus V1 and V2 use constructor 0 of [constructor 0 [txId], index].
+// AssetClass encodes constructor 0 of its two fields:
 //
 //	type Datum struct {
 //		_     struct{}          `plutusType:"DefList" plutusConstr:"0"`

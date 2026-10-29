@@ -121,7 +121,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
 	case "Credential":
 		if fieldVal.Type() != reflect.TypeOf(common.Credential{}) {
-			return fmt.Errorf("field %s: Credential requires common.Credential, got %s", field.Name, fieldVal.Type())
+			return fmt.Errorf("Credential requires common.Credential, got %s", fieldVal.Type())
 		}
 		cred, err := unmarshalCredential(pd)
 		if err != nil {
@@ -131,7 +131,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return nil
 	case "TxOutRef":
 		if fieldVal.Type() != reflect.TypeOf(TxOutRef{}) {
-			return fmt.Errorf("field %s: TxOutRef requires plutusencoder.TxOutRef, got %s", field.Name, fieldVal.Type())
+			return fmt.Errorf("TxOutRef requires plutusencoder.TxOutRef, got %s", fieldVal.Type())
 		}
 		ref, err := unmarshalTxOutRef(pd)
 		if err != nil {
@@ -141,7 +141,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return nil
 	case "AssetClass":
 		if fieldVal.Type() != reflect.TypeOf(AssetClass{}) {
-			return fmt.Errorf("field %s: AssetClass requires plutusencoder.AssetClass, got %s", field.Name, fieldVal.Type())
+			return fmt.Errorf("AssetClass requires plutusencoder.AssetClass, got %s", fieldVal.Type())
 		}
 		asset, err := unmarshalAssetClass(pd)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -83,12 +84,19 @@ func TestTxOutRefMatchesShelleyInputShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantRef, err := data.Encode(data.NewConstr(0, data.NewByteString(txId), data.NewInteger(big.NewInt(7))))
+	txHash, err := common.NewBlake2b256Checked(txId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRef, err := data.Encode(shelley.ShelleyTransactionInput{
+		TxId:        txHash,
+		OutputIndex: 7,
+	}.ToPlutusData())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(gotRef, wantRef) {
-		t.Fatal("TxOutRef encoding does not match constructor 0 of [txId, index]")
+		t.Fatal("TxOutRef encoding does not match ShelleyTransactionInput.ToPlutusData")
 	}
 
 	var decoded productCodecsDatum
@@ -409,5 +417,43 @@ func assertConstrWidthError(t *testing.T, err error, tag uint64, fields int) {
 	want := fmt.Sprintf("constructor %d with %d fields", tag, fields)
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not include %q", err, want)
+	}
+}
+
+func TestTxOutRefRejectsNegativeIndex(t *testing.T) {
+	txID := bytes.Repeat([]byte{0xcd}, common.Blake2b256Size)
+	pd := data.NewConstr(0, data.NewByteString(txID), data.NewInteger(big.NewInt(-1)))
+	if _, err := unmarshalTxOutRef(pd); err == nil {
+		t.Fatal("expected a negative output index to fail")
+	}
+}
+
+func TestCredentialRejectsUnsupportedType(t *testing.T) {
+	hash, err := common.NewBlake2b224Checked(bytes.Repeat([]byte{0x11}, common.Blake2b224Size))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred := common.Credential{CredType: 99, Credential: hash}
+	if _, err := marshalCredential(cred); err == nil {
+		t.Fatal("expected an unsupported credential type to fail")
+	}
+}
+
+func TestProductCodecsRejectWrongGoType(t *testing.T) {
+	type wrong struct {
+		_ struct{} `plutusType:"DefList" plutusConstr:"0"`
+		C int64    `plutusType:"Credential"`
+		R int64    `plutusType:"TxOutRef"`
+		A int64    `plutusType:"AssetClass"`
+	}
+	_, err := MarshalPlutus(&wrong{})
+	if err == nil {
+		t.Fatal("expected a wrong Go field type to fail")
+	}
+	if strings.Count(err.Error(), "field C:") != 1 {
+		t.Fatalf("field name repeated: %v", err)
+	}
+	if err := UnmarshalPlutus(data.NewConstr(0, data.NewInteger(big.NewInt(1)), data.NewInteger(big.NewInt(1)), data.NewInteger(big.NewInt(1))), &wrong{}); err == nil {
+		t.Fatal("expected decode of a wrong Go field type to fail")
 	}
 }

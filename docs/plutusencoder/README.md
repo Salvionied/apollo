@@ -61,7 +61,7 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
 | `Credential` | `common.Credential`: key hash is constructor 0, script hash is constructor 1 |
-| `TxOutRef` | `TxOutRef`: constructor 0 of a 32-byte transaction id and an output index |
+| `TxOutRef` | Plutus V3 `TxOutRef`: constructor 0 of a 32-byte transaction id and an output index. V1 and V2 wrap the id as constructor 0 of `[constructor 0 [txId], index]` |
 | `AssetClass` | `AssetClass`: constructor 0 of a policy id and a token name |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
@@ -74,16 +74,19 @@ Unknown types, unknown options, empty or duplicate options, and a malformed
 
 ```go
 type Datum struct {
-    _     struct{}          `plutusType:"DefList" plutusConstr:"0"`
-    Owner common.Credential `plutusType:"Credential"`
+    _     struct{}                 `plutusType:"DefList" plutusConstr:"0"`
+    Owner common.Credential        `plutusType:"Credential"`
     Utxo  plutusencoder.TxOutRef   `plutusType:"TxOutRef"`
     Asset plutusencoder.AssetClass `plutusType:"AssetClass"`
 }
 ```
 
 `Credential` encodes `common.Credential` as constructor 0 for a key hash and
-constructor 1 for a script hash, with a 28-byte hash. `TxOutRef` is
-constructor 0 of a 32-byte transaction id and an unsigned output index.
+constructor 1 for a script hash, with a 28-byte hash. `TxOutRef` is the
+Plutus V3 shape: constructor 0 of a 32-byte transaction id and an unsigned
+output index. Plutus V1 and V2 wrap that id as constructor 0 of
+`[constructor 0 [txId], index]`. A datum built for those validators encodes
+here and then fails on chain.
 `AssetClass` is constructor 0 of an empty or 28-byte policy id and a token
 name up to 32 bytes; an empty policy id requires an empty token name.
 
