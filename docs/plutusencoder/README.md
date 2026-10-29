@@ -63,6 +63,11 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Either` | a two-pointer struct: `Left` is constructor 0, `Right` is constructor 1 |
 | `OutputDatum` | `OutputDatum`: none is constructor 0, datum hash is 1, inline is 2 |
 | `Interval` | `Interval` with explicit `BoundNegInf`, `BoundFinite`, and `BoundPosInf` bounds |
+| `Value` | `Value` as a map of policy id to asset map, with lovelace under the empty policy |
+| `V4Value` | `Value` as the Plutus V4 tagged `data.Value` constructor (CBOR tag 1401) |
+| `Credential` | `common.Credential`: key hash is constructor 0, script hash is constructor 1 |
+| `TxOutRef` | Plutus V3 `TxOutRef`: constructor 0 of a 32-byte transaction id and an output index. V1 and V2 wrap the id as constructor 0 of `[constructor 0 [txId], index]` |
+| `AssetClass` | `AssetClass`: constructor 0 of a policy id and a token name |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
 
@@ -83,6 +88,10 @@ type Datum struct {
     Side   Choice                    `plutusType:"Either"`
     Datum  plutusencoder.OutputDatum `plutusType:"OutputDatum"`
     Window plutusencoder.Interval    `plutusType:"Interval"`
+    Locked plutusencoder.Value       `plutusType:"Value"`
+    Owner  common.Credential         `plutusType:"Credential"`
+    Utxo   plutusencoder.TxOutRef    `plutusType:"TxOutRef"`
+    Asset  plutusencoder.AssetClass  `plutusType:"AssetClass"`
 }
 ```
 
@@ -94,6 +103,26 @@ constructor 1 for a 32-byte `Hash`, and constructor 2 for `Inline`.
 rejected.
 `Interval` encodes lower and upper bounds with `BoundNegInf` (0),
 `BoundFinite` (1), or `BoundPosInf` (2) and the closure flag the caller sets.
+
+`Value` encodes the Plutus ledger `Value`: a map of policy id to a map of
+asset name to quantity, with keys sorted by their bytes. Lovelace uses the
+empty policy id and the empty asset name. `V4Value` encodes the same `Value`
+struct as the Plutus V4 `data.Value` constructor (CBOR tag 1401) and runs
+`data.Value.Validate()`. Encoding omits a zero quantity and an empty token
+map, and sorts both levels. Decoding a plain `Value` keeps a zero quantity
+and accepts an unsorted map or an empty token map; re-encoding makes that
+canonical. `V4Value` still rejects a non-canonical value. Duplicate policy or
+asset names and a negative quantity are errors on both paths. `UnmarshalPlutus`
+on both tags accepts either `*data.Map` or `*data.Value`.
+
+`Credential` encodes `common.Credential` as constructor 0 for a key hash and
+constructor 1 for a script hash, with a 28-byte hash. `TxOutRef` is the
+Plutus V3 shape: constructor 0 of a 32-byte transaction id and an unsigned
+output index. Plutus V1 and V2 wrap that id as constructor 0 of
+`[constructor 0 [txId], index]`. A datum built for those validators encodes
+here and then fails on chain.
+`AssetClass` is constructor 0 of an empty or 28-byte policy id and a token
+name up to 32 bytes; an empty policy id requires an empty token name.
 
 ## Options
 

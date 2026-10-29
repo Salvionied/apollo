@@ -175,6 +175,18 @@ func TestApplyParamsToScriptPlutusV1(t *testing.T) {
 	}
 }
 
+func TestApplyParamsToScriptPlutusV4(t *testing.T) {
+	script := common.PlutusV4Script(mustHex(t, identityScriptHex))
+	got, err := ApplyParamsToScript(script, data.NewInteger(big.NewInt(42)))
+	if err != nil {
+		t.Fatalf("ApplyParamsToScript: %v", err)
+	}
+	want := mustHex(t, "4c010100320014c102182a0001")
+	if !bytes.Equal(got, want) {
+		t.Fatalf("applied V4 script = %x, want %x", []byte(got), want)
+	}
+}
+
 func TestApplyParamsToScriptNoParamsReturnsCopy(t *testing.T) {
 	script := common.PlutusV3Script(mustHex(t, identityScriptHex))
 	got, err := ApplyParamsToScript(script)
