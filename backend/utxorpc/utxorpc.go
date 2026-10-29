@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,14 +22,19 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	alphacardano "github.com/utxorpc/go-codegen/utxorpc/v1alpha/cardano"
 	alphaquery "github.com/utxorpc/go-codegen/utxorpc/v1alpha/query"
+	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/query/queryconnect"
 	alphasubmit "github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit"
+	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/submit/submitconnect"
 	alphasync "github.com/utxorpc/go-codegen/utxorpc/v1alpha/sync"
+	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/sync/syncconnect"
+	"github.com/utxorpc/go-codegen/utxorpc/v1alpha/watch/watchconnect"
 	cardano "github.com/utxorpc/go-codegen/utxorpc/v1beta/cardano"
 	query "github.com/utxorpc/go-codegen/utxorpc/v1beta/query"
 	submit "github.com/utxorpc/go-codegen/utxorpc/v1beta/submit"
 	syncpb "github.com/utxorpc/go-codegen/utxorpc/v1beta/sync"
 	sdk "github.com/utxorpc/go-sdk"
 	alphasdk "github.com/utxorpc/go-sdk/v1alpha"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
@@ -71,10 +78,13 @@ func (e *EvaluationError) Error() string {
 func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]string) *UtxoRpcChainContext {
 	opts := []sdk.ClientOption{
 		sdk.WithBaseUrl(baseUrl),
+		sdk.WithConnectOptions(connect.WithReadMaxBytes(maxRpcResponseBytes)),
 	}
 	if len(headers) > 0 {
 		opts = append(opts, sdk.WithHeaders(headers))
 	}
+	baseClient := sdk.NewClient(opts...)
+	opts = append(opts, sdk.WithHttpClient(&boundedResponseClient{client: baseClient.HTTPClient()}))
 	client := sdk.NewClient(opts...)
 	// Both clients are built up front because neither constructor performs
 	// network I/O; only the one that ends up negotiated is ever used.
@@ -84,11 +94,64 @@ func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]
 	if len(headers) > 0 {
 		alphaOpts = append(alphaOpts, alphasdk.WithHeaders(headers))
 	}
+	baseAlphaClient := alphasdk.NewClient(alphaOpts...)
+	alphaOpts = append(alphaOpts, alphasdk.WithHttpClient(&boundedResponseClient{client: baseAlphaClient.HTTPClient()}))
+	alphaClient := alphasdk.NewClient(alphaOpts...)
+	alphaConnectOpts := []connect.ClientOption{connect.WithGRPC(), connect.WithReadMaxBytes(maxRpcResponseBytes)}
+	alphaClient.Query = queryconnect.NewQueryServiceClient(alphaClient.HTTPClient(), baseUrl, alphaConnectOpts...)
+	alphaClient.Submit = submitconnect.NewSubmitServiceClient(alphaClient.HTTPClient(), baseUrl, alphaConnectOpts...)
+	alphaClient.Sync = syncconnect.NewSyncServiceClient(alphaClient.HTTPClient(), baseUrl, alphaConnectOpts...)
+	alphaClient.Watch = watchconnect.NewWatchServiceClient(alphaClient.HTTPClient(), baseUrl, alphaConnectOpts...)
 	return &UtxoRpcChainContext{
 		client:      client,
-		alphaClient: alphasdk.NewClient(alphaOpts...),
+		alphaClient: alphaClient,
 		networkId:   networkId,
 	}
+}
+
+const (
+	maxRpcResponseBytes = 16 * 1024 * 1024
+	maxRpcPageItems     = 1000
+)
+
+type boundedResponseClient struct {
+	client connect.HTTPClient
+}
+
+func (c *boundedResponseClient) Do(req *http.Request) (*http.Response, error) {
+	resp, err := c.client.Do(req)
+	if err != nil || resp == nil || resp.Body == nil {
+		return resp, err
+	}
+	if resp.ContentLength > maxRpcResponseBytes {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("UTxO RPC response exceeds %d bytes", maxRpcResponseBytes)
+	}
+	resp.Body = &boundedResponseBody{ReadCloser: resp.Body, remaining: maxRpcResponseBytes + 1}
+	return resp, nil
+}
+
+type boundedResponseBody struct {
+	io.ReadCloser
+	remaining int64
+}
+
+func (b *boundedResponseBody) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if b.remaining == 0 {
+		return 0, fmt.Errorf("UTxO RPC response exceeds %d bytes", maxRpcResponseBytes)
+	}
+	if int64(len(p)) > b.remaining {
+		p = p[:b.remaining]
+	}
+	n, err := b.ReadCloser.Read(p)
+	b.remaining -= int64(n)
+	if b.remaining == 0 {
+		return n, fmt.Errorf("UTxO RPC response exceeds %d bytes", maxRpcResponseBytes)
+	}
+	return n, err
 }
 
 func bigIntToInt64(bi *cardano.BigInt) int64 {
@@ -398,11 +461,12 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 	}
 
 	var utxos []common.Utxo
+	var budget backendutil.UtxoQueryBudget
 	seenTokens := make(map[string]struct{})
 	const maxPages = 10_000
 	var startToken string
 	for page := 0; page < maxPages; page++ {
-		page, err := u.searchUtxosPage(ctx, addrBytes, startToken)
+		page, err := u.searchUtxosPage(ctx, addrBytes, startToken, &budget)
 		if err != nil {
 			if startToken == "" {
 				return nil, err
@@ -412,6 +476,11 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 				startToken,
 				err,
 			)
+		}
+		for _, utxo := range page.utxos {
+			if err := budget.AddReference(utxo); err != nil {
+				return nil, err
+			}
 		}
 		utxos = append(utxos, page.utxos...)
 		next := page.nextToken
@@ -451,10 +520,13 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 	ctx context.Context,
 	addrBytes []byte,
 	startToken string,
+	budget *backendutil.UtxoQueryBudget,
 ) (utxoPage, error) {
 	return callWithVersionFallback(ctx, u,
 		func(ctx context.Context) (utxoPage, error) {
+			maxItems := int32(maxRpcPageItems)
 			req := connect.NewRequest(&query.SearchUtxosRequest{
+				MaxItems: &maxItems,
 				Predicate: &query.UtxoPredicate{
 					Match: &query.AnyUtxoPattern{
 						UtxoPattern: &query.AnyUtxoPattern_Cardano{
@@ -475,6 +547,12 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 			if err != nil {
 				return utxoPage{}, err
 			}
+			if len(resp.Msg.GetItems()) > maxRpcPageItems {
+				return utxoPage{}, fmt.Errorf("UTxO RPC returned %d items in a page, maximum %d", len(resp.Msg.GetItems()), maxRpcPageItems)
+			}
+			if err := budget.AddPage(len(resp.Msg.GetItems()), proto.Size(resp.Msg)); err != nil {
+				return utxoPage{}, err
+			}
 			page := utxoPage{nextToken: resp.Msg.GetNextToken()}
 			for _, item := range resp.Msg.GetItems() {
 				utxo, err := utxoFromRpc(item)
@@ -487,6 +565,7 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 		},
 		func(ctx context.Context) (utxoPage, error) {
 			req := connect.NewRequest(&alphaquery.SearchUtxosRequest{
+				MaxItems: maxRpcPageItems,
 				Predicate: &alphaquery.UtxoPredicate{
 					Match: &alphaquery.AnyUtxoPattern{
 						UtxoPattern: &alphaquery.AnyUtxoPattern_Cardano{
@@ -503,6 +582,12 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 			u.alphaClient.AddHeadersToRequest(req)
 			resp, err := u.alphaClient.SearchUtxosWithContext(ctx, req)
 			if err != nil {
+				return utxoPage{}, err
+			}
+			if len(resp.Msg.GetItems()) > maxRpcPageItems {
+				return utxoPage{}, fmt.Errorf("UTxO RPC returned %d items in a page, maximum %d", len(resp.Msg.GetItems()), maxRpcPageItems)
+			}
+			if err := budget.AddPage(len(resp.Msg.GetItems()), proto.Size(resp.Msg)); err != nil {
 				return utxoPage{}, err
 			}
 			page := utxoPage{nextToken: resp.Msg.GetNextToken()}

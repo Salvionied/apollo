@@ -324,6 +324,7 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 	}{Addresses: []string{addr}, Extended: true}
 
 	var utxos []common.Utxo
+	var budget backendutil.UtxoQueryBudget
 	for page := range maxUtxoPages + 1 {
 		query := url.Values{}
 		query.Set("offset", strconv.Itoa(page*koiosPageSize))
@@ -334,8 +335,11 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 		if err != nil {
 			return nil, err
 		}
-		var rows []koiosUtxo
-		if err := json.Unmarshal(data, &rows); err != nil {
+		if err := budget.AddBytes(len(data)); err != nil {
+			return nil, err
+		}
+		rows, err := backendutil.DecodeLimitedArray[koiosUtxo](data, koiosPageSize)
+		if err != nil {
 			return nil, fmt.Errorf("failed to parse koios address_utxos: %w", err)
 		}
 		if len(rows) == 0 {
@@ -343,6 +347,9 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 		}
 		if page == maxUtxoPages {
 			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxUtxoPages)
+		}
+		if err := budget.AddPage(len(rows), 0); err != nil {
+			return nil, err
 		}
 		for _, row := range rows {
 			if row.Address != addr {
@@ -354,6 +361,9 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 			utxo, err := row.toUtxo()
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse UTxO %s#%s: %w", row.TxHash, row.TxIndex, err)
+			}
+			if err := budget.AddReference(utxo); err != nil {
+				return nil, err
 			}
 			utxos = append(utxos, utxo)
 		}

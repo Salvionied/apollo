@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -545,6 +546,49 @@ func TestUtxosPaginates(t *testing.T) {
 	}
 	if n := len(rs.recorded()); n != 2 {
 		t.Fatalf("made %d requests, want 2 (stop after a short page)", n)
+	}
+}
+
+func TestUtxosRejectsDuplicateReferences(t *testing.T) {
+	row := utxoRow(t, 0, nil)
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/address_utxos", http.StatusOK, mustJSON(t, []any{row, row}))
+	if _, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t)); err == nil {
+		t.Fatal("expected duplicate UTxO reference to fail")
+	}
+}
+
+func TestUtxosBoundsCumulativePageBytes(t *testing.T) {
+	padding := strings.Repeat("x", 9*1024)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		var page int
+		switch r.URL.Query().Get("offset") {
+		case "0":
+		case "1000":
+			page = 1
+		case "2000":
+			page = 2
+		case "3000":
+			page = 3
+		default:
+			_, _ = io.WriteString(w, "[]")
+			return
+		}
+		rows := make([]map[string]any, koiosPageSize)
+		for i := range rows {
+			rows[i] = utxoRow(t, page*koiosPageSize+i, map[string]any{"padding": padding})
+		}
+		_ = json.NewEncoder(w).Encode(rows)
+	}))
+	defer server.Close()
+
+	if _, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t)); err == nil {
+		t.Fatal("expected cumulative response bytes to exceed the query budget")
+	}
+	if got := requests.Load(); got != 4 {
+		t.Fatalf("requests = %d, want 4 before returning the budget error", got)
 	}
 }
 
