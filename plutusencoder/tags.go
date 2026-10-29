@@ -114,10 +114,7 @@ func isEmptyField(fieldVal reflect.Value) bool {
 	case reflect.String, reflect.Array, reflect.Slice, reflect.Map:
 		return fieldVal.Len() == 0
 	case reflect.Pointer:
-		if fieldVal.IsNil() {
-			return true
-		}
-		return isEmptyField(fieldVal.Elem())
+		return fieldVal.IsNil()
 	default:
 		return fieldVal.IsZero()
 	}

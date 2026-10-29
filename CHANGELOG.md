@@ -19,12 +19,24 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preserving Apollo's historical mixed encoding as the default.
 - `plutusType:"Ignore"` skips a struct field entirely, in both directions. It
   takes no options.
-- `omitempty` is honored on map fields, dropping a field whose value is empty
-  from the encoded map. Empty follows `encoding/json` semantics — false,
+- `omitempty` drops an empty field from a Map, and from the end of a
+  `DefList` or `IndefList`. Empty follows `encoding/json` semantics — false,
   numeric zero, nil pointer or interface, and zero-length string, array, slice
-  or map — and a type may override it by implementing `IsZero() bool`. The
-  option is still rejected on positional list fields, where dropping an element
-  would shift the ones after it.
+  or map — and a type may override it by implementing `IsZero() bool`. A
+  non-nil pointer stays present when the pointed-to value is zero. Omitting
+  an empty list field that is followed by a present field is an error,
+  because a positional list cannot represent a hole. A missing trailing field
+  and an absent optional map key decode as zero.
+- `plutusType:"Address"` encodes `common.Address` as Plutus data. Payment
+  types 0–7 are constructor 0 of a payment credential and a Maybe staking
+  credential. Reward types 14 and 15 are constructor 0 or 1 of the 28-byte
+  stake hash. Byron addresses are rejected. Pointer components outside
+  cardano-ledger's `Ptr` bounds are rejected. `UnmarshalPlutus` decodes
+  addresses as testnet unless `WithAddressNetwork` selects mainnet.
+- `plutusType:"Maybe"` encodes a pointer as PlutusTx `Maybe`: nil is
+  constructor 1, and a value is constructor 0 around the element. Custom
+  `PlutusMarshaler` values and `*big.Int` are honored inside `Maybe`. `Just 0`
+  is not empty.
 - Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
   scalar key and value codecs. Entries are sorted by encoded key bytes, so the
   output is deterministic, and duplicate encoded keys are rejected.

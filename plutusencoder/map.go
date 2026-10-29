@@ -286,7 +286,7 @@ func extractMapKey(elem reflect.Value) (data.PlutusData, int, error) {
 	return nil, -1, fmt.Errorf("cannot extract map key from non-struct element of kind %s", elem.Kind())
 }
 
-func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) error {
+func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, cfg decodeConfig) error {
 	container, expectedConstr, hasExpectedConstr, err := readContainerMetadata(typ)
 	if err != nil {
 		return err
@@ -362,23 +362,24 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type) e
 				}
 			}
 			if optional {
-				// Optional field absent from the map: leave the zero value.
+				// Optional field absent from the map: reset to the zero value.
+				val.Field(i).SetZero()
 				continue
 			}
 			return fmt.Errorf("missing required map key %q for field %s of struct %s", keyName, field.Name, typ.Name())
 		}
 
 		fieldVal := val.Field(i)
-		if err := unmarshalField(value, fieldVal, field); err != nil {
+		if err := unmarshalField(value, fieldVal, field, cfg); err != nil {
 			return fmt.Errorf("field %s: %w", field.Name, err)
 		}
 	}
 	return nil
 }
 
-func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if fieldVal.Kind() == reflect.Map {
-		return unmarshalNativeMap(pd, fieldVal, field)
+		return unmarshalNativeMap(pd, fieldVal, field, cfg)
 	}
 	if fieldVal.Kind() == reflect.Slice {
 		mapData, ok := pd.(*data.Map)
@@ -395,7 +396,7 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 			} else {
 				elem = reflect.New(elemType).Elem()
 			}
-			if err := unmarshalMapEntry(pair, elem); err != nil {
+			if err := unmarshalMapEntry(pair, elem, cfg); err != nil {
 				return fmt.Errorf("element %d: %w", i, err)
 			}
 			if elemType.Kind() == reflect.Pointer {
@@ -407,10 +408,10 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 		fieldVal.Set(result)
 		return nil
 	}
-	return unmarshalValue(pd, fieldVal)
+	return unmarshalValue(pd, fieldVal, cfg)
 }
 
-func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	mapData, ok := pd.(*data.Map)
 	if !ok {
 		return fmt.Errorf("expected Map for native map field %s, got %T", field.Name, pd)
@@ -424,12 +425,12 @@ func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflec
 	result := reflect.MakeMapWithSize(mapType, len(mapData.Pairs))
 	for i, pair := range mapData.Pairs {
 		key := reflect.New(mapType.Key()).Elem()
-		if err := unmarshalNativeMapKey(pair[0], key, field); err != nil {
+		if err := unmarshalNativeMapKey(pair[0], key, field, cfg); err != nil {
 			return fmt.Errorf("field %s pair %d key: %w", field.Name, i, err)
 		}
 
 		value := reflect.New(mapType.Elem()).Elem()
-		if err := unmarshalNativeMapValue(pair[1], value, field); err != nil {
+		if err := unmarshalNativeMapValue(pair[1], value, field, cfg); err != nil {
 			return fmt.Errorf("field %s pair %d value: %w", field.Name, i, err)
 		}
 		result.SetMapIndex(key, value)
@@ -438,7 +439,7 @@ func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflec
 	return nil
 }
 
-func unmarshalNativeMapKey(pd data.PlutusData, key reflect.Value, field reflect.StructField) error {
+func unmarshalNativeMapKey(pd data.PlutusData, key reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if key.Kind() == reflect.Interface {
 		return fmt.Errorf("unsupported native map key type %s", key.Type())
 	}
@@ -458,7 +459,7 @@ func unmarshalNativeMapKey(pd data.PlutusData, key reflect.Value, field reflect.
 	}
 	if plutusType != "" && plutusType != "Map" {
 		synthetic := reflect.StructField{Name: field.Name + "Key", Tag: field.Tag}
-		return unmarshalField(pd, key, synthetic)
+		return unmarshalField(pd, key, synthetic, cfg)
 	}
 
 	switch key.Kind() {
@@ -477,7 +478,7 @@ func unmarshalNativeMapKey(pd data.PlutusData, key reflect.Value, field reflect.
 	return fmt.Errorf("unsupported native map key type %s", key.Type())
 }
 
-func unmarshalNativeMapValue(pd data.PlutusData, value reflect.Value, field reflect.StructField) error {
+func unmarshalNativeMapValue(pd data.PlutusData, value reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
 	if err != nil {
 		return fmt.Errorf("native map value: %w", err)
@@ -486,7 +487,7 @@ func unmarshalNativeMapValue(pd data.PlutusData, value reflect.Value, field refl
 		return unmarshalNativeMapScalar(pd, value, field)
 	}
 	synthetic := reflect.StructField{Name: field.Name + "Value", Tag: field.Tag}
-	return unmarshalField(pd, value, synthetic)
+	return unmarshalField(pd, value, synthetic, cfg)
 }
 
 func unmarshalNativeMapScalar(pd data.PlutusData, value reflect.Value, field reflect.StructField) error {
@@ -517,9 +518,9 @@ func unmarshalNativeMapScalar(pd data.PlutusData, value reflect.Value, field ref
 
 // unmarshalMapEntry restores a map entry into a struct by setting the key field
 // from pair[0] and the remaining value fields from pair[1].
-func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
+func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value, cfg decodeConfig) error {
 	if elem.Kind() != reflect.Struct {
-		return unmarshalValue(pair[1], elem)
+		return unmarshalValue(pair[1], elem, cfg)
 	}
 	typ := elem.Type()
 
@@ -534,7 +535,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 			}
 			return nil
 		}
-		if err := unmarshalField(keyPD, fieldVal, field); err != nil {
+		if err := unmarshalField(keyPD, fieldVal, field, cfg); err != nil {
 			return fmt.Errorf("key field %s: %w", field.Name, err)
 		}
 		return nil
@@ -551,7 +552,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 		break
 	}
 	if keyIdx < 0 {
-		return unmarshalValue(pair[1], elem)
+		return unmarshalValue(pair[1], elem, cfg)
 	}
 
 	// Unmarshal the key into the key field
@@ -576,7 +577,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 	if len(valueFieldIdxs) == 1 {
 		// Single value field - unmarshal pair[1] directly into it
 		f := typ.Field(valueFieldIdxs[0])
-		return unmarshalField(pair[1], elem.Field(valueFieldIdxs[0]), f)
+		return unmarshalField(pair[1], elem.Field(valueFieldIdxs[0]), f, cfg)
 	}
 
 	// Multiple value fields must be a bare List; Constr tags are not discarded.
@@ -590,7 +591,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value) error {
 	}
 	for i, fieldIdx := range valueFieldIdxs {
 		f := typ.Field(fieldIdx)
-		if err := unmarshalField(items[i], elem.Field(fieldIdx), f); err != nil {
+		if err := unmarshalField(items[i], elem.Field(fieldIdx), f, cfg); err != nil {
 			return fmt.Errorf("value field %s: %w", f.Name, err)
 		}
 	}
