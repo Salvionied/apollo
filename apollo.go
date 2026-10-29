@@ -2997,12 +2997,12 @@ func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters)
 			refScriptSize,
 		)
 	}
-	return backend.TierRefScriptFeeRational(
+	return backend.TierRefScriptFeeRationalChecked(
 		refScriptSize,
 		refFeePerByte,
 		pp.RefScriptSizeIncrement(),
 		pp.RefScriptMultiplierRational(),
-	), nil
+	)
 }
 
 // totalReferenceScriptSize resolves the combined byte size of all reference
