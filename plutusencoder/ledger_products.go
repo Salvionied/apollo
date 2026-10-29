@@ -30,11 +30,8 @@ type AssetClass struct {
 func marshalCredential(cred common.Credential) (data.PlutusData, error) {
 	switch cred.CredType {
 	case common.CredentialTypeAddrKeyHash, common.CredentialTypeScriptHash:
-		// A zero Credential is CredType 0 and a zero hash. ToPlutusData would
-		// emit that unset value as a key credential, so reject it first.
-		if cred.CredType == common.CredentialTypeAddrKeyHash && cred.Credential == (common.Blake2b224{}) {
-			return nil, errors.New("credential hash is empty")
-		}
+		// Blake2b224 is a fixed array, so the zero value is 28 zero bytes.
+		// That is a real hash, and Credential.ToPlutusData encodes it.
 		hashLen := len(cred.Credential.Bytes())
 		if hashLen != common.Blake2b224Size {
 			return nil, fmt.Errorf("expected %d-byte credential hash, got %d", common.Blake2b224Size, hashLen)

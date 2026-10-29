@@ -147,22 +147,48 @@ func TestProductCodecsRejectWrongHashLengths(t *testing.T) {
 	}
 }
 
-func TestZeroCredentialEncode(t *testing.T) {
-	runs := 0
-	if _, err := marshalCredential(common.Credential{}); err == nil {
-		t.Fatal("expected zero credential to fail")
-	} else if !strings.Contains(err.Error(), "empty") {
-		t.Fatalf("zero credential error %q does not say the hash is empty", err)
-	}
-	runs++
+func TestZeroCredentialRoundTrip(t *testing.T) {
+	txId := bytes.Repeat([]byte{0xcd}, common.Blake2b256Size)
+	for _, kind := range []uint{common.CredentialTypeAddrKeyHash, common.CredentialTypeScriptHash} {
+		cred := common.Credential{CredType: kind}
+		pd, err := marshalCredential(cred)
+		if err != nil {
+			t.Fatalf("kind %d: %v", kind, err)
+		}
+		got, err := data.Encode(pd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := data.Encode(cred.ToPlutusData())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("kind %d encoding does not match Credential.ToPlutusData", kind)
+		}
+		decoded, err := unmarshalCredential(pd)
+		if err != nil {
+			t.Fatalf("kind %d decode: %v", kind, err)
+		}
+		if decoded.CredType != cred.CredType || decoded.Credential != cred.Credential {
+			t.Fatalf("kind %d decoded as %+v", kind, decoded)
+		}
 
-	if _, err := MarshalPlutus(&productCodecsDatum{}); err == nil {
-		t.Fatal("expected a datum with a zero credential to fail")
-	}
-	runs++
-
-	if runs != 2 {
-		t.Fatalf("zero credential cases = %d, want 2", runs)
+		datum := productCodecsDatum{
+			Owner: cred,
+			Utxo:  TxOutRef{TxId: txId},
+		}
+		wire, err := MarshalPlutus(&datum)
+		if err != nil {
+			t.Fatalf("kind %d datum: %v", kind, err)
+		}
+		var back productCodecsDatum
+		if err := UnmarshalPlutus(wire, &back); err != nil {
+			t.Fatalf("kind %d datum decode: %v", kind, err)
+		}
+		if back.Owner.CredType != cred.CredType || back.Owner.Credential != cred.Credential {
+			t.Fatalf("kind %d datum owner = %+v", kind, back.Owner)
+		}
 	}
 }
 
