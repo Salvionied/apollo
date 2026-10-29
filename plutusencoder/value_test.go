@@ -285,3 +285,25 @@ func TestValueRejectsLongTokenNameAndGoldenHex(t *testing.T) {
 		t.Fatal("V4 Value must reject a zero quantity")
 	}
 }
+
+func TestValueRejectsTypedNilComponents(t *testing.T) {
+	policy := bytes.Repeat([]byte{0x11}, common.Blake2b224Size)
+	token := data.NewByteString([]byte("N"))
+	qty := data.NewInteger(big.NewInt(1))
+	asset := data.NewMap([][2]data.PlutusData{{token, qty}})
+	cases := []data.PlutusData{
+		(*data.Map)(nil),
+		(*data.Value)(nil),
+		&data.Value{},
+		data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), asset}}),
+		data.NewMap([][2]data.PlutusData{{data.NewByteString(policy), (*data.Map)(nil)}}),
+		data.NewMap([][2]data.PlutusData{{data.NewByteString(policy), data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), qty}})}}),
+		data.NewMap([][2]data.PlutusData{{data.NewByteString(nil), data.NewMap([][2]data.PlutusData{{data.NewByteString(nil), (*data.Integer)(nil)}})}}),
+	}
+	for i, value := range cases {
+		var decoded valueDatum
+		if err := UnmarshalPlutus(data.NewConstr(0, value), &decoded); err == nil {
+			t.Fatalf("case %d decoded a typed-nil Value component", i)
+		}
+	}
+}

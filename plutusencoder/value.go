@@ -85,8 +85,14 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 	var outer *data.Map
 	switch v := pd.(type) {
 	case *data.Map:
+		if plutusNil(v) {
+			return Value{}, fmt.Errorf("expected Plutus Value map or V4 Value, got %T", pd)
+		}
 		outer = v
 	case *data.Value:
+		if plutusNil(v) || v.Inner == nil {
+			return Value{}, fmt.Errorf("expected Plutus Value map or V4 Value, got %T", pd)
+		}
 		if err := v.Validate(); err != nil {
 			return Value{}, err
 		}
@@ -101,11 +107,11 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 
 	for _, pair := range outer.Pairs {
 		policyBytes, ok := pair[0].(*data.ByteString)
-		if !ok {
+		if !ok || plutusNil(policyBytes) {
 			return Value{}, fmt.Errorf("expected byte string policy id, got %T", pair[0])
 		}
 		innerMap, ok := pair[1].(*data.Map)
-		if !ok {
+		if !ok || plutusNil(innerMap) {
 			return Value{}, fmt.Errorf("expected asset map for policy, got %T", pair[1])
 		}
 
@@ -121,7 +127,7 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 				return Value{}, errors.New("lovelace policy must contain one entry")
 			}
 			nameBytes, ok := innerMap.Pairs[0][0].(*data.ByteString)
-			if !ok || len(nameBytes.Inner) != 0 {
+			if !ok || plutusNil(nameBytes) || len(nameBytes.Inner) != 0 {
 				return Value{}, errors.New("lovelace asset name must be empty")
 			}
 			qty, err := valueQuantity(innerMap.Pairs[0][1])
@@ -143,7 +149,7 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 		policyAssets := make(map[cbor.ByteString]uint64, len(innerMap.Pairs))
 		for _, item := range innerMap.Pairs {
 			nameBytes, ok := item[0].(*data.ByteString)
-			if !ok || len(nameBytes.Inner) > valueMaxTokenNameSize {
+			if !ok || plutusNil(nameBytes) || len(nameBytes.Inner) > valueMaxTokenNameSize {
 				return Value{}, fmt.Errorf("expected token name up to %d bytes", valueMaxTokenNameSize)
 			}
 			qty, err := valueQuantity(item[1])
@@ -167,7 +173,7 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 
 func valueQuantity(pd data.PlutusData) (uint64, error) {
 	integer, ok := pd.(*data.Integer)
-	if !ok || integer.Inner == nil {
+	if !ok || plutusNil(integer) || integer.Inner == nil {
 		return 0, fmt.Errorf("expected integer quantity, got %T", pd)
 	}
 	if integer.Inner.Sign() < 0 || !integer.Inner.IsUint64() {
