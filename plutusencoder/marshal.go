@@ -130,7 +130,7 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 	case "Credential":
 		cred, ok := fieldVal.Interface().(common.Credential)
 		if !ok {
-			return nil, fmt.Errorf("Credential requires common.Credential, got %s", fieldVal.Type())
+			return nil, fmt.Errorf("credential requires common.Credential, got %s", fieldVal.Type())
 		}
 		return marshalCredential(cred)
 	case "TxOutRef":

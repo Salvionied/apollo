@@ -121,7 +121,7 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
 	case "Credential":
 		if fieldVal.Type() != reflect.TypeOf(common.Credential{}) {
-			return fmt.Errorf("Credential requires common.Credential, got %s", fieldVal.Type())
+			return fmt.Errorf("credential requires common.Credential, got %s", fieldVal.Type())
 		}
 		cred, err := unmarshalCredential(pd)
 		if err != nil {
