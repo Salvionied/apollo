@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"math/big"
 	"sync"
 	"time"
 
@@ -55,6 +56,12 @@ func (c *CachedChainContext) ProtocolParamsContext(ctx context.Context) (backend
 			}
 			pp.CostModels = cm
 		}
+		if pp.MinFeeRefScriptCostPerByteRational != nil {
+			pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
+		}
+		if pp.MinFeeReferenceScriptsMultiplierRational != nil {
+			pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
+		}
 		c.mu.Unlock()
 		return pp, nil
 	}
@@ -75,6 +82,12 @@ func (c *CachedChainContext) ProtocolParamsContext(ctx context.Context) (backend
 			cm[k] = dup
 		}
 		cached.CostModels = cm
+	}
+	if cached.MinFeeRefScriptCostPerByteRational != nil {
+		cached.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(cached.MinFeeRefScriptCostPerByteRational)
+	}
+	if cached.MinFeeReferenceScriptsMultiplierRational != nil {
+		cached.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(cached.MinFeeReferenceScriptsMultiplierRational)
 	}
 
 	c.mu.Lock()

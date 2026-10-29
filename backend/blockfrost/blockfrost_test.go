@@ -692,6 +692,33 @@ func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
 	}
 }
 
+func TestProtocolParamsPriceDoesNotShareCacheState(t *testing.T) {
+	const body = `{"min_fee_a":44,"min_fee_b":155381,"price_mem":0.0577,"price_step":0.0000721,"min_fee_ref_script_cost_per_byte":15.125}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	ctx := NewBlockFrostChainContext(srv.URL, 0, "")
+	for i := 0; i < 2; i++ {
+		pp, err := ctx.ProtocolParams()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pp.MinFeeRefScriptCostPerByteRational.Cmp(big.NewRat(121, 8)) != 0 {
+			t.Fatalf("cached price changed after return %d", i)
+		}
+		pp.MinFeeRefScriptCostPerByteRational.SetInt64(1000)
+	}
+	pp, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pp.MinFeeRefScriptCostPerByteRational.Cmp(big.NewRat(121, 8)) != 0 {
+		t.Fatal("cached price changed after caller mutation")
+	}
+}
+
 func TestProtocolParamsPreservesFractionalRefScriptCostPerByte(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,

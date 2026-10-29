@@ -138,6 +138,12 @@ func (b *BlockFrostChainContext) ProtocolParamsContext(ctx context.Context) (bac
 			}
 			pp.CostModels = cm
 		}
+		if pp.MinFeeRefScriptCostPerByteRational != nil {
+			pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
+		}
+		if pp.MinFeeReferenceScriptsMultiplierRational != nil {
+			pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
+		}
 		b.mu.Unlock()
 		return pp, nil
 	}
@@ -168,6 +174,12 @@ func (b *BlockFrostChainContext) ProtocolParamsContext(ctx context.Context) (bac
 			cm[k] = dup
 		}
 		cached.CostModels = cm
+	}
+	if cached.MinFeeRefScriptCostPerByteRational != nil {
+		cached.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(cached.MinFeeRefScriptCostPerByteRational)
+	}
+	if cached.MinFeeReferenceScriptsMultiplierRational != nil {
+		cached.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(cached.MinFeeReferenceScriptsMultiplierRational)
 	}
 
 	b.mu.Lock()
