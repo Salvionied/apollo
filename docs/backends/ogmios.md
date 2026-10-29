@@ -24,6 +24,10 @@ queries Ogmios serves, but it reports neither `CapabilityUtxos` nor
 
 `KupoTimeout` bounds each Kupo HTTP request; zero leaves the client default.
 
+Protocol and genesis parameters are cached for five minutes per context, so
+the repeated reads made while building a transaction do not each become an
+Ogmios query. Reuse one context across transactions to benefit from it.
+
 ## Connection reuse
 
 Queries reuse Ogmios WebSocket connections instead of dialing one per query.
@@ -61,4 +65,5 @@ Ogmios v6.1.0 and later encode lovelace-valued parameters as
 error — previously every lovelace field decoded as zero, which zeroed
 `minFeeConstant` and underpriced every transaction by 155381 lovelace on
 mainnet. Shelley genesis decoding is similarly strict (`activeSlotsCoefficient`
-as a ratio string, `slotLength`, `startTime`, `maxReferenceScriptsSize`).
+as a ratio string, `slotLength` as a positive whole number of seconds,
+`startTime`, `maxReferenceScriptsSize`).

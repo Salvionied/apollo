@@ -160,7 +160,7 @@ func (k *KoiosChainContext) ProtocolParams() (backend.ProtocolParameters, error)
 func (k *KoiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	k.mu.Lock()
 	if k.cachedParams != nil && time.Since(k.paramsCacheAt) < cacheExpiry {
-		pp := cloneProtocolParams(*k.cachedParams)
+		pp := backendutil.CloneProtocolParams(*k.cachedParams)
 		k.mu.Unlock()
 		return pp, nil
 	}
@@ -189,31 +189,12 @@ func (k *KoiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.
 		return backend.ProtocolParameters{}, err
 	}
 
-	cached := cloneProtocolParams(pp)
+	cached := backendutil.CloneProtocolParams(pp)
 	k.mu.Lock()
 	k.cachedParams = &cached
 	k.paramsCacheAt = time.Now()
 	k.mu.Unlock()
 	return pp, nil
-}
-
-// cloneProtocolParams deep-copies the reference fields of pp so callers cannot
-// mutate the cache.
-func cloneProtocolParams(pp backend.ProtocolParameters) backend.ProtocolParameters {
-	if pp.CostModels != nil {
-		models := make(map[string][]int64, len(pp.CostModels))
-		for language, costs := range pp.CostModels {
-			models[language] = append([]int64(nil), costs...)
-		}
-		pp.CostModels = models
-	}
-	if pp.MinFeeRefScriptCostPerByteRational != nil {
-		pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
-	}
-	if pp.MinFeeReferenceScriptsMultiplierRational != nil {
-		pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
-	}
-	return pp
 }
 
 func (k *KoiosChainContext) GenesisParams() (backend.GenesisParameters, error) {
