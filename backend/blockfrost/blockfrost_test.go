@@ -140,6 +140,7 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 		OutputIndex:         0,
 		Address:             addr.String(),
 		Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		DataHash:            common.Blake2b256Hash(wantDatumCbor).String(),
 		InlineDatum:         json.RawMessage(`"182a"`),
 		ReferenceScriptHash: scriptHashHex,
 	}
@@ -184,6 +185,7 @@ func TestHydrateUtxoChecksInlineDatumHash(t *testing.T) {
 		wantErr string
 	}{
 		{"matching", common.Blake2b256Hash([]byte{0x18, 0x2a}).String(), ""},
+		{"missing", "", "inline datum is missing its data hash"},
 		{"mismatch", strings.Repeat("b", 64), "inline datum hash mismatch"},
 		{"short", "abcd", "invalid data hash length"},
 		{"invalid hex", "zz", "invalid data hash hex"},

@@ -1288,19 +1288,20 @@ func inlineDatumOptionFromBlockfrost(raw json.RawMessage, datumHash string) (*ba
 	if err != nil {
 		return nil, fmt.Errorf("invalid inline datum CBOR hex %q: %w", datumCborHex, err)
 	}
-	if datumHash != "" {
-		hashBytes, err := hex.DecodeString(datumHash)
-		if err != nil {
-			return nil, fmt.Errorf("invalid data hash hex %q: %w", datumHash, err)
-		}
-		if len(hashBytes) != common.Blake2b256Size {
-			return nil, fmt.Errorf("invalid data hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
-		}
-		var claimed common.Blake2b256
-		copy(claimed[:], hashBytes)
-		if computed := common.Blake2b256Hash(datumBytes); computed != claimed {
-			return nil, fmt.Errorf("inline datum hash mismatch: computed %s, provider claimed %s", computed, datumHash)
-		}
+	if datumHash == "" {
+		return nil, errors.New("inline datum is missing its data hash")
+	}
+	hashBytes, err := hex.DecodeString(datumHash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid data hash hex %q: %w", datumHash, err)
+	}
+	if len(hashBytes) != common.Blake2b256Size {
+		return nil, fmt.Errorf("invalid data hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
+	}
+	var claimed common.Blake2b256
+	copy(claimed[:], hashBytes)
+	if computed := common.Blake2b256Hash(datumBytes); computed != claimed {
+		return nil, fmt.Errorf("inline datum hash mismatch: computed %s, provider claimed %s", computed, datumHash)
 	}
 	// Inline datum option: [1, #6.24(datum_cbor)]
 	cborBytes, err := cbor.Encode([]any{1, cbor.Tag{Number: 24, Content: datumBytes}})
