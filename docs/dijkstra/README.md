@@ -38,7 +38,9 @@ Consume the script with `AddReferenceInput`. `AttachScript` rejects a V4 script 
 in a Conway build. A V4 script can lock spent UTxOs (`CollectFrom`) and guard
 the transaction (`AddGuard`). The script integrity hash uses the provider's
 `PlutusV4` cost model (Ogmios `plutus:v4`, Blockfrost `PlutusV4`, UTxO RPC
-`plutus_v4`).
+`plutus_v4`). When loading a V4 validator from a CIP-57 `plutus.json`, see
+[Plutus blueprint (`CIP-57`)](../blueprint/README.md) for `V4()`,
+`ScriptRef()`, `GuardCredential()`, and `"guard"` redeemer encoding.
 
 ## Withdrawals and governance
 
