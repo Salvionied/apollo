@@ -34,7 +34,6 @@ import (
 	syncpb "github.com/utxorpc/go-codegen/utxorpc/v1beta/sync"
 	sdk "github.com/utxorpc/go-sdk"
 	alphasdk "github.com/utxorpc/go-sdk/v1alpha"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
@@ -461,12 +460,11 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 	}
 
 	var utxos []common.Utxo
-	var budget backendutil.UtxoQueryBudget
+	var references backendutil.UtxoReferenceSet
 	seenTokens := make(map[string]struct{})
-	const maxPages = 10_000
 	var startToken string
-	for page := 0; page < maxPages; page++ {
-		page, err := u.searchUtxosPage(ctx, addrBytes, startToken, &budget)
+	for {
+		page, err := u.searchUtxosPage(ctx, addrBytes, startToken)
 		if err != nil {
 			if startToken == "" {
 				return nil, err
@@ -478,7 +476,7 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 			)
 		}
 		for _, utxo := range page.utxos {
-			if err := budget.AddReference(utxo); err != nil {
+			if err := references.Add(utxo); err != nil {
 				return nil, err
 			}
 		}
@@ -493,7 +491,6 @@ func (u *UtxoRpcChainContext) UtxosContext(ctx context.Context, address common.A
 		seenTokens[next] = struct{}{}
 		startToken = next
 	}
-	return nil, fmt.Errorf("UTxO RPC pagination exceeded %d pages", maxPages)
 }
 
 // utxoPage is one page of a UTxO search, already converted to Apollo's types.
@@ -520,7 +517,6 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 	ctx context.Context,
 	addrBytes []byte,
 	startToken string,
-	budget *backendutil.UtxoQueryBudget,
 ) (utxoPage, error) {
 	return callWithVersionFallback(ctx, u,
 		func(ctx context.Context) (utxoPage, error) {
@@ -549,9 +545,6 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 			}
 			if len(resp.Msg.GetItems()) > maxRpcPageItems {
 				return utxoPage{}, fmt.Errorf("UTxO RPC returned %d items in a page, maximum %d", len(resp.Msg.GetItems()), maxRpcPageItems)
-			}
-			if err := budget.AddPage(len(resp.Msg.GetItems()), proto.Size(resp.Msg)); err != nil {
-				return utxoPage{}, err
 			}
 			page := utxoPage{nextToken: resp.Msg.GetNextToken()}
 			for _, item := range resp.Msg.GetItems() {
@@ -586,9 +579,6 @@ func (u *UtxoRpcChainContext) searchUtxosPage(
 			}
 			if len(resp.Msg.GetItems()) > maxRpcPageItems {
 				return utxoPage{}, fmt.Errorf("UTxO RPC returned %d items in a page, maximum %d", len(resp.Msg.GetItems()), maxRpcPageItems)
-			}
-			if err := budget.AddPage(len(resp.Msg.GetItems()), proto.Size(resp.Msg)); err != nil {
-				return utxoPage{}, err
 			}
 			page := utxoPage{nextToken: resp.Msg.GetNextToken()}
 			for _, item := range resp.Msg.GetItems() {

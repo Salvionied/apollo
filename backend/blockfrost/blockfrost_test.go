@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,7 +26,6 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
-	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 type contextRoundTripperFunc func(*http.Request) (*http.Response, error)
@@ -239,49 +240,37 @@ func TestUtxosRejectsDuplicateReferences(t *testing.T) {
 	}
 }
 
-func TestUtxosBoundsCumulativePageBytes(t *testing.T) {
+func TestUtxosReturnsAllProviderPages(t *testing.T) {
 	addr := testAddress(t)
-	padding := strings.Repeat("x", 9*1024*1024)
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		page := r.URL.Query().Get("page")
-		if page == "5" {
-			_, _ = io.WriteString(w, "[]")
+		page, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tx_hash":      strings.Repeat(page, 64),
-			"output_index": 0,
-			"address":      addr.String(),
-			"amount":       []map[string]string{{"unit": "lovelace", "quantity": "1000000"}},
-			"padding":      padding,
+		if page > 1001 {
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]bfAddressUTxO{{
+			TxHash: fmt.Sprintf("%064x", page), OutputIndex: 0,
+			Address: addr.String(),
+			Amount:  []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
 		}})
 	}))
 	defer server.Close()
 
-	if _, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr); err == nil {
-		t.Fatal("expected cumulative response bytes to exceed the query budget")
-	}
-	if got := requests.Load(); got != 4 {
-		t.Fatalf("requests = %d, want 4 before returning the budget error", got)
-	}
-}
-
-func TestUtxosCountsResolvedReferenceScriptBytes(t *testing.T) {
-	script := common.PlutusV2Script([]byte{0x01, 0x02})
-	hash := hex.EncodeToString(script.Hash().Bytes())
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"cbor": hex.EncodeToString(script)})
-	}))
-	defer server.Close()
-	ctx := NewBlockFrostChainContext(server.URL, 0, "")
-	var budget backendutil.UtxoQueryBudget
-	if err := budget.AddBytes(backendutil.MaxUtxoBytesPerQuery - 1); err != nil {
+	utxos, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newScriptRefResolver(t.Context(), ctx, &budget).resolve(hash); err == nil {
-		t.Fatal("expected resolved script bytes to exceed the query budget")
+	if len(utxos) != 1001 {
+		t.Fatalf("UTxOs = %d, want 1001", len(utxos))
+	}
+	if got := requests.Load(); got != 1002 {
+		t.Fatalf("requests = %d, want 1002", got)
 	}
 }
 

@@ -55,7 +55,6 @@ const (
 	// koiosPageSize is the Koios max-rows limit. A page shorter than this is
 	// the last one.
 	koiosPageSize = 1000
-	maxUtxoPages  = 1000
 
 	// ogmiosOverlappingAdditionalUtxo is the Ogmios v6 evaluateTransaction
 	// error returned when supplied additional UTxOs already exist on chain.
@@ -324,18 +323,15 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 	}{Addresses: []string{addr}, Extended: true}
 
 	var utxos []common.Utxo
-	var budget backendutil.UtxoQueryBudget
-	for page := range maxUtxoPages + 1 {
+	var references backendutil.UtxoReferenceSet
+	for offset := int64(0); ; offset += koiosPageSize {
 		query := url.Values{}
-		query.Set("offset", strconv.Itoa(page*koiosPageSize))
+		query.Set("offset", strconv.FormatInt(offset, 10))
 		query.Set("limit", strconv.Itoa(koiosPageSize))
 		// A stable order keeps offset pages from skipping or repeating rows.
 		query.Set("order", "tx_hash.asc,tx_index.asc")
 		data, err := k.postJSON(ctx, "/address_utxos?"+query.Encode(), payload)
 		if err != nil {
-			return nil, err
-		}
-		if err := budget.AddBytes(len(data)); err != nil {
 			return nil, err
 		}
 		rows, err := backendutil.DecodeLimitedArray[koiosUtxo](data, koiosPageSize)
@@ -344,12 +340,6 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 		}
 		if len(rows) == 0 {
 			return utxos, nil
-		}
-		if page == maxUtxoPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxUtxoPages)
-		}
-		if err := budget.AddPage(len(rows), 0); err != nil {
-			return nil, err
 		}
 		for _, row := range rows {
 			if row.Address != addr {
@@ -362,7 +352,7 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse UTxO %s#%s: %w", row.TxHash, row.TxIndex, err)
 			}
-			if err := budget.AddReference(utxo); err != nil {
+			if err := references.Add(utxo); err != nil {
 				return nil, err
 			}
 			utxos = append(utxos, utxo)
@@ -371,7 +361,6 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 			return utxos, nil
 		}
 	}
-	return utxos, nil
 }
 
 func (k *KoiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {

@@ -439,7 +439,7 @@ func TestUtxosRejectsDuplicateReferencesForBothVersions(t *testing.T) {
 	}
 }
 
-func TestUtxosBoundsCumulativeResponseBytes(t *testing.T) {
+func TestUtxosReadsCompleteResultAcrossLargePages(t *testing.T) {
 	unknown := protowire.AppendTag(nil, 100, protowire.BytesType)
 	unknown = protowire.AppendBytes(unknown, []byte(strings.Repeat("x", 9*1024*1024)))
 	var requests atomic.Int32
@@ -469,12 +469,15 @@ func TestUtxosBoundsCumulativeResponseBytes(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
-	_, err := ctx.UtxosContext(t.Context(), versionTestAddress(t))
-	if err == nil || !strings.Contains(err.Error(), "UTxO query exceeds") {
-		t.Fatalf("UtxosContext() error = %v, want cumulative budget error", err)
+	utxos, err := ctx.UtxosContext(t.Context(), versionTestAddress(t))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := requests.Load(); got != 4 {
-		t.Fatalf("requests = %d, want 4 before returning the budget error", got)
+	if len(utxos) != 0 {
+		t.Fatalf("UTxOs = %d, want 0", len(utxos))
+	}
+	if got := requests.Load(); got != 5 {
+		t.Fatalf("requests = %d, want 5 through the final page", got)
 	}
 }
 

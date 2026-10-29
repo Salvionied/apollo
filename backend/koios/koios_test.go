@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -558,37 +559,34 @@ func TestUtxosRejectsDuplicateReferences(t *testing.T) {
 	}
 }
 
-func TestUtxosBoundsCumulativePageBytes(t *testing.T) {
-	padding := strings.Repeat("x", 9*1024)
+func TestUtxosReturnsCompleteResultBeyondTenThousand(t *testing.T) {
+	const total = 10_001
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		var page int
-		switch r.URL.Query().Get("offset") {
-		case "0":
-		case "1000":
-			page = 1
-		case "2000":
-			page = 2
-		case "3000":
-			page = 3
-		default:
-			_, _ = io.WriteString(w, "[]")
+		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		rows := make([]map[string]any, koiosPageSize)
+		count := min(koiosPageSize, total-offset)
+		rows := make([]map[string]any, count)
 		for i := range rows {
-			rows[i] = utxoRow(t, page*koiosPageSize+i, map[string]any{"padding": padding})
+			rows[i] = utxoRow(t, offset+i, nil)
 		}
 		_ = json.NewEncoder(w).Encode(rows)
 	}))
 	defer server.Close()
 
-	if _, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t)); err == nil {
-		t.Fatal("expected cumulative response bytes to exceed the query budget")
+	utxos, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := requests.Load(); got != 4 {
-		t.Fatalf("requests = %d, want 4 before returning the budget error", got)
+	if len(utxos) != total {
+		t.Fatalf("UTxOs = %d, want %d", len(utxos), total)
+	}
+	if got := requests.Load(); got != 11 {
+		t.Fatalf("requests = %d, want 11", got)
 	}
 }
 

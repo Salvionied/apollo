@@ -284,19 +284,15 @@ func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, e
 }
 
 func (b *BlockFrostChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
-	const maxPages = 1000
 	const maxPageItems = 1000
 	var allUtxos []common.Utxo
-	var budget backendutil.UtxoQueryBudget
-	resolver := newScriptRefResolver(ctx, b, &budget)
+	var references backendutil.UtxoReferenceSet
+	resolver := newScriptRefResolver(ctx, b)
 
-	for page := 1; page <= maxPages+1; page++ {
+	for page := uint64(1); ; page++ {
 		path := fmt.Sprintf("/addresses/%s/utxos?page=%d", address.String(), page)
 		data, err := b.requestContext(ctx, "GET", path, nil, "")
 		if err != nil {
-			return nil, err
-		}
-		if err := budget.AddBytes(len(data)); err != nil {
 			return nil, err
 		}
 
@@ -307,25 +303,18 @@ func (b *BlockFrostChainContext) UtxosContext(ctx context.Context, address commo
 		if len(rawUtxos) == 0 {
 			return allUtxos, nil
 		}
-		if page > maxPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxPages)
-		}
-		if err := budget.AddPage(len(rawUtxos), 0); err != nil {
-			return nil, err
-		}
 
 		utxos, err := b.hydrateUtxoPage(rawUtxos, address, resolver.resolve)
 		if err != nil {
 			return nil, err
 		}
 		for _, utxo := range utxos {
-			if err := budget.AddReference(utxo); err != nil {
+			if err := references.Add(utxo); err != nil {
 				return nil, err
 			}
 		}
 		allUtxos = append(allUtxos, utxos...)
 	}
-	return allUtxos, nil
 }
 
 func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
@@ -1242,7 +1231,6 @@ func (b *BlockFrostChainContext) hydrateUtxoWithScriptResolver(
 type scriptRefResolver struct {
 	requestContext context.Context
 	chainContext   *BlockFrostChainContext
-	budget         *backendutil.UtxoQueryBudget
 
 	mu      sync.Mutex
 	entries map[string]*scriptRefResolveResult
@@ -1254,11 +1242,10 @@ type scriptRefResolveResult struct {
 	err       error
 }
 
-func newScriptRefResolver(ctx context.Context, chainContext *BlockFrostChainContext, budget *backendutil.UtxoQueryBudget) *scriptRefResolver {
+func newScriptRefResolver(ctx context.Context, chainContext *BlockFrostChainContext) *scriptRefResolver {
 	return &scriptRefResolver{
 		requestContext: ctx,
 		chainContext:   chainContext,
-		budget:         budget,
 		entries:        make(map[string]*scriptRefResolveResult),
 	}
 }
@@ -1286,12 +1273,6 @@ func (r *scriptRefResolver) resolve(hashHex string) (*common.ScriptRef, error) {
 	}
 
 	entry.scriptRef, entry.err = r.chainContext.scriptRefByHashContext(r.requestContext, key)
-	if entry.err == nil {
-		entry.err = r.budget.AddBytes(len(entry.scriptRef.Script.RawScriptBytes()))
-		if entry.err != nil {
-			entry.scriptRef = nil
-		}
-	}
 	close(entry.done)
 	return entry.scriptRef, entry.err
 }
