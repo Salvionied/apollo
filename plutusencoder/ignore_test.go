@@ -11,6 +11,14 @@ type offChainData struct {
 	Value string
 }
 
+type ignoredSecret string
+
+func (s ignoredSecret) ToPlutusData() (data.PlutusData, error) {
+	return data.NewByteString([]byte(s)), nil
+}
+
+func (s ignoredSecret) FromPlutusData(data.PlutusData, any) error { return nil }
+
 type ignoreListDatum struct {
 	_        struct{}     `plutusType:"DefList" plutusConstr:"1"`
 	Amount   int64        `plutusType:"Int"`
@@ -113,5 +121,68 @@ func TestIgnoreListFieldDoesNotConsumeTrailingWireValue(t *testing.T) {
 	}
 	if decoded.Amount != 42 || string(decoded.Name) != "order" || decoded.OffChain.Value != "" {
 		t.Errorf("unexpected decoded datum: %+v", decoded)
+	}
+}
+
+func TestIgnoreFieldsInSliceMapEntries(t *testing.T) {
+	type leadingSecretEntry struct {
+		Secret ignoredSecret `plutusType:"Ignore"`
+		Key    string        `plutusType:"StringBytes"`
+		Value  int64         `plutusType:"Int"`
+	}
+	type trailingSecretEntry struct {
+		Key    string        `plutusType:"StringBytes"`
+		Secret ignoredSecret `plutusType:"Ignore"`
+		Value  int64         `plutusType:"Int"`
+	}
+	type leadingDatum struct {
+		_       struct{}             `plutusType:"DefList" plutusConstr:"0"`
+		Entries []leadingSecretEntry `plutusType:"Map"`
+	}
+	type trailingDatum struct {
+		_       struct{}              `plutusType:"DefList" plutusConstr:"0"`
+		Entries []trailingSecretEntry `plutusType:"Map"`
+	}
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{name: "before key", value: &leadingDatum{Entries: []leadingSecretEntry{{Secret: "private", Key: "name", Value: 42}}}},
+		{name: "after key", value: &trailingDatum{Entries: []trailingSecretEntry{{Key: "name", Secret: "private", Value: 42}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pd, err := MarshalPlutus(tc.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			constr, ok := pd.(*data.Constr)
+			if !ok || len(constr.Fields) != 1 {
+				t.Fatalf("expected constructor with Map, got %T", pd)
+			}
+			mapData, ok := constr.Fields[0].(*data.Map)
+			if !ok || len(mapData.Pairs) != 1 {
+				t.Fatalf("expected one Map entry, got %T", constr.Fields[0])
+			}
+			key, ok := mapData.Pairs[0][0].(*data.ByteString)
+			if !ok || string(key.Inner) != "name" {
+				t.Fatalf("Map key = %v, want name", mapData.Pairs[0][0])
+			}
+			value, ok := mapData.Pairs[0][1].(*data.Integer)
+			if !ok || value.Inner.Int64() != 42 {
+				t.Fatalf("Map value = %v, want 42", mapData.Pairs[0][1])
+			}
+			switch tc.name {
+			case "before key":
+				var decoded leadingDatum
+				if err := UnmarshalPlutus(pd, &decoded); err != nil || len(decoded.Entries) != 1 || decoded.Entries[0].Key != "name" || decoded.Entries[0].Value != 42 || decoded.Entries[0].Secret != "" {
+					t.Fatalf("decoded = %+v, error = %v", decoded, err)
+				}
+			case "after key":
+				var decoded trailingDatum
+				if err := UnmarshalPlutus(pd, &decoded); err != nil || len(decoded.Entries) != 1 || decoded.Entries[0].Key != "name" || decoded.Entries[0].Value != 42 || decoded.Entries[0].Secret != "" {
+					t.Fatalf("decoded = %+v, error = %v", decoded, err)
+				}
+			}
+		})
 	}
 }

@@ -303,3 +303,15 @@ func TestRoundTripSliceListShape(t *testing.T) {
 		t.Fatalf("unexpected decoded slice: %+v", decoded.Items)
 	}
 }
+
+func TestBareListRejectsConstructor(t *testing.T) {
+	type bareList struct {
+		_     struct{} `plutusType:"DefList"`
+		Value int64    `plutusType:"Int"`
+	}
+	pd := data.NewConstr(7, data.NewInteger(big.NewInt(42)))
+	var decoded bareList
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected constructor data to be rejected by bare List schema")
+	}
+}
