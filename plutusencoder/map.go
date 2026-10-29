@@ -289,17 +289,17 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 	}
 
 	mapData, ok := pd.(*data.Map)
-	if !ok {
+	if !ok || plutusNil(mapData) {
 		// Could be a Constr wrapping a Map
-		if constr, ok := pd.(*data.Constr); ok && len(constr.Fields) == 1 {
+		if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) && len(constr.Fields) == 1 {
 			if hasExpectedConstr && !constrTagEqual(constr.Tag, expectedConstr) {
 				return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, constr.Tag)
 			}
 			mapData, ok = constr.Fields[0].(*data.Map)
-			if !ok {
+			if !ok || plutusNil(mapData) {
 				return fmt.Errorf("expected Map in Constr, got %T", constr.Fields[0])
 			}
-		} else if constr, ok := pd.(*data.Constr); ok {
+		} else if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) {
 			return fmt.Errorf("expected Constr with 1 field wrapping a Map, got Constr with %d fields", len(constr.Fields))
 		} else {
 			return fmt.Errorf("expected Map, got %T", pd)
@@ -314,7 +314,7 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 	keyMap := make(map[string]data.PlutusData, len(mapData.Pairs))
 	for i, pair := range mapData.Pairs {
 		bs, ok := pair[0].(*data.ByteString)
-		if !ok {
+		if !ok || plutusNil(bs) {
 			return fmt.Errorf("map pair %d: expected ByteString key, got %T", i, pair[0])
 		}
 		mapKey := string(bs.Inner)
@@ -366,7 +366,7 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 	}
 	if fieldVal.Kind() == reflect.Slice {
 		mapData, ok := pd.(*data.Map)
-		if !ok {
+		if !ok || plutusNil(mapData) {
 			return fmt.Errorf("expected Map for slice, got %T", pd)
 		}
 
@@ -396,7 +396,7 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 
 func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	mapData, ok := pd.(*data.Map)
-	if !ok {
+	if !ok || plutusNil(mapData) {
 		return fmt.Errorf("expected Map for native map field %s, got %T", field.Name, pd)
 	}
 
@@ -565,7 +565,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value, cfg decodeCo
 
 	// Multiple value fields must be a bare List; Constr tags are not discarded.
 	list, ok := pair[1].(*data.List)
-	if !ok {
+	if !ok || plutusNil(list) {
 		return fmt.Errorf("expected List for multi-field map value, got %T", pair[1])
 	}
 	items := list.Items

@@ -195,7 +195,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type, 
 func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if fieldVal.Kind() == reflect.Slice {
 		list, ok := pd.(*data.List)
-		if !ok {
+		if !ok || plutusNil(list) {
 			return fmt.Errorf("expected List for slice field %s, got %T", field.Name, pd)
 		}
 		items := list.Items
@@ -241,7 +241,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeCon
 		return unmarshalValue(pd, elem, cfg)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		integer, ok := pd.(*data.Integer)
-		if !ok {
+		if !ok || plutusNil(integer) || integer.Inner == nil {
 			return fmt.Errorf("expected Integer, got %T", pd)
 		}
 		if !integer.Inner.IsInt64() {
@@ -270,7 +270,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeCon
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		integer, ok := pd.(*data.Integer)
-		if !ok {
+		if !ok || plutusNil(integer) || integer.Inner == nil {
 			return fmt.Errorf("expected Integer, got %T", pd)
 		}
 		if integer.Inner.Sign() < 0 || !integer.Inner.IsUint64() {
@@ -299,7 +299,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeCon
 		return nil
 	case reflect.String:
 		bs, ok := pd.(*data.ByteString)
-		if !ok {
+		if !ok || plutusNil(bs) {
 			return fmt.Errorf("expected ByteString, got %T", pd)
 		}
 		elem.SetString(string(bs.Inner))
@@ -307,7 +307,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeCon
 	case reflect.Slice:
 		if elem.Type().Elem().Kind() == reflect.Uint8 {
 			bs, ok := pd.(*data.ByteString)
-			if !ok {
+			if !ok || plutusNil(bs) {
 				return fmt.Errorf("expected ByteString, got %T", pd)
 			}
 			elem.SetBytes(append([]byte(nil), bs.Inner...))
