@@ -46,13 +46,51 @@ func TestStoredDatumsDoNotAliasCaller(t *testing.T) {
 
 func TestPayToContractRejectsTypedNilDatum(t *testing.T) {
 	addr := testAddress(t)
-	original := &common.Datum{Data: (*data.Integer)(nil)}
-	paid := New(setupFixedContext()).PayToContract(addr, original, 2_000_000)
-	if paid.err == nil {
-		t.Fatal("PayToContract accepted a typed-nil datum")
+	shapes := []struct {
+		name string
+		data data.PlutusData
+	}{
+		{name: "root", data: (*data.Integer)(nil)},
+		{name: "list item", data: data.NewList((*data.Integer)(nil))},
+		{name: "constructor field", data: data.NewConstr(0, (*data.Integer)(nil))},
+		{name: "map key", data: data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}})},
 	}
-	if len(paid.payments) != 0 {
-		t.Fatal("PayToContract stored a typed-nil datum")
+	for _, shape := range shapes {
+		paid := New(setupFixedContext()).PayToContract(addr, &common.Datum{Data: shape.data}, 2_000_000)
+		if paid.err == nil || len(paid.payments) != 0 {
+			t.Fatalf("%s: PayToContract stored a typed-nil datum, err=%v payments=%d", shape.name, paid.err, len(paid.payments))
+		}
+	}
+	if err := checkDatumTree(data.NewInteger(big.NewInt(1)), maxDatumCloneDepth+1); err == nil {
+		t.Fatal("depth cap accepted a datum past the walk limit")
+	}
+}
+
+func TestAddDatumRejectsTypedNilChildren(t *testing.T) {
+	shapes := []data.PlutusData{
+		data.NewList((*data.Integer)(nil)),
+		data.NewConstr(0, (*data.Integer)(nil)),
+		data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}}),
+	}
+	for i, shape := range shapes {
+		added := New(setupFixedContext()).AddDatum(&common.Datum{Data: shape})
+		if added.err == nil || len(added.datums) != 0 {
+			t.Fatalf("case %d: AddDatum stored a typed-nil datum, err=%v datums=%d", i, added.err, len(added.datums))
+		}
+	}
+}
+
+func TestAddRequiredTopLevelGuardRejectsTypedNilChildren(t *testing.T) {
+	shapes := []data.PlutusData{
+		data.NewList((*data.Integer)(nil)),
+		data.NewConstr(0, (*data.Integer)(nil)),
+		data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}}),
+	}
+	for i, shape := range shapes {
+		guarded := New(setupFixedContext()).SetTargetEra(EraDijkstra).AddRequiredTopLevelGuard(guardScriptCredential(), &common.Datum{Data: shape})
+		if guarded.err == nil || len(guarded.requiredTopLevelGuards) != 0 {
+			t.Fatalf("case %d: AddRequiredTopLevelGuard stored a typed-nil datum, err=%v guards=%d", i, guarded.err, len(guarded.requiredTopLevelGuards))
+		}
 	}
 }
 

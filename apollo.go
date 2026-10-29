@@ -22,6 +22,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/dijkstra"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+	"github.com/blinklabs-io/plutigo/data"
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
@@ -428,6 +429,10 @@ func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
 // than being silently rehashed into a transaction the ledger would refuse.
 func (a *Apollo) AddDatum(datum *common.Datum) *Apollo {
 	if datum != nil {
+		if err := datumTreeError(datum.Data); err != nil {
+			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
+			return a
+		}
 		if _, err := DatumWireCbor(datum); err != nil {
 			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
 			return a
@@ -1697,12 +1702,65 @@ func cloneDatum(datum *common.Datum) (*common.Datum, error) {
 	return &cloned, nil
 }
 
-func cloneDatumValue(datum common.Datum) (common.Datum, error) {
-	if datum.Data != nil {
-		v := reflect.ValueOf(datum.Data)
-		if v.Kind() == reflect.Pointer && v.IsNil() {
-			return common.Datum{}, errors.New("datum PlutusData is nil")
+// maxDatumCloneDepth stops a hostile datum from growing the walk without limit.
+const maxDatumCloneDepth = 1024
+
+func datumTreeError(pd data.PlutusData) error {
+	return checkDatumTree(pd, 0)
+}
+
+func checkDatumTree(pd data.PlutusData, depth int) error {
+	if depth > maxDatumCloneDepth {
+		return fmt.Errorf("datum exceeds maximum depth %d", maxDatumCloneDepth)
+	}
+	if pd == nil {
+		return nil
+	}
+	v := reflect.ValueOf(pd)
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		return errors.New("datum PlutusData is nil")
+	}
+	switch node := pd.(type) {
+	case *data.List:
+		for _, item := range node.Items {
+			if err := checkDatumTree(item, depth+1); err != nil {
+				return err
+			}
 		}
+	case *data.Constr:
+		for _, field := range node.Fields {
+			if err := checkDatumTree(field, depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Map:
+		for _, pair := range node.Pairs {
+			if err := checkDatumTree(pair[0], depth+1); err != nil {
+				return err
+			}
+			if err := checkDatumTree(pair[1], depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Value:
+		if node.Inner != nil {
+			if err := checkDatumTree(node.Inner, depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Integer:
+		if node.Inner == nil {
+			return errors.New("datum PlutusData is nil")
+		}
+	}
+	return nil
+}
+
+func cloneDatumValue(datum common.Datum) (common.Datum, error) {
+	if err := datumTreeError(datum.Data); err != nil {
+		return common.Datum{}, err
+	}
+	if datum.Data != nil {
 		datum.Data = datum.Data.Clone()
 	}
 	if raw := datum.Cbor(); len(raw) > 0 {

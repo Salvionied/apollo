@@ -102,6 +102,12 @@ func (a *Apollo) AddRequiredTopLevelGuard(cred common.Credential, datum *common.
 		a.setErrOnce(errors.New("required top-level guard datum is missing Plutus data"))
 		return a
 	}
+	if datum != nil {
+		if err := datumTreeError(datum.Data); err != nil {
+			a.setErrOnce(fmt.Errorf("required top-level guard datum: %w", err))
+			return a
+		}
+	}
 	key := credentialKey(cred)
 	for _, required := range a.requiredTopLevelGuards {
 		if credentialKey(required.Credential) == key {
