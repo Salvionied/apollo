@@ -29,9 +29,11 @@ scripts.
 ## Plutus V4
 
 The Dijkstra ledger accepts Plutus V4 scripts only as reference scripts.
-Apply parameters with `ApplyParamsToScript`, publish the V4 script with
-`PayToAddressWithReferenceScript` or `PayToContractWithV4ReferenceScript`, and
-consume it with `AddReferenceInput`; `AttachScript` rejects a V4 script with
+Apply parameters with `ApplyParamsToScript` and publish the script with
+`PayToAddressWithReferenceScript` or `PayToContractWithReferenceScript`
+(including `PayToContractWithV4ReferenceScript`). Both payment methods return
+`ErrPlutusV4RequiresDijkstra` unless `SetTargetEra(EraDijkstra)` was called.
+Consume the script with `AddReferenceInput`. `AttachScript` rejects a V4 script with
 `ErrPlutusV4WitnessScript` in a Dijkstra build and `ErrPlutusV4RequiresDijkstra`
 in a Conway build. A V4 script can lock spent UTxOs (`CollectFrom`) and guard
 the transaction (`AddGuard`). The script integrity hash uses the provider's

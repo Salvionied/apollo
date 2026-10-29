@@ -76,7 +76,11 @@ func (a *Apollo) PayToAddressWithV3ReferenceScript(addr common.Address, lovelace
 }
 
 // PayToContractWithReferenceScript pays to a script address with an inline datum and a reference script.
+// Plutus V4 reference scripts require the Dijkstra target era.
 func (a *Apollo) PayToContractWithReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.Script, units ...Unit) (*Apollo, error) {
+	if isPlutusV4Script(script) && a.targetEra != EraDijkstra {
+		return a, ErrPlutusV4RequiresDijkstra
+	}
 	ref, err := NewScriptRef(script)
 	if err != nil {
 		return a, fmt.Errorf("failed to create script ref: %w", err)

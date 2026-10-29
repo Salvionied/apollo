@@ -369,14 +369,21 @@ func TestPayToContractWithV3ReferenceScript(t *testing.T) {
 	}
 }
 
-func TestPayToContractWithV4ReferenceScript(t *testing.T) {
+func TestPayToContractWithV4ReferenceScriptRequiresDijkstra(t *testing.T) {
 	cc := setupFixedContext()
-	a := New(cc)
 	addr := testAddress(t)
 	datum := common.Datum{}
 	script := common.PlutusV4Script([]byte{0x04})
 
-	a, err := a.PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script)
+	a := New(cc)
+	if _, err := a.PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script); err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("Conway V4 contract payment error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+	if _, err := a.PayToContractWithReferenceScript(addr, &datum, 5_000_000, script); err != ErrPlutusV4RequiresDijkstra {
+		t.Fatalf("Conway unified contract payment error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
+	}
+
+	a, err := New(cc).SetTargetEra(EraDijkstra).PayToContractWithV4ReferenceScript(addr, &datum, 5_000_000, script)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,8 +391,8 @@ func TestPayToContractWithV4ReferenceScript(t *testing.T) {
 		t.Fatalf("expected 1 payment, got %d", len(a.payments))
 	}
 	p := a.payments[0].(*Payment)
-	if p.ScriptRef.Type != 4 {
-		t.Errorf("expected script ref type 4 (V4), got %d", p.ScriptRef.Type)
+	if p.ScriptRef.Type != common.ScriptRefTypePlutusV4 {
+		t.Errorf("expected script ref type %d (V4), got %d", common.ScriptRefTypePlutusV4, p.ScriptRef.Type)
 	}
 }
 
