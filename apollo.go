@@ -1706,6 +1706,9 @@ func cloneDatum(datum *common.Datum) (*common.Datum, error) {
 const maxDatumCloneDepth = 1024
 
 func datumTreeError(pd data.PlutusData) error {
+	if pd == nil {
+		return nil
+	}
 	return checkDatumTree(pd, 0)
 }
 
@@ -1714,7 +1717,7 @@ func checkDatumTree(pd data.PlutusData, depth int) error {
 		return fmt.Errorf("datum exceeds maximum depth %d", maxDatumCloneDepth)
 	}
 	if pd == nil {
-		return nil
+		return errors.New("datum PlutusData is nil")
 	}
 	v := reflect.ValueOf(pd)
 	if v.Kind() == reflect.Pointer && v.IsNil() {
@@ -1722,36 +1725,60 @@ func checkDatumTree(pd data.PlutusData, depth int) error {
 	}
 	switch node := pd.(type) {
 	case *data.List:
-		for _, item := range node.Items {
-			if err := checkDatumTree(item, depth+1); err != nil {
-				return err
-			}
-		}
+		return checkDatumItems(node.Items, depth)
+	case data.List:
+		return checkDatumItems(node.Items, depth)
 	case *data.Constr:
-		for _, field := range node.Fields {
-			if err := checkDatumTree(field, depth+1); err != nil {
-				return err
-			}
-		}
+		return checkDatumItems(node.Fields, depth)
+	case data.Constr:
+		return checkDatumItems(node.Fields, depth)
 	case *data.Map:
-		for _, pair := range node.Pairs {
-			if err := checkDatumTree(pair[0], depth+1); err != nil {
-				return err
-			}
-			if err := checkDatumTree(pair[1], depth+1); err != nil {
-				return err
-			}
-		}
+		return checkDatumPairs(node.Pairs, depth)
+	case data.Map:
+		return checkDatumPairs(node.Pairs, depth)
 	case *data.Value:
-		if node.Inner != nil {
-			if err := checkDatumTree(node.Inner, depth+1); err != nil {
-				return err
-			}
-		}
+		return checkDatumValue(node.Inner, depth)
+	case data.Value:
+		return checkDatumValue(node.Inner, depth)
 	case *data.Integer:
-		if node.Inner == nil {
-			return errors.New("datum PlutusData is nil")
+		return checkDatumInteger(node.Inner)
+	case data.Integer:
+		return checkDatumInteger(node.Inner)
+	}
+	return nil
+}
+
+func checkDatumItems(items []data.PlutusData, depth int) error {
+	for _, item := range items {
+		if err := checkDatumTree(item, depth+1); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func checkDatumPairs(pairs [][2]data.PlutusData, depth int) error {
+	for _, pair := range pairs {
+		if err := checkDatumTree(pair[0], depth+1); err != nil {
+			return err
+		}
+		if err := checkDatumTree(pair[1], depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkDatumValue(inner *data.Map, depth int) error {
+	if inner == nil {
+		return nil
+	}
+	return checkDatumTree(inner, depth+1)
+}
+
+func checkDatumInteger(inner *big.Int) error {
+	if inner == nil {
+		return errors.New("datum PlutusData is nil")
 	}
 	return nil
 }
