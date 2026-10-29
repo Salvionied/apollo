@@ -16,6 +16,14 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 )
 
+func dataIsNil(pd data.PlutusData) bool {
+	if pd == nil {
+		return true
+	}
+	v := reflect.ValueOf(pd)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
+
 func checkDataDepth(depth int, loc string) error {
 	if depth > constants.MaxPlutusDataDepth {
 		return fmt.Errorf("%s: plutus data exceeds maximum depth %d", loc, constants.MaxPlutusDataDepth)
@@ -312,7 +320,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 	if err := checkDataDepth(depth, loc); err != nil {
 		return err
 	}
-	if pd == nil {
+	if dataIsNil(pd) {
 		return fmt.Errorf("%s: nil PlutusData", loc)
 	}
 	resolved, err := bp.deref(s)
@@ -393,15 +401,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if err := checkCountBounds(s.MinItems, s.MaxItems, len(m.Pairs), loc); err != nil {
 			return err
 		}
-		seenKeys := make(map[string]struct{}, containerCap(len(m.Pairs)))
 		for i, pair := range m.Pairs {
-			fresh, err := rememberPlutus(seenKeys, pair[0])
-			if err != nil {
-				return err
-			}
-			if !fresh {
-				return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
-			}
 			if err := bp.validatePlutusData(s.Keys, pair[0], fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 				return err
 			}
@@ -966,6 +966,9 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 	if err := checkDataDepth(depth, loc); err != nil {
 		return err
 	}
+	if dataIsNil(pd) {
+		return fmt.Errorf("%s: nil PlutusData", loc)
+	}
 	resolved, err := bp.deref(s)
 	if err != nil {
 		return fmt.Errorf("%s: %w", loc, err)
@@ -1156,16 +1159,7 @@ func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value,
 	}
 
 	out := reflect.MakeMapWithSize(dst.Type(), containerCap(n))
-	seenKeys := make(map[string]struct{}, containerCap(n))
 	for i, pair := range m.Pairs {
-		fresh, err := rememberPlutus(seenKeys, pair[0])
-		if err != nil {
-			return err
-		}
-		if !fresh {
-			return fmt.Errorf("%s[%d]: duplicate key in Plutus map", loc, i)
-		}
-
 		kVal := reflect.New(dst.Type().Key()).Elem()
 		if err := bp.decodeValue(s.Keys, pair[0], kVal, fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 			return err

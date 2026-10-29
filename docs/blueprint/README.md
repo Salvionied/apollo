@@ -31,7 +31,7 @@ and angle-bracket keys such as `Option<Int>`.
 - `preamble.plutusVersion` is not `v1`, `v2`, `v3`, or `v4`
 - the document is larger than `constants.MaxBlueprintBytes` (16 MiB) or contains trailing JSON tokens
 - a `$ref` does not resolve, or aliases cycle without passing through a constructor, list, or map
-- encoded, decoded, or validated data is nested deeper than `constants.MaxPlutusDataDepth` (64 levels)
+- encoded, decoded, or validated data is nested deeper than `constants.MaxPlutusDataDepth` (100,000 levels, the same bound as plutigo's flat decoder)
 - a constructor omits `index` or `fields`
 - a keyword appears on the wrong `dataType` (for example `items` on `integer`)
 - `purpose` is not one of `spend`, `mint`, `withdraw`, `publish`, `vote`,

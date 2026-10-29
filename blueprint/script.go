@@ -1,7 +1,6 @@
 package blueprint
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -75,7 +74,7 @@ func (bp *Blueprint) Script(validatorTitle string) (*ValidatorScript, error) {
 		raw:       raw,
 		remaining: rem,
 	}
-	if _, _, err := vs.applyData(nil); err != nil {
+	if _, err := vs.applyWithHelper(nil); err != nil {
 		return nil, err
 	}
 	if err := vs.checkRecordedHashIfPresent(); err != nil {
@@ -132,7 +131,7 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 			return nil, fmt.Errorf("parameter %d: %w", i, err)
 		}
 	}
-	applied, program, err := vs.applyData(params)
+	applied, err := vs.applyWithHelper(params)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +144,6 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 		raw:           applied,
 		remaining:     rem,
 		paramsApplied: true,
-		program:       program,
 	}
 	h, err := next.Hash()
 	if err != nil {
@@ -178,44 +176,23 @@ func (vs *ValidatorScript) ensureProgram() (*syn.Program[syn.DeBruijn], error) {
 	return program, nil
 }
 
-func (vs *ValidatorScript) applyData(params []data.PlutusData) ([]byte, *syn.Program[syn.DeBruijn], error) {
+func (vs *ValidatorScript) applyWithHelper(params []data.PlutusData) ([]byte, error) {
 	switch vs.version {
-	case "v1", "v2", "v3", "v4":
+	case "v1":
+		out, err := apollo.ApplyParamsToScript(common.PlutusV1Script(vs.raw), params...)
+		return []byte(out), err
+	case "v2":
+		out, err := apollo.ApplyParamsToScript(common.PlutusV2Script(vs.raw), params...)
+		return []byte(out), err
+	case "v3":
+		out, err := apollo.ApplyParamsToScript(common.PlutusV3Script(vs.raw), params...)
+		return []byte(out), err
+	case "v4":
+		out, err := apollo.ApplyParamsToScript(common.PlutusV4Script(vs.raw), params...)
+		return []byte(out), err
 	default:
-		return nil, nil, fmt.Errorf("unsupported Plutus version %q", vs.version)
+		return nil, fmt.Errorf("unsupported Plutus version %q", vs.version)
 	}
-	if _, err := vs.ensureProgram(); err != nil {
-		return nil, nil, err
-	}
-	if len(params) == 0 {
-		return bytes.Clone(vs.raw), vs.program, nil
-	}
-	for i, param := range params {
-		if param == nil {
-			return nil, nil, fmt.Errorf("parameter %d is nil", i)
-		}
-		if _, err := data.Encode(param); err != nil {
-			return nil, nil, fmt.Errorf("parameter %d: %w", i, err)
-		}
-	}
-	prog := *vs.program
-	term := prog.Term
-	for _, param := range params {
-		term = &syn.Apply[syn.DeBruijn]{
-			Function: term,
-			Argument: &syn.Constant{Con: &syn.Data{Inner: param}},
-		}
-	}
-	prog.Term = term
-	flat, err := syn.Encode(&prog)
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode script program: %w", err)
-	}
-	wrapped, err := cbor.Encode(flat)
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode script CBOR: %w", err)
-	}
-	return wrapped, &prog, nil
 }
 
 // Bytes returns the CBOR-wrapped flat UPLC bytes of the script.

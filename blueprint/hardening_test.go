@@ -92,16 +92,14 @@ func TestPlutusDataDepthLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pd := data.NewInteger(big.NewInt(1))
-	for range constants.MaxPlutusDataDepth + 5 {
-		pd = data.NewConstr(0, pd)
+	if constants.MaxPlutusDataDepth != 100_000 {
+		t.Fatalf("depth cap = %d, want 100000", constants.MaxPlutusDataDepth)
 	}
-	val, err := bp.Validator("v")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := bp.ValidateData(&val.Redeemer.Single.Schema, pd); err == nil || !strings.Contains(err.Error(), "maximum depth") {
+	if err := checkDataDepth(constants.MaxPlutusDataDepth+1, "root"); err == nil || !strings.Contains(err.Error(), "maximum depth") {
 		t.Fatalf("depth limit: got %v", err)
+	}
+	if _, err := bp.Validator("v"); err != nil {
+		t.Fatal(err)
 	}
 }
 

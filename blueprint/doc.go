@@ -9,7 +9,13 @@
 // constants.MaxBlueprintBytes, and documents with trailing tokens, are
 // rejected. A $ref cycle is rejected when it does not pass through a
 // constructor, list, or map; a guarded recursive definition is accepted, and
-// values nested deeper than constants.MaxPlutusDataDepth are rejected.
+// values nested deeper than constants.MaxPlutusDataDepth (100,000, matching
+// plutigo's flat decoder) are rejected. Duplicate keys in a Plutus data map
+// are legal on chain: decoding keeps the later pair, and encoding a Go map
+// still rejects two keys that encode to the same bytes. A missing
+// preamble.plutusVersion defaults to v3. "value" as a dataType and "guard"
+// as a purpose are Dijkstra extensions, not part of CIP-57. An empty oneOf
+// list is read as one opaque redeemer.
 // ValidatorNames returns the validator titles
 // in declaration order. Marshal and WriteFile serialize a Blueprint back to
 // CIP-57 JSON, and ApplyValidatorParams applies 1..N compile-time parameters

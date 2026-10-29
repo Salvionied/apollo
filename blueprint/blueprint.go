@@ -22,6 +22,10 @@ type Blueprint struct {
 	Preamble    Preamble           `json:"preamble"`
 	Validators  []Validator        `json:"validators"`
 	Definitions map[string]*Schema `json:"definitions,omitempty"`
+
+	// checkedSchemas remembers definitions already validated during one
+	// validate call, so a shared $ref is not walked again.
+	checkedSchemas map[string]struct{}
 }
 
 // Preamble holds contract metadata from a blueprint.
@@ -389,6 +393,8 @@ func containsPurpose(purposes []string, target string) bool {
 }
 
 func (bp *Blueprint) validate() error {
+	bp.checkedSchemas = make(map[string]struct{})
+	defer func() { bp.checkedSchemas = nil }()
 	if strings.TrimSpace(bp.Preamble.Title) == "" {
 		return errors.New("preamble.title is required")
 	}
@@ -540,12 +546,21 @@ func (bp *Blueprint) validateSchema(s *Schema, loc string, sinceGuard, stack map
 			// guarded recursive datum such as a linked list or a tree.
 			return nil
 		}
+		if _, done := bp.checkedSchemas[key]; done {
+			return nil
+		}
 		sinceGuard[key] = true
 		stack[key] = true
 		err = bp.validateSchema(target, "definitions/"+key, sinceGuard, stack)
 		delete(sinceGuard, key)
 		delete(stack, key)
-		return err
+		if err != nil {
+			return err
+		}
+		if bp.checkedSchemas != nil {
+			bp.checkedSchemas[key] = struct{}{}
+		}
+		return nil
 	}
 
 	if len(s.AnyOf) > 0 {
