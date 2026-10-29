@@ -165,9 +165,14 @@ func cachedStructMeta(typ reflect.Type) *structMeta {
 
 func buildStructMeta(typ reflect.Type) *structMeta {
 	meta := &structMeta{fields: make([]parsedField, typ.NumField())}
+	seenBlank := false
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		if field.Name == "_" {
+			if seenBlank {
+				continue
+			}
+			seenBlank = true
 			container, err := parseContainerTag(field.Tag.Get("plutusType"))
 			if err != nil {
 				meta.err = err
