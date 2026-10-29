@@ -44,6 +44,18 @@ func TestStoredDatumsDoNotAliasCaller(t *testing.T) {
 	assertStoredDatum(t, &entry.Data)
 }
 
+func TestPayToContractRejectsTypedNilDatum(t *testing.T) {
+	addr := testAddress(t)
+	original := &common.Datum{Data: (*data.Integer)(nil)}
+	paid := New(setupFixedContext()).PayToContract(addr, original, 2_000_000)
+	if paid.err == nil {
+		t.Fatal("PayToContract accepted a typed-nil datum")
+	}
+	if len(paid.payments) != 0 {
+		t.Fatal("PayToContract stored a typed-nil datum")
+	}
+}
+
 func assertStoredDatum(t *testing.T, stored *common.Datum) {
 	t.Helper()
 	integer, ok := stored.Data.(*data.Integer)

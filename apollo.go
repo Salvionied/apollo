@@ -472,9 +472,14 @@ func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits
 		if exUnits != nil {
 			eu = *exUnits
 		}
+		cloned, err := cloneDatumValue(*redeemer)
+		if err != nil {
+			a.setErrOnce(err)
+			return a
+		}
 		a.mintRedeemers[unit.PolicyId] = redeemerEntry{
 			Tag:     common.RedeemerTagMint,
-			Data:    cloneDatumValue(*redeemer),
+			Data:    cloned,
 			ExUnits: eu,
 		}
 		a.isEstimateRequired = true
@@ -545,9 +550,14 @@ func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits co
 	a.isEstimateRequired = true
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	ref := utxoRef(utxo)
+	cloned, err := cloneDatumValue(redeemer)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
 	a.redeemers[ref] = redeemerEntry{
 		Tag:     common.RedeemerTagSpend,
-		Data:    cloneDatumValue(redeemer),
+		Data:    cloned,
 		ExUnits: exUnits,
 	}
 	return a
@@ -555,11 +565,16 @@ func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits co
 
 // PayToContract creates a payment to a script address with an inline datum.
 func (a *Apollo) PayToContract(addr common.Address, datum *common.Datum, lovelace int64, units ...Unit) *Apollo {
+	stored, err := cloneDatum(datum)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
 	p := &Payment{
 		Receiver: addr,
 		Lovelace: lovelace,
 		Units:    units,
-		Datum:    cloneDatum(datum),
+		Datum:    stored,
 		IsInline: true,
 	}
 	a.payments = append(a.payments, p)
@@ -578,7 +593,10 @@ func (a *Apollo) PayToContractWithDatumHash(addr common.Address, datum *common.D
 		// Hash the bytes the datum will occupy in the witness set, so the
 		// output's datum hash matches the datum the ledger sees. Store a
 		// clone so later mutation of the caller's datum cannot change it.
-		stored := cloneDatum(datum)
+		stored, err := cloneDatum(datum)
+		if err != nil {
+			return a, err
+		}
 		hash, err := DatumHash(stored)
 		if err != nil {
 			return a, err
@@ -1037,9 +1055,14 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 			return a
 		}
 		key := hex.EncodeToString(skh.Bytes())
+		cloned, err := cloneDatumValue(*redeemerData)
+		if err != nil {
+			a.setErrOnce(err)
+			return a
+		}
 		entry := redeemerEntry{
 			Tag:  common.RedeemerTagReward,
-			Data: cloneDatumValue(*redeemerData),
+			Data: cloned,
 		}
 		if exUnits != nil {
 			entry.ExUnits = *exUnits
@@ -1663,22 +1686,29 @@ func isNilPayment(payment PaymentI) bool {
 	}
 }
 
-func cloneDatum(datum *common.Datum) *common.Datum {
+func cloneDatum(datum *common.Datum) (*common.Datum, error) {
 	if datum == nil {
-		return nil
+		return nil, nil
 	}
-	cloned := cloneDatumValue(*datum)
-	return &cloned
+	cloned, err := cloneDatumValue(*datum)
+	if err != nil {
+		return nil, err
+	}
+	return &cloned, nil
 }
 
-func cloneDatumValue(datum common.Datum) common.Datum {
+func cloneDatumValue(datum common.Datum) (common.Datum, error) {
 	if datum.Data != nil {
+		v := reflect.ValueOf(datum.Data)
+		if v.Kind() == reflect.Pointer && v.IsNil() {
+			return common.Datum{}, errors.New("datum PlutusData is nil")
+		}
 		datum.Data = datum.Data.Clone()
 	}
 	if raw := datum.Cbor(); len(raw) > 0 {
 		datum.SetCbor(raw)
 	}
-	return datum
+	return datum, nil
 }
 
 func cloneCBORValue(src, dst any) error {

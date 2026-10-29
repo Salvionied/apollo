@@ -60,7 +60,12 @@ func (a *Apollo) AddGuard(cred common.Credential, redeemer *common.Datum, exUnit
 	if redeemer == nil {
 		return a
 	}
-	entry := redeemerEntry{Tag: common.RedeemerTagGuarding, Data: cloneDatumValue(*redeemer)}
+	cloned, err := cloneDatumValue(*redeemer)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
+	entry := redeemerEntry{Tag: common.RedeemerTagGuarding, Data: cloned}
 	if exUnits != nil {
 		entry.ExUnits = *exUnits
 	}

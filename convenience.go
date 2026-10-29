@@ -81,11 +81,15 @@ func (a *Apollo) PayToContractWithReferenceScript(addr common.Address, datum *co
 	if err != nil {
 		return a, fmt.Errorf("failed to create script ref: %w", err)
 	}
+	stored, err := cloneDatum(datum)
+	if err != nil {
+		return a, err
+	}
 	p := &Payment{
 		Receiver:  addr,
 		Lovelace:  lovelace,
 		Units:     units,
-		Datum:     cloneDatum(datum),
+		Datum:     stored,
 		IsInline:  true,
 		ScriptRef: ref,
 	}
