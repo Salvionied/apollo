@@ -127,6 +127,12 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 		return marshalSliceOrNested(fieldVal, field, false)
 	case "Map":
 		return marshalSliceAsMap(fieldVal, field)
+	case "Value", "V4Value":
+		v, ok := fieldVal.Interface().(Value)
+		if !ok {
+			return nil, fmt.Errorf("field %s: %s requires plutusencoder.Value, got %s", field.Name, plutusType, fieldVal.Type())
+		}
+		return marshalPlutusValue(v, plutusType == "V4Value")
 	case "Credential":
 		cred, ok := fieldVal.Interface().(common.Credential)
 		if !ok {

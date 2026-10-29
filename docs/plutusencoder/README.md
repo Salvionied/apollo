@@ -60,6 +60,8 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Map` | a native Go map, or a slice of key-value structs |
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
+| `Value` | `Value` as a map of policy id to asset map, with lovelace under the empty policy |
+| `V4Value` | `Value` as the Plutus V4 tagged `data.Value` constructor (CBOR tag 1401) |
 | `Credential` | `common.Credential`: key hash is constructor 0, script hash is constructor 1 |
 | `TxOutRef` | Plutus V3 `TxOutRef`: constructor 0 of a 32-byte transaction id and an output index. V1 and V2 wrap the id as constructor 0 of `[constructor 0 [txId], index]` |
 | `AssetClass` | `AssetClass`: constructor 0 of a policy id and a token name |
@@ -74,12 +76,24 @@ Unknown types, unknown options, empty or duplicate options, and a malformed
 
 ```go
 type Datum struct {
-    _     struct{}                 `plutusType:"DefList" plutusConstr:"0"`
-    Owner common.Credential        `plutusType:"Credential"`
-    Utxo  plutusencoder.TxOutRef   `plutusType:"TxOutRef"`
-    Asset plutusencoder.AssetClass `plutusType:"AssetClass"`
+    _      struct{}                 `plutusType:"DefList" plutusConstr:"0"`
+    Locked plutusencoder.Value      `plutusType:"Value"`
+    Owner  common.Credential        `plutusType:"Credential"`
+    Utxo   plutusencoder.TxOutRef   `plutusType:"TxOutRef"`
+    Asset  plutusencoder.AssetClass `plutusType:"AssetClass"`
 }
 ```
+
+`Value` encodes the Plutus ledger `Value`: a map of policy id to a map of
+asset name to quantity, with keys sorted by their bytes. Lovelace uses the
+empty policy id and the empty asset name. `V4Value` encodes the same `Value`
+struct as the Plutus V4 `data.Value` constructor (CBOR tag 1401) and runs
+`data.Value.Validate()`. Encoding omits a zero quantity and an empty token
+map, and sorts both levels. Decoding a plain `Value` keeps a zero quantity
+and accepts an unsorted map or an empty token map; re-encoding makes that
+canonical. `V4Value` still rejects a non-canonical value. Duplicate policy or
+asset names and a negative quantity are errors on both paths. `UnmarshalPlutus`
+on both tags accepts either `*data.Map` or `*data.Value`.
 
 `Credential` encodes `common.Credential` as constructor 0 for a key hash and
 constructor 1 for a script hash, with a 28-byte hash. `TxOutRef` is the

@@ -52,6 +52,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   output is deterministic, and duplicate encoded keys are rejected.
 - Custom `Marshaler` implementations are honored on slice elements, not just on
   whole fields.
+- `plutusType:"Value"` encodes `plutusencoder.Value` as the Plutus ledger map
+  of policy id to asset map, with lovelace under the empty policy id and empty
+  asset name. `plutusType:"V4Value"` encodes the Plutus V4 `data.Value`
+  constructor (CBOR tag 1401), and decoding on either tag accepts both
+  `*data.Map` and `*data.Value`.
 - `plutusType:"Credential"`, `plutusType:"TxOutRef"`, and
   `plutusType:"AssetClass"` encode a key or script credential, a transaction
   output reference, and a policy-id/token-name pair.
