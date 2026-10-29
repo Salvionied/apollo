@@ -1,10 +1,13 @@
 package backend
 
 import (
+	"bytes"
 	"context"
 	"errors"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 var errNilChainContext = errors.New("chain context is nil")
@@ -161,10 +164,21 @@ func ScriptCborContext(
 	if isNilInterface(chainContext) {
 		return nil, errNilChainContext
 	}
+	var scriptCbor []byte
+	var err error
 	if cc, ok := chainContext.(ContextChainContext); ok {
-		return cc.ScriptCborContext(normalizeContext(ctx), scriptHash)
+		scriptCbor, err = cc.ScriptCborContext(normalizeContext(ctx), scriptHash)
+	} else {
+		scriptCbor, err = chainContext.ScriptCbor(scriptHash)
 	}
-	return chainContext.ScriptCbor(scriptHash)
+	if err != nil {
+		return nil, err
+	}
+	scriptCbor = bytes.Clone(scriptCbor)
+	if _, err := backendutil.ScriptRefFromHash(scriptHash, scriptCbor); err != nil {
+		return nil, err
+	}
+	return scriptCbor, nil
 }
 
 // BindContext returns a ChainContext whose blocking methods dispatch through

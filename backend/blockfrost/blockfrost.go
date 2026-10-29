@@ -793,6 +793,20 @@ func (b *BlockFrostChainContext) ScriptCborContext(
 	ctx context.Context,
 	scriptHash common.Blake2b224,
 ) ([]byte, error) {
+	scriptCbor, err := b.fetchScriptCborContext(ctx, scriptHash)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := backendutil.ScriptRefFromHash(scriptHash, scriptCbor); err != nil {
+		return nil, err
+	}
+	return scriptCbor, nil
+}
+
+func (b *BlockFrostChainContext) fetchScriptCborContext(
+	ctx context.Context,
+	scriptHash common.Blake2b224,
+) ([]byte, error) {
 	hashHex := hex.EncodeToString(scriptHash.Bytes())
 	path := fmt.Sprintf("/scripts/%s/cbor", hashHex)
 	data, err := b.requestContext(ctx, "GET", path, nil, "")
@@ -1317,51 +1331,9 @@ func (b *BlockFrostChainContext) scriptRefByHashContext(
 	}
 	var scriptHash common.Blake2b224
 	copy(scriptHash[:], hashBytes)
-	scriptCbor, err := b.ScriptCborContext(ctx, scriptHash)
+	scriptCbor, err := b.fetchScriptCborContext(ctx, scriptHash)
 	if err != nil {
 		return nil, err
 	}
-	return scriptRefFromHash(scriptHash, scriptCbor)
-}
-
-func scriptRefFromHash(
-	scriptHash common.Blake2b224,
-	scriptCbor []byte,
-) (*common.ScriptRef, error) {
-	var native common.NativeScript
-	if _, err := cbor.Decode(scriptCbor, &native); err == nil && native.Hash() == scriptHash {
-		return &common.ScriptRef{
-			Type:   common.ScriptRefTypeNativeScript,
-			Script: native,
-		}, nil
-	}
-	v1 := common.PlutusV1Script(scriptCbor)
-	if v1.Hash() == scriptHash {
-		return &common.ScriptRef{
-			Type:   common.ScriptRefTypePlutusV1,
-			Script: v1,
-		}, nil
-	}
-	v2 := common.PlutusV2Script(scriptCbor)
-	if v2.Hash() == scriptHash {
-		return &common.ScriptRef{
-			Type:   common.ScriptRefTypePlutusV2,
-			Script: v2,
-		}, nil
-	}
-	v3 := common.PlutusV3Script(scriptCbor)
-	if v3.Hash() == scriptHash {
-		return &common.ScriptRef{
-			Type:   common.ScriptRefTypePlutusV3,
-			Script: v3,
-		}, nil
-	}
-	v4 := common.PlutusV4Script(scriptCbor)
-	if v4.Hash() == scriptHash {
-		return &common.ScriptRef{
-			Type:   common.ScriptRefTypePlutusV4,
-			Script: v4,
-		}, nil
-	}
-	return nil, errors.New("unable to determine reference script language from script hash")
+	return backendutil.ScriptRefFromHash(scriptHash, scriptCbor)
 }

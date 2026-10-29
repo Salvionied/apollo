@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -362,7 +363,15 @@ func (o *OgmiosChainContext) ScriptCborContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.ScriptCbor(ctx, scriptHash)
+	scriptCbor, err := client.ScriptCbor(ctx, scriptHash)
+	if err != nil {
+		return nil, err
+	}
+	scriptCbor = bytes.Clone(scriptCbor)
+	if _, err := backendutil.ScriptRefFromHash(scriptHash, scriptCbor); err != nil {
+		return nil, err
+	}
+	return scriptCbor, nil
 }
 
 // --- Ogmios response types and conversion ---

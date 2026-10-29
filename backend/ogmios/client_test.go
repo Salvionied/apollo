@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -225,13 +226,38 @@ func TestNewOgmiosChainContextQueriesKupo(t *testing.T) {
 		t.Fatalf("lovelace = %s, want 2000000", got)
 	}
 
-	var scriptHash common.Blake2b224
+	scriptHash := common.PlutusV2Script([]byte{0x49, 0x48, 0x01, 0x00}).Hash()
 	scriptCbor, err := ctx.ScriptCborContext(t.Context(), scriptHash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := hex.EncodeToString(scriptCbor); got != scriptCborHex {
 		t.Fatalf("script cbor = %s, want %s", got, scriptCborHex)
+	}
+}
+
+func TestInjectedKupoScriptCborRejectsBytesForAnotherHash(t *testing.T) {
+	kupo := &stubKupoClient{scriptCbor: []byte{0x03, 0x04}}
+	ctx, err := NewOgmiosChainContextFromClients(
+		&stubOgmiosClient{},
+		kupo,
+		1,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.PlutusV2Script([]byte{0x01, 0x02}).Hash()
+	if _, err := ctx.ScriptCbor(want); err == nil {
+		t.Fatal("expected script hash mismatch")
+	}
+	kupo.scriptCbor = []byte{0x01, 0x02}
+	got, err := ctx.ScriptCbor(want)
+	if err != nil || !bytes.Equal(got, kupo.scriptCbor) {
+		t.Fatalf("ScriptCbor() = %x, %v, want %x, nil", got, err, kupo.scriptCbor)
+	}
+	kupo.scriptCbor[0] = 0x09
+	if !bytes.Equal(got, []byte{0x01, 0x02}) {
+		t.Fatalf("ScriptCbor() returned aliased Kupo client bytes: %x", got)
 	}
 }
 
@@ -470,7 +496,8 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		t.Fatalf("queried addresses = %v", kupoClient.addresses)
 	}
 
-	scriptCbor, err := ctx.ScriptCbor(common.Blake2b224{})
+	scriptHash := common.PlutusV2Script(kupoClient.scriptCbor).Hash()
+	scriptCbor, err := ctx.ScriptCbor(scriptHash)
 	if err != nil {
 		t.Fatal(err)
 	}
