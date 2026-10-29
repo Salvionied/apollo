@@ -91,42 +91,39 @@ func NewUtxoRpcChainContext(baseUrl string, networkId uint8, headers map[string]
 	}
 }
 
-func bigIntToInt64(bi *cardano.BigInt) int64 {
+func requiredFeeInt64(bi *cardano.BigInt, field string) (int64, error) {
 	if bi == nil {
-		return 0
+		return 0, fmt.Errorf("missing %s", field)
 	}
 	oneof := bi.GetBigInt()
 	if oneof == nil {
-		return 0
+		return 0, fmt.Errorf("missing %s", field)
 	}
+	var value int64
 	switch v := oneof.(type) {
 	case *cardano.BigInt_Int:
 		if v == nil {
-			return 0
+			return 0, fmt.Errorf("missing %s", field)
 		}
-		return v.Int
+		value = v.Int
 	case *cardano.BigInt_BigUInt:
 		if v == nil {
-			return 0
+			return 0, fmt.Errorf("missing %s", field)
 		}
 		n := new(big.Int).SetBytes(v.BigUInt)
 		if !n.IsInt64() {
-			return math.MaxInt64
+			return 0, fmt.Errorf("%s exceeds int64 range", field)
 		}
-		return n.Int64()
+		value = n.Int64()
 	case *cardano.BigInt_BigNInt:
-		if v == nil {
-			return 0
-		}
-		n := new(big.Int).SetBytes(v.BigNInt)
-		n.Neg(n)
-		if !n.IsInt64() {
-			return math.MinInt64
-		}
-		return n.Int64()
+		return 0, fmt.Errorf("invalid negative %s", field)
 	default:
-		return 0
+		return 0, fmt.Errorf("missing %s", field)
 	}
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s", field)
+	}
+	return value, nil
 }
 
 func bigIntToString(bi *cardano.BigInt) string {
@@ -215,9 +212,17 @@ func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backen
 		return backend.ProtocolParameters{}, err
 	}
 
+	minFeeCoefficient, err := requiredFeeInt64(params.GetMinFeeCoefficient(), "min fee coefficient")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+	minFeeConstant, err := requiredFeeInt64(params.GetMinFeeConstant(), "min fee constant")
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
 	pp := backend.ProtocolParameters{
-		MinFeeCoefficient:   bigIntToInt64(params.GetMinFeeCoefficient()),
-		MinFeeConstant:      bigIntToInt64(params.GetMinFeeConstant()),
+		MinFeeCoefficient:   minFeeCoefficient,
+		MinFeeConstant:      minFeeConstant,
 		MaxBlockSize:        maxBlockSize,
 		MaxTxSize:           maxTxSize,
 		MaxBlockHeaderSize:  maxBlockHeaderSize,
@@ -238,15 +243,12 @@ func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backen
 		pp.MaxBlockExSteps = strconv.FormatUint(blockEx.GetSteps(), 10)
 	}
 
-	prices := params.GetPrices()
-	if prices != nil {
-		if prices.GetMemory() != nil && prices.GetMemory().GetDenominator() != 0 {
-			pp.PriceMem = float64(prices.GetMemory().GetNumerator()) / float64(prices.GetMemory().GetDenominator())
-		}
-		if prices.GetSteps() != nil && prices.GetSteps().GetDenominator() != 0 {
-			pp.PriceStep = float64(prices.GetSteps().GetNumerator()) / float64(prices.GetSteps().GetDenominator())
-		}
+	priceMem, priceStep, err := requiredExecutionPrices(params.GetPrices())
+	if err != nil {
+		return backend.ProtocolParameters{}, err
 	}
+	pp.PriceMem = priceMem
+	pp.PriceStep = priceStep
 
 	if err := setProtocolVersion(&pp, params.GetProtocolVersion()); err != nil {
 		return backend.ProtocolParameters{}, err
@@ -259,6 +261,15 @@ func (u *UtxoRpcChainContext) ProtocolParamsContext(ctx context.Context) (backen
 	pp.CostModels = costModelsFromRpc(params.GetCostModels())
 
 	return pp, nil
+}
+
+func requiredExecutionPrices(prices *cardano.ExPrices) (float64, float64, error) {
+	if prices == nil || prices.GetMemory() == nil || prices.GetMemory().GetNumerator() <= 0 || prices.GetMemory().GetDenominator() == 0 ||
+		prices.GetSteps() == nil || prices.GetSteps().GetNumerator() <= 0 || prices.GetSteps().GetDenominator() == 0 {
+		return 0, 0, errors.New("missing or invalid execution prices")
+	}
+	return float64(prices.GetMemory().GetNumerator()) / float64(prices.GetMemory().GetDenominator()),
+		float64(prices.GetSteps().GetNumerator()) / float64(prices.GetSteps().GetDenominator()), nil
 }
 
 // setProtocolVersion copies the chain's protocol version, which gates

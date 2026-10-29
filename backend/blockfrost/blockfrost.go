@@ -862,8 +862,8 @@ type bfTxOut struct {
 // --- BlockFrost response types ---
 
 type bfProtocolParams struct {
-	MinFeeA            int64           `json:"min_fee_a"`
-	MinFeeB            int64           `json:"min_fee_b"`
+	MinFeeA            *int64          `json:"min_fee_a"`
+	MinFeeB            *int64          `json:"min_fee_b"`
 	MaxBlockSize       int64           `json:"max_block_size"`
 	MaxTxSize          int64           `json:"max_tx_size"`
 	MaxBlockHeaderSize int64           `json:"max_block_header_size"`
@@ -873,8 +873,8 @@ type bfProtocolParams struct {
 	PoolDeposit        string          `json:"pool_deposit"`
 	Decentralisation   float64         `json:"decentralisation_param"`
 	MinPoolCost        string          `json:"min_pool_cost"`
-	PriceMem           float64         `json:"price_mem"`
-	PriceStep          float64         `json:"price_step"`
+	PriceMem           *float64        `json:"price_mem"`
+	PriceStep          *float64        `json:"price_step"`
 	MaxTxExMem         string          `json:"max_tx_ex_mem"`
 	MaxTxExSteps       string          `json:"max_tx_ex_steps"`
 	MaxBlockExMem      string          `json:"max_block_ex_mem"`
@@ -896,6 +896,18 @@ type bfProtocolParams struct {
 }
 
 func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error) {
+	if p.MinFeeA == nil || *p.MinFeeA <= 0 {
+		return backend.ProtocolParameters{}, errors.New("missing or invalid min_fee_a")
+	}
+	if p.MinFeeB == nil || *p.MinFeeB <= 0 {
+		return backend.ProtocolParameters{}, errors.New("missing or invalid min_fee_b")
+	}
+	if p.PriceMem == nil || *p.PriceMem <= 0 || math.IsNaN(*p.PriceMem) || math.IsInf(*p.PriceMem, 0) {
+		return backend.ProtocolParameters{}, errors.New("missing or invalid price_mem")
+	}
+	if p.PriceStep == nil || *p.PriceStep <= 0 || math.IsNaN(*p.PriceStep) || math.IsInf(*p.PriceStep, 0) {
+		return backend.ProtocolParameters{}, errors.New("missing or invalid price_step")
+	}
 	maxBlockSize, err := backendutil.BoundedInt(p.MaxBlockSize, "max_block_size")
 	if err != nil {
 		return backend.ProtocolParameters{}, err
@@ -925,8 +937,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		return backend.ProtocolParameters{}, err
 	}
 	pp := backend.ProtocolParameters{
-		MinFeeConstant:       p.MinFeeB,
-		MinFeeCoefficient:    p.MinFeeA,
+		MinFeeConstant:       *p.MinFeeB,
+		MinFeeCoefficient:    *p.MinFeeA,
 		MaxBlockSize:         maxBlockSize,
 		MaxTxSize:            maxTxSize,
 		MaxBlockHeaderSize:   maxBlockHeaderSize,
@@ -935,8 +947,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		KeyDeposits:          p.KeyDeposit,
 		PoolDeposits:         p.PoolDeposit,
 		MinPoolCost:          p.MinPoolCost,
-		PriceMem:             p.PriceMem,
-		PriceStep:            p.PriceStep,
+		PriceMem:             *p.PriceMem,
+		PriceStep:            *p.PriceStep,
 		MaxTxExMem:           p.MaxTxExMem,
 		MaxTxExSteps:         p.MaxTxExSteps,
 		MaxBlockExMem:        p.MaxBlockExMem,

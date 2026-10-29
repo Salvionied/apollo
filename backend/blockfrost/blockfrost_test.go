@@ -666,6 +666,8 @@ func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
+		"price_mem": 0.0577,
+		"price_step": 0.0000721,
 		"max_tx_size": 16384,
 		"coins_per_utxo_size": "4310",
 		"collateral_percent": 150,
@@ -692,10 +694,34 @@ func TestProtocolParamsParsesRefScriptCostPerByte(t *testing.T) {
 	}
 }
 
+func TestProtocolParamsRejectsMissingFeeFields(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"coefficient", `{"min_fee_b":1,"price_mem":0.1,"price_step":0.1}`},
+		{"constant", `{"min_fee_a":1,"price_mem":0.1,"price_step":0.1}`},
+		{"memory price", `{"min_fee_a":1,"min_fee_b":1,"price_step":0.1}`},
+		{"step price", `{"min_fee_a":1,"min_fee_b":1,"price_mem":0.1}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw bfProtocolParams
+			if err := json.Unmarshal([]byte(tc.body), &raw); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.toProtocolParams(); err == nil {
+				t.Fatal("expected missing fee parameter to be rejected")
+			}
+		})
+	}
+}
+
 func TestProtocolParamsPreservesFractionalRefScriptCostPerByte(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
+		"price_mem": 0.0577,
+		"price_step": 0.0000721,
 		"max_tx_size": 16384,
 		"coins_per_utxo_size": "4310",
 		"collateral_percent": 150,
@@ -720,6 +746,8 @@ func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
+		"price_mem": 0.0577,
+		"price_step": 0.0000721,
 		"max_tx_size": 16384,
 		"coins_per_utxo_size": "4310",
 		"collateral_percent": 150,
@@ -754,6 +782,8 @@ func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
+		"price_mem": 0.0577,
+		"price_step": 0.0000721,
 		"max_tx_size": 16384,
 		"coins_per_utxo_size": "4310",
 		"collateral_percent": 150,
@@ -1397,7 +1427,7 @@ func decodeSingleTxOut(t *testing.T, body []byte) map[string]json.RawMessage {
 
 func TestProtocolParamsParsesProtocolVersion(t *testing.T) {
 	var raw bfProtocolParams
-	if err := json.Unmarshal([]byte(`{"protocol_major_ver": 12, "protocol_minor_ver": 1}`), &raw); err != nil {
+	if err := json.Unmarshal([]byte(`{"protocol_major_ver": 12, "protocol_minor_ver": 1, "min_fee_a": 44, "min_fee_b": 155381, "price_mem": 0.0577, "price_step": 0.0000721}`), &raw); err != nil {
 		t.Fatal(err)
 	}
 	pp, err := raw.toProtocolParams()

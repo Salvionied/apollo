@@ -129,6 +129,49 @@ func newVersionRouter(t *testing.T, serve string) (*versionRouter, *httptest.Ser
 	return r, srv
 }
 
+func TestProtocolParamsRejectsIncompleteFeeResponse(t *testing.T) {
+	fee := &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 44}}
+	prices := &cardano.ExPrices{
+		Memory: &cardano.RationalNumber{Numerator: 1, Denominator: 10},
+		Steps:  &cardano.RationalNumber{Numerator: 1, Denominator: 10},
+	}
+	for _, tc := range []struct {
+		name   string
+		params *cardano.PParams
+		valid  bool
+	}{
+		{name: "missing coefficient", params: &cardano.PParams{MinFeeConstant: fee, Prices: prices}},
+		{name: "missing prices", params: &cardano.PParams{MinFeeCoefficient: fee, MinFeeConstant: fee}},
+		{name: "complete", params: &cardano.PParams{MinFeeCoefficient: fee, MinFeeConstant: fee, Prices: prices}, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := proto.Marshal(&query.ReadParamsResponse{
+				Values: &query.AnyChainParams{Params: &query.AnyChainParams_Cardano{Cardano: tc.params}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			_, err = ctx.ProtocolParamsContext(t.Context())
+			if (err == nil) != tc.valid {
+				t.Fatalf("ProtocolParamsContext() error = %v; valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
 // TestFallsBackToV1AlphaWhenV1BetaUnimplemented covers the Dolos-style
 // deployment that serves only the older services: the v1beta attempt returns
 // UNIMPLEMENTED and the call must succeed against v1alpha rather than failing.
