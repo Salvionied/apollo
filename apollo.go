@@ -2607,7 +2607,7 @@ func (a *Apollo) checkCurrentFeeLimit() error {
 	} else {
 		fee = a.tx.Body.TxFee
 	}
-	if fee > uint64(a.maxFee) {
+	if fee > uint64(a.maxFee) { //nolint:gosec // SetMaxFee rejects negative values
 		return fmt.Errorf("transaction fee %d lovelace exceeds approved maximum of %d lovelace", fee, a.maxFee)
 	}
 	return nil
