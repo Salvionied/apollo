@@ -1027,15 +1027,15 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 		if pd == nil {
 			return fmt.Errorf("%s: nil PlutusData", loc)
 		}
-		if dst.Type() == reflect.TypeOf((*data.PlutusData)(nil)).Elem() || dst.Type().Implements(reflect.TypeOf((*data.PlutusData)(nil)).Elem()) {
-			cloned, err := clonePlutusData(pd, loc, depth)
-			if err != nil {
-				return err
-			}
-			dst.Set(reflect.ValueOf(cloned))
-			return nil
+		cloned, err := clonePlutusData(pd, loc, depth)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("%s: opaque Data target must be data.PlutusData, got %s", loc, dst.Type())
+		if !reflect.TypeOf(cloned).AssignableTo(dst.Type()) {
+			return fmt.Errorf("%s: cannot decode %T into %s", loc, cloned, dst.Type())
+		}
+		dst.Set(reflect.ValueOf(cloned))
+		return nil
 	}
 
 	if dst.Type() == reflect.TypeOf((*big.Int)(nil)) {

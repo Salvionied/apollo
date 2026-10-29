@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -98,5 +99,33 @@ func TestOpaqueTypedNilChildIsRejected(t *testing.T) {
 		if _, err := bp.Encode(schema, tc.pd); err == nil || !strings.Contains(err.Error(), "nil") {
 			t.Fatalf("%s encode: %v", tc.name, err)
 		}
+	}
+}
+
+func TestOpaqueDecodeRequiresAssignableTarget(t *testing.T) {
+	const raw = `{
+		"preamble": {"title": "opaque", "version": "1.0.0", "plutusVersion": "v3"},
+		"validators": [{"title": "v", "redeemer": {"schema": {}}}]
+	}`
+	bp, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	val, err := bp.Validator("v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := &val.Redeemer.Single.Schema
+	integer := data.NewInteger(big.NewInt(4))
+	var matched *data.Integer
+	if err := bp.Decode(schema, integer, &matched); err != nil {
+		t.Fatal(err)
+	}
+	if matched == nil || matched.Inner == nil || matched.Inner.Int64() != 4 {
+		t.Fatalf("matched integer = %#v", matched)
+	}
+	var mismatched *data.Integer
+	if err := bp.Decode(schema, data.NewList(), &mismatched); err == nil {
+		t.Fatal("decoded a list into *data.Integer")
 	}
 }
