@@ -3,6 +3,7 @@ package backendutil
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -11,7 +12,7 @@ import (
 // more entries than the caller's page limit.
 func DecodeLimitedArray[T any](data []byte, maxItems int) ([]T, error) {
 	if maxItems < 0 {
-		return nil, fmt.Errorf("negative JSON array limit")
+		return nil, errors.New("negative JSON array limit")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	token, err := decoder.Token()
@@ -19,7 +20,7 @@ func DecodeLimitedArray[T any](data []byte, maxItems int) ([]T, error) {
 		return nil, err
 	}
 	if token != json.Delim('[') {
-		return nil, fmt.Errorf("expected JSON array")
+		return nil, errors.New("expected JSON array")
 	}
 	rows := make([]T, 0, min(maxItems, 100))
 	for decoder.More() {
@@ -37,7 +38,7 @@ func DecodeLimitedArray[T any](data []byte, maxItems int) ([]T, error) {
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		if err == nil {
-			return nil, fmt.Errorf("trailing data after provider array")
+			return nil, errors.New("trailing data after provider array")
 		}
 		return nil, err
 	}

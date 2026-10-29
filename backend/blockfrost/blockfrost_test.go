@@ -250,9 +250,13 @@ func TestUtxosBoundsCumulativePageBytes(t *testing.T) {
 			_, _ = io.WriteString(w, "[]")
 			return
 		}
-		_, _ = io.WriteString(w, `[{"tx_hash":"`+strings.Repeat(page, 64)+`","output_index":0,"address":"`+addr.String()+`","amount":[{"unit":"lovelace","quantity":"1000000"}],"padding":"`)
-		_, _ = io.WriteString(w, padding)
-		_, _ = io.WriteString(w, `"}]`)
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"tx_hash":      strings.Repeat(page, 64),
+			"output_index": 0,
+			"address":      addr.String(),
+			"amount":       []map[string]string{{"unit": "lovelace", "quantity": "1000000"}},
+			"padding":      padding,
+		}})
 	}))
 	defer server.Close()
 
