@@ -41,7 +41,7 @@ func TestDijkstraPlutusV4ReferenceOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	builder := New(cc).SetWallet(NewExternalWallet(addr)).SetTargetEra(EraDijkstra).AddPayment(payment)
+	builder := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).SetTargetEra(EraDijkstra).AddPayment(payment)
 	if _, err := builder.PayToAddressWithReferenceScript(addr, 1_000_000, common.PlutusV4Script{0x01}); err != nil {
 		t.Fatalf("add V4 reference script output: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestCompleteDijkstraTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	builder, err := New(cc).
+	builder, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddDirectDeposit(account, 1_000_000).
@@ -122,7 +122,7 @@ func TestCompleteDijkstraTransaction(t *testing.T) {
 		t.Fatalf("decode Dijkstra transaction: %v", err)
 	}
 
-	loaded, err := New(cc).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(cc).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatalf("load Dijkstra transaction: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestCompleteDijkstraRequiresProtocolVersion12(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = New(cc).
+	_, err = newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddPayment(payment).
@@ -190,7 +190,7 @@ func dijkstraRefScriptBuilder(t *testing.T, era TargetEra, mutate func(*backend.
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(era).
 		AddPayment(payment).
@@ -319,7 +319,7 @@ func TestCompleteDijkstraPartialWithdrawal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddPayment(payment).
@@ -371,7 +371,7 @@ func TestAddDijkstraProposalPledgeLeverage(t *testing.T) {
 		},
 		PPAnchor: common.GovAnchor{Url: "https://example.com/leverage"},
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddDijkstraProposal(proposal).

@@ -9,7 +9,7 @@ import (
 func completePinned(t *testing.T, pinned common.Utxo, pool []common.Utxo, pay int64) *Apollo {
 	t.Helper()
 	addr := testAddress(t)
-	a, err := New(setupFixedContext()).
+	a, err := newTestApollo(setupFixedContext()).
 		SetWallet(NewExternalWallet(addr)).
 		AddInput(pinned).
 		AddLoadedUTxOs(pool...).

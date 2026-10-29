@@ -17,7 +17,7 @@ func TestSignLoadedConwayTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(payment).Complete()
+	built, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(payment).Complete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestSignLoadedConwayTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(setupFixedContext()).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(setupFixedContext()).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestSignLoadedConwayTransaction(t *testing.T) {
 		t.Fatal("signature does not verify against the ledger transaction hash")
 	}
 	trailing := hex.EncodeToString(append(append([]byte(nil), txCbor...), 0x00))
-	if _, err := New(setupFixedContext()).LoadTxCbor(trailing); err == nil {
+	if _, err := newTestApollo(setupFixedContext()).LoadTxCbor(trailing); err == nil {
 		t.Fatal("LoadTxCbor accepted a Conway transaction with trailing bytes")
 	}
 }
@@ -67,7 +67,7 @@ func TestWalletSignLoadedConwayTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(payment).Complete()
+	built, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(payment).Complete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestWalletSignLoadedConwayTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(setupFixedContext()).SetWallet(w).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(setupFixedContext()).SetWallet(w).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatal(err)
 	}

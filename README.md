@@ -172,6 +172,7 @@ func main() {
     builder, err = builder.
         AddLoadedUTxOs(utxos...).
         PayToAddress(receiver, 1_000_000).
+        SetMaxFee(300_000).
         Complete()
     if err != nil {
         panic(err)
@@ -201,6 +202,7 @@ contract. To request a Dijkstra transaction, select the era before building:
 builder, err := apollo.New(chainContext).
     SetTargetEra(apollo.EraDijkstra).
     AddPayment(payment).
+    SetMaxFee(1_000_000).
     Complete()
 if err != nil {
     return err

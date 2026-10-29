@@ -260,7 +260,7 @@ func TestSetCoinSelectorUsedByComplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50000000).
@@ -421,7 +421,7 @@ func TestCompletePropagatesContextCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50000000).

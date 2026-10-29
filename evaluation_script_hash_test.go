@@ -64,7 +64,7 @@ func TestEstimateExecutionUnitsUsesLedgerCorrectScriptDataHash(t *testing.T) {
 	unit := NewUnit(policyHex, "746f6b656e", 1)
 	redeemer := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddInputAddress(addr).
 		AttachScript(script).

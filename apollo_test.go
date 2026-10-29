@@ -120,7 +120,7 @@ func TestApolloChaining(t *testing.T) {
 
 func TestCompleteRequiresWallet(t *testing.T) {
 	cc := setupFixedContext()
-	a := New(cc)
+	a := newTestApollo(cc)
 	_, err := a.Complete()
 	if err == nil {
 		t.Error("expected error when wallet is not set")
@@ -292,7 +292,7 @@ func TestCompleteSimpleTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -324,7 +324,7 @@ func TestCompleteCborEncoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -353,7 +353,7 @@ func TestCompleteInsufficientFunds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -387,7 +387,7 @@ func TestCompleteWithPreselectedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddInput(utxo).
 		AddPayment(p).
@@ -420,7 +420,7 @@ func TestCompleteMultiplePayments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p1).
 		AddPayment(p2).
@@ -449,7 +449,7 @@ func TestCompleteWithExplicitFee(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetFee(300000).
@@ -623,7 +623,7 @@ func TestAttachScriptV3Dedup(t *testing.T) {
 }
 
 func TestAttachScriptV4RequiresDijkstra(t *testing.T) {
-	a := New(setupFixedContext())
+	a := newTestApollo(setupFixedContext())
 	a.AttachScript(common.PlutusV4Script([]byte{0x01, 0x02, 0x03}))
 
 	if a.err != ErrPlutusV4RequiresDijkstra {
@@ -957,7 +957,7 @@ func TestCompleteWithMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -1352,7 +1352,7 @@ func TestCompleteWithWithdrawal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -1401,7 +1401,7 @@ func TestCompleteWithCustomChangeAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetChangeAddress(addr).
@@ -1449,7 +1449,7 @@ func TestCompleteWithReferenceInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddPayment(p).
 		SetTtl(50000000)
@@ -1523,7 +1523,7 @@ func TestCompleteErrorsOnRefScriptWithoutPrice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(w).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(w).AddPayment(p).SetTtl(50000000)
 	a, err = a.AddReferenceInput(hashHex, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -1563,7 +1563,7 @@ func TestCompleteReservesReferenceScriptFeeForCoinSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p)
 	a, err = a.AddReferenceInput(hashHex, 0)
@@ -1619,7 +1619,7 @@ func TestSignWithSkeySupportsBursaXPrv(t *testing.T) {
 	addr := testAddress(t)
 	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
 
-	a := New(cc).SetWallet(NewExternalWallet(addr))
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr))
 	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1657,7 +1657,7 @@ func TestSignWithSkeySupportsEd25519PrivateKey(t *testing.T) {
 	addr := testAddress(t)
 	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
 
-	a := New(cc).SetWallet(NewExternalWallet(addr))
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr))
 	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1701,7 +1701,7 @@ func TestCompleteDoesNotReuseCollateralAsInput(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -1739,7 +1739,7 @@ func TestCompleteFailsWhenScriptTxHasNoEligibleCollateral(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -1865,7 +1865,7 @@ func TestCompleteUsesOnlyReferencedCostModelInScriptDataHash(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(w).
 		AddInput(inputUtxo).
 		AddCollateral(collateralUtxo).
@@ -2031,7 +2031,7 @@ func TestSingleUtxoIsBothInputAndCollateral(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2124,7 +2124,7 @@ func TestTwoUtxoWalletPicksSeparateCollateral(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2164,7 +2164,7 @@ func TestScriptAddressCollateralRejected(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2194,7 +2194,7 @@ func TestDuplicateCollateralRejected(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2238,7 +2238,7 @@ func TestMaxCollateralInputsEnforced(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2272,7 +2272,7 @@ func TestManualScriptAddressCollateralRejected(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2301,7 +2301,7 @@ func TestExplicitCollateralAmountBelowRequiredRejected(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2335,7 +2335,7 @@ func TestExplicitCollateralAmountEmittedInBody(t *testing.T) {
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
 	const wantAmount = 5_000_000
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2379,7 +2379,7 @@ func TestManualAssetCollateralRejected(t *testing.T) {
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().
@@ -2414,7 +2414,7 @@ func TestExplicitCollateralAmountLeavingDustRejected(t *testing.T) {
 	unit := NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1)
 
 	// Request an amount that leaves only 1 lovelace of return, far below min-ADA.
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(script).
 		DisableExecutionUnitsEstimation().

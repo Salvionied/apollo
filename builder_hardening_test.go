@@ -46,13 +46,13 @@ func (p *cloneableTestPayment) ClonePayment() (PaymentI, error) {
 }
 
 func TestNewRejectsNilChainContext(t *testing.T) {
-	if _, err := New(nil).Complete(); err == nil || !strings.Contains(err.Error(), "chain context must not be nil") {
-		t.Fatalf("New(nil).Complete() error = %v", err)
+	if _, err := newTestApollo(nil).Complete(); err == nil || !strings.Contains(err.Error(), "chain context must not be nil") {
+		t.Fatalf("newTestApollo(nil).Complete() error = %v", err)
 	}
 
 	var typedNil *fixed.FixedChainContext
-	if _, err := New(typedNil).Complete(); err == nil || !strings.Contains(err.Error(), "chain context must not be nil") {
-		t.Fatalf("New(typed nil).Complete() error = %v", err)
+	if _, err := newTestApollo(typedNil).Complete(); err == nil || !strings.Contains(err.Error(), "chain context must not be nil") {
+		t.Fatalf("newTestApollo(typed nil).Complete() error = %v", err)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestNegativeBuilderSettersRecordError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := New(setupFixedContext())
+			a := newTestApollo(setupFixedContext())
 			tt.set(a)
 			if a.err == nil {
 				t.Fatal("negative value did not record an error")

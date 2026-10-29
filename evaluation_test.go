@@ -95,7 +95,7 @@ func setupMintEvalBuilder(t *testing.T, cc *balancedEvalContext, paymentLovelace
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).
@@ -277,7 +277,7 @@ func TestEstimateExecutionUnitsDraftConservesBurnedAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).
@@ -505,7 +505,7 @@ func TestEvaluationKeepsDeterministicOutputOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p1).
 		AddPayment(p2).
