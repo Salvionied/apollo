@@ -48,7 +48,7 @@ func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
 		return common.Credential{}, wrongConstrShape("credential constructor 0 or 1 with 1 field", pd)
 	}
 	raw, ok := constr.Fields[0].(*data.ByteString)
-	if !ok || len(raw.Inner) != common.Blake2b224Size {
+	if !ok || plutusNil(raw) || len(raw.Inner) != common.Blake2b224Size {
 		return common.Credential{}, fmt.Errorf("expected %d-byte credential hash", common.Blake2b224Size)
 	}
 	hash, err := common.NewBlake2b224Checked(raw.Inner)
@@ -85,11 +85,11 @@ func unmarshalTxOutRef(pd data.PlutusData) (TxOutRef, error) {
 		return TxOutRef{}, wrongConstrShape("TxOutRef constructor 0 with 2 fields", pd)
 	}
 	rawId, ok := constr.Fields[0].(*data.ByteString)
-	if !ok || len(rawId.Inner) != common.Blake2b256Size {
+	if !ok || plutusNil(rawId) || len(rawId.Inner) != common.Blake2b256Size {
 		return TxOutRef{}, fmt.Errorf("expected %d-byte transaction id", common.Blake2b256Size)
 	}
 	idxInt, ok := constr.Fields[1].(*data.Integer)
-	if !ok || idxInt.Inner == nil || idxInt.Inner.Sign() < 0 || !idxInt.Inner.IsUint64() {
+	if !ok || plutusNil(idxInt) || idxInt.Inner == nil || idxInt.Inner.Sign() < 0 || !idxInt.Inner.IsUint64() {
 		return TxOutRef{}, errors.New("expected unsigned output index")
 	}
 	idx := idxInt.Inner.Uint64()
@@ -127,11 +127,11 @@ func unmarshalAssetClass(pd data.PlutusData) (AssetClass, error) {
 		return AssetClass{}, wrongConstrShape("AssetClass constructor 0 with 2 fields", pd)
 	}
 	policy, ok := constr.Fields[0].(*data.ByteString)
-	if !ok || (len(policy.Inner) != 0 && len(policy.Inner) != common.Blake2b224Size) {
+	if !ok || plutusNil(policy) || (len(policy.Inner) != 0 && len(policy.Inner) != common.Blake2b224Size) {
 		return AssetClass{}, fmt.Errorf("expected empty or %d-byte policy id", common.Blake2b224Size)
 	}
 	token, ok := constr.Fields[1].(*data.ByteString)
-	if !ok || len(token.Inner) > maxTokenNameSize {
+	if !ok || plutusNil(token) || len(token.Inner) > maxTokenNameSize {
 		return AssetClass{}, fmt.Errorf("expected token name of at most %d bytes", maxTokenNameSize)
 	}
 	if len(policy.Inner) == 0 && len(token.Inner) != 0 {

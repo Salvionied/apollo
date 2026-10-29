@@ -20,6 +20,27 @@ type productCodecsDatum struct {
 	RewardAsset AssetClass        `plutusType:"AssetClass"`
 }
 
+func TestProductCodecsRejectTypedNilChildren(t *testing.T) {
+	hash := bytes.Repeat([]byte{0xab}, common.Blake2b224Size)
+	txID := bytes.Repeat([]byte{0xcd}, common.Blake2b256Size)
+	cred := data.NewConstr(0, data.NewByteString(hash))
+	ref := data.NewConstr(0, data.NewByteString(txID), data.NewInteger(big.NewInt(1)))
+	asset := data.NewConstr(0, data.NewByteString(nil), data.NewByteString(nil))
+	cases := []data.PlutusData{
+		data.NewConstr(0, data.NewConstr(0, (*data.ByteString)(nil)), ref, asset),
+		data.NewConstr(0, cred, data.NewConstr(0, (*data.ByteString)(nil), data.NewInteger(big.NewInt(1))), asset),
+		data.NewConstr(0, cred, data.NewConstr(0, data.NewByteString(txID), (*data.Integer)(nil)), asset),
+		data.NewConstr(0, cred, ref, data.NewConstr(0, (*data.ByteString)(nil), data.NewByteString(nil))),
+		data.NewConstr(0, cred, ref, data.NewConstr(0, data.NewByteString(nil), (*data.ByteString)(nil))),
+	}
+	for i, pd := range cases {
+		var decoded productCodecsDatum
+		if err := UnmarshalPlutus(pd, &decoded); err == nil {
+			t.Fatalf("case %d decoded a typed-nil child", i)
+		}
+	}
+}
+
 func TestCredentialMatchesGouroboros(t *testing.T) {
 	hash, err := common.NewBlake2b224Checked(bytes.Repeat([]byte{0xab}, common.Blake2b224Size))
 	if err != nil {
