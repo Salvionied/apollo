@@ -1210,7 +1210,7 @@ func (b *BlockFrostChainContext) hydrateUtxoWithScriptResolver(
 		return common.Utxo{}, fmt.Errorf("unexpected UTxO output type: %T", utxo.Output)
 	}
 	if len(raw.InlineDatum) > 0 && string(raw.InlineDatum) != "null" {
-		datumOpt, err := inlineDatumOptionFromBlockfrost(raw.InlineDatum)
+		datumOpt, err := inlineDatumOptionFromBlockfrost(raw.InlineDatum, raw.DataHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to decode inline datum: %w", err)
 		}
@@ -1279,7 +1279,7 @@ func (r *scriptRefResolver) resolve(hashHex string) (*common.ScriptRef, error) {
 // inline_datum field, which is a CBOR-encoded datum serialized as a hex string.
 // The original CBOR bytes are preserved exactly (no JSON decode/re-encode
 // round-trip) so the datum hash is not altered by a non-canonical re-encoding.
-func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTransactionOutputDatumOption, error) {
+func inlineDatumOptionFromBlockfrost(raw json.RawMessage, datumHash string) (*babbage.BabbageTransactionOutputDatumOption, error) {
 	var datumCborHex string
 	if err := json.Unmarshal(raw, &datumCborHex); err != nil {
 		return nil, fmt.Errorf("inline datum must be a CBOR hex string: %w", err)
@@ -1287,6 +1287,20 @@ func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTrans
 	datumBytes, err := hex.DecodeString(datumCborHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid inline datum CBOR hex %q: %w", datumCborHex, err)
+	}
+	if datumHash != "" {
+		hashBytes, err := hex.DecodeString(datumHash)
+		if err != nil {
+			return nil, fmt.Errorf("invalid data hash hex %q: %w", datumHash, err)
+		}
+		if len(hashBytes) != common.Blake2b256Size {
+			return nil, fmt.Errorf("invalid data hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
+		}
+		var claimed common.Blake2b256
+		copy(claimed[:], hashBytes)
+		if computed := common.Blake2b256Hash(datumBytes); computed != claimed {
+			return nil, fmt.Errorf("inline datum hash mismatch: computed %s, provider claimed %s", computed, datumHash)
+		}
 	}
 	// Inline datum option: [1, #6.24(datum_cbor)]
 	cborBytes, err := cbor.Encode([]any{1, cbor.Tag{Number: 24, Content: datumBytes}})
