@@ -653,3 +653,54 @@ func constrInteger(t *testing.T, constr *data.Constr) *big.Int {
 	}
 	return integer.Inner
 }
+
+func TestOutputDatumAndIntervalRejectTypedNil(t *testing.T) {
+	hash := bytes.Repeat([]byte{0xab}, common.Blake2b256Size)
+	closed := data.NewConstr(1)
+	finite := data.NewConstr(1, data.NewInteger(big.NewInt(5)))
+	lower := data.NewConstr(0, data.NewConstr(0), closed)
+	cases := []struct {
+		name string
+		dst  any
+		pd   data.PlutusData
+	}{
+		{
+			name: "datum hash",
+			dst:  &outputDatumOnly{},
+			pd:   data.NewConstr(0, data.NewConstr(1, (*data.ByteString)(nil))),
+		},
+		{
+			name: "inline datum",
+			dst:  &outputDatumOnly{},
+			pd:   data.NewConstr(0, data.NewConstr(2, (*data.Integer)(nil))),
+		},
+		{
+			name: "finite bound",
+			dst:  &intervalDatum{},
+			pd: data.NewConstr(0, data.NewConstr(0,
+				data.NewConstr(0, data.NewConstr(1, (*data.Integer)(nil)), closed),
+				data.NewConstr(0, finite, closed),
+			)),
+		},
+		{
+			name: "closure",
+			dst:  &intervalDatum{},
+			pd: data.NewConstr(0, data.NewConstr(0,
+				lower,
+				data.NewConstr(0, finite, (*data.Constr)(nil)),
+			)),
+		},
+	}
+	for _, tc := range cases {
+		if err := UnmarshalPlutus(tc.pd, tc.dst); err == nil {
+			t.Errorf("%s: typed nil decoded", tc.name)
+		}
+	}
+	var round outputDatumOnly
+	if err := UnmarshalPlutus(data.NewConstr(0, data.NewConstr(1, data.NewByteString(hash))), &round); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(round.Datum.Hash, hash) {
+		t.Fatalf("hash = %x", round.Datum.Hash)
+	}
+}

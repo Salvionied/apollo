@@ -236,12 +236,12 @@ func unmarshalOutputDatum(pd data.PlutusData) (OutputDatum, error) {
 			return OutputDatum{}, unexpectedConstr("datum-hash OutputDatum constructor 1 with 1 field", pd)
 		}
 		raw, ok := constr.Fields[0].(*data.ByteString)
-		if !ok || len(raw.Inner) != common.Blake2b256Size {
+		if !ok || plutusNil(raw) || len(raw.Inner) != common.Blake2b256Size {
 			return OutputDatum{}, fmt.Errorf("expected %d-byte datum hash", common.Blake2b256Size)
 		}
 		return OutputDatum{Hash: append([]byte(nil), raw.Inner...)}, nil
 	case constrTagEqual(constr.Tag, 2):
-		if len(constr.Fields) != 1 || constr.Fields[0] == nil {
+		if len(constr.Fields) != 1 || plutusNil(constr.Fields[0]) {
 			return OutputDatum{}, unexpectedConstr("inline OutputDatum constructor 2 with 1 field", pd)
 		}
 		return OutputDatum{Inline: constr.Fields[0]}, nil
@@ -313,7 +313,7 @@ func unmarshalIntervalBound(pd data.PlutusData) (IntervalBound, error) {
 		result.Kind = BoundNegInf
 	case constrTagEqual(ext.Tag, 1) && len(ext.Fields) == 1:
 		integer, ok := ext.Fields[0].(*data.Integer)
-		if !ok || integer == nil || integer.Inner == nil {
+		if !ok || plutusNil(integer) || integer.Inner == nil {
 			return IntervalBound{}, errors.New("expected int64 finite bound")
 		}
 		if !integer.Inner.IsInt64() {
@@ -328,7 +328,7 @@ func unmarshalIntervalBound(pd data.PlutusData) (IntervalBound, error) {
 	}
 
 	closure, ok := bound.Fields[1].(*data.Constr)
-	if !ok || closure == nil || len(closure.Fields) != 0 {
+	if !ok || plutusNil(closure) || len(closure.Fields) != 0 {
 		return IntervalBound{}, unexpectedConstr("closure Bool constructor with no fields", bound.Fields[1])
 	}
 	switch {
