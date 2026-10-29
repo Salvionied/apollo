@@ -327,3 +327,29 @@ func TestEvaluateDijkstraTopLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateRejectsDijkstraSubTransactions(t *testing.T) {
+	tx := buildSyntheticTx(t, compileScript(t, syntheticV3Source))
+	var parts []cbor.RawMessage
+	if _, err := cbor.Decode(tx.txCbor, &parts); err != nil {
+		t.Fatal(err)
+	}
+	var body map[uint]cbor.RawMessage
+	if _, err := cbor.Decode(parts[0], &body); err != nil {
+		t.Fatal(err)
+	}
+	body[23] = mustEncode(t, []any{
+		[]any{
+			map[uint]any{0: []any{}, 1: []any{}},
+			map[uint]any{},
+			nil,
+		},
+	})
+	dijkstraTx := mustEncode(t, []any{body, parts[1], nil})
+	params := tx.params
+	params.ProtocolParams.ProtocolMajorVersion = 12
+
+	if _, err := Evaluate(dijkstraTx, tx.utxos, params); err == nil {
+		t.Fatal("evaluation of a Dijkstra transaction with sub-transactions succeeded")
+	}
+}

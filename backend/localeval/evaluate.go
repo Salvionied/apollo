@@ -69,6 +69,9 @@ func evaluate(txCbor []byte, resolve utxoResolver, params Params) (map[common.Re
 	if err != nil {
 		return nil, fmt.Errorf("decode Dijkstra transaction: %w", err)
 	}
+	if len(tx.Body.TxSubTransactions.Items()) > 0 {
+		return nil, errors.New("evaluating Dijkstra sub-transactions is not supported")
+	}
 	evaluations, err := dijkstra.EvaluatePlutusScripts(tx, ls, pp, budget)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate scripts: %w", err)
