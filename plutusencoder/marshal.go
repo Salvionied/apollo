@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -68,9 +69,25 @@ func marshalField(fieldVal reflect.Value, field reflect.StructField) (data.Plutu
 		return nil, fmt.Errorf("field %s: %w", field.Name, err)
 	}
 
-	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference
-	if plutusType == "BigInt" {
+	// BigInt handles nil *big.Int directly, so dispatch before pointer dereference.
+	// Maybe and Address likewise accept a nil pointer or a non-pointer value.
+	switch plutusType {
+	case "BigInt":
 		return marshalBigInt(fieldVal)
+	case "Maybe":
+		return marshalMaybe(fieldVal)
+	case "Address":
+		if fieldVal.Kind() == reflect.Pointer {
+			if fieldVal.IsNil() {
+				return nil, fmt.Errorf("field %s: nil address", field.Name)
+			}
+			fieldVal = fieldVal.Elem()
+		}
+		addr, ok := fieldVal.Interface().(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("field %s: Address requires common.Address, got %s", field.Name, fieldVal.Type())
+		}
+		return marshalAddress(addr)
 	}
 
 	// Dereference pointers

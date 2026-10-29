@@ -12,6 +12,7 @@ import (
 
 func marshalList(val reflect.Value, typ reflect.Type, constrTag uint64, hasConstr bool, useIndef bool) (data.PlutusData, error) {
 	var fields []data.PlutusData
+	omittedField := ""
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -30,11 +31,17 @@ func marshalList(val reflect.Value, typ reflect.Type, constrTag uint64, hasConst
 		if err != nil {
 			return nil, err
 		}
-		if omitEmpty {
-			return nil, fmt.Errorf("field %s: omitempty is not supported on positional list fields", field.Name)
+		fieldVal := val.Field(i)
+		if omitEmpty && isEmptyField(fieldVal) {
+			if omittedField == "" {
+				omittedField = field.Name
+			}
+			continue
+		}
+		if omittedField != "" {
+			return nil, fmt.Errorf("field %s: omitempty omitted %s before a present field; put omitempty fields last or use Ignore", field.Name, omittedField)
 		}
 
-		fieldVal := val.Field(i)
 		pd, err := marshalField(fieldVal, field)
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
@@ -107,7 +114,7 @@ func marshalSliceElement(elem reflect.Value) (data.PlutusData, error) {
 	}
 }
 
-func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) error {
+func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type, cfg decodeConfig) error {
 	container, expectedConstr, hasExpectedConstr, err := readContainerMetadata(typ)
 	if err != nil {
 		return err
@@ -133,8 +140,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		return fmt.Errorf("expected Constr or List, got %T", pd)
 	}
 
-	// Count exported wire fields (excluding the "_" tag field and ignored fields).
-	exportedCount := 0
+	requiredCount := 0
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		if f.Name == "_" || !f.IsExported() {
@@ -144,15 +150,23 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		if err != nil {
 			return err
 		}
-		if !ignored {
-			exportedCount++
+		if ignored {
+			continue
+		}
+		omitEmpty, err := fieldOmitEmpty(f)
+		if err != nil {
+			return err
+		}
+		if !omitEmpty {
+			requiredCount++
 		}
 	}
-	if len(fields) < exportedCount {
-		return fmt.Errorf("plutus data has %d fields, struct %s expects %d", len(fields), typ.Name(), exportedCount)
+	if len(fields) < requiredCount {
+		return fmt.Errorf("plutus data has %d fields, struct %s expects at least %d", len(fields), typ.Name(), requiredCount)
 	}
-	// Extra fields in the PlutusData (len(fields) > exportedCount) are intentionally
-	// ignored for forward-compatibility with newer datum schemas.
+	// Extra fields in the PlutusData are intentionally ignored for
+	// forward-compatibility with newer datum schemas. Trailing omitempty
+	// fields may be absent and stay at their zero value.
 
 	fieldIdx := 0
 	for i := 0; i < typ.NumField(); i++ {
@@ -167,9 +181,20 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 		if ignored {
 			continue
 		}
+		omitEmpty, err := fieldOmitEmpty(field)
+		if err != nil {
+			return err
+		}
+		if fieldIdx >= len(fields) {
+			if omitEmpty {
+				val.Field(i).SetZero()
+				continue
+			}
+			return fmt.Errorf("plutus data has %d fields, struct %s field %s is required", len(fields), typ.Name(), field.Name)
+		}
 
 		fieldVal := val.Field(i)
-		if err := unmarshalField(fields[fieldIdx], fieldVal, field); err != nil {
+		if err := unmarshalField(fields[fieldIdx], fieldVal, field, cfg); err != nil {
 			return fmt.Errorf("field %s: %w", field.Name, err)
 		}
 		fieldIdx++
@@ -177,7 +202,7 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type) 
 	return nil
 }
 
-func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	if fieldVal.Kind() == reflect.Slice {
 		list, ok := pd.(*data.List)
 		if !ok {
@@ -191,13 +216,13 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 			// Handle pointer element types (e.g. []*MyStruct)
 			if elemType.Kind() == reflect.Pointer {
 				ptr := reflect.New(elemType.Elem())
-				if err := unmarshalSliceElement(item, ptr.Elem()); err != nil {
+				if err := unmarshalSliceElement(item, ptr.Elem(), cfg); err != nil {
 					return fmt.Errorf("element %d: %w", i, err)
 				}
 				result.Index(i).Set(ptr)
 			} else {
 				elem := reflect.New(elemType).Elem()
-				if err := unmarshalSliceElement(item, elem); err != nil {
+				if err := unmarshalSliceElement(item, elem, cfg); err != nil {
 					return fmt.Errorf("element %d: %w", i, err)
 				}
 				result.Index(i).Set(elem)
@@ -207,11 +232,11 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 		return nil
 	}
 	// Nested struct
-	return unmarshalValue(pd, fieldVal)
+	return unmarshalValue(pd, fieldVal, cfg)
 }
 
 // unmarshalSliceElement unmarshals a single slice element, handling both struct and primitive types.
-func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value) error {
+func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value, cfg decodeConfig) error {
 	if elem.CanAddr() {
 		if m, ok := elem.Addr().Interface().(PlutusMarshaler); ok {
 			return m.FromPlutusData(pd, elem.Addr().Interface())
@@ -223,7 +248,7 @@ func unmarshalSliceElement(pd data.PlutusData, elem reflect.Value) error {
 
 	switch elem.Kind() {
 	case reflect.Struct:
-		return unmarshalValue(pd, elem)
+		return unmarshalValue(pd, elem, cfg)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		integer, ok := pd.(*data.Integer)
 		if !ok {

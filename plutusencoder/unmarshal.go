@@ -5,19 +5,25 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
 // UnmarshalPlutus decodes PlutusData into a Go struct using struct tags.
-func UnmarshalPlutus(pd data.PlutusData, v any) error {
+// Options apply to this call only. With no options, addresses decode as testnet.
+func UnmarshalPlutus(pd data.PlutusData, v any, opts ...UnmarshalOption) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Pointer || val.IsNil() {
 		return errors.New("UnmarshalPlutus requires a non-nil pointer")
 	}
-	return unmarshalValue(pd, val.Elem())
+	cfg, err := applyUnmarshalOptions(opts)
+	if err != nil {
+		return err
+	}
+	return unmarshalValue(pd, val.Elem(), cfg)
 }
 
-func unmarshalValue(pd data.PlutusData, val reflect.Value) error {
+func unmarshalValue(pd data.PlutusData, val reflect.Value, cfg decodeConfig) error {
 	// Check for PlutusMarshaler (pointer or value receiver)
 	if val.CanAddr() {
 		if m, ok := val.Addr().Interface().(PlutusMarshaler); ok {
@@ -41,23 +47,43 @@ func unmarshalValue(pd data.PlutusData, val reflect.Value) error {
 
 	switch container {
 	case containerMap:
-		return unmarshalFromMap(pd, val, typ)
+		return unmarshalFromMap(pd, val, typ, cfg)
 	case containerDefList, containerIndefList:
-		return unmarshalFromList(pd, val, typ)
+		return unmarshalFromList(pd, val, typ, cfg)
 	default:
 		return fmt.Errorf("unknown plutus encoder container: %d", container)
 	}
 }
 
-func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField) error {
+func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.StructField, cfg decodeConfig) error {
 	plutusType, _, err := parseFieldTag(field.Tag.Get("plutusType"))
 	if err != nil {
 		return fmt.Errorf("field %s: %w", field.Name, err)
 	}
 
-	// BigInt handles *big.Int directly, so dispatch before pointer dereference
-	if plutusType == "BigInt" {
+	// BigInt, Maybe, and Address are dispatched before pointer allocation.
+	// Maybe Nothing must stay nil, and Address writes a common.Address value.
+	switch plutusType {
+	case "BigInt":
 		return unmarshalBigInt(pd, fieldVal)
+	case "Maybe":
+		return unmarshalMaybe(pd, fieldVal, cfg)
+	case "Address":
+		if fieldVal.Kind() == reflect.Pointer {
+			if fieldVal.IsNil() {
+				fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
+			}
+			fieldVal = fieldVal.Elem()
+		}
+		if fieldVal.Type() != reflect.TypeOf(common.Address{}) {
+			return fmt.Errorf("field %s: Address requires common.Address, got %s", field.Name, fieldVal.Type())
+		}
+		addr, err := unmarshalAddress(pd, cfg.network)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(addr))
+		return nil
 	}
 
 	// Dereference / allocate pointers
@@ -90,15 +116,15 @@ func unmarshalField(pd data.PlutusData, fieldVal reflect.Value, field reflect.St
 	case "Bool", "IndefBool":
 		return unmarshalBool(pd, fieldVal)
 	case "IndefList", "DefList":
-		return unmarshalSliceOrNested(pd, fieldVal, field)
+		return unmarshalSliceOrNested(pd, fieldVal, field, cfg)
 	case "Map":
-		return unmarshalSliceAsMap(pd, fieldVal, field)
+		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
 	case "Custom":
 		return fmt.Errorf("field %s tagged Custom but doesn't implement PlutusMarshaler", field.Name)
 	default:
 		// Nested struct
 		if fieldVal.Kind() == reflect.Struct {
-			return unmarshalValue(pd, fieldVal)
+			return unmarshalValue(pd, fieldVal, cfg)
 		}
 		return fmt.Errorf("unsupported field type %s for field %s", fieldVal.Kind(), field.Name)
 	}

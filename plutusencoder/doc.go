@@ -4,7 +4,8 @@
 //
 // MarshalPlutus takes a struct, or a pointer to one, and returns the encoded
 // data.PlutusData. UnmarshalPlutus takes data.PlutusData and a non-nil
-// pointer to a struct and fills it in.
+// pointer to a struct and fills it in. WithAddressNetwork selects testnet or
+// mainnet for addresses decoded by that call. The default is testnet.
 //
 // # The container marker
 //
@@ -40,6 +41,8 @@
 //	DefList      a slice, or a nested struct forced definite-length
 //	IndefList    a slice, or a nested struct forced indefinite-length
 //	Map          a native Go map, or a slice of key-value structs
+//	Address      common.Address as a Plutus ledger address
+//	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -53,18 +56,41 @@
 //
 // plutusType accepts comma-separated options after the type name. Surrounding
 // whitespace is ignored, and a repeated option is an error. There is one
-// option, omitempty, which drops a field whose value is empty from an encoded
-// Map:
+// option, omitempty, which drops a field whose value is empty:
 //
 //	Memo string `plutusType:"StringBytes,omitempty"`
 //
 // Empty follows the encoding/json rules — false, numeric zero, a nil
 // pointer or interface, and a zero-length string, array, slice or map — and a
-// type may override them by implementing IsZero() bool.
+// type may override them by implementing IsZero() bool. A non-nil pointer is
+// present even when the value it points at is zero. IsZero on that pointer
+// value still decides.
 //
-// omitempty is rejected on the fields of a list container, where dropping one
-// element would shift the position of every element after it. Ignore accepts
-// no options at all.
+// On a Map, the empty field is left out of the map. On a DefList or
+// IndefList, an empty omitempty field is left off the end of the list and
+// decodes back as zero. An absent map key with omitempty or plutusOptional
+// also decodes as zero, including when the destination already held a value.
+// Omitting an empty field that is followed by a
+// present field is an error, because a positional list cannot represent a
+// hole. Ignore accepts no options at all.
+//
+// Address encodes common.Address as Plutus data. A Shelley payment address
+// is constructor 0 of a payment credential and a Maybe staking credential.
+// Types 0–3 are base addresses (payment key or script, stake key or script).
+// Types 4 and 5 are pointer addresses (StakingPtr of slot, transaction index,
+// and certificate index). Types 6 and 7 are enterprise addresses (Nothing).
+// A reward account is not that pair: a stake key is constructor 0 of the
+// 28-byte hash, and a stake script is constructor 1 of the hash, matching
+// Address.ToPlutusData. Byron addresses have no Plutus form and are rejected.
+// A pointer whose slot is above 2^32-1, or whose index is above 65535, is
+// rejected. Plutus data does not carry a network id. Decoding uses the
+// testnet id unless WithAddressNetwork selects mainnet.
+//
+// Maybe encodes a pointer as PlutusTx Maybe. Nil is constructor 1 with no
+// fields. A value is constructor 0 around the element. A PlutusMarshaler is
+// used before the Address codec, *big.Int and big.Int use the integer codec,
+// and any other struct uses the struct codec. A non-nil pointer is Just,
+// including Just 0.
 //
 // # Naming and optional fields
 //
