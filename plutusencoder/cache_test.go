@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/blinklabs-io/plutigo/data"
 )
 
 type cacheList struct {
@@ -69,8 +71,13 @@ func TestFirstBlankFieldWins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%T", pd); got != "*data.Constr" {
-		t.Fatalf("second blank field changed the container to %s", got)
+	constr, ok := pd.(*data.Constr)
+	if !ok || !constrTagEqual(constr.Tag, 1) || len(constr.Fields) != 1 {
+		t.Fatalf("expected constructor 1 with one field, got %#v", pd)
+	}
+	integer, ok := constr.Fields[0].(*data.Integer)
+	if !ok || integer.Inner == nil || integer.Inner.Int64() != 5 {
+		t.Fatalf("expected integer 5, got %#v", constr.Fields[0])
 	}
 }
 
