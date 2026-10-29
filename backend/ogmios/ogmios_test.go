@@ -1147,3 +1147,42 @@ func TestProtocolParamsRejectNegativeProtocolVersion(t *testing.T) {
 		t.Fatal("expected an error for a negative protocol version")
 	}
 }
+
+// TestGenesisParamsRejectInvalidSlotLength keeps a slot length that
+// GenesisParameters cannot hold in whole seconds from being truncated, and a
+// missing one from becoming zero, matching the UTxO RPC backend.
+func TestGenesisParamsRejectInvalidSlotLength(t *testing.T) {
+	slotLengths := map[string]string{
+		"sub-second milliseconds": `{"milliseconds": 200}`,
+		"fractional seconds":      `{"milliseconds": 1500}`,
+		"zero milliseconds":       `{"milliseconds": 0}`,
+		"zero seconds":            `0`,
+		"negative seconds":        `-1`,
+		"missing":                 ``,
+	}
+	for name, slotLength := range slotLengths {
+		t.Run(name, func(t *testing.T) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(ogmiosV6ShelleyGenesisBody), &fields); err != nil {
+				t.Fatal(err)
+			}
+			if slotLength == "" {
+				delete(fields, "slotLength")
+			} else {
+				fields["slotLength"] = json.RawMessage(slotLength)
+			}
+			body, err := json.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var raw ogmiosGenesisConfig
+			if err := json.Unmarshal(body, &raw); err != nil {
+				return
+			}
+			if gp, err := raw.toGenesisParams(); err == nil {
+				t.Fatalf("slotLength %s accepted as %d seconds", slotLength, gp.SlotLength)
+			}
+		})
+	}
+}

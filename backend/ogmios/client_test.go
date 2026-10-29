@@ -246,13 +246,16 @@ type stubOgmiosClient struct {
 	txHash         common.Blake2b256
 	exUnits        map[common.RedeemerKey]common.ExUnits
 	utxo           *common.Utxo
+	// protocolParamsErr, when set, fails ProtocolParameters.
+	protocolParamsErr error
 
-	// Recorded arguments.
-	eras            []string
-	submitted       []byte
-	evaluated       []byte
-	additionalUtxos []common.Utxo
-	refs            []string
+	// Recorded calls and arguments.
+	protocolParamsCalls int
+	eras                []string
+	submitted           []byte
+	evaluated           []byte
+	additionalUtxos     []common.Utxo
+	refs                []string
 }
 
 var _ OgmiosClient = (*stubOgmiosClient)(nil)
@@ -260,6 +263,10 @@ var _ OgmiosClient = (*stubOgmiosClient)(nil)
 func (s *stubOgmiosClient) ProtocolParameters(
 	_ context.Context,
 ) (json.RawMessage, error) {
+	s.protocolParamsCalls++
+	if s.protocolParamsErr != nil {
+		return nil, s.protocolParamsErr
+	}
 	return s.protocolParams, nil
 }
 

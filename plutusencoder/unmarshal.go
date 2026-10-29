@@ -122,6 +122,68 @@ func unmarshalFieldWithType(pd data.PlutusData, fieldVal reflect.Value, field re
 		return unmarshalSliceOrNested(pd, fieldVal, field, cfg)
 	case "Map":
 		return unmarshalSliceAsMap(pd, fieldVal, field, cfg)
+	case "Either":
+		return unmarshalEither(pd, fieldVal, cfg)
+	case "OutputDatum":
+		if fieldVal.Type() != reflect.TypeOf(OutputDatum{}) {
+			return fmt.Errorf("field %s: OutputDatum requires plutusencoder.OutputDatum, got %s", field.Name, fieldVal.Type())
+		}
+		od, err := unmarshalOutputDatum(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(od))
+		return nil
+	case "Interval":
+		if fieldVal.Type() != reflect.TypeOf(Interval{}) {
+			return fmt.Errorf("field %s: Interval requires plutusencoder.Interval, got %s", field.Name, fieldVal.Type())
+		}
+		iv, err := unmarshalInterval(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(iv))
+		return nil
+	case "Value", "V4Value":
+		if fieldVal.Type() != reflect.TypeOf(Value{}) {
+			return fmt.Errorf("field %s: %s requires plutusencoder.Value, got %s", field.Name, plutusType, fieldVal.Type())
+		}
+		v, err := unmarshalPlutusValue(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(v))
+		return nil
+	case "Credential":
+		if fieldVal.Type() != reflect.TypeOf(common.Credential{}) {
+			return fmt.Errorf("credential requires common.Credential, got %s", fieldVal.Type())
+		}
+		cred, err := unmarshalCredential(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(cred))
+		return nil
+	case "TxOutRef":
+		if fieldVal.Type() != reflect.TypeOf(TxOutRef{}) {
+			return fmt.Errorf("TxOutRef requires plutusencoder.TxOutRef, got %s", fieldVal.Type())
+		}
+		ref, err := unmarshalTxOutRef(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(ref))
+		return nil
+	case "AssetClass":
+		if fieldVal.Type() != reflect.TypeOf(AssetClass{}) {
+			return fmt.Errorf("AssetClass requires plutusencoder.AssetClass, got %s", fieldVal.Type())
+		}
+		asset, err := unmarshalAssetClass(pd)
+		if err != nil {
+			return err
+		}
+		fieldVal.Set(reflect.ValueOf(asset))
+		return nil
 	case "Custom":
 		return fmt.Errorf("field %s tagged Custom but doesn't implement PlutusMarshaler", field.Name)
 	default:
