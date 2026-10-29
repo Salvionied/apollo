@@ -82,8 +82,9 @@ Details, benchmarks, and the design note: [coin selection](docs/coin_selection/R
 
 ## Chain Backends and Evaluation
 
-Apollo does not embed a Plutus CEK machine. Script execution units come from
-the chain backend's `EvaluateTx`. Backends implement `ChainContext` and may
+Script execution units come from the chain backend's `EvaluateTx`, or from
+`backend/localeval`, which evaluates scripts in-process and can wrap any
+backend or run fully offline. Backends implement `ChainContext` and may
 report optional operations through `CapabilityReporter` — check
 `CapabilityEvaluateTxAdditionalUtxos` before relying on evaluator-supplied
 UTxOs for transaction chaining.
@@ -96,6 +97,7 @@ UTxOs for transaction chaining.
 | UTxO RPC | `backend/utxorpc` |
 | In-memory tests | `backend/fixed` |
 | TTL cache wrapper | `backend/cache` |
+| Local script evaluation | `backend/localeval` |
 
 See [backends](docs/backends/README.md) and
 [capabilities](docs/backends/capabilities.md).

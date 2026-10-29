@@ -20,7 +20,8 @@ input.
 
 **Capabilities:** protocol params, genesis params, max tx fee, UTxOs, UTxO by
 ref. No tip, submit, evaluate, epoch, or script CBOR — it does not pretend to
-be a node.
+be a node. Wrap it with [`backend/localeval`](localeval.md) to evaluate
+scripts in tests.
 
 ## `backend/cache`
 
