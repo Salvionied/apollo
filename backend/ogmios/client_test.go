@@ -450,7 +450,7 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		)
 	}
 
-	byRef, err := ctx.UtxoByRef(txHash, 7)
+	byRef, err := ctx.UtxoByRef(utxo.Id.Id(), 7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,6 +476,20 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 	}
 	if len(scriptCbor) != 4 {
 		t.Fatalf("ScriptCbor() = %x, want 4 bytes", scriptCbor)
+	}
+}
+
+func TestUtxoByRefRejectsMismatchedClientResult(t *testing.T) {
+	utxo := testStubUtxo(t)
+	client := &stubOgmiosClient{utxo: &utxo}
+	ctx, err := NewOgmiosChainContextFromClients(client, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requested common.Blake2b256
+	requested[0] = 1
+	if _, err := ctx.UtxoByRef(requested, 7); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
 	}
 }
 

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 )
@@ -145,10 +146,35 @@ func UtxoByRefContext(
 	if isNilInterface(chainContext) {
 		return nil, errNilChainContext
 	}
+	var utxo *common.Utxo
+	var err error
 	if cc, ok := chainContext.(ContextChainContext); ok {
-		return cc.UtxoByRefContext(normalizeContext(ctx), txHash, index)
+		utxo, err = cc.UtxoByRefContext(normalizeContext(ctx), txHash, index)
+	} else {
+		utxo, err = chainContext.UtxoByRef(txHash, index)
 	}
-	return chainContext.UtxoByRef(txHash, index)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateUtxoRef(utxo, txHash, index); err != nil {
+		return nil, err
+	}
+	return utxo, nil
+}
+
+// ValidateUtxoRef rejects a lookup result that does not match its requested reference.
+func ValidateUtxoRef(utxo *common.Utxo, txHash common.Blake2b256, index uint32) error {
+	if utxo == nil {
+		return nil
+	}
+	if isNilInterface(utxo.Id) {
+		return errors.New("provider returned UTxO without a reference")
+	}
+	if utxo.Id.Id() != txHash || utxo.Id.Index() != index {
+		return fmt.Errorf("provider returned UTxO %x#%d for requested %x#%d",
+			utxo.Id.Id().Bytes(), utxo.Id.Index(), txHash.Bytes(), index)
+	}
+	return nil
 }
 
 // ScriptCborContext calls the context-aware implementation when available,

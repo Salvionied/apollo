@@ -823,6 +823,9 @@ func (u *UtxoRpcChainContext) UtxoByRefContext(
 		return nil, errors.New("utxo not found")
 	}
 	utxo := found[0]
+	if err := backend.ValidateUtxoRef(&utxo, txHash, index); err != nil {
+		return nil, err
+	}
 	return &utxo, nil
 }
 

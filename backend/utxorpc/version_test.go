@@ -129,6 +129,58 @@ func newVersionRouter(t *testing.T, serve string) (*versionRouter, *httptest.Ser
 	return r, srv
 }
 
+func TestUtxoByRefRejectsMismatchedResponseAcrossVersions(t *testing.T) {
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: versionTestAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1_500_000},
+	}
+	nativeBytes, err := cbor.Encode(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requested, returned common.Blake2b256
+	requested[0] = 1
+	returned[0] = 2
+	for _, version := range []string{"utxorpc.v1beta.", "utxorpc.v1alpha."} {
+		t.Run(version, func(t *testing.T) {
+			var payload []byte
+			var err error
+			if version == "utxorpc.v1alpha." {
+				payload, err = proto.Marshal(&alphaquery.ReadUtxosResponse{Items: []*alphaquery.AnyUtxoData{{
+					NativeBytes: nativeBytes, TxoRef: &alphaquery.TxoRef{Hash: returned.Bytes(), Index: 3},
+				}}})
+			} else {
+				payload, err = proto.Marshal(&query.ReadUtxosResponse{Items: []*query.AnyUtxoData{{
+					NativeBytes: nativeBytes, TxoRef: &query.TxoRef{Hash: returned.Bytes(), Index: 3},
+				}}})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				if !strings.Contains(req.URL.Path, version) {
+					w.Header().Set("Grpc-Status", "12")
+					return
+				}
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			if _, err := ctx.UtxoByRef(requested, 3); err == nil {
+				t.Fatal("expected mismatched reference to be rejected")
+			}
+		})
+	}
+}
+
 // TestFallsBackToV1AlphaWhenV1BetaUnimplemented covers the Dolos-style
 // deployment that serves only the older services: the v1beta attempt returns
 // UNIMPLEMENTED and the call must succeed against v1alpha rather than failing.
