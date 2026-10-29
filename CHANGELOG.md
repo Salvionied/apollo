@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
+  reports `CapabilityGenesisParams`. A server that does not implement
+  `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
+
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
@@ -45,6 +49,21 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `backend/ogmios` and `backend/utxorpc` cache protocol parameters for five
+  minutes, as the Blockfrost and Koios backends already did; Ogmios caches
+  genesis parameters too. Building one transaction reads them many times, and
+  each read was a separate request (for Ogmios, over a new WebSocket
+  connection). Failed requests and responses that do not decode are not
+  cached.
+- `backend/ogmios` rejects a genesis slot length that is missing, not
+  positive, or not a whole number of seconds, matching `backend/utxorpc`. It
+  previously truncated sub-second lengths and accepted zero or negative ones.
+- Cached protocol parameters in `backend/blockfrost` and `backend/cache` are
+  fully copied on read. Only cost models were copied before, so a caller that
+  modified a returned reference-script price changed the cached value.
+- `backend/cache` also caches `MaxTxFee` for its TTL. It passed every call
+  through to the wrapped context, which typically re-fetched protocol
+  parameters to answer it.
 - Pinned inputs (`AddInput`) that cover the payment no longer skip coin
   selection when the change they leave is below min-UTxO. Selection now draws
   enough from the loaded UTxOs to emit that change, instead of folding it into
@@ -66,6 +85,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `github.com/utxorpc/go-sdk` is upgraded to v0.2.0, which adds the
+  `ReadGenesis` client the UTxO RPC backend now uses.
 - **Breaking:** `blockfrost.NewBlockFrostChainContext` uses the base URL as
   given and no longer appends `/api/v0` when the URL does not end with `/v0`.
   This supports Blockfrost-compatible providers that serve the API under

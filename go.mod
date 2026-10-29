@@ -11,7 +11,7 @@ require (
 	github.com/blinklabs-io/plutigo v0.9.11
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/utxorpc/go-codegen v0.19.2
-	github.com/utxorpc/go-sdk v0.1.0
+	github.com/utxorpc/go-sdk v0.2.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -36,7 +36,6 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
