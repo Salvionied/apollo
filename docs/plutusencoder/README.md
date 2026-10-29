@@ -60,6 +60,9 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Map` | a native Go map, or a slice of key-value structs |
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
+| `Either` | a two-pointer struct: `Left` is constructor 0, `Right` is constructor 1 |
+| `OutputDatum` | `OutputDatum`: none is constructor 0, datum hash is 1, inline is 2 |
+| `Interval` | `Interval` with explicit `BoundNegInf`, `BoundFinite`, and `BoundPosInf` bounds |
 | `Value` | `Value` as a map of policy id to asset map, with lovelace under the empty policy |
 | `V4Value` | `Value` as the Plutus V4 tagged `data.Value` constructor (CBOR tag 1401) |
 | `Credential` | `common.Credential`: key hash is constructor 0, script hash is constructor 1 |
@@ -75,14 +78,31 @@ Unknown types, unknown options, empty or duplicate options, and a malformed
 `plutusConstr` are errors.
 
 ```go
+type Choice struct {
+    Left  *int64
+    Right *string
+}
+
 type Datum struct {
-    _      struct{}                 `plutusType:"DefList" plutusConstr:"0"`
-    Locked plutusencoder.Value      `plutusType:"Value"`
-    Owner  common.Credential        `plutusType:"Credential"`
-    Utxo   plutusencoder.TxOutRef   `plutusType:"TxOutRef"`
-    Asset  plutusencoder.AssetClass `plutusType:"AssetClass"`
+    _      struct{}                  `plutusType:"DefList" plutusConstr:"0"`
+    Side   Choice                    `plutusType:"Either"`
+    Datum  plutusencoder.OutputDatum `plutusType:"OutputDatum"`
+    Window plutusencoder.Interval    `plutusType:"Interval"`
+    Locked plutusencoder.Value       `plutusType:"Value"`
+    Owner  common.Credential         `plutusType:"Credential"`
+    Utxo   plutusencoder.TxOutRef    `plutusType:"TxOutRef"`
+    Asset  plutusencoder.AssetClass  `plutusType:"AssetClass"`
 }
 ```
+
+`Either` encodes a struct with two exported pointer fields: the first is
+`Left` (constructor 0) and the second is `Right` (constructor 1). Setting
+both or neither is an error. `OutputDatum` uses constructor 0 when empty,
+constructor 1 for a 32-byte `Hash`, and constructor 2 for `Inline`.
+`IntervalBound.Value` is an `int64`, so a finite bound outside that range is
+rejected.
+`Interval` encodes lower and upper bounds with `BoundNegInf` (0),
+`BoundFinite` (1), or `BoundPosInf` (2) and the closure flag the caller sets.
 
 `Value` encodes the Plutus ledger `Value`: a map of policy id to a map of
 asset name to quantity, with keys sorted by their bytes. Lovelace uses the
