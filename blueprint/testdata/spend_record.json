@@ -1,0 +1,112 @@
+{
+  "preamble": {
+    "title": "example/spend_record",
+    "version": "1.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "1.1.24"
+    }
+  },
+  "validators": [
+    {
+      "title": "escrow.spend",
+      "datum": {
+        "title": "datum",
+        "purpose": "spend",
+        "schema": {
+          "$ref": "#/definitions/escrow~1Datum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "spend",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "compiledCode": "46010100200101",
+      "hash": "e090c94a874e6f220d343402ca1287b0b333daedaf0bd3d4335006bb"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "escrow/Note": {
+      "title": "Note",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "tag",
+          "dataType": "bytes"
+        },
+        {
+          "title": "weight",
+          "dataType": "integer"
+        }
+      ]
+    },
+    "Option<escrow/Note>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/escrow~1Note"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "escrow/Datum": {
+      "title": "Datum",
+      "anyOf": [
+        {
+          "title": "Datum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            },
+            {
+              "title": "amount",
+              "dataType": "integer",
+              "minimum": 1
+            },
+            {
+              "title": "memo",
+              "$ref": "#/definitions/Option<escrow~1Note>"
+            },
+            {
+              "title": "steps",
+              "dataType": "list",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/definitions/escrow~1Note"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

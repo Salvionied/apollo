@@ -45,6 +45,10 @@
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Value        Value as the Plutus ledger map of policy id to asset map
 //	V4Value      Value as the Plutus V4 tagged Value (CBOR tag 1401)
+//	Credential   common.Credential as a key or script credential
+//	TxOutRef     Plutus V3 TxOutRef: constructor 0 of a 32-byte tx id and an index.
+//	             V1 and V2 wrap the id as constructor 0 of [constructor 0 [txId], index].
+//	AssetClass   AssetClass as constructor 0 of a policy id and a token name
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
 //
@@ -60,12 +64,19 @@
 // plain Value keeps a zero and accepts an unsorted or empty token map.
 // V4Value encodes the same Value struct as the Plutus V4
 // data.Value constructor (CBOR tag 1401) and rejects a non-canonical value.
-// UnmarshalPlutus on either tag
-// accepts both *data.Map and *data.Value:
+// UnmarshalPlutus on either tag accepts both *data.Map and *data.Value.
+// Credential encodes common.Credential as constructor 0 for a key hash and
+// constructor 1 for a script hash, carrying the 28-byte credential hash.
+// TxOutRef is the Plutus V3 shape: constructor 0 of the 32-byte transaction id
+// and the index. Plutus V1 and V2 use constructor 0 of [constructor 0 [txId], index].
+// AssetClass encodes constructor 0 of its two fields:
 //
 //	type Datum struct {
 //		_      struct{} `plutusType:"DefList" plutusConstr:"0"`
 //		Locked Value    `plutusType:"Value"`
+//		Owner  common.Credential `plutusType:"Credential"`
+//		Utxo   TxOutRef          `plutusType:"TxOutRef"`
+//		Asset  AssetClass        `plutusType:"AssetClass"`
 //	}
 //
 // # Options

@@ -1423,3 +1423,53 @@ func TestProtocolParamsRejectsOutOfRangeProtocolVersion(t *testing.T) {
 		}
 	}
 }
+
+// TestProtocolParamsCachedAndCopied checks that repeated reads are served from
+// the cache and that mutating a returned value, including its reference-script
+// price, cannot reach the cached copy.
+func TestProtocolParamsCachedAndCopied(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/epochs/latest/parameters" {
+			http.NotFound(w, r)
+			return
+		}
+		requests.Add(1)
+		_, _ = io.WriteString(w, `{
+			"min_fee_a": 44,
+			"min_fee_b": 155381,
+			"max_tx_size": 16384,
+			"coins_per_utxo_size": "4310",
+			"collateral_percent": 150,
+			"max_collateral_inputs": 3,
+			"cost_models_raw": {"PlutusV3": [100788, 420, 1]},
+			"min_fee_ref_script_cost_per_byte": 15
+		}`)
+	}))
+	defer server.Close()
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
+
+	first, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.CostModels["PlutusV3"][0] = -1
+	first.MinFeeRefScriptCostPerByteRational.SetInt64(-1)
+
+	second, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := second.CostModels["PlutusV3"][0]; got != 100788 {
+		t.Fatalf("cached cost model entry = %d, want 100788", got)
+	}
+	if got := second.MinFeeRefScriptCostPerByteRational; got.Cmp(big.NewRat(15, 1)) != 0 {
+		t.Fatalf("cached ref script price = %s, want 15", got)
+	}
+	if _, err := ctx.MaxTxFee(); err != nil {
+		t.Fatal(err)
+	}
+	if n := requests.Load(); n != 1 {
+		t.Fatalf("made %d parameter requests, want 1", n)
+	}
+}
