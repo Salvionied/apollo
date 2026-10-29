@@ -7,10 +7,8 @@ import (
 	"strings"
 
 	"github.com/Salvionied/apollo/v2"
-	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/plutigo/data"
-	"github.com/blinklabs-io/plutigo/syn"
 )
 
 // ValidatorScript wraps a blueprint validator together with its Plutus version,
@@ -22,7 +20,6 @@ type ValidatorScript struct {
 	raw           []byte
 	remaining     []Parameter
 	paramsApplied bool
-	program       *syn.Program[syn.DeBruijn]
 }
 
 // AppliedScript holds a parameterized ValidatorScript together with its newly
@@ -154,26 +151,6 @@ func (vs *ValidatorScript) ApplyParamsData(params ...data.PlutusData) (*AppliedS
 		Hash:    h,
 		HashHex: hex.EncodeToString(h.Bytes()),
 	}, nil
-}
-
-func (vs *ValidatorScript) ensureProgram() (*syn.Program[syn.DeBruijn], error) {
-	if vs.program != nil {
-		return vs.program, nil
-	}
-	var inner []byte
-	bytesRead, err := cbor.Decode(vs.raw, &inner)
-	if err != nil {
-		return nil, fmt.Errorf("decode script CBOR: %w", err)
-	}
-	if bytesRead != len(vs.raw) {
-		return nil, fmt.Errorf("decode script CBOR: %d trailing bytes", len(vs.raw)-bytesRead)
-	}
-	program, err := syn.Decode[syn.DeBruijn](inner)
-	if err != nil {
-		return nil, fmt.Errorf("decode script program: %w", err)
-	}
-	vs.program = program
-	return program, nil
 }
 
 func (vs *ValidatorScript) applyWithHelper(params []data.PlutusData) ([]byte, error) {
