@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"fmt"
 	"math"
@@ -16,12 +17,45 @@ import (
 	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
 
-func TestCloneDatumDoesNotAliasPlutusData(t *testing.T) {
+func TestStoredDatumsDoNotAliasCaller(t *testing.T) {
+	addr := testAddress(t)
+	script := common.PlutusV2Script([]byte{0x04, 0x05})
+
 	original := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
-	cloned := cloneDatum(original)
+	paid := New(setupFixedContext()).PayToContract(addr, original, 2_000_000)
 	original.Data.(*data.Integer).Inner.SetInt64(9)
-	if cloned.Data.(*data.Integer).Inner.Int64() != 4 {
-		t.Fatal("clone shares plutus data with the caller")
+	assertStoredDatum(t, paid.payments[0].(*Payment).Datum)
+
+	refOriginal := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	withRef, err := New(setupFixedContext()).PayToContractWithReferenceScript(addr, refOriginal, 2_000_000, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refOriginal.Data.(*data.Integer).Inner.SetInt64(9)
+	assertStoredDatum(t, withRef.payments[0].(*Payment).Datum)
+
+	guardOriginal := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	guarded := New(setupFixedContext()).SetTargetEra(EraDijkstra).AddGuard(guardScriptCredential(), guardOriginal, nil)
+	if guarded.err != nil {
+		t.Fatal(guarded.err)
+	}
+	guardOriginal.Data.(*data.Integer).Inner.SetInt64(9)
+	entry := guarded.guardRedeemers[credentialKey(guardScriptCredential())]
+	assertStoredDatum(t, &entry.Data)
+}
+
+func assertStoredDatum(t *testing.T, stored *common.Datum) {
+	t.Helper()
+	integer, ok := stored.Data.(*data.Integer)
+	if !ok || integer.Inner == nil || integer.Inner.Int64() != 4 {
+		t.Fatalf("stored datum = %#v", stored.Data)
+	}
+	raw, err := data.Encode(stored.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, []byte{0x04}) {
+		t.Fatalf("stored wire = %x, want 04", raw)
 	}
 }
 

@@ -85,7 +85,7 @@ func (a *Apollo) PayToContractWithReferenceScript(addr common.Address, datum *co
 		Receiver:  addr,
 		Lovelace:  lovelace,
 		Units:     units,
-		Datum:     datum,
+		Datum:     cloneDatum(datum),
 		IsInline:  true,
 		ScriptRef: ref,
 	}

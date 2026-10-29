@@ -33,6 +33,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `PayToContract`, `PayToContractWithReferenceScript`, and `AddGuard` store a
+  copy of the caller's datum. Changing that datum afterward leaves the stored
+  payment and guard redeemer unchanged.
 - Pinned inputs (`AddInput`) that cover the payment no longer skip coin
   selection when the change they leave is below min-UTxO. Selection now draws
   enough from the loaded UTxOs to emit that change, instead of folding it into
