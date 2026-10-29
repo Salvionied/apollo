@@ -11,8 +11,9 @@ import (
 )
 
 // OutputDatum is the Plutus OutputDatum sum type. Neither Inline nor Hash set
-// encodes constructor 0 with no fields. Inline set encodes constructor 1 with
-// that PlutusData. Hash set encodes constructor 2 with the 32-byte datum hash.
+// encodes constructor 0 with no fields. A 32-byte Hash encodes constructor 1.
+// Inline set encodes constructor 2 with that PlutusData. A non-nil Hash that
+// is not 32 bytes is an error.
 type OutputDatum struct {
 	Inline data.PlutusData
 	Hash   []byte
@@ -30,7 +31,8 @@ const (
 	BoundPosInf
 )
 
-// IntervalBound is one endpoint of a Plutus Interval.
+// IntervalBound is one endpoint of a Plutus Interval. Value is an int64, so a
+// finite bound outside that range is rejected on decode. POSIXTime fits.
 type IntervalBound struct {
 	Kind   BoundKind
 	Value  int64
@@ -202,18 +204,18 @@ func unmarshalSumElement(pd data.PlutusData, elem reflect.Value, field reflect.S
 
 func marshalOutputDatum(od OutputDatum) (data.PlutusData, error) {
 	hasInline := od.Inline != nil
-	hasHash := len(od.Hash) > 0
+	hasHash := od.Hash != nil
 	if hasInline && hasHash {
 		return nil, errors.New("output datum cannot set both Inline and Hash")
-	}
-	if hasInline {
-		return data.NewConstr(1, od.Inline), nil
 	}
 	if hasHash {
 		if len(od.Hash) != common.Blake2b256Size {
 			return nil, fmt.Errorf("expected %d-byte datum hash, got %d", common.Blake2b256Size, len(od.Hash))
 		}
-		return data.NewConstr(2, data.NewByteString(append([]byte(nil), od.Hash...))), nil
+		return data.NewConstr(1, data.NewByteString(append([]byte(nil), od.Hash...))), nil
+	}
+	if hasInline {
+		return data.NewConstr(2, od.Inline), nil
 	}
 	return data.NewConstr(0), nil
 }
@@ -230,19 +232,19 @@ func unmarshalOutputDatum(pd data.PlutusData) (OutputDatum, error) {
 		}
 		return OutputDatum{}, nil
 	case constrTagEqual(constr.Tag, 1):
-		if len(constr.Fields) != 1 || constr.Fields[0] == nil {
-			return OutputDatum{}, unexpectedConstr("inline OutputDatum constructor 1 with 1 field", pd)
-		}
-		return OutputDatum{Inline: constr.Fields[0]}, nil
-	case constrTagEqual(constr.Tag, 2):
 		if len(constr.Fields) != 1 {
-			return OutputDatum{}, unexpectedConstr("datum-hash OutputDatum constructor 2 with 1 field", pd)
+			return OutputDatum{}, unexpectedConstr("datum-hash OutputDatum constructor 1 with 1 field", pd)
 		}
 		raw, ok := constr.Fields[0].(*data.ByteString)
 		if !ok || len(raw.Inner) != common.Blake2b256Size {
 			return OutputDatum{}, fmt.Errorf("expected %d-byte datum hash", common.Blake2b256Size)
 		}
 		return OutputDatum{Hash: append([]byte(nil), raw.Inner...)}, nil
+	case constrTagEqual(constr.Tag, 2):
+		if len(constr.Fields) != 1 || constr.Fields[0] == nil {
+			return OutputDatum{}, unexpectedConstr("inline OutputDatum constructor 2 with 1 field", pd)
+		}
+		return OutputDatum{Inline: constr.Fields[0]}, nil
 	default:
 		return OutputDatum{}, unexpectedConstr("OutputDatum constructor 0, 1, or 2", pd)
 	}

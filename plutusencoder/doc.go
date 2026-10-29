@@ -44,7 +44,7 @@
 //	Address      common.Address as a Plutus ledger address
 //	Maybe        a pointer; nil is Nothing and a value is Just of the element
 //	Either       a two-pointer struct: Left is constructor 0, Right is 1
-//	OutputDatum  OutputDatum: none is 0, inline is 1, datum hash is 2
+//	OutputDatum  OutputDatum: none is 0, datum hash is 1, inline is 2
 //	Interval     Interval with explicit NegInf, Finite, or PosInf bounds
 //	Ignore       the field is skipped in both directions
 //	Custom       the field's type must implement PlutusMarshaler
@@ -57,10 +57,11 @@
 //
 // Either encodes a struct with two exported pointer fields: the first is
 // Left (constructor 0) and the second is Right (constructor 1). Exactly one
-// side must be non-nil. OutputDatum encodes none as constructor 0, an inline
-// datum as constructor 1, and a 32-byte datum hash as constructor 2.
+// side must be non-nil. OutputDatum encodes none as constructor 0, a 32-byte
+// datum hash as constructor 1, and an inline datum as constructor 2.
 // Interval encodes lower and upper bounds using BoundNegInf (0), BoundFinite
-// (1), and BoundPosInf (2) with the caller's closure flag:
+// (1), and BoundPosInf (2). A finite bound is an int64, so a value outside
+// that range is rejected. The caller's closure flag is kept:
 //
 //	type Datum struct {
 //		_      struct{}    `plutusType:"DefList" plutusConstr:"0"`

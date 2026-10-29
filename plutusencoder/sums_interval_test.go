@@ -44,8 +44,8 @@ func TestEitherOutputDatumAndIntervalRoundTrip(t *testing.T) {
 	if !constrTagEqual(outer.Fields[0].(*data.Constr).Tag, 0) {
 		t.Fatal("expected Left as constructor 0")
 	}
-	if !constrTagEqual(outer.Fields[1].(*data.Constr).Tag, 2) {
-		t.Fatal("expected datum hash as constructor 2")
+	if !constrTagEqual(outer.Fields[1].(*data.Constr).Tag, 1) {
+		t.Fatal("expected datum hash as constructor 1")
 	}
 
 	var decoded sumIntervalDatum
@@ -458,8 +458,8 @@ func TestOutputDatumConstructorsRoundTrip(t *testing.T) {
 		tag   uint64
 	}{
 		{name: "none", datum: OutputDatum{}, tag: 0},
-		{name: "inline", datum: OutputDatum{Inline: inline}, tag: 1},
-		{name: "hash", datum: OutputDatum{Hash: hash}, tag: 2},
+		{name: "inline", datum: OutputDatum{Inline: inline}, tag: 2},
+		{name: "hash", datum: OutputDatum{Hash: hash}, tag: 1},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -481,19 +481,64 @@ func TestOutputDatumConstructorsRoundTrip(t *testing.T) {
 					t.Fatalf("unexpected none datum: wire=%v decoded=%+v", got.Fields, decoded.Datum)
 				}
 			case 1:
+				if decoded.Datum.Inline != nil || !bytes.Equal(decoded.Datum.Hash, hash) {
+					t.Fatalf("unexpected hash datum: %+v", decoded.Datum)
+				}
+				want := data.NewConstr(1, data.NewByteString(hash))
+				gotBytes, err := data.Encode(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantBytes, err := data.Encode(want)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(gotBytes, wantBytes) {
+					t.Fatal("hash datum does not match constructor 1 of the hash bytes")
+				}
+			case 2:
 				decodedInline, ok := decoded.Datum.Inline.(*data.Integer)
 				if !ok || decodedInline.Inner.Cmp(big.NewInt(9)) != 0 || len(decoded.Datum.Hash) != 0 {
 					t.Fatalf("unexpected inline datum: %+v", decoded.Datum)
 				}
-			case 2:
-				if decoded.Datum.Inline != nil || !bytes.Equal(decoded.Datum.Hash, hash) {
-					t.Fatalf("unexpected hash datum: %+v", decoded.Datum)
+				want := data.NewConstr(2, inline)
+				gotBytes, err := data.Encode(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantBytes, err := data.Encode(want)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(gotBytes, wantBytes) {
+					t.Fatal("inline datum does not match constructor 2 of the datum")
 				}
 			default:
 				t.Fatalf("untested output datum tag %d", tt.tag)
 			}
 		})
 	}
+
+	t.Run("opposite shapes", func(t *testing.T) {
+		hashAsInline := data.NewConstr(0, data.NewConstr(2, data.NewByteString(hash)))
+		var decoded outputDatumOnly
+		if err := UnmarshalPlutus(hashAsInline, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.Datum.Hash != nil || decoded.Datum.Inline == nil {
+			t.Fatalf("constructor 2 decoded as a hash: %+v", decoded.Datum)
+		}
+		integerAsHash := data.NewConstr(0, data.NewConstr(1, data.NewInteger(big.NewInt(5))))
+		if err := UnmarshalPlutus(integerAsHash, &decoded); err == nil {
+			t.Fatal("expected constructor 1 of an integer to fail")
+		}
+	})
+
+	t.Run("empty hash", func(t *testing.T) {
+		if _, err := MarshalPlutus(&outputDatumOnly{Datum: OutputDatum{Hash: []byte{}}}); err == nil {
+			t.Fatal("expected a non-nil empty hash to fail")
+		}
+	})
 
 	t.Run("constructor 3", func(t *testing.T) {
 		pd := data.NewConstr(0, data.NewConstr(3))

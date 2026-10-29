@@ -61,7 +61,7 @@ field's shape unless it carries its own `_` marker, which wins.
 | `Address` | `common.Address` as a Plutus ledger address |
 | `Maybe` | a pointer; nil is Nothing, a value is Just of the element |
 | `Either` | a two-pointer struct: `Left` is constructor 0, `Right` is constructor 1 |
-| `OutputDatum` | `OutputDatum`: none is constructor 0, inline is 1, datum hash is 2 |
+| `OutputDatum` | `OutputDatum`: none is constructor 0, datum hash is 1, inline is 2 |
 | `Interval` | `Interval` with explicit `BoundNegInf`, `BoundFinite`, and `BoundPosInf` bounds |
 | `Ignore` | skipped in both directions; accepts no options |
 | `Custom` | the field's type must implement `PlutusMarshaler` |
@@ -89,7 +89,9 @@ type Datum struct {
 `Either` encodes a struct with two exported pointer fields: the first is
 `Left` (constructor 0) and the second is `Right` (constructor 1). Setting
 both or neither is an error. `OutputDatum` uses constructor 0 when empty,
-constructor 1 for `Inline`, and constructor 2 for a 32-byte `Hash`.
+constructor 1 for a 32-byte `Hash`, and constructor 2 for `Inline`.
+`IntervalBound.Value` is an `int64`, so a finite bound outside that range is
+rejected.
 `Interval` encodes lower and upper bounds with `BoundNegInf` (0),
 `BoundFinite` (1), or `BoundPosInf` (2) and the closure flag the caller sets.
 
