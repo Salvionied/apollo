@@ -82,9 +82,12 @@ type Datum struct {
 asset name to quantity, with keys sorted by their bytes. Lovelace uses the
 empty policy id and the empty asset name. `V4Value` encodes the same `Value`
 struct as the Plutus V4 `data.Value` constructor (CBOR tag 1401) and runs
-`data.Value.Validate()`. `UnmarshalPlutus` on both `Value` and `V4Value`
-accepts either `*data.Map` or `*data.Value`. Duplicate policy or asset names
-and non-positive quantities are errors.
+`data.Value.Validate()`. Encoding omits a zero quantity and an empty token
+map, and sorts both levels. Decoding a plain `Value` keeps a zero quantity
+and accepts an unsorted map or an empty token map; re-encoding makes that
+canonical. `V4Value` still rejects a non-canonical value. Duplicate policy or
+asset names and a negative quantity are errors on both paths. `UnmarshalPlutus`
+on both tags accepts either `*data.Map` or `*data.Value`.
 
 ## Options
 

@@ -56,8 +56,11 @@
 //
 // Value encodes the Plutus ledger Value: a map of policy id to a map of asset
 // name to quantity. Lovelace is stored under the empty policy id and the
-// empty asset name. V4Value encodes the same Value struct as the Plutus V4
-// data.Value constructor (CBOR tag 1401), and UnmarshalPlutus on either tag
+// empty asset name. Encoding omits a zero and an empty token map. Decoding a
+// plain Value keeps a zero and accepts an unsorted or empty token map.
+// V4Value encodes the same Value struct as the Plutus V4
+// data.Value constructor (CBOR tag 1401) and rejects a non-canonical value.
+// UnmarshalPlutus on either tag
 // accepts both *data.Map and *data.Value:
 //
 //	type Datum struct {

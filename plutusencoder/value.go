@@ -16,7 +16,10 @@ const valueMaxTokenNameSize = 32
 
 // Value is the Plutus ledger Value: a map of policy id to a map of asset name
 // to quantity. Lovelace is encoded under the empty policy id and the empty
-// asset name. A non-negative quantity is required because Assets uses uint64.
+// asset name. Encoding omits a zero quantity and an empty token map, and
+// sorts both levels by key bytes. Decoding keeps a zero quantity, and accepts
+// an unsorted map or an empty token map. A V4 tagged Value is still rejected
+// unless it passes Validate.
 type Value struct {
 	Lovelace uint64
 	Assets   common.MultiAsset[uint64]
@@ -111,6 +114,9 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 				return Value{}, errors.New("duplicate lovelace policy in Plutus Value")
 			}
 			seenAda = true
+			if len(innerMap.Pairs) == 0 {
+				continue
+			}
 			if len(innerMap.Pairs) != 1 {
 				return Value{}, errors.New("lovelace policy must contain one entry")
 			}
@@ -164,8 +170,8 @@ func valueQuantity(pd data.PlutusData) (uint64, error) {
 	if !ok || integer.Inner == nil {
 		return 0, fmt.Errorf("expected integer quantity, got %T", pd)
 	}
-	if integer.Inner.Sign() <= 0 || !integer.Inner.IsUint64() {
-		return 0, errors.New("asset quantity must be a positive uint64")
+	if integer.Inner.Sign() < 0 || !integer.Inner.IsUint64() {
+		return 0, errors.New("asset quantity must be a non-negative uint64")
 	}
 	return integer.Inner.Uint64(), nil
 }
