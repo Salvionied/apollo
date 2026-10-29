@@ -52,6 +52,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   output is deterministic, and duplicate encoded keys are rejected.
 - Custom `Marshaler` implementations are honored on slice elements, not just on
   whole fields.
+- `plutusType:"Credential"`, `plutusType:"TxOutRef"`, and
+  `plutusType:"AssetClass"` encode a key or script credential, a transaction
+  output reference, and a policy-id/token-name pair.
 - `blueprint`: parse and validate CIP-57 `plutus.json` blueprints (`v1`
   through `v4`), encode and decode datums, redeemers, and parameters (including
   Plutus V4 `data.Value` and `"guard"` / `"vote"` / `"propose"` purposes), and
