@@ -127,17 +127,7 @@ func (b *BlockFrostChainContext) ProtocolParams() (backend.ProtocolParameters, e
 func (b *BlockFrostChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	b.mu.Lock()
 	if b.cachedParams != nil && time.Since(b.paramsCacheAt) < cacheExpiry {
-		pp := *b.cachedParams
-		// Deep copy CostModels to prevent callers from mutating the cache.
-		if pp.CostModels != nil {
-			cm := make(map[string][]int64, len(pp.CostModels))
-			for k, v := range pp.CostModels {
-				dup := make([]int64, len(v))
-				copy(dup, v)
-				cm[k] = dup
-			}
-			pp.CostModels = cm
-		}
+		pp := backendutil.CloneProtocolParams(*b.cachedParams)
 		b.mu.Unlock()
 		return pp, nil
 	}
@@ -158,17 +148,7 @@ func (b *BlockFrostChainContext) ProtocolParamsContext(ctx context.Context) (bac
 		return backend.ProtocolParameters{}, err
 	}
 
-	// Deep copy CostModels before storing to prevent callers from mutating the cache.
-	cached := pp
-	if cached.CostModels != nil {
-		cm := make(map[string][]int64, len(cached.CostModels))
-		for k, v := range cached.CostModels {
-			dup := make([]int64, len(v))
-			copy(dup, v)
-			cm[k] = dup
-		}
-		cached.CostModels = cm
-	}
+	cached := backendutil.CloneProtocolParams(pp)
 
 	b.mu.Lock()
 	b.cachedParams = &cached

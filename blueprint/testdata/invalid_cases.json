@@ -1,0 +1,212 @@
+{
+  "missing_preamble": {
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "dataType": "integer"
+          }
+        }
+      }
+    ]
+  },
+  "missing_validators": {
+    "preamble": {
+      "title": "empty",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": []
+  },
+  "duplicate_validator": {
+    "preamble": {
+      "title": "dup",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "same",
+        "redeemer": {
+          "schema": {
+            "dataType": "integer"
+          }
+        }
+      },
+      {
+        "title": "same",
+        "redeemer": {
+          "schema": {
+            "dataType": "integer"
+          }
+        }
+      }
+    ]
+  },
+  "unresolved_ref": {
+    "preamble": {
+      "title": "missing_ref",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "$ref": "#/definitions/DoesNotExist"
+          }
+        }
+      }
+    ]
+  },
+  "ref_cycle": {
+    "preamble": {
+      "title": "cycle",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "$ref": "#/definitions/A"
+          }
+        }
+      }
+    ],
+    "definitions": {
+      "A": {
+        "$ref": "#/definitions/B"
+      },
+      "B": {
+        "$ref": "#/definitions/A"
+      }
+    }
+  },
+  "constructor_without_fields": {
+    "preamble": {
+      "title": "no_fields",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "dataType": "constructor",
+            "index": 0
+          }
+        }
+      }
+    ]
+  },
+  "constructor_without_index": {
+    "preamble": {
+      "title": "no_index",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "dataType": "constructor",
+            "fields": []
+          }
+        }
+      }
+    ]
+  },
+  "items_on_integer": {
+    "preamble": {
+      "title": "bad_keyword",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "dataType": "integer",
+            "items": {
+              "dataType": "bytes"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "unknown_datatype": {
+    "preamble": {
+      "title": "unknown_dt",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "schema": {
+            "dataType": "record"
+          }
+        }
+      }
+    ]
+  },
+  "builtin_pair_on_datum": {
+    "preamble": {
+      "title": "builtin_pair",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "datum": {
+          "schema": {
+            "dataType": "#pair"
+          }
+        },
+        "redeemer": {
+          "schema": {
+            "dataType": "integer"
+          }
+        }
+      }
+    ]
+  },
+  "overlapping_purpose": {
+    "preamble": {
+      "title": "overlap",
+      "version": "1.0.0",
+      "plutusVersion": "v3"
+    },
+    "validators": [
+      {
+        "title": "v",
+        "redeemer": {
+          "oneOf": [
+            {
+              "purpose": "spend",
+              "schema": {
+                "dataType": "integer"
+              }
+            },
+            {
+              "purpose": "spend",
+              "schema": {
+                "dataType": "bytes"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

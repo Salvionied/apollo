@@ -8,34 +8,87 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
+  reports `CapabilityGenesisParams`. A server that does not implement
+  `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
+- `backend/ogmios` reuses WebSocket connections between queries instead of
+  dialing one per query. `Config.OgmiosMaxIdleConns` (default 4, negative to
+  disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
+  `OgmiosChainContext.CloseIdleConnections` closes idle connections. This
+  requires ogmigo v6.2.2.
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
   an optional bearer token.
 - `ApplyParamsToScript` applies Plutus data parameters to a parameterized
-  Plutus V1, V2, or V3 script, such as an Aiken blueprint's `compiledCode`.
+  Plutus V1, V2, V3, or V4 script, such as an Aiken blueprint's `compiledCode`.
+- `PayToContractWithV4ReferenceScript` pays to a script address with an inline
+  datum and a Plutus V4 reference script.
 - `SetTransactionBodySetTagPolicy` supports a uniform untagged encoding for
   Conway body inputs, collateral, required signers, and reference inputs while
   preserving Apollo's historical mixed encoding as the default.
 - `plutusType:"Ignore"` skips a struct field entirely, in both directions. It
   takes no options.
-- `omitempty` is honored on map fields, dropping a field whose value is empty
-  from the encoded map. Empty follows `encoding/json` semantics — false,
+- `omitempty` drops an empty field from a Map, and from the end of a
+  `DefList` or `IndefList`. Empty follows `encoding/json` semantics — false,
   numeric zero, nil pointer or interface, and zero-length string, array, slice
-  or map — and a type may override it by implementing `IsZero() bool`. The
-  option is still rejected on positional list fields, where dropping an element
-  would shift the ones after it.
+  or map — and a type may override it by implementing `IsZero() bool`. A
+  non-nil pointer stays present when the pointed-to value is zero. Omitting
+  an empty list field that is followed by a present field is an error,
+  because a positional list cannot represent a hole. A missing trailing field
+  and an absent optional map key decode as zero.
+- `plutusType:"Address"` encodes `common.Address` as Plutus data. Payment
+  types 0–7 are constructor 0 of a payment credential and a Maybe staking
+  credential. Reward types 14 and 15 are constructor 0 or 1 of the 28-byte
+  stake hash. Byron addresses are rejected. Pointer components outside
+  cardano-ledger's `Ptr` bounds are rejected. `UnmarshalPlutus` decodes
+  addresses as testnet unless `WithAddressNetwork` selects mainnet.
+- `plutusType:"Maybe"` encodes a pointer as PlutusTx `Maybe`: nil is
+  constructor 1, and a value is constructor 0 around the element. Custom
+  `PlutusMarshaler` values and `*big.Int` are honored inside `Maybe`. `Just 0`
+  is not empty.
 - Native Go `map[K]V` fields encode and decode through `plutusType:"Map"` with
   scalar key and value codecs. Entries are sorted by encoded key bytes, so the
   output is deterministic, and duplicate encoded keys are rejected.
 - Custom `Marshaler` implementations are honored on slice elements, not just on
   whole fields.
+- `plutusType:"Either"`, `plutusType:"OutputDatum"`, and
+  `plutusType:"Interval"` encode PlutusTx `Either`, `OutputDatum`, and an
+  explicit `Interval`.
+- `plutusType:"Value"` encodes `plutusencoder.Value` as the Plutus ledger map
+  of policy id to asset map, with lovelace under the empty policy id and empty
+  asset name. `plutusType:"V4Value"` encodes the Plutus V4 `data.Value`
+  constructor (CBOR tag 1401), and decoding on either tag accepts both
+  `*data.Map` and `*data.Value`.
+- `plutusType:"Credential"`, `plutusType:"TxOutRef"`, and
+  `plutusType:"AssetClass"` encode a key or script credential, a transaction
+  output reference, and a policy-id/token-name pair.
+- `blueprint`: parse and validate CIP-57 `plutus.json` blueprints (`v1`
+  through `v4`), encode and decode datums, redeemers, and parameters (including
+  Plutus V4 `data.Value` and `"guard"` / `"vote"` / `"propose"` purposes), and
+  derive parameterized scripts, `ScriptRef`, spend and reward addresses, guard
+  credentials, and policy IDs for transactions.
 
 ### Fixed
 
 - `PayToContract`, `PayToContractWithReferenceScript`, and `AddGuard` store a
   copy of the caller's datum. Changing that datum afterward leaves the stored
   payment and guard redeemer unchanged.
+- `backend/ogmios` and `backend/utxorpc` cache protocol parameters for five
+  minutes, as the Blockfrost and Koios backends already did; Ogmios caches
+  genesis parameters too. Building one transaction reads them many times, and
+  each read was a separate request (for Ogmios, over a new WebSocket
+  connection). Failed requests and responses that do not decode are not
+  cached.
+- `backend/ogmios` rejects a genesis slot length that is missing, not
+  positive, or not a whole number of seconds, matching `backend/utxorpc`. It
+  previously truncated sub-second lengths and accepted zero or negative ones.
+- Cached protocol parameters in `backend/blockfrost` and `backend/cache` are
+  fully copied on read. Only cost models were copied before, so a caller that
+  modified a returned reference-script price changed the cached value.
+- `backend/cache` also caches `MaxTxFee` for its TTL. It passed every call
+  through to the wrapped context, which typically re-fetched protocol
+  parameters to answer it.
 - Pinned inputs (`AddInput`) that cover the payment no longer skip coin
   selection when the change they leave is below min-UTxO. Selection now draws
   enough from the loaded UTxOs to emit that change, instead of folding it into
@@ -57,6 +110,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `github.com/utxorpc/go-sdk` is upgraded to v0.2.0, which adds the
+  `ReadGenesis` client the UTxO RPC backend now uses.
 - **Breaking:** `blockfrost.NewBlockFrostChainContext` uses the base URL as
   given and no longer appends `/api/v0` when the URL does not end with `/v0`.
   This supports Blockfrost-compatible providers that serve the API under

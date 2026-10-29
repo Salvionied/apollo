@@ -1,0 +1,152 @@
+{
+  "preamble": {
+    "title": "example/tx_actions",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "lock.spend",
+      "datum": {
+        "title": "datum",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "beneficiary",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            },
+            {
+              "title": "nonce",
+              "dataType": "integer"
+            }
+          ]
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "step",
+              "dataType": "integer"
+            }
+          ]
+        }
+      },
+      "compiledCode": "46010100200101"
+    },
+    {
+      "title": "token.mint",
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "mint",
+        "schema": {
+          "dataType": "integer"
+        }
+      },
+      "parameters": [
+        {
+          "title": "seed",
+          "purpose": "mint",
+          "schema": {
+            "dataType": "integer"
+          }
+        }
+      ],
+      "compiledCode": "46010100200101"
+    },
+    {
+      "title": "reward.withdraw",
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "withdraw",
+        "schema": {
+          "dataType": "bytes"
+        }
+      },
+      "compiledCode": "46010100200101"
+    },
+    {
+      "title": "params.else",
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "dataType": "integer"
+        }
+      },
+      "parameters": [
+        {
+          "title": "owner",
+          "schema": {
+            "dataType": "bytes"
+          }
+        },
+        {
+          "title": "amount",
+          "schema": {
+            "dataType": "integer"
+          }
+        },
+        {
+          "title": "config",
+          "schema": {
+            "$ref": "#/definitions/Config"
+          }
+        },
+        {
+          "title": "extra",
+          "schema": {
+            "$ref": "#/definitions/Data"
+          }
+        }
+      ],
+      "compiledCode": "588b010100222229800aba2aba1aab9eaab9dab9a9bae0059bad0044888888966002b30013370e900018021baa00a899192cc004cdc79bae30080020048acc004cdc49bad30080010038acc006600266ebd30101800030083009001a50a5140151980099baf00b00ba50a51401514a0802a29410054528200a30080013005375401514a0801a29344d95900301"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data"
+    },
+    "Config": {
+      "title": "Config",
+      "anyOf": [
+        {
+          "title": "Config",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "dataType": "bytes"
+            },
+            {
+              "title": "threshold",
+              "dataType": "integer"
+            },
+            {
+              "title": "tags",
+              "dataType": "list",
+              "items": {
+                "dataType": "integer"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Disabled",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    }
+  }
+}
