@@ -41,11 +41,59 @@ func containerCap(n int) int {
 	return n
 }
 
-func clonePlutusData(pd data.PlutusData) data.PlutusData {
-	if pd == nil {
+func clonePlutusData(pd data.PlutusData, loc string, depth int) (data.PlutusData, error) {
+	if err := checkOpaquePlutus(pd, loc, depth); err != nil {
+		return nil, err
+	}
+	return pd.Clone(), nil
+}
+
+// checkOpaquePlutus rejects a typed-nil term anywhere in an opaque Plutus
+// Data tree. Clone panics on those pointers, including a nil list item, a nil
+// constructor field, and a nil map key or value.
+func checkOpaquePlutus(pd data.PlutusData, loc string, depth int) error {
+	if err := checkDataDepth(depth, loc); err != nil {
+		return err
+	}
+	if dataIsNil(pd) {
+		return fmt.Errorf("%s: nil PlutusData", loc)
+	}
+	switch v := pd.(type) {
+	case *data.List:
+		for i, item := range v.Items {
+			if err := checkOpaquePlutus(item, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Constr:
+		for i, field := range v.Fields {
+			if err := checkOpaquePlutus(field, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Map:
+		for i, pair := range v.Pairs {
+			if err := checkOpaquePlutus(pair[0], fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
+				return err
+			}
+			if err := checkOpaquePlutus(pair[1], fmt.Sprintf("%s[%d]/value", loc, i), depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Value:
+		if v.Inner != nil {
+			if err := checkOpaquePlutus(v.Inner, loc+"/value", depth+1); err != nil {
+				return err
+			}
+		}
+	case *data.Integer:
+		if v.Inner == nil {
+			return fmt.Errorf("%s: nil PlutusData", loc)
+		}
+	default:
 		return nil
 	}
-	return pd.Clone()
+	return nil
 }
 
 // plutusIdentity is a stable equality key. Integers and byte strings skip
@@ -330,7 +378,7 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 	s = resolved
 
 	if s.DataType == "" && len(s.AnyOf) == 0 {
-		return nil
+		return checkOpaquePlutus(pd, loc, depth)
 	}
 	if len(s.AnyOf) > 0 {
 		constr, ok := pd.(*data.Constr)
@@ -489,7 +537,7 @@ func (bp *Blueprint) encodeValue(s *Schema, val reflect.Value, loc string, depth
 
 	// Opaque Plutus Data schema accepts any data.PlutusData directly.
 	if s.DataType == "" && len(s.AnyOf) == 0 {
-		return encodeOpaqueData(val, loc)
+		return encodeOpaqueData(val, loc, depth)
 	}
 
 	if val.IsValid() && val.Type() == reflect.TypeOf((*big.Int)(nil)) {
@@ -579,7 +627,7 @@ func decodeV4Value(pd data.PlutusData, dst reflect.Value, loc string) error {
 	return fmt.Errorf("%s: cannot decode V4 Value into %s", loc, dst.Type())
 }
 
-func encodeOpaqueData(val reflect.Value, loc string) (data.PlutusData, error) {
+func encodeOpaqueData(val reflect.Value, loc string, depth int) (data.PlutusData, error) {
 	if !val.IsValid() {
 		return nil, fmt.Errorf("%s: nil PlutusData", loc)
 	}
@@ -588,12 +636,12 @@ func encodeOpaqueData(val reflect.Value, loc string) (data.PlutusData, error) {
 			return nil, fmt.Errorf("%s: nil PlutusData", loc)
 		}
 		if pd, ok := val.Interface().(data.PlutusData); ok {
-			return clonePlutusData(pd), nil
+			return clonePlutusData(pd, loc, depth)
 		}
 		val = val.Elem()
 	}
 	if pd, ok := val.Interface().(data.PlutusData); ok {
-		return clonePlutusData(pd), nil
+		return clonePlutusData(pd, loc, depth)
 	}
 	return nil, fmt.Errorf("%s: opaque Data schema requires data.PlutusData, got %s", loc, val.Type())
 }
@@ -980,7 +1028,11 @@ func (bp *Blueprint) decodeValue(s *Schema, pd data.PlutusData, dst reflect.Valu
 			return fmt.Errorf("%s: nil PlutusData", loc)
 		}
 		if dst.Type() == reflect.TypeOf((*data.PlutusData)(nil)).Elem() || dst.Type().Implements(reflect.TypeOf((*data.PlutusData)(nil)).Elem()) {
-			dst.Set(reflect.ValueOf(clonePlutusData(pd)))
+			cloned, err := clonePlutusData(pd, loc, depth)
+			if err != nil {
+				return err
+			}
+			dst.Set(reflect.ValueOf(cloned))
 			return nil
 		}
 		return fmt.Errorf("%s: opaque Data target must be data.PlutusData, got %s", loc, dst.Type())
