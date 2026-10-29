@@ -563,6 +563,9 @@ func (u *UtxoRpcChainContext) SubmitTxContext(ctx context.Context, txCbor []byte
 	}
 	var result common.Blake2b256
 	copy(result[:], ref)
+	if err := backend.VerifySubmittedTxID(txCbor, result); err != nil {
+		return common.Blake2b256{}, err
+	}
 	return result, nil
 }
 

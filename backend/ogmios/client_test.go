@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -244,6 +245,8 @@ type stubOgmiosClient struct {
 	epoch          uint64
 	tip            uint64
 	txHash         common.Blake2b256
+	submitHash     common.Blake2b256
+	mutateSubmit   bool
 	exUnits        map[common.RedeemerKey]common.ExUnits
 	utxo           *common.Utxo
 
@@ -284,7 +287,29 @@ func (s *stubOgmiosClient) SubmitTx(
 	txCbor []byte,
 ) (common.Blake2b256, error) {
 	s.submitted = txCbor
-	return s.txHash, nil
+	if s.mutateSubmit {
+		txCbor[3] = 1
+	}
+	return s.submitHash, nil
+}
+
+func TestInjectedSubmitClientCannotChangeExpectedID(t *testing.T) {
+	client := &stubOgmiosClient{
+		submitHash:   common.Blake2b256Hash([]byte{0xa1, 0x02, 0x01}),
+		mutateSubmit: true,
+	}
+	ctx, err := NewOgmiosChainContextFromClients(client, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txCbor := []byte{0x84, 0xa1, 0x02, 0x00, 0xa0, 0xf5, 0xf6}
+	original := bytes.Clone(txCbor)
+	if _, err := ctx.SubmitTx(txCbor); err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
+	}
+	if !bytes.Equal(txCbor, original) {
+		t.Fatalf("SubmitTx() changed caller bytes: %x", txCbor)
+	}
 }
 
 func (s *stubOgmiosClient) EvaluateTx(
@@ -369,6 +394,7 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		epoch:          507,
 		tip:            123456,
 		txHash:         txHash,
+		submitHash:     common.Blake2b256Hash([]byte{0xa0}),
 		exUnits: map[common.RedeemerKey]common.ExUnits{
 			{Tag: common.RedeemerTagSpend, Index: 0}: {
 				Memory: 1700,
@@ -422,16 +448,20 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		t.Fatalf("MaxTxFee() = %d, %v, want a nonzero fee", fee, err)
 	}
 
-	txCbor := []byte{0x84, 0xA0}
+	txCbor := []byte{0x84, 0xA0, 0xA0, 0xF5, 0xF6}
 	hash, err := ctx.SubmitTx(txCbor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hash != txHash {
-		t.Fatalf("SubmitTx hash = %x, want %x", hash, txHash)
+	if hash != ogmiosClient.submitHash {
+		t.Fatalf("SubmitTx hash = %x, want %x", hash, ogmiosClient.submitHash)
 	}
 	if string(ogmiosClient.submitted) != string(txCbor) {
 		t.Fatalf("submitted CBOR = %x, want %x", ogmiosClient.submitted, txCbor)
+	}
+	ogmiosClient.submitHash = txHash
+	if _, err := ctx.SubmitTx(txCbor); err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
 	}
 
 	additional := []common.Utxo{sampleCommonUtxo(t)}

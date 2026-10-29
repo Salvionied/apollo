@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -275,7 +276,14 @@ func (o *OgmiosChainContext) SubmitTxContext(ctx context.Context, txCbor []byte)
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	return client.SubmitTx(ctx, txCbor)
+	result, err := client.SubmitTx(ctx, bytes.Clone(txCbor))
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	if err := backend.VerifySubmittedTxID(txCbor, result); err != nil {
+		return common.Blake2b256{}, err
+	}
+	return result, nil
 }
 
 func (o *OgmiosChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
