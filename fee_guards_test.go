@@ -33,7 +33,7 @@ func TestOutputValueSizeIsEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = New(cc).
+	_, err = newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddInput(utxo).
 		AddPayment(p).
@@ -76,7 +76,7 @@ func TestWitnessCountCoversDistinctInputCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := New(cc).SetWallet(NewExternalWallet(first)).SetTtl(50_000_000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(first)).SetTtl(50_000_000)
 	for _, u := range append(firstUtxos, secondUtxos...) {
 		a = a.AddInput(u)
 	}
@@ -111,7 +111,7 @@ func TestWitnessCountCoversWithdrawalStakeKey(t *testing.T) {
 	addr := testAddress(t)
 	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
 
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTtl(50_000_000).
 		AddWithdrawal(stakeAddressFor(t, addr), 1_000_000, nil, nil).

@@ -90,7 +90,7 @@ func TestCompleteWithPoolUpdateConservesValue(t *testing.T) {
 	const input = uint64(20_000_000)
 	addTestUtxo(cc, addr, input, 0x01, 0)
 
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTtl(50000000).
 		UpdatePool(poolParams(1)).

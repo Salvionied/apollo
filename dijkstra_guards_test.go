@@ -45,7 +45,7 @@ func guardTestBuilder(t *testing.T, result map[common.RedeemerKey]common.ExUnits
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cc).
+	return newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddPayment(payment), cc
@@ -271,7 +271,7 @@ func TestGuardBuilderRejectsInvalidInput(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra))
+			a := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra))
 			if tt.name != "conway guard" && tt.name != "conway required guard" {
 				a.SetTargetEra(EraDijkstra)
 			}
@@ -366,7 +366,7 @@ func TestAddGuardSatisfiesDijkstraWitnessRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	exUnits := common.ExUnits{Memory: 1000, Steps: 2000}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddPayment(payment).

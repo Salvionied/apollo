@@ -70,7 +70,7 @@ func signAndSubmit(t *testing.T, w Wallet) []byte {
 		common.AddressTypeKeyKey,
 		common.AddressNetworkMainnet,
 	)
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(w).
 		SetTtl(50_000_000).
 		PayToAddress(payee, 2_000_000).

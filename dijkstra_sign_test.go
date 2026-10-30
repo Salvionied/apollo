@@ -49,7 +49,7 @@ func completedDijkstraPayment(t *testing.T) *Apollo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddPayment(payment).
@@ -70,7 +70,7 @@ func TestSignLoadedDijkstraTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestLoadedDijkstraBodyMutationIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestLoadedDijkstraInvalidWitnessReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
+	loaded, err := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestSignLoadedDijkstraTransactionPreservesBodyBytes(t *testing.T) {
 	indefinite = append(indefinite, 0xff)
 	rewritten := dijkstraEnvelope(indefinite, envelope[1], envelope[2])
 
-	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(rewritten))
+	loaded, err := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).LoadTxCbor(hex.EncodeToString(rewritten))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestWalletSignLoadedDijkstraTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).
+	loaded, err := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).
 		SetWallet(w).
 		LoadTxCbor(hex.EncodeToString(txCbor))
 	if err != nil {

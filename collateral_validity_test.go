@@ -65,7 +65,7 @@ func autoCollateralBuilder(
 	t.Helper()
 	var hash common.Blake2b256
 	hash[0] = 0x41
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(testAddress(t))).
 		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
 		AddLoadedUTxOs(makeTestUtxo(t, hash, 0, lovelace))
@@ -314,7 +314,7 @@ func mintingScriptBuilder(
 		1,
 	)
 	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
 		DisableExecutionUnitsEstimation().
@@ -392,7 +392,7 @@ func TestValidityIntervalBoundsAreNotSwapped(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			a := New(cc).
+			a := newTestApollo(cc).
 				SetWallet(NewExternalWallet(addr)).
 				AddPayment(payment)
 			if tc.ttl > 0 {
@@ -450,7 +450,7 @@ func TestValidityIntervalSurvivesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(payment).
 		SetValidityStart(start).

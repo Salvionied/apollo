@@ -39,7 +39,7 @@ func networkTestBuilder(
 		walletNetwork,
 	)
 	addTestUtxo(cc, walletAddr, 10_000_000, 0x01, 0)
-	return New(cc).
+	return newTestApollo(cc).
 		SetWallet(NewExternalWallet(walletAddr)).
 		SetTtl(50000000)
 }

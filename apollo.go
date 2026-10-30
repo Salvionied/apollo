@@ -92,6 +92,9 @@ type Apollo struct {
 	collaterals        []common.Utxo
 	Fee                int64
 	FeePadding         int64
+	maxFee             int64
+	maxFeeSet          bool
+	maxPaymentIncrease uint64
 	Ttl                int64
 	ValidityStart      int64
 	totalCollateral    int64
@@ -377,6 +380,26 @@ func (a *Apollo) SetFeePadding(padding int64) *Apollo {
 		return a
 	}
 	a.FeePadding = padding
+	return a
+}
+
+// SetMaxFee approves the largest total transaction fee in lovelace. Complete
+// requires this limit and rejects fees above it, including fee padding and
+// change absorbed into the fee.
+func (a *Apollo) SetMaxFee(fee int64) *Apollo {
+	if fee < 0 {
+		a.setErrOnce(errors.New("SetMaxFee: fee must be non-negative"))
+		return a
+	}
+	a.maxFee = fee
+	a.maxFeeSet = true
+	return a
+}
+
+// SetMaxPaymentIncrease approves the total lovelace that minimum-UTxO
+// adjustments may add to payments. Without this call, payments cannot grow.
+func (a *Apollo) SetMaxPaymentIncrease(increase uint64) *Apollo {
+	a.maxPaymentIncrease = increase
 	return a
 }
 
@@ -1386,6 +1409,9 @@ func (a *Apollo) SignWithSkey(skey []byte) (*Apollo, error) {
 	if err := a.validateTransactionBodyIntegrity(); err != nil {
 		return a, err
 	}
+	if err := a.checkCurrentFeeLimit(); err != nil {
+		return a, err
+	}
 	var bodyCbor []byte
 	var err error
 	if a.dijkstraTx != nil {
@@ -1485,6 +1511,9 @@ func (a *Apollo) Clone() *Apollo {
 		isEstimateRequired:         a.isEstimateRequired,
 		Fee:                        a.Fee,
 		FeePadding:                 a.FeePadding,
+		maxFee:                     a.maxFee,
+		maxFeeSet:                  a.maxFeeSet,
+		maxPaymentIncrease:         a.maxPaymentIncrease,
 		forceFee:                   a.forceFee,
 		Ttl:                        a.Ttl,
 		ValidityStart:              a.ValidityStart,
@@ -1910,6 +1939,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if a.err != nil {
 		return a, a.err
 	}
+	if !a.maxFeeSet {
+		return a, errors.New("maximum transaction fee is required: call SetMaxFee")
+	}
 	if a.tx != nil || a.dijkstraTx != nil {
 		return a, errors.New("transaction already built - call Complete() only once")
 	}
@@ -2194,6 +2226,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if fee < 0 {
 		fee = 0
 	}
+	if err := a.checkFeeLimit(fee); err != nil {
+		return a, err
+	}
 
 	// Compute totalInput once (it does not change across iterations).
 	totalInput, err = a.sumUtxoValues(allInputUtxos)
@@ -2254,6 +2289,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 			return a, balanceErr
 		}
 		outputs, fee = balanced.Outputs, balanced.Fee
+		if err := a.checkFeeLimit(fee); err != nil {
+			return a, err
+		}
 		if err := a.finalizeCollateral(fee); err != nil {
 			return a, err
 		}
@@ -2289,6 +2327,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 				nextFee = 0
 			}
 		}
+		if err := a.checkFeeLimit(nextFee); err != nil {
+			return a, err
+		}
 		// Never settle on a fee below one already required by a shape that was
 		// considered. Around the change output's min-UTxO threshold the same
 		// transaction is bistable: at the lower fee the change clears min-UTxO
@@ -2314,6 +2355,9 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 	if !converged {
 		return a, errors.New("evaluation transaction did not converge after 5 iterations")
+	}
+	if err := a.checkFeeLimit(fee); err != nil {
+		return a, err
 	}
 
 	// Build transaction body
@@ -2423,6 +2467,9 @@ func (a *Apollo) Sign() (*Apollo, error) {
 	if err := a.validateTransactionBodyIntegrity(); err != nil {
 		return a, err
 	}
+	if err := a.checkCurrentFeeLimit(); err != nil {
+		return a, err
+	}
 
 	// Marshal body to CBOR and set it for downstream consumers
 	var bodyCbor []byte
@@ -2530,7 +2577,28 @@ func (a *Apollo) loadUtxos() error {
 
 func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 	outputs := make([]babbage.BabbageTransactionOutput, 0, len(a.payments))
-	for _, payment := range a.payments {
+	var totalIncrease uint64
+	for i, original := range a.payments {
+		var payment PaymentI
+		if builtIn, ok := original.(*Payment); ok {
+			copy := *builtIn
+			payment = &copy
+		} else if cloner, ok := original.(PaymentCloner); ok {
+			var err error
+			payment, err = cloner.ClonePayment()
+			if err != nil {
+				return nil, fmt.Errorf("clone payment %d: %w", i, err)
+			}
+			if isNilPayment(payment) {
+				return nil, fmt.Errorf("clone payment %d: returned nil", i)
+			}
+		} else {
+			return nil, fmt.Errorf("payment %d of type %T must implement PaymentCloner", i, original)
+		}
+		requested, err := payment.ToValue()
+		if err != nil {
+			return nil, fmt.Errorf("payment %d requested value: %w", i, err)
+		}
 		if err := payment.EnsureMinUTXO(backend.BindContext(a.requestContext, a.Context)); err != nil {
 			return nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
 		}
@@ -2542,9 +2610,46 @@ func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 		if err != nil {
 			return nil, err
 		}
+		actual := babbageOut.OutputAmount.Amount
+		if actual > requested.Coin {
+			increase := actual - requested.Coin
+			if increase > a.maxPaymentIncrease-totalIncrease {
+				return nil, fmt.Errorf("payment %d requires %d lovelace (requested %d), exceeding approved minimum-UTxO increase of %d lovelace", i, actual, requested.Coin, a.maxPaymentIncrease)
+			}
+			totalIncrease += increase
+		}
 		outputs = append(outputs, *babbageOut)
 	}
 	return outputs, nil
+}
+
+func (a *Apollo) checkFeeLimit(fee int64) error {
+	if !a.maxFeeSet {
+		return errors.New("maximum transaction fee is required: call SetMaxFee")
+	}
+	if fee < 0 {
+		return fmt.Errorf("negative fee: %d", fee)
+	}
+	if fee > a.maxFee {
+		return fmt.Errorf("transaction fee %d lovelace exceeds approved maximum of %d lovelace", fee, a.maxFee)
+	}
+	return nil
+}
+
+func (a *Apollo) checkCurrentFeeLimit() error {
+	if !a.maxFeeSet {
+		return errors.New("maximum transaction fee is required: call SetMaxFee")
+	}
+	var fee uint64
+	if a.dijkstraTx != nil {
+		fee = a.dijkstraTx.Body.TxFee
+	} else {
+		fee = a.tx.Body.TxFee
+	}
+	if fee > uint64(a.maxFee) { //nolint:gosec // SetMaxFee rejects negative values
+		return fmt.Errorf("transaction fee %d lovelace exceeds approved maximum of %d lovelace", fee, a.maxFee)
+	}
+	return nil
 }
 
 func (a *Apollo) totalOutputValue(outputs []babbage.BabbageTransactionOutput) (Value, error) {

@@ -41,7 +41,7 @@ func TestWithdrawalTransactionSpendsAtLeastOneInput(t *testing.T) {
 		addr := testAddress(t)
 		addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
 
-		a, err := New(cc).
+		a, err := newTestApollo(cc).
 			SetWallet(NewExternalWallet(addr)).
 			SetTtl(50_000_000).
 			AddWithdrawal(stakeAddressFor(t, addr), reward, nil, nil).
@@ -79,7 +79,7 @@ func TestWithdrawalOnlyTransactionConservesValue(t *testing.T) {
 	addr := testAddress(t)
 	addTestUtxo(cc, addr, balance, 0x01, 0)
 
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTtl(50_000_000).
 		AddWithdrawal(stakeAddressFor(t, addr), reward, nil, nil).
@@ -126,7 +126,7 @@ func TestPreselectedInputSatisfiesTheInputSet(t *testing.T) {
 		t.Fatal("fixture produced no UTxOs")
 	}
 
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTtl(50_000_000).
 		AddInput(utxos[0]).

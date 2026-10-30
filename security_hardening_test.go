@@ -201,7 +201,7 @@ func TestCompleteSpendAllOfTokenOmitsZeroChangeEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
 	a, err = a.Complete()
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +242,7 @@ func TestCompleteBurnConsumingFullBalanceOmitsZeroChangeEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
 	a = a.Mint(NewUnit(policyHex, "746f6b", -5), nil, nil)
 	a, err = a.Complete()
 	if err != nil {
@@ -273,7 +273,7 @@ func TestCompleteBurnWithoutTokensFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
 	// Burn tokens that are not present in any available UTxO: the build must
 	// fail at selection time instead of signing a non-conserving transaction.
 	a = a.Mint(NewUnit(policyHex, "746f6b", -5), nil, nil)
@@ -308,7 +308,7 @@ func TestEstimateExecutionUnitsRejectsEmptyEvalResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
 	a = a.Mint(NewUnit(policyHex, "746f6b", 5), &redeemer, nil)
 	_, err = a.Complete()
 	if err == nil {
@@ -336,7 +336,7 @@ func TestEstimateExecutionUnitsRejectsOutOfRangeIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000)
 	a = a.Mint(NewUnit(policyHex, "746f6b", 5), &redeemer, nil)
 	_, err = a.Complete()
 	if err == nil {
