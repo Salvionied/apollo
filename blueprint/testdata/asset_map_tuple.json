@@ -1,0 +1,54 @@
+{
+  "preamble": {
+    "title": "example/asset_map_tuple",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "vault.spend",
+      "datum": {
+        "title": "datum",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "balances",
+              "dataType": "map",
+              "minItems": 1,
+              "maxItems": 8,
+              "keys": {
+                "dataType": "bytes"
+              },
+              "values": {
+                "dataType": "integer"
+              }
+            },
+            {
+              "title": "pair_tuple",
+              "dataType": "list",
+              "items": [
+                {
+                  "dataType": "bytes"
+                },
+                {
+                  "dataType": "integer"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "spend",
+        "schema": {
+          "dataType": "integer"
+        }
+      },
+      "compiledCode": "46010100200101"
+    }
+  ]
+}
