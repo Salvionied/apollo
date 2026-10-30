@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/big"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -938,13 +937,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		pp.MinFeeRefScriptCostPerByte, _ = price.Float64()
 	}
 
-	// Parse cost models from BlockFrost JSON.
-	// Prefer cost_models_raw (canonical integer arrays). Fall back to
-	// cost_models which may be either:
-	//   - array format:  {"PlutusV1": [205665, 812, ...]}
-	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
-	// Both formats use keys "PlutusV1" through "PlutusV4" which match the
-	// canonical form expected by ComputeScriptDataHash.
+	// Use only positional integer arrays for cost models. Named parameter
+	// maps do not reliably preserve the ledger's parameter order.
 	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
 		var rawModels map[string][]int64
 		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
@@ -956,32 +950,10 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	}
 	if pp.CostModels == nil && len(p.CostModels) > 0 {
 		var arrayModels map[string][]int64
-		if err := json.Unmarshal(p.CostModels, &arrayModels); err == nil {
-			pp.CostModels = arrayModels
-		} else {
-			// Fall back to keyed format (map[string]map[string]int64).
-			var keyedModels map[string]map[string]int64
-			if err := json.Unmarshal(p.CostModels, &keyedModels); err != nil {
-				return pp, fmt.Errorf("failed to parse cost models: %w", err)
-			}
-			pp.CostModels = make(map[string][]int64, len(keyedModels))
-			for lang, costs := range keyedModels {
-				// Sort parameter names alphabetically. The Cardano ledger
-				// serializes cost models as a flat list of integers whose
-				// positions correspond to alphabetically-sorted parameter
-				// names (see IntersectMBO/cardano-ledger#2902).
-				sortedKeys := make([]string, 0, len(costs))
-				for k := range costs {
-					sortedKeys = append(sortedKeys, k)
-				}
-				sort.Strings(sortedKeys)
-				values := make([]int64, 0, len(costs))
-				for _, k := range sortedKeys {
-					values = append(values, costs[k])
-				}
-				pp.CostModels[lang] = values
-			}
+		if err := json.Unmarshal(p.CostModels, &arrayModels); err != nil {
+			return pp, fmt.Errorf("failed to parse cost_models as integer arrays: %w", err)
 		}
+		pp.CostModels = arrayModels
 	}
 
 	return pp, nil

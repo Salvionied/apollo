@@ -857,7 +857,7 @@ func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
 	}
 }
 
-func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
+func TestProtocolParamsFallsBackToArrayCostModels(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
@@ -880,7 +880,16 @@ func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
 	}
 	got := pp.CostModels["PlutusV2"]
 	if len(got) != 3 || got[0] != 9 {
-		t.Fatalf("expected named cost_models fallback, got %v", got)
+		t.Fatalf("expected array cost_models fallback, got %v", got)
+	}
+}
+
+func TestProtocolParamsRejectsNamedCostModelParameters(t *testing.T) {
+	raw := bfProtocolParams{
+		CostModels: json.RawMessage(`{"PlutusV3":{"addInteger-cpu-arguments-intercept":1,"addInteger-cpu-arguments-slope":2}}`),
+	}
+	if _, err := raw.toProtocolParams(); err == nil || !strings.Contains(err.Error(), "integer arrays") {
+		t.Fatalf("toProtocolParams() error = %v, want integer-array cost model error", err)
 	}
 }
 
