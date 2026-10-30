@@ -60,7 +60,12 @@ func (a *Apollo) AddGuard(cred common.Credential, redeemer *common.Datum, exUnit
 	if redeemer == nil {
 		return a
 	}
-	entry := redeemerEntry{Tag: common.RedeemerTagGuarding, Data: *redeemer}
+	cloned, err := cloneDatumValue(*redeemer)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
+	entry := redeemerEntry{Tag: common.RedeemerTagGuarding, Data: cloned}
 	if exUnits != nil {
 		entry.ExUnits = *exUnits
 	}
@@ -96,6 +101,12 @@ func (a *Apollo) AddRequiredTopLevelGuard(cred common.Credential, datum *common.
 	if datum != nil && datum.Data == nil {
 		a.setErrOnce(errors.New("required top-level guard datum is missing Plutus data"))
 		return a
+	}
+	if datum != nil {
+		if err := datumTreeError(datum.Data); err != nil {
+			a.setErrOnce(fmt.Errorf("required top-level guard datum: %w", err))
+			return a
+		}
 	}
 	key := credentialKey(cred)
 	for _, required := range a.requiredTopLevelGuards {

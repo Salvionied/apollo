@@ -22,6 +22,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/dijkstra"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
+	"github.com/blinklabs-io/plutigo/data"
 
 	"github.com/Salvionied/apollo/v2/backend"
 )
@@ -442,6 +443,10 @@ func (a *Apollo) AddCollateral(utxo common.Utxo) *Apollo {
 // than being silently rehashed into a transaction the ledger would refuse.
 func (a *Apollo) AddDatum(datum *common.Datum) *Apollo {
 	if datum != nil {
+		if err := datumTreeError(datum.Data); err != nil {
+			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
+			return a
+		}
 		if _, err := DatumWireCbor(datum); err != nil {
 			a.setErrOnce(fmt.Errorf("AddDatum: %w", err))
 			return a
@@ -486,9 +491,14 @@ func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits
 		if exUnits != nil {
 			eu = *exUnits
 		}
+		cloned, err := cloneDatumValue(*redeemer)
+		if err != nil {
+			a.setErrOnce(err)
+			return a
+		}
 		a.mintRedeemers[unit.PolicyId] = redeemerEntry{
 			Tag:     common.RedeemerTagMint,
-			Data:    *redeemer,
+			Data:    cloned,
 			ExUnits: eu,
 		}
 		a.isEstimateRequired = true
@@ -559,9 +569,14 @@ func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits co
 	a.isEstimateRequired = true
 	a.preselectedUtxos = append(a.preselectedUtxos, utxo)
 	ref := utxoRef(utxo)
+	cloned, err := cloneDatumValue(redeemer)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
 	a.redeemers[ref] = redeemerEntry{
 		Tag:     common.RedeemerTagSpend,
-		Data:    redeemer,
+		Data:    cloned,
 		ExUnits: exUnits,
 	}
 	return a
@@ -569,11 +584,16 @@ func (a *Apollo) CollectFrom(utxo common.Utxo, redeemer common.Datum, exUnits co
 
 // PayToContract creates a payment to a script address with an inline datum.
 func (a *Apollo) PayToContract(addr common.Address, datum *common.Datum, lovelace int64, units ...Unit) *Apollo {
+	stored, err := cloneDatum(datum)
+	if err != nil {
+		a.setErrOnce(err)
+		return a
+	}
 	p := &Payment{
 		Receiver: addr,
 		Lovelace: lovelace,
 		Units:    units,
-		Datum:    datum,
+		Datum:    stored,
 		IsInline: true,
 	}
 	a.payments = append(a.payments, p)
@@ -590,13 +610,18 @@ func (a *Apollo) PayToContractWithDatumHash(addr common.Address, datum *common.D
 	}
 	if datum != nil {
 		// Hash the bytes the datum will occupy in the witness set, so the
-		// output's datum hash matches the datum the ledger sees.
-		hash, err := DatumHash(datum)
+		// output's datum hash matches the datum the ledger sees. Store a
+		// clone so later mutation of the caller's datum cannot change it.
+		stored, err := cloneDatum(datum)
+		if err != nil {
+			return a, err
+		}
+		hash, err := DatumHash(stored)
 		if err != nil {
 			return a, err
 		}
 		p.DatumHash = hash.Bytes()
-		a.datums = append(a.datums, *datum)
+		a.datums = append(a.datums, *stored)
 	}
 	a.payments = append(a.payments, p)
 	return a, nil
@@ -1070,9 +1095,14 @@ func (a *Apollo) AddWithdrawal(address common.Address, amount uint64, redeemerDa
 			return a
 		}
 		key := hex.EncodeToString(skh.Bytes())
+		cloned, err := cloneDatumValue(*redeemerData)
+		if err != nil {
+			a.setErrOnce(err)
+			return a
+		}
 		entry := redeemerEntry{
 			Tag:  common.RedeemerTagReward,
-			Data: *redeemerData,
+			Data: cloned,
 		}
 		if exUnits != nil {
 			entry.ExUnits = *exUnits
@@ -1728,6 +1758,111 @@ func isNilPayment(payment PaymentI) bool {
 	default:
 		return false
 	}
+}
+
+func cloneDatum(datum *common.Datum) (*common.Datum, error) {
+	if datum == nil {
+		return nil, nil
+	}
+	cloned, err := cloneDatumValue(*datum)
+	if err != nil {
+		return nil, err
+	}
+	return &cloned, nil
+}
+
+// maxDatumCloneDepth stops a hostile datum from growing the walk without limit.
+const maxDatumCloneDepth = 1024
+
+func datumTreeError(pd data.PlutusData) error {
+	if pd == nil {
+		return nil
+	}
+	return checkDatumTree(pd, 0)
+}
+
+func checkDatumTree(pd data.PlutusData, depth int) error {
+	if depth > maxDatumCloneDepth {
+		return fmt.Errorf("datum exceeds maximum depth %d", maxDatumCloneDepth)
+	}
+	if pd == nil {
+		return errors.New("datum PlutusData is nil")
+	}
+	v := reflect.ValueOf(pd)
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		return errors.New("datum PlutusData is nil")
+	}
+	switch node := pd.(type) {
+	case *data.List:
+		return checkDatumItems(node.Items, depth)
+	case data.List:
+		return checkDatumItems(node.Items, depth)
+	case *data.Constr:
+		return checkDatumItems(node.Fields, depth)
+	case data.Constr:
+		return checkDatumItems(node.Fields, depth)
+	case *data.Map:
+		return checkDatumPairs(node.Pairs, depth)
+	case data.Map:
+		return checkDatumPairs(node.Pairs, depth)
+	case *data.Value:
+		return checkDatumValue(node.Inner, depth)
+	case data.Value:
+		return checkDatumValue(node.Inner, depth)
+	case *data.Integer:
+		return checkDatumInteger(node.Inner)
+	case data.Integer:
+		return checkDatumInteger(node.Inner)
+	}
+	return nil
+}
+
+func checkDatumItems(items []data.PlutusData, depth int) error {
+	for _, item := range items {
+		if err := checkDatumTree(item, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkDatumPairs(pairs [][2]data.PlutusData, depth int) error {
+	for _, pair := range pairs {
+		if err := checkDatumTree(pair[0], depth+1); err != nil {
+			return err
+		}
+		if err := checkDatumTree(pair[1], depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkDatumValue(inner *data.Map, depth int) error {
+	if inner == nil {
+		return nil
+	}
+	return checkDatumTree(inner, depth+1)
+}
+
+func checkDatumInteger(inner *big.Int) error {
+	if inner == nil {
+		return errors.New("datum PlutusData is nil")
+	}
+	return nil
+}
+
+func cloneDatumValue(datum common.Datum) (common.Datum, error) {
+	if err := datumTreeError(datum.Data); err != nil {
+		return common.Datum{}, err
+	}
+	if datum.Data != nil {
+		datum.Data = datum.Data.Clone()
+	}
+	if raw := datum.Cbor(); len(raw) > 0 {
+		datum.SetCbor(raw)
+	}
+	return datum, nil
 }
 
 func cloneCBORValue(src, dst any) error {
@@ -3321,6 +3456,8 @@ func (a *Apollo) estimateExecutionUnits(
 // applyExecutionUnits is deliberately separate from estimateExecutionUnits:
 // callers only reach it after the complete evaluator response was validated.
 func (a *Apollo) applyExecutionUnits(units map[common.RedeemerKey]common.ExUnits, inputs []common.Utxo) {
+	sortedPolicies := a.sortedMintPolicyIds()
+	sortedWithdrawals := a.sortedWithdrawalKeys()
 	for key, exUnits := range units {
 		switch key.Tag {
 		case common.RedeemerTagSpend:
@@ -3329,12 +3466,12 @@ func (a *Apollo) applyExecutionUnits(units map[common.RedeemerKey]common.ExUnits
 			entry.ExUnits = exUnits
 			a.redeemers[ref] = entry
 		case common.RedeemerTagMint:
-			policy := a.sortedMintPolicyIds()[key.Index]
+			policy := sortedPolicies[key.Index]
 			entry := a.mintRedeemers[policy]
 			entry.ExUnits = exUnits
 			a.mintRedeemers[policy] = entry
 		case common.RedeemerTagReward:
-			wd := a.withdrawals[a.sortedWithdrawalKeys()[key.Index]]
+			wd := a.withdrawals[sortedWithdrawals[key.Index]]
 			stakeKey := hex.EncodeToString(wd.Address.StakeKeyHash().Bytes())
 			entry := a.stakeRedeemers[stakeKey]
 			entry.ExUnits = exUnits

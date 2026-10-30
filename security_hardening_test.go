@@ -1,6 +1,7 @@
 package apollo
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"fmt"
 	"math"
@@ -12,9 +13,118 @@ import (
 	"github.com/blinklabs-io/bursa/bip32"
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/plutigo/data"
 
 	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
+
+func TestStoredDatumsDoNotAliasCaller(t *testing.T) {
+	addr := testAddress(t)
+	script := common.PlutusV2Script([]byte{0x04, 0x05})
+
+	original := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	paid := New(setupFixedContext()).PayToContract(addr, original, 2_000_000)
+	original.Data.(*data.Integer).Inner.SetInt64(9)
+	assertStoredDatum(t, paid.payments[0].(*Payment).Datum)
+
+	refOriginal := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	withRef, err := New(setupFixedContext()).PayToContractWithReferenceScript(addr, refOriginal, 2_000_000, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refOriginal.Data.(*data.Integer).Inner.SetInt64(9)
+	assertStoredDatum(t, withRef.payments[0].(*Payment).Datum)
+
+	guardOriginal := &common.Datum{Data: data.NewInteger(big.NewInt(4))}
+	guarded := New(setupFixedContext()).SetTargetEra(EraDijkstra).AddGuard(guardScriptCredential(), guardOriginal, nil)
+	if guarded.err != nil {
+		t.Fatal(guarded.err)
+	}
+	guardOriginal.Data.(*data.Integer).Inner.SetInt64(9)
+	entry := guarded.guardRedeemers[credentialKey(guardScriptCredential())]
+	assertStoredDatum(t, &entry.Data)
+}
+
+func TestPayToContractRejectsTypedNilDatum(t *testing.T) {
+	addr := testAddress(t)
+	shapes := []struct {
+		name string
+		data data.PlutusData
+	}{
+		{name: "root", data: (*data.Integer)(nil)},
+		{name: "list item", data: data.NewList((*data.Integer)(nil))},
+		{name: "constructor field", data: data.NewConstr(0, (*data.Integer)(nil))},
+		{name: "map key", data: data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}})},
+		{name: "nil list item", data: data.NewList(nil)},
+		{name: "nil constructor field", data: data.NewConstr(0, nil)},
+		{name: "nil map key", data: data.NewMap([][2]data.PlutusData{{nil, data.NewInteger(big.NewInt(1))}})},
+		{name: "integer value", data: data.Integer{}},
+	}
+	for _, shape := range shapes {
+		paid := New(setupFixedContext()).PayToContract(addr, &common.Datum{Data: shape.data}, 2_000_000)
+		if paid.err == nil || len(paid.payments) != 0 {
+			t.Fatalf("%s: PayToContract stored a typed-nil datum, err=%v payments=%d", shape.name, paid.err, len(paid.payments))
+		}
+	}
+	absent := New(setupFixedContext()).PayToContract(addr, &common.Datum{}, 2_000_000)
+	if absent.err != nil || len(absent.payments) != 1 {
+		t.Fatalf("absent datum: err=%v payments=%d", absent.err, len(absent.payments))
+	}
+	if err := checkDatumTree(data.NewInteger(big.NewInt(1)), maxDatumCloneDepth+1); err == nil {
+		t.Fatal("depth cap accepted a datum past the walk limit")
+	}
+}
+
+func TestAddDatumRejectsTypedNilChildren(t *testing.T) {
+	shapes := []data.PlutusData{
+		data.NewList((*data.Integer)(nil)),
+		data.NewConstr(0, (*data.Integer)(nil)),
+		data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}}),
+		data.NewList(nil),
+		data.NewConstr(0, nil),
+		data.NewMap([][2]data.PlutusData{{nil, data.NewInteger(big.NewInt(1))}}),
+		data.Integer{},
+	}
+	for i, shape := range shapes {
+		added := New(setupFixedContext()).AddDatum(&common.Datum{Data: shape})
+		if added.err == nil || len(added.datums) != 0 {
+			t.Fatalf("case %d: AddDatum stored a typed-nil datum, err=%v datums=%d", i, added.err, len(added.datums))
+		}
+	}
+}
+
+func TestAddRequiredTopLevelGuardRejectsTypedNilChildren(t *testing.T) {
+	shapes := []data.PlutusData{
+		data.NewList((*data.Integer)(nil)),
+		data.NewConstr(0, (*data.Integer)(nil)),
+		data.NewMap([][2]data.PlutusData{{(*data.ByteString)(nil), data.NewInteger(big.NewInt(1))}}),
+		data.NewList(nil),
+		data.NewConstr(0, nil),
+		data.NewMap([][2]data.PlutusData{{nil, data.NewInteger(big.NewInt(1))}}),
+		data.Integer{},
+	}
+	for i, shape := range shapes {
+		guarded := New(setupFixedContext()).SetTargetEra(EraDijkstra).AddRequiredTopLevelGuard(guardScriptCredential(), &common.Datum{Data: shape})
+		if guarded.err == nil || len(guarded.requiredTopLevelGuards) != 0 {
+			t.Fatalf("case %d: AddRequiredTopLevelGuard stored a typed-nil datum, err=%v guards=%d", i, guarded.err, len(guarded.requiredTopLevelGuards))
+		}
+	}
+}
+
+func assertStoredDatum(t *testing.T, stored *common.Datum) {
+	t.Helper()
+	integer, ok := stored.Data.(*data.Integer)
+	if !ok || integer.Inner == nil || integer.Inner.Int64() != 4 {
+		t.Fatalf("stored datum = %#v", stored.Data)
+	}
+	raw, err := data.Encode(stored.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, []byte{0x04}) {
+		t.Fatalf("stored wire = %x, want 04", raw)
+	}
+}
 
 func TestBufferExUnits(t *testing.T) {
 	tests := []struct {
