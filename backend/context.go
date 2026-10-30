@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -112,10 +113,25 @@ func SubmitTxContext(ctx context.Context, chainContext ChainContext, txCbor []by
 	if isNilInterface(chainContext) {
 		return common.Blake2b256{}, errNilChainContext
 	}
+	want, parseErr := submittedTxID(txCbor)
+	submitted := bytes.Clone(txCbor)
+	var result common.Blake2b256
+	var err error
 	if cc, ok := chainContext.(ContextChainContext); ok {
-		return cc.SubmitTxContext(normalizeContext(ctx), txCbor)
+		result, err = cc.SubmitTxContext(normalizeContext(ctx), submitted)
+	} else {
+		result, err = chainContext.SubmitTx(submitted)
 	}
-	return chainContext.SubmitTx(txCbor)
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	if parseErr != nil {
+		return common.Blake2b256{}, parseErr
+	}
+	if err := verifySubmittedTxID(want, result); err != nil {
+		return common.Blake2b256{}, err
+	}
+	return result, nil
 }
 
 // EvaluateTxContext calls the context-aware implementation when available,

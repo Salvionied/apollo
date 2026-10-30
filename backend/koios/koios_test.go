@@ -879,18 +879,28 @@ func TestScriptCborRejectsMismatchAndMissingBytes(t *testing.T) {
 
 func TestSubmitTx(t *testing.T) {
 	txCbor := []byte{0x84, 0xa0, 0xa0, 0xf5, 0xf6}
+	want := common.Blake2b256Hash([]byte{0xa0})
 	rs, server := newRecordingServer(t)
-	rs.handle(http.MethodPost, "/submittx", http.StatusAccepted, `"`+testTxHash+`"`)
+	rs.handle(http.MethodPost, "/submittx", http.StatusAccepted, `"`+want.String()+`"`)
 	hash, err := NewKoiosChainContext(server.URL, 0, "").SubmitTx(txCbor)
 	if err != nil {
 		t.Fatalf("SubmitTx() error = %v", err)
 	}
-	if hex.EncodeToString(hash.Bytes()) != testTxHash {
+	if hash != want {
 		t.Fatalf("SubmitTx() = %s", hash)
 	}
 	req := rs.recorded()[0]
 	if req.header.Get("Content-Type") != "application/cbor" || string(req.body) != string(txCbor) {
 		t.Fatalf("request content-type %q body %x", req.header.Get("Content-Type"), req.body)
+	}
+}
+
+func TestSubmitTxRejectsUnrelatedID(t *testing.T) {
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/submittx", http.StatusAccepted, `"`+testTxHash+`"`)
+	_, err := NewKoiosChainContext(server.URL, 0, "").SubmitTx([]byte{0x84, 0xa0, 0xa0, 0xf5, 0xf6})
+	if err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
 	}
 }
 

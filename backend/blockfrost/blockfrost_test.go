@@ -51,6 +51,19 @@ func TestRequestContextPropagatesCancellation(t *testing.T) {
 	}
 }
 
+func TestSubmitTxRejectsUnrelatedID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`"` + strings.Repeat("a", 64) + `"`))
+	}))
+	t.Cleanup(server.Close)
+
+	txCbor := []byte{0x84, 0xa0, 0xa0, 0xf5, 0xf6}
+	_, err := NewBlockFrostChainContext(server.URL, 0, "").SubmitTx(txCbor)
+	if err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
+	}
+}
+
 func TestRequestRejectsCrossOriginRedirect(t *testing.T) {
 	var forwarded atomic.Int32
 	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

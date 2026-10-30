@@ -61,6 +61,17 @@ func grpcFrame(msg []byte) []byte {
 // exercise a fully successful call rather than only the routing. ReadTip is the
 // operation the routing tests drive; anything else gets an empty message.
 func (r *versionRouter) payloadFor(path string) []byte {
+	if strings.Contains(path, "SubmitTx") && r.submitRef != nil {
+		var msg proto.Message = &submit.SubmitTxResponse{Ref: r.submitRef}
+		if strings.Contains(path, "utxorpc.v1alpha.") {
+			msg = &alphasubmit.SubmitTxResponse{Ref: r.submitRef}
+		}
+		encoded, err := proto.Marshal(msg)
+		if err != nil {
+			return nil
+		}
+		return encoded
+	}
 	if !strings.Contains(path, "ReadTip") {
 		return nil
 	}
@@ -90,10 +101,41 @@ const testTipSlot = 4242
 // everything else with gRPC UNIMPLEMENTED, which is how a server that exposes
 // one version but not the other behaves.
 type versionRouter struct {
-	serve string // proto package fragment to accept, e.g. "utxorpc.v1alpha."
+	serve     string // proto package fragment to accept, e.g. "utxorpc.v1alpha."
+	submitRef []byte
 
 	mu    sync.Mutex
 	paths []string
+}
+
+func TestSubmitTxVerifiesIDAcrossProtocolVersions(t *testing.T) {
+	txCbor := []byte{0x84, 0xa0, 0xa0, 0xf5, 0xf6}
+	want := common.Blake2b256Hash([]byte{0xa0})
+	for _, version := range []string{"utxorpc.v1beta.", "utxorpc.v1alpha."} {
+		for _, mismatch := range []bool{false, true} {
+			name := version + "matching"
+			if mismatch {
+				name = version + "mismatched"
+			}
+			t.Run(name, func(t *testing.T) {
+				router, srv := newVersionRouter(t, version)
+				router.submitRef = want.Bytes()
+				if mismatch {
+					router.submitRef = make([]byte, common.Blake2b256Size)
+				}
+				got, err := NewUtxoRpcChainContext(srv.URL, 1, nil).SubmitTxContext(t.Context(), txCbor)
+				if mismatch {
+					if err == nil || !strings.Contains(err.Error(), "transaction ID") {
+						t.Fatalf("SubmitTxContext() error = %v, want transaction ID mismatch", err)
+					}
+					return
+				}
+				if err != nil || got != want {
+					t.Fatalf("SubmitTxContext() = %x, %v, want %x, nil", got, err, want)
+				}
+			})
+		}
+	}
 }
 
 func (r *versionRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {

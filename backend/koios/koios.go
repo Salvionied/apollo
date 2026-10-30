@@ -357,7 +357,14 @@ func (k *KoiosChainContext) SubmitTxContext(ctx context.Context, txCbor []byte) 
 	if err := json.Unmarshal(data, &txHash); err != nil {
 		return common.Blake2b256{}, fmt.Errorf("failed to parse koios submittx response: %w", err)
 	}
-	return parseBlake2b256(txHash, "tx hash")
+	result, err := parseBlake2b256(txHash, "tx hash")
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	if err := backend.VerifySubmittedTxID(txCbor, result); err != nil {
+		return common.Blake2b256{}, err
+	}
+	return result, nil
 }
 
 func (k *KoiosChainContext) EvaluateTx(

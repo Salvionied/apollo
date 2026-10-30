@@ -319,6 +319,9 @@ func (b *BlockFrostChainContext) SubmitTxContext(ctx context.Context, txCbor []b
 	}
 	var result common.Blake2b256
 	copy(result[:], hashBytes)
+	if err := backend.VerifySubmittedTxID(txCbor, result); err != nil {
+		return common.Blake2b256{}, err
+	}
 	return result, nil
 }
 
