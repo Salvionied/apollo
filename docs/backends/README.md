@@ -42,6 +42,7 @@ also limits each individual response to 16 MiB.
 | [UTxO RPC](utxorpc.md) | `backend/utxorpc` | gRPC/`connect`; prefers `utxorpc.v1beta`, falls back to v1alpha |
 | [Fixed](fixed_and_cache.md) | `backend/fixed` | Deterministic tests; no live chain |
 | [Cache](fixed_and_cache.md) | `backend/cache` | TTL wrapper around another context |
+| [Local evaluation](localeval.md) | `backend/localeval` | Evaluates scripts in-process; wraps another context or runs offline |
 
 Out-of-tree backends should still implement `ChainContext`. Optional
 `CapabilityReporter` lets callers discover gaps without a probe request.

@@ -35,7 +35,10 @@ Helpers:
 | UTxO by ref | yes | yes | yes | yes | yes | yes |
 | Script CBOR | yes | yes | yes | no | no | no |
 
-`backend/cache` forwards `CapabilitiesOf(inner)`.
+`backend/cache` forwards `CapabilitiesOf(inner)`. `backend/localeval` adds
+EvaluateTx and EvaluateTx additional UTxOs to `CapabilitiesOf(inner)` when
+`inner` can supply protocol parameters and a slot mapping; see
+[local evaluation](localeval.md).
 
 ## Additional UTxOs and chaining
 

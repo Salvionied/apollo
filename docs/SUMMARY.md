@@ -16,6 +16,7 @@
 * [Ogmios and Kupo](backends/ogmios.md)
 * [UTxO RPC](backends/utxorpc.md)
 * [Fixed and cache](backends/fixed_and_cache.md)
+* [Local evaluation](backends/localeval.md)
 
 ## Wallets and signing
 

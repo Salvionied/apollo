@@ -16,6 +16,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
   `OgmiosChainContext.CloseIdleConnections` closes idle connections. This
   requires ogmigo v6.2.2.
+- `backend/localeval`: in-process Plutus script evaluation. `Evaluate` runs
+  with no chain access, given the transaction, its resolved UTxOs, protocol
+  parameters and a `SlotConfig`. `NewLocalEvalChainContext` wraps any
+  `ChainContext` to report and serve `EvaluateTx` and
+  `EvaluateTxAdditionalUtxos` locally. Tests check its results against
+  cardano-cli's evaluator.
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
