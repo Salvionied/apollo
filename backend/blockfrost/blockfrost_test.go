@@ -182,6 +182,7 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 		OutputIndex:         0,
 		Address:             addr.String(),
 		Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		DataHash:            common.Blake2b256Hash(wantDatumCbor).String(),
 		InlineDatum:         json.RawMessage(`"182a"`),
 		ReferenceScriptHash: scriptHashHex,
 	}
@@ -207,6 +208,47 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 	if _, ok := scriptRef.(common.PlutusV2Script); !ok {
 		t.Fatalf("expected PlutusV2 reference script, got %T", scriptRef)
+	}
+}
+
+func TestHydrateUtxoChecksInlineDatumHash(t *testing.T) {
+	addr := testAddress(t)
+	base := bfAddressUTxO{
+		TxHash:      strings.Repeat("a", 64),
+		OutputIndex: 0,
+		Address:     addr.String(),
+		Amount:      []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		InlineDatum: json.RawMessage(`"182a"`),
+	}
+	ctx := NewBlockFrostChainContext("https://example.invalid", 0, "")
+	for _, tc := range []struct {
+		name    string
+		hash    string
+		wantErr string
+	}{
+		{"matching", common.Blake2b256Hash([]byte{0x18, 0x2a}).String(), ""},
+		{"missing", "", "inline datum is missing its data hash"},
+		{"mismatch", strings.Repeat("b", 64), "inline datum hash mismatch"},
+		{"short", "abcd", "invalid data hash length"},
+		{"invalid hex", "zz", "invalid data hash hex"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := base
+			raw.DataHash = tc.hash
+			utxo, err := ctx.hydrateUtxo(raw, addr)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("hydrateUtxo() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := utxo.Output.Datum().Cbor(); !bytes.Equal(got, []byte{0x18, 0x2a}) {
+				t.Fatalf("inline datum CBOR = %x, want 182a", got)
+			}
+		})
 	}
 }
 
