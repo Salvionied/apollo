@@ -249,13 +249,16 @@ type stubOgmiosClient struct {
 	mutateSubmit   bool
 	exUnits        map[common.RedeemerKey]common.ExUnits
 	utxo           *common.Utxo
+	// protocolParamsErr, when set, fails ProtocolParameters.
+	protocolParamsErr error
 
-	// Recorded arguments.
-	eras            []string
-	submitted       []byte
-	evaluated       []byte
-	additionalUtxos []common.Utxo
-	refs            []string
+	// Recorded calls and arguments.
+	protocolParamsCalls int
+	eras                []string
+	submitted           []byte
+	evaluated           []byte
+	additionalUtxos     []common.Utxo
+	refs                []string
 }
 
 var _ OgmiosClient = (*stubOgmiosClient)(nil)
@@ -263,6 +266,10 @@ var _ OgmiosClient = (*stubOgmiosClient)(nil)
 func (s *stubOgmiosClient) ProtocolParameters(
 	_ context.Context,
 ) (json.RawMessage, error) {
+	s.protocolParamsCalls++
+	if s.protocolParamsErr != nil {
+		return nil, s.protocolParamsErr
+	}
 	return s.protocolParams, nil
 }
 
@@ -480,7 +487,7 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		)
 	}
 
-	byRef, err := ctx.UtxoByRef(txHash, 7)
+	byRef, err := ctx.UtxoByRef(utxo.Id.Id(), 7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,6 +513,20 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 	}
 	if len(scriptCbor) != 4 {
 		t.Fatalf("ScriptCbor() = %x, want 4 bytes", scriptCbor)
+	}
+}
+
+func TestUtxoByRefRejectsMismatchedClientResult(t *testing.T) {
+	utxo := testStubUtxo(t)
+	client := &stubOgmiosClient{utxo: &utxo}
+	ctx, err := NewOgmiosChainContextFromClients(client, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requested common.Blake2b256
+	requested[0] = 1
+	if _, err := ctx.UtxoByRef(requested, 7); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
 	}
 }
 

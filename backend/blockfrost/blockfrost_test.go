@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,6 +61,48 @@ func TestSubmitTxRejectsUnrelatedID(t *testing.T) {
 	_, err := NewBlockFrostChainContext(server.URL, 0, "").SubmitTx(txCbor)
 	if err == nil || !strings.Contains(err.Error(), "transaction ID") {
 		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
+	}
+}
+
+func TestRequestRejectsCrossOriginRedirect(t *testing.T) {
+	var forwarded atomic.Int32
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwarded.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer sink.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, sink.URL+"/capture", http.StatusFound)
+	}))
+	defer source.Close()
+
+	ctx := NewBlockFrostChainContext(source.URL, 0, "secret-project-id")
+	if _, err := ctx.requestContext(context.Background(), http.MethodGet, "/blocks/latest", nil, ""); err == nil {
+		t.Fatal("expected cross-origin redirect to fail")
+	}
+	if got := forwarded.Load(); got != 0 {
+		t.Fatalf("cross-origin destination received %d requests", got)
+	}
+}
+
+func TestRequestAllowsSameOriginRedirect(t *testing.T) {
+	var gotCredential string
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		gotCredential = r.Header.Get("project_id")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer source.Close()
+
+	ctx := NewBlockFrostChainContext(source.URL, 0, "secret-project-id")
+	if _, err := ctx.requestContext(context.Background(), http.MethodGet, "/start", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if gotCredential != "secret-project-id" {
+		t.Fatalf("redirected request credential = %q", gotCredential)
 	}
 }
 
@@ -153,6 +197,7 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 		OutputIndex:         0,
 		Address:             addr.String(),
 		Amount:              []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		DataHash:            common.Blake2b256Hash(wantDatumCbor).String(),
 		InlineDatum:         json.RawMessage(`"182a"`),
 		ReferenceScriptHash: scriptHashHex,
 	}
@@ -178,6 +223,47 @@ func TestHydrateUtxoResolvesInlineDatumAndReferenceScript(t *testing.T) {
 	}
 	if _, ok := scriptRef.(common.PlutusV2Script); !ok {
 		t.Fatalf("expected PlutusV2 reference script, got %T", scriptRef)
+	}
+}
+
+func TestHydrateUtxoChecksInlineDatumHash(t *testing.T) {
+	addr := testAddress(t)
+	base := bfAddressUTxO{
+		TxHash:      strings.Repeat("a", 64),
+		OutputIndex: 0,
+		Address:     addr.String(),
+		Amount:      []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		InlineDatum: json.RawMessage(`"182a"`),
+	}
+	ctx := NewBlockFrostChainContext("https://example.invalid", 0, "")
+	for _, tc := range []struct {
+		name    string
+		hash    string
+		wantErr string
+	}{
+		{"matching", common.Blake2b256Hash([]byte{0x18, 0x2a}).String(), ""},
+		{"missing", "", "inline datum is missing its data hash"},
+		{"mismatch", strings.Repeat("b", 64), "inline datum hash mismatch"},
+		{"short", "abcd", "invalid data hash length"},
+		{"invalid hex", "zz", "invalid data hash hex"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := base
+			raw.DataHash = tc.hash
+			utxo, err := ctx.hydrateUtxo(raw, addr)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("hydrateUtxo() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := utxo.Output.Datum().Cbor(); !bytes.Equal(got, []byte{0x18, 0x2a}) {
+				t.Fatalf("inline datum CBOR = %x, want 182a", got)
+			}
+		})
 	}
 }
 
@@ -229,6 +315,59 @@ func TestUtxosHydratesDuplicateReferenceScriptsOnce(t *testing.T) {
 	}
 	if got := scriptRequests.Load(); got != 1 {
 		t.Fatalf("script requests = %d, want 1", got)
+	}
+}
+
+func TestUtxosRejectsDuplicateReferences(t *testing.T) {
+	addr := testAddress(t)
+	row := bfAddressUTxO{
+		TxHash: strings.Repeat("a", 64), OutputIndex: 0, Address: addr.String(),
+		Amount: []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "1" {
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]bfAddressUTxO{row, row})
+	}))
+	defer server.Close()
+	if _, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr); err == nil {
+		t.Fatal("expected duplicate UTxO reference to fail")
+	}
+}
+
+func TestUtxosReturnsAllProviderPages(t *testing.T) {
+	addr := testAddress(t)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		page, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if page > 1001 {
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]bfAddressUTxO{{
+			TxHash: fmt.Sprintf("%064x", page), OutputIndex: 0,
+			Address: addr.String(),
+			Amount:  []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		}})
+	}))
+	defer server.Close()
+
+	utxos, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(utxos) != 1001 {
+		t.Fatalf("UTxOs = %d, want 1001", len(utxos))
+	}
+	if got := requests.Load(); got != 1002 {
+		t.Fatalf("requests = %d, want 1002", got)
 	}
 }
 
@@ -419,6 +558,29 @@ func TestUtxoByRefFillsMissingTxHashOnTxUtxosOutputs(t *testing.T) {
 	}
 	if out.OutputAmount.Amount != 2_000_000 {
 		t.Fatalf("lovelace = %d, want 2000000", out.OutputAmount.Amount)
+	}
+}
+
+func TestUtxoByRefRejectsMismatchedResponse(t *testing.T) {
+	addr := testAddress(t)
+	var requested common.Blake2b256
+	requested[0] = 1
+	returned := requested
+	returned[0] = 2
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hash": hex.EncodeToString(returned.Bytes()),
+			"outputs": []map[string]any{{
+				"address":      addr.String(),
+				"amount":       []map[string]string{{"unit": "lovelace", "quantity": "2000000"}},
+				"output_index": 1,
+			}},
+		})
+	}))
+	t.Cleanup(server.Close)
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	if _, err := ctx.UtxoByRef(requested, 1); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
 	}
 }
 
@@ -763,7 +925,7 @@ func TestProtocolParamsPrefersCostModelsRaw(t *testing.T) {
 	}
 }
 
-func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
+func TestProtocolParamsFallsBackToArrayCostModels(t *testing.T) {
 	const body = `{
 		"min_fee_a": 44,
 		"min_fee_b": 155381,
@@ -786,7 +948,16 @@ func TestProtocolParamsFallsBackToNamedCostModels(t *testing.T) {
 	}
 	got := pp.CostModels["PlutusV2"]
 	if len(got) != 3 || got[0] != 9 {
-		t.Fatalf("expected named cost_models fallback, got %v", got)
+		t.Fatalf("expected array cost_models fallback, got %v", got)
+	}
+}
+
+func TestProtocolParamsRejectsNamedCostModelParameters(t *testing.T) {
+	raw := bfProtocolParams{
+		CostModels: json.RawMessage(`{"PlutusV3":{"addInteger-cpu-arguments-intercept":1,"addInteger-cpu-arguments-slope":2}}`),
+	}
+	if _, err := raw.toProtocolParams(); err == nil || !strings.Contains(err.Error(), "integer arrays") {
+		t.Fatalf("toProtocolParams() error = %v, want integer-array cost model error", err)
 	}
 }
 
@@ -1434,5 +1605,55 @@ func TestProtocolParamsRejectsOutOfRangeProtocolVersion(t *testing.T) {
 		if _, err := raw.toProtocolParams(); err == nil {
 			t.Fatalf("expected an error for %s", body)
 		}
+	}
+}
+
+// TestProtocolParamsCachedAndCopied checks that repeated reads are served from
+// the cache and that mutating a returned value, including its reference-script
+// price, cannot reach the cached copy.
+func TestProtocolParamsCachedAndCopied(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/epochs/latest/parameters" {
+			http.NotFound(w, r)
+			return
+		}
+		requests.Add(1)
+		_, _ = io.WriteString(w, `{
+			"min_fee_a": 44,
+			"min_fee_b": 155381,
+			"max_tx_size": 16384,
+			"coins_per_utxo_size": "4310",
+			"collateral_percent": 150,
+			"max_collateral_inputs": 3,
+			"cost_models_raw": {"PlutusV3": [100788, 420, 1]},
+			"min_fee_ref_script_cost_per_byte": 15
+		}`)
+	}))
+	defer server.Close()
+	ctx := NewBlockFrostChainContext(server.URL+"/api/v0", 0, "")
+
+	first, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.CostModels["PlutusV3"][0] = -1
+	first.MinFeeRefScriptCostPerByteRational.SetInt64(-1)
+
+	second, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := second.CostModels["PlutusV3"][0]; got != 100788 {
+		t.Fatalf("cached cost model entry = %d, want 100788", got)
+	}
+	if got := second.MinFeeRefScriptCostPerByteRational; got.Cmp(big.NewRat(15, 1)) != 0 {
+		t.Fatalf("cached ref script price = %s, want 15", got)
+	}
+	if _, err := ctx.MaxTxFee(); err != nil {
+		t.Fatal(err)
+	}
+	if n := requests.Load(); n != 1 {
+		t.Fatalf("made %d parameter requests, want 1", n)
 	}
 }

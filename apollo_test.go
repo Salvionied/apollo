@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"math/big"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/bursa/bip32"
@@ -45,7 +46,11 @@ func testAddress(t *testing.T) common.Address {
 }
 
 func setupFixedContext() *fixed.FixedChainContext {
-	return fixed.NewEmptyFixedChainContext()
+	base := fixed.NewEmptyFixedChainContext()
+	pp, _ := base.ProtocolParams()
+	gp, _ := base.GenesisParams()
+	pp.CostModels = map[string][]int64{"PlutusV2": {4, 5, 6}}
+	return fixed.NewFixedChainContext(pp, gp, base.NetworkId())
 }
 
 func addTestUtxo(fc *fixed.FixedChainContext, addr common.Address, lovelace uint64, txHashByte byte, index uint32) {
@@ -1897,6 +1902,27 @@ func TestCompleteUsesOnlyReferencedCostModelInScriptDataHash(t *testing.T) {
 	}
 	if *a.tx.Body.TxScriptDataHash != *expected {
 		t.Fatalf("unexpected script data hash: got %x want %x", a.tx.Body.TxScriptDataHash.Bytes(), expected.Bytes())
+	}
+}
+
+func TestCompleteRejectsMissingCostModel(t *testing.T) {
+	cc := fixed.NewEmptyFixedChainContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 20_000_000, 0x51, 0)
+	addTestUtxo(cc, addr, 10_000_000, 0x52, 0)
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeemer := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	a := New(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AddPayment(payment).
+		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
+		DisableExecutionUnitsEstimation().
+		Mint(NewUnit(strings.Repeat("ab", 28), "", 1), &redeemer, &common.ExUnits{Memory: 1, Steps: 1})
+	if _, err := a.Complete(); err == nil || !strings.Contains(err.Error(), "missing cost models") {
+		t.Fatalf("Complete error = %v, want missing cost models", err)
 	}
 }
 

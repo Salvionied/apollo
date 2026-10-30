@@ -65,12 +65,12 @@ func main() {
 Parameterized validators, such as Aiken validators that take parameters, must
 have their parameters applied before the script can be hashed, attached, or
 used as a reference script. `ApplyParamsToScript` applies Plutus data
-parameters to a `PlutusV1Script`, `PlutusV2Script`, or `PlutusV3Script` and
-returns a new script of the same type:
+parameters to a `PlutusV1Script`, `PlutusV2Script`, `PlutusV3Script`, or
+`PlutusV4Script` and returns a new script of the same type:
 
 ```go
 func ApplyParamsToScript[
-    S common.PlutusV1Script | common.PlutusV2Script | common.PlutusV3Script,
+    S common.PlutusV1Script | common.PlutusV2Script | common.PlutusV3Script | common.PlutusV4Script,
 ](script S, params ...data.PlutusData) (S, error)
 ```
 
