@@ -92,6 +92,10 @@ func testPParams() *cardano.PParams {
 		MinFeeCoefficient: &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 44}},
 		MinFeeConstant:    &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 155381}},
 		MaxTxSize:         16384,
+		Prices: &cardano.ExPrices{
+			Memory: &cardano.RationalNumber{Numerator: 577, Denominator: 10000},
+			Steps:  &cardano.RationalNumber{Numerator: 721, Denominator: 10000000},
+		},
 		CostModels: &cardano.CostModels{
 			PlutusV3: &cardano.CostModel{Values: []int64{100788, 420, 1}},
 		},
