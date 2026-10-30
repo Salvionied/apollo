@@ -20,10 +20,10 @@ import (
 
 func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 	ctx := NewUtxoRpcChainContext("http://localhost", 0, nil)
-	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef|backend.CapabilityGenesisParams) {
 		t.Fatal("expected UTxO RPC supported capabilities")
 	}
-	if backend.Supports(ctx, backend.CapabilityGenesisParams|backend.CapabilityEvaluateTxAdditionalUtxos) {
+	if backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
 		t.Fatal("UTxO RPC reported unavailable capabilities")
 	}
 
@@ -32,7 +32,6 @@ func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 		capability backend.Capability
 		call       func() error
 	}{
-		{"genesis", backend.CapabilityGenesisParams, func() error { _, err := ctx.GenesisParams(); return err }},
 		{"epoch", backend.CapabilityCurrentEpoch, func() error { _, err := ctx.CurrentEpoch(); return err }},
 		{"additional utxos", backend.CapabilityEvaluateTxAdditionalUtxos, func() error {
 			_, err := ctx.EvaluateTx(nil, []common.Utxo{{}})

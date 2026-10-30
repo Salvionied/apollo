@@ -586,6 +586,22 @@ func TestComputeScriptDataHashOmitsEmptyDatums(t *testing.T) {
 	}
 }
 
+func TestComputeScriptDataHashRejectsMissingCostModels(t *testing.T) {
+	redeemers := map[common.RedeemerKey]common.RedeemerValue{
+		{Tag: common.RedeemerTagSpend, Index: 0}: {ExUnits: common.ExUnits{Memory: 1, Steps: 1}},
+	}
+	for name, models := range map[string]map[string][]int64{
+		"missing":     nil,
+		"empty model": {"PlutusV2": nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ComputeScriptDataHash(redeemers, nil, models); err == nil {
+				t.Fatal("expected missing cost model to be rejected")
+			}
+		})
+	}
+}
+
 func TestComputeScriptDataHashIncludesNonEmptyDatums(t *testing.T) {
 	redeemerKey := common.RedeemerKey{Tag: common.RedeemerTagSpend, Index: 0}
 	redeemers := map[common.RedeemerKey]common.RedeemerValue{
