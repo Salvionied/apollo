@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -225,13 +226,38 @@ func TestNewOgmiosChainContextQueriesKupo(t *testing.T) {
 		t.Fatalf("lovelace = %s, want 2000000", got)
 	}
 
-	var scriptHash common.Blake2b224
+	scriptHash := common.PlutusV2Script([]byte{0x49, 0x48, 0x01, 0x00}).Hash()
 	scriptCbor, err := ctx.ScriptCborContext(t.Context(), scriptHash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := hex.EncodeToString(scriptCbor); got != scriptCborHex {
 		t.Fatalf("script cbor = %s, want %s", got, scriptCborHex)
+	}
+}
+
+func TestInjectedKupoScriptCborRejectsBytesForAnotherHash(t *testing.T) {
+	kupo := &stubKupoClient{scriptCbor: []byte{0x03, 0x04}}
+	ctx, err := NewOgmiosChainContextFromClients(
+		&stubOgmiosClient{},
+		kupo,
+		1,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := common.PlutusV2Script([]byte{0x01, 0x02}).Hash()
+	if _, err := ctx.ScriptCbor(want); err == nil {
+		t.Fatal("expected script hash mismatch")
+	}
+	kupo.scriptCbor = []byte{0x01, 0x02}
+	got, err := ctx.ScriptCbor(want)
+	if err != nil || !bytes.Equal(got, kupo.scriptCbor) {
+		t.Fatalf("ScriptCbor() = %x, %v, want %x, nil", got, err, kupo.scriptCbor)
+	}
+	kupo.scriptCbor[0] = 0x09
+	if !bytes.Equal(got, []byte{0x01, 0x02}) {
+		t.Fatalf("ScriptCbor() returned aliased Kupo client bytes: %x", got)
 	}
 }
 
@@ -244,15 +270,20 @@ type stubOgmiosClient struct {
 	epoch          uint64
 	tip            uint64
 	txHash         common.Blake2b256
+	submitHash     common.Blake2b256
+	mutateSubmit   bool
 	exUnits        map[common.RedeemerKey]common.ExUnits
 	utxo           *common.Utxo
+	// protocolParamsErr, when set, fails ProtocolParameters.
+	protocolParamsErr error
 
-	// Recorded arguments.
-	eras            []string
-	submitted       []byte
-	evaluated       []byte
-	additionalUtxos []common.Utxo
-	refs            []string
+	// Recorded calls and arguments.
+	protocolParamsCalls int
+	eras                []string
+	submitted           []byte
+	evaluated           []byte
+	additionalUtxos     []common.Utxo
+	refs                []string
 }
 
 var _ OgmiosClient = (*stubOgmiosClient)(nil)
@@ -260,6 +291,10 @@ var _ OgmiosClient = (*stubOgmiosClient)(nil)
 func (s *stubOgmiosClient) ProtocolParameters(
 	_ context.Context,
 ) (json.RawMessage, error) {
+	s.protocolParamsCalls++
+	if s.protocolParamsErr != nil {
+		return nil, s.protocolParamsErr
+	}
 	return s.protocolParams, nil
 }
 
@@ -284,7 +319,29 @@ func (s *stubOgmiosClient) SubmitTx(
 	txCbor []byte,
 ) (common.Blake2b256, error) {
 	s.submitted = txCbor
-	return s.txHash, nil
+	if s.mutateSubmit {
+		txCbor[3] = 1
+	}
+	return s.submitHash, nil
+}
+
+func TestInjectedSubmitClientCannotChangeExpectedID(t *testing.T) {
+	client := &stubOgmiosClient{
+		submitHash:   common.Blake2b256Hash([]byte{0xa1, 0x02, 0x01}),
+		mutateSubmit: true,
+	}
+	ctx, err := NewOgmiosChainContextFromClients(client, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txCbor := []byte{0x84, 0xa1, 0x02, 0x00, 0xa0, 0xf5, 0xf6}
+	original := bytes.Clone(txCbor)
+	if _, err := ctx.SubmitTx(txCbor); err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
+	}
+	if !bytes.Equal(txCbor, original) {
+		t.Fatalf("SubmitTx() changed caller bytes: %x", txCbor)
+	}
 }
 
 func (s *stubOgmiosClient) EvaluateTx(
@@ -369,6 +426,7 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		epoch:          507,
 		tip:            123456,
 		txHash:         txHash,
+		submitHash:     common.Blake2b256Hash([]byte{0xa0}),
 		exUnits: map[common.RedeemerKey]common.ExUnits{
 			{Tag: common.RedeemerTagSpend, Index: 0}: {
 				Memory: 1700,
@@ -422,16 +480,20 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		t.Fatalf("MaxTxFee() = %d, %v, want a nonzero fee", fee, err)
 	}
 
-	txCbor := []byte{0x84, 0xA0}
+	txCbor := []byte{0x84, 0xA0, 0xA0, 0xF5, 0xF6}
 	hash, err := ctx.SubmitTx(txCbor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hash != txHash {
-		t.Fatalf("SubmitTx hash = %x, want %x", hash, txHash)
+	if hash != ogmiosClient.submitHash {
+		t.Fatalf("SubmitTx hash = %x, want %x", hash, ogmiosClient.submitHash)
 	}
 	if string(ogmiosClient.submitted) != string(txCbor) {
 		t.Fatalf("submitted CBOR = %x, want %x", ogmiosClient.submitted, txCbor)
+	}
+	ogmiosClient.submitHash = txHash
+	if _, err := ctx.SubmitTx(txCbor); err == nil || !strings.Contains(err.Error(), "transaction ID") {
+		t.Fatalf("SubmitTx() error = %v, want transaction ID mismatch", err)
 	}
 
 	additional := []common.Utxo{sampleCommonUtxo(t)}
@@ -450,7 +512,7 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		)
 	}
 
-	byRef, err := ctx.UtxoByRef(txHash, 7)
+	byRef, err := ctx.UtxoByRef(utxo.Id.Id(), 7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,12 +532,27 @@ func TestInjectedClientsServeEveryChainContextMethod(t *testing.T) {
 		t.Fatalf("queried addresses = %v", kupoClient.addresses)
 	}
 
-	scriptCbor, err := ctx.ScriptCbor(common.Blake2b224{})
+	scriptHash := common.PlutusV2Script(kupoClient.scriptCbor).Hash()
+	scriptCbor, err := ctx.ScriptCbor(scriptHash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(scriptCbor) != 4 {
 		t.Fatalf("ScriptCbor() = %x, want 4 bytes", scriptCbor)
+	}
+}
+
+func TestUtxoByRefRejectsMismatchedClientResult(t *testing.T) {
+	utxo := testStubUtxo(t)
+	client := &stubOgmiosClient{utxo: &utxo}
+	ctx, err := NewOgmiosChainContextFromClients(client, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requested common.Blake2b256
+	requested[0] = 1
+	if _, err := ctx.UtxoByRef(requested, 7); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
 	}
 }
 

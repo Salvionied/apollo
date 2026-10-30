@@ -1,17 +1,22 @@
 package utxorpc
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -56,6 +61,17 @@ func grpcFrame(msg []byte) []byte {
 // exercise a fully successful call rather than only the routing. ReadTip is the
 // operation the routing tests drive; anything else gets an empty message.
 func (r *versionRouter) payloadFor(path string) []byte {
+	if strings.Contains(path, "SubmitTx") && r.submitRef != nil {
+		var msg proto.Message = &submit.SubmitTxResponse{Ref: r.submitRef}
+		if strings.Contains(path, "utxorpc.v1alpha.") {
+			msg = &alphasubmit.SubmitTxResponse{Ref: r.submitRef}
+		}
+		encoded, err := proto.Marshal(msg)
+		if err != nil {
+			return nil
+		}
+		return encoded
+	}
 	if !strings.Contains(path, "ReadTip") {
 		return nil
 	}
@@ -85,10 +101,41 @@ const testTipSlot = 4242
 // everything else with gRPC UNIMPLEMENTED, which is how a server that exposes
 // one version but not the other behaves.
 type versionRouter struct {
-	serve string // proto package fragment to accept, e.g. "utxorpc.v1alpha."
+	serve     string // proto package fragment to accept, e.g. "utxorpc.v1alpha."
+	submitRef []byte
 
 	mu    sync.Mutex
 	paths []string
+}
+
+func TestSubmitTxVerifiesIDAcrossProtocolVersions(t *testing.T) {
+	txCbor := []byte{0x84, 0xa0, 0xa0, 0xf5, 0xf6}
+	want := common.Blake2b256Hash([]byte{0xa0})
+	for _, version := range []string{"utxorpc.v1beta.", "utxorpc.v1alpha."} {
+		for _, mismatch := range []bool{false, true} {
+			name := version + "matching"
+			if mismatch {
+				name = version + "mismatched"
+			}
+			t.Run(name, func(t *testing.T) {
+				router, srv := newVersionRouter(t, version)
+				router.submitRef = want.Bytes()
+				if mismatch {
+					router.submitRef = make([]byte, common.Blake2b256Size)
+				}
+				got, err := NewUtxoRpcChainContext(srv.URL, 1, nil).SubmitTxContext(t.Context(), txCbor)
+				if mismatch {
+					if err == nil || !strings.Contains(err.Error(), "transaction ID") {
+						t.Fatalf("SubmitTxContext() error = %v, want transaction ID mismatch", err)
+					}
+					return
+				}
+				if err != nil || got != want {
+					t.Fatalf("SubmitTxContext() = %x, %v, want %x, nil", got, err, want)
+				}
+			})
+		}
+	}
 }
 
 func (r *versionRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -127,6 +174,101 @@ func newVersionRouter(t *testing.T, serve string) (*versionRouter, *httptest.Ser
 	srv.Start()
 	t.Cleanup(srv.Close)
 	return r, srv
+}
+
+func TestProtocolParamsRejectsIncompleteFeeResponse(t *testing.T) {
+	fee := &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 44}}
+	prices := &cardano.ExPrices{
+		Memory: &cardano.RationalNumber{Numerator: 1, Denominator: 10},
+		Steps:  &cardano.RationalNumber{Numerator: 1, Denominator: 10},
+	}
+	for _, tc := range []struct {
+		name   string
+		params *cardano.PParams
+		valid  bool
+	}{
+		{name: "missing coefficient", params: &cardano.PParams{MinFeeConstant: fee, Prices: prices}},
+		{name: "missing prices", params: &cardano.PParams{MinFeeCoefficient: fee, MinFeeConstant: fee}},
+		{name: "complete", params: &cardano.PParams{MinFeeCoefficient: fee, MinFeeConstant: fee, Prices: prices}, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := proto.Marshal(&query.ReadParamsResponse{
+				Values: &query.AnyChainParams{Params: &query.AnyChainParams_Cardano{Cardano: tc.params}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			_, err = ctx.ProtocolParamsContext(t.Context())
+			if (err == nil) != tc.valid {
+				t.Fatalf("ProtocolParamsContext() error = %v; valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
+func TestUtxoByRefRejectsMismatchedResponseAcrossVersions(t *testing.T) {
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: versionTestAddress(t),
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1_500_000},
+	}
+	nativeBytes, err := cbor.Encode(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requested, returned common.Blake2b256
+	requested[0] = 1
+	returned[0] = 2
+	for _, version := range []string{"utxorpc.v1beta.", "utxorpc.v1alpha."} {
+		t.Run(version, func(t *testing.T) {
+			var payload []byte
+			var err error
+			if version == "utxorpc.v1alpha." {
+				payload, err = proto.Marshal(&alphaquery.ReadUtxosResponse{Items: []*alphaquery.AnyUtxoData{{
+					NativeBytes: nativeBytes, TxoRef: &alphaquery.TxoRef{Hash: returned.Bytes(), Index: 3},
+				}}})
+			} else {
+				payload, err = proto.Marshal(&query.ReadUtxosResponse{Items: []*query.AnyUtxoData{{
+					NativeBytes: nativeBytes, TxoRef: &query.TxoRef{Hash: returned.Bytes(), Index: 3},
+				}}})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				if !strings.Contains(req.URL.Path, version) {
+					w.Header().Set("Grpc-Status", "12")
+					return
+				}
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			if _, err := ctx.UtxoByRef(requested, 3); err == nil {
+				t.Fatal("expected mismatched reference to be rejected")
+			}
+		})
+	}
 }
 
 // TestFallsBackToV1AlphaWhenV1BetaUnimplemented covers the Dolos-style
@@ -250,6 +392,229 @@ func TestFallbackAppliesToEveryOperation(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestUtxosRejectsOversizedResponseForBothVersions(t *testing.T) {
+	token := strings.Repeat("x", 16*1024*1024)
+	for _, version := range []protoVersion{protoVersionV1Beta, protoVersionV1Alpha} {
+		t.Run(version.String(), func(t *testing.T) {
+			var payload []byte
+			var err error
+			if version == protoVersionV1Beta {
+				payload, err = proto.Marshal(&query.SearchUtxosResponse{NextToken: &token})
+			} else {
+				payload, err = proto.Marshal(&alphaquery.SearchUtxosResponse{NextToken: token})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			ctx.rememberVersion(version)
+			_, err = ctx.UtxosContext(t.Context(), versionTestAddress(t))
+			if err == nil || !strings.Contains(err.Error(), "response exceeds") {
+				t.Fatalf("UtxosContext() error = %v, want response limit", err)
+			}
+		})
+	}
+}
+
+func TestUtxosRejectsCompressedOversizedResponseForBothVersions(t *testing.T) {
+	unknown := protowire.AppendTag(nil, 100, protowire.BytesType)
+	unknown = protowire.AppendBytes(unknown, []byte(strings.Repeat("x", 17*1024*1024)))
+	for _, version := range []protoVersion{protoVersionV1Beta, protoVersionV1Alpha} {
+		t.Run(version.String(), func(t *testing.T) {
+			var message proto.Message
+			if version == protoVersionV1Beta {
+				message = &query.SearchUtxosResponse{}
+			} else {
+				message = &alphaquery.SearchUtxosResponse{}
+			}
+			message.ProtoReflect().SetUnknown(unknown)
+			payload, err := proto.Marshal(message)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var compressed bytes.Buffer
+			writer := gzip.NewWriter(&compressed)
+			if _, err := writer.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			frame := grpcFrame(compressed.Bytes())
+			frame[0] = 1
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Grpc-Encoding", "gzip")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(frame)
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			ctx.rememberVersion(version)
+			_, err = ctx.UtxosContext(t.Context(), versionTestAddress(t))
+			if err == nil || !strings.Contains(err.Error(), "max") {
+				t.Fatalf("UtxosContext() error = %v, want decompressed message limit", err)
+			}
+		})
+	}
+}
+
+func TestUtxosAcceptsCompressedResponseForBothVersions(t *testing.T) {
+	for _, version := range []protoVersion{protoVersionV1Beta, protoVersionV1Alpha} {
+		t.Run(version.String(), func(t *testing.T) {
+			var message proto.Message
+			if version == protoVersionV1Beta {
+				message = &query.SearchUtxosResponse{}
+			} else {
+				message = &alphaquery.SearchUtxosResponse{}
+			}
+			payload, err := proto.Marshal(message)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var compressed bytes.Buffer
+			writer := gzip.NewWriter(&compressed)
+			if _, err := writer.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			frame := grpcFrame(compressed.Bytes())
+			frame[0] = 1
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Grpc-Encoding", "gzip")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(frame)
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			ctx.rememberVersion(version)
+			utxos, err := ctx.UtxosContext(t.Context(), versionTestAddress(t))
+			if err != nil || len(utxos) != 0 {
+				t.Fatalf("UtxosContext() = %d UTxOs, %v; want empty success", len(utxos), err)
+			}
+		})
+	}
+}
+
+func TestUtxosRejectsDuplicateReferencesForBothVersions(t *testing.T) {
+	addr := versionTestAddress(t)
+	output := babbage.BabbageTransactionOutput{
+		OutputAddress: addr,
+		OutputAmount:  mary.MaryTransactionOutputValue{Amount: 1_500_000},
+	}
+	nativeBytes, err := cbor.Encode(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := make([]byte, common.Blake2b256Size)
+	for _, version := range []protoVersion{protoVersionV1Beta, protoVersionV1Alpha} {
+		t.Run(version.String(), func(t *testing.T) {
+			var payload []byte
+			var err error
+			if version == protoVersionV1Beta {
+				item := &query.AnyUtxoData{NativeBytes: nativeBytes, TxoRef: &query.TxoRef{Hash: hash, Index: 3}}
+				payload, err = proto.Marshal(&query.SearchUtxosResponse{Items: []*query.AnyUtxoData{item, item}})
+			} else {
+				item := &alphaquery.AnyUtxoData{NativeBytes: nativeBytes, TxoRef: &alphaquery.TxoRef{Hash: hash, Index: 3}}
+				payload, err = proto.Marshal(&alphaquery.SearchUtxosResponse{Items: []*alphaquery.AnyUtxoData{item, item}})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(grpcFrame(payload))
+				w.Header().Set("Grpc-Status", "0")
+			}))
+			protocols := new(http.Protocols)
+			protocols.SetUnencryptedHTTP2(true)
+			srv.Config.Protocols = protocols
+			srv.Start()
+			t.Cleanup(srv.Close)
+
+			ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+			ctx.rememberVersion(version)
+			if _, err := ctx.UtxosContext(t.Context(), addr); err == nil {
+				t.Fatal("expected duplicate UTxO reference to fail")
+			}
+		})
+	}
+}
+
+func TestUtxosReadsCompleteResultAcrossLargePages(t *testing.T) {
+	unknown := protowire.AppendTag(nil, 100, protowire.BytesType)
+	unknown = protowire.AppendBytes(unknown, []byte(strings.Repeat("x", 9*1024*1024)))
+	var requests atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestNum := requests.Add(1)
+		token := strconv.Itoa(int(requestNum))
+		resp := &query.SearchUtxosResponse{NextToken: &token}
+		if requestNum <= 4 {
+			resp.ProtoReflect().SetUnknown(unknown)
+		} else {
+			resp.NextToken = nil
+		}
+		payload, err := proto.Marshal(resp)
+		if err != nil {
+			return
+		}
+		w.Header().Set("Content-Type", "application/grpc")
+		w.Header().Set("Trailer", "Grpc-Status, Grpc-Message")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(grpcFrame(payload))
+		w.Header().Set("Grpc-Status", "0")
+	}))
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	srv.Config.Protocols = protocols
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	ctx := NewUtxoRpcChainContext(srv.URL, 1, nil)
+	utxos, err := ctx.UtxosContext(t.Context(), versionTestAddress(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(utxos) != 0 {
+		t.Fatalf("UTxOs = %d, want 0", len(utxos))
+	}
+	if got := requests.Load(); got != 5 {
+		t.Fatalf("requests = %d, want 5 through the final page", got)
 	}
 }
 

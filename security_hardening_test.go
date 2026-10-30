@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/bursa"
+	"github.com/blinklabs-io/bursa/bip32"
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 
@@ -557,14 +558,47 @@ func TestWalletStringRedactsKeyMaterialByValue(t *testing.T) {
 }
 
 func TestNewKeyPairWalletValidatesKeyLength(t *testing.T) {
-	addr := testAddress(t)
+	key := testPaymentKey(t, 1)
+	addr := keyPairTestAddress(t, key, common.AddressTypeKeyNone)
 	if _, err := NewKeyPairWallet(addr, make([]byte, 32)); err == nil {
 		t.Error("expected error for 32-byte key, got nil")
 	}
 	if _, err := NewKeyPairWallet(addr, nil); err == nil {
 		t.Error("expected error for nil key, got nil")
 	}
-	if _, err := NewKeyPairWallet(addr, make([]byte, 96)); err != nil {
+	if _, err := NewKeyPairWallet(addr, key); err != nil {
 		t.Errorf("expected 96-byte key to be accepted, got: %v", err)
+	}
+}
+
+func keyPairTestAddress(t *testing.T, key bip32.XPrv, addrType uint8) common.Address {
+	t.Helper()
+	hash := common.Blake2b224Hash(key.Public().PublicKey())
+	addr, err := common.NewAddressFromParts(
+		addrType,
+		common.AddressNetworkMainnet,
+		hash.Bytes(),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return addr
+}
+
+func TestNewKeyPairWalletRejectsUncontrolledAddress(t *testing.T) {
+	key := testPaymentKey(t, 1)
+	otherKey := testPaymentKey(t, 2)
+	otherAddress := keyPairTestAddress(t, otherKey, common.AddressTypeKeyNone)
+	if _, err := NewKeyPairWallet(otherAddress, key); err == nil {
+		t.Fatal("accepted an address whose payment credential is not controlled by the key")
+	}
+	scriptAddress := keyPairTestAddress(t, key, common.AddressTypeScriptNone)
+	if _, err := NewKeyPairWallet(scriptAddress, key); err == nil {
+		t.Fatal("accepted a script payment address for a key-pair wallet")
+	}
+	controlledAddress := keyPairTestAddress(t, key, common.AddressTypeKeyNone)
+	if _, err := NewKeyPairWallet(controlledAddress, key); err != nil {
+		t.Fatalf("rejected an address controlled by the key: %v", err)
 	}
 }

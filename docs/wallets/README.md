@@ -48,8 +48,10 @@ log it.
 ## Key-pair wallet
 
 `NewKeyPairWallet(addr, key)` takes a 96-byte BIP32-Ed25519 extended private
-key. Other lengths are rejected up front (bursa panics on them). There is no
-staking key: `StakePubKeyHash()` is zero.
+key. Other lengths are rejected up front (bursa panics on them). The address
+must have a payment-key credential controlled by that key. There is no staking
+key: `StakePubKeyHash()` is zero. Use `SetChangeAddress` when change should go
+to a different address.
 
 This is **not** a replacement for v1 `SetWalletFromKeypair` of raw vkey/skey
 pairs. Build an address, then wrap it.
@@ -58,7 +60,7 @@ pairs. Build an address, then wrap it.
 
 ```go
 addr, err := apollo.ParseAddress("addr1...")
-builder = apollo.New(ctx).SetWallet(apollo.NewExternalWallet(addr))
+builder = apollo.New(ctx).SetMaxFee(1_000_000).SetWallet(apollo.NewExternalWallet(addr))
 ```
 
 `SignTxBody` always errors. Use this for hardware, remote, or "build unsigned"

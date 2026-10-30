@@ -30,12 +30,13 @@ func (a *Apollo) PayToContractWithReferenceScript(addr common.Address, datum *co
 
 Creates a payment to a script address with an **inline datum** and a reference script.
 
-### Version-specific: PayToContractWithV1/V2/V3ReferenceScript
+### Version-specific: PayToContractWithV1/V2/V3/V4ReferenceScript
 
 ```go
 func (a *Apollo) PayToContractWithV1ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV1Script, units ...Unit) (*Apollo, error)
 func (a *Apollo) PayToContractWithV2ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV2Script, units ...Unit) (*Apollo, error)
 func (a *Apollo) PayToContractWithV3ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV3Script, units ...Unit) (*Apollo, error)
+func (a *Apollo) PayToContractWithV4ReferenceScript(addr common.Address, datum *common.Datum, lovelace int64, script common.PlutusV4Script, units ...Unit) (*Apollo, error)
 ```
 
 Type-safe wrappers with inline datum. These delegate to the unified `PayToContractWithReferenceScript` method.

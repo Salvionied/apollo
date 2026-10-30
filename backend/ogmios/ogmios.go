@@ -1,6 +1,7 @@
 package ogmios
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SundaeSwap-finance/kugo"
@@ -24,6 +26,7 @@ import (
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
+	"github.com/Salvionied/apollo/v2/internal/scriptutil"
 )
 
 // OgmiosChainContext implements backend.ChainContext using Ogmios + Kupo.
@@ -31,7 +34,18 @@ type OgmiosChainContext struct {
 	ogmios    OgmiosClient
 	kupo      KupoClient
 	networkId uint8
+
+	mu             sync.Mutex
+	cachedParams   *backend.ProtocolParameters
+	cachedGenesis  *backend.GenesisParameters
+	paramsCacheAt  time.Time
+	genesisCacheAt time.Time
 }
+
+// cacheExpiry is how long protocol and genesis parameters are reused before
+// Ogmios is queried again. The transaction builder reads them many times per
+// transaction, and with Ogmios each read is a round trip.
+const cacheExpiry = 5 * time.Minute
 
 var _ backend.ContextChainContext = (*OgmiosChainContext)(nil)
 
@@ -54,14 +68,33 @@ type Config struct {
 	// KupoTimeout bounds each Kupo HTTP request. Zero leaves the Kupo client
 	// default in place.
 	KupoTimeout time.Duration
+	// OgmiosMaxIdleConns is how many idle Ogmios connections are kept open
+	// for reuse between queries. Zero uses DefaultOgmiosMaxIdleConns; a
+	// negative value turns reuse off, so every query dials a new connection.
+	OgmiosMaxIdleConns int
+	// OgmiosIdleTimeout is how long an idle Ogmios connection is kept before
+	// it is closed. Zero uses DefaultOgmiosIdleTimeout. Keep it below the
+	// idle timeout of any proxy or load balancer in front of Ogmios.
+	OgmiosIdleTimeout time.Duration
 }
+
+const (
+	// DefaultOgmiosMaxIdleConns is the number of idle Ogmios connections a
+	// context keeps for reuse when Config.OgmiosMaxIdleConns is zero.
+	DefaultOgmiosMaxIdleConns = 4
+	// DefaultOgmiosIdleTimeout is how long an idle Ogmios connection is kept
+	// when Config.OgmiosIdleTimeout is zero.
+	DefaultOgmiosIdleTimeout = 30 * time.Second
+)
 
 // NewOgmiosChainContext creates an Ogmios chain context from connection
 // settings, building the Ogmios and Kupo clients internally. An endpoint that
 // is empty, or is not a URL Apollo can reach the service at, is rejected here
 // rather than failing on the first query.
 func NewOgmiosChainContext(cfg Config) (*OgmiosChainContext, error) {
-	ogmiosClient, err := newOgmigoClient(cfg.OgmiosEndpoint)
+	ogmiosClient, err := newOgmigoClient(
+		cfg.OgmiosEndpoint, cfg.OgmiosMaxIdleConns, cfg.OgmiosIdleTimeout,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +201,18 @@ func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
 	return capabilities
 }
 
+// CloseIdleConnections closes the Ogmios connections held open for reuse.
+// Call it when the context is no longer needed; idle connections otherwise
+// close on their own after Config.OgmiosIdleTimeout. The context stays
+// usable and dials again as needed. A context built from a custom
+// OgmiosClient passes the call on only if that client has a
+// CloseIdleConnections method.
+func (o *OgmiosChainContext) CloseIdleConnections() {
+	if closer, ok := o.ogmios.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
 	return o.ProtocolParamsContext(context.Background())
 }
@@ -177,6 +222,15 @@ func (o *OgmiosChainContext) ProtocolParamsContext(ctx context.Context) (backend
 	if err != nil {
 		return backend.ProtocolParameters{}, err
 	}
+
+	o.mu.Lock()
+	if o.cachedParams != nil && time.Since(o.paramsCacheAt) < cacheExpiry {
+		pp := backendutil.CloneProtocolParams(*o.cachedParams)
+		o.mu.Unlock()
+		return pp, nil
+	}
+	o.mu.Unlock()
+
 	raw, err := client.ProtocolParameters(ctx)
 	if err != nil {
 		return backend.ProtocolParameters{}, err
@@ -186,8 +240,17 @@ func (o *OgmiosChainContext) ProtocolParamsContext(ctx context.Context) (backend
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("failed to parse protocol params: %w", err)
 	}
+	pp, err := params.toProtocolParams()
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
 
-	return params.toProtocolParams()
+	cached := backendutil.CloneProtocolParams(pp)
+	o.mu.Lock()
+	o.cachedParams = &cached
+	o.paramsCacheAt = time.Now()
+	o.mu.Unlock()
+	return pp, nil
 }
 
 func (o *OgmiosChainContext) GenesisParams() (backend.GenesisParameters, error) {
@@ -199,6 +262,15 @@ func (o *OgmiosChainContext) GenesisParamsContext(ctx context.Context) (backend.
 	if err != nil {
 		return backend.GenesisParameters{}, err
 	}
+
+	o.mu.Lock()
+	if o.cachedGenesis != nil && time.Since(o.genesisCacheAt) < cacheExpiry {
+		gp := *o.cachedGenesis
+		o.mu.Unlock()
+		return gp, nil
+	}
+	o.mu.Unlock()
+
 	raw, err := client.GenesisConfig(ctx, "shelley")
 	if err != nil {
 		return backend.GenesisParameters{}, err
@@ -211,7 +283,16 @@ func (o *OgmiosChainContext) GenesisParamsContext(ctx context.Context) (backend.
 		)
 	}
 
-	return genesis.toGenesisParams()
+	gp, err := genesis.toGenesisParams()
+	if err != nil {
+		return backend.GenesisParameters{}, err
+	}
+
+	o.mu.Lock()
+	o.cachedGenesis = &gp
+	o.genesisCacheAt = time.Now()
+	o.mu.Unlock()
+	return gp, nil
 }
 
 func (o *OgmiosChainContext) NetworkId() uint8 {
@@ -275,7 +356,14 @@ func (o *OgmiosChainContext) SubmitTxContext(ctx context.Context, txCbor []byte)
 	if err != nil {
 		return common.Blake2b256{}, err
 	}
-	return client.SubmitTx(ctx, txCbor)
+	result, err := client.SubmitTx(ctx, bytes.Clone(txCbor))
+	if err != nil {
+		return common.Blake2b256{}, err
+	}
+	if err := backend.VerifySubmittedTxID(txCbor, result); err != nil {
+		return common.Blake2b256{}, err
+	}
+	return result, nil
 }
 
 func (o *OgmiosChainContext) EvaluateTx(txCbor []byte, additionalUtxos []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
@@ -347,7 +435,14 @@ func (o *OgmiosChainContext) UtxoByRefContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.UtxoByRef(ctx, txHash, index)
+	utxo, err := client.UtxoByRef(ctx, txHash, index)
+	if err != nil {
+		return nil, err
+	}
+	if err := backend.ValidateUtxoRef(utxo, txHash, index); err != nil {
+		return nil, err
+	}
+	return utxo, nil
 }
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
@@ -362,7 +457,15 @@ func (o *OgmiosChainContext) ScriptCborContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.ScriptCbor(ctx, scriptHash)
+	scriptCbor, err := client.ScriptCbor(ctx, scriptHash)
+	if err != nil {
+		return nil, err
+	}
+	scriptCbor = bytes.Clone(scriptCbor)
+	if _, err := scriptutil.ScriptRefFromHash(scriptHash, scriptCbor); err != nil {
+		return nil, err
+	}
+	return scriptCbor, nil
 }
 
 // --- Ogmios response types and conversion ---
@@ -636,10 +739,11 @@ func (r *ogmiosRatio) UnmarshalJSON(data []byte) error {
 // {"milliseconds": N}; v5 sent a bare number of seconds. Both are accepted and
 // normalized to the whole seconds that GenesisParameters.SlotLength reports.
 //
-// That field is defined in seconds across every backend, so a sub-second slot
-// length is not representable and is truncated toward zero. No Cardano network
-// uses one: Shelley onward is 1000ms and Byron was 20000ms. Should that ever
-// change, the field's unit has to change with it rather than this conversion.
+// That field is defined in seconds across every backend, so a slot length that
+// is not a positive whole number of seconds is not representable and is
+// rejected, as the UTxO RPC backend does. No Cardano network uses one: Shelley
+// onward is 1000ms and Byron was 20000ms. Should that ever change, the field's
+// unit has to change with it rather than this conversion.
 type ogmiosSlotLength struct {
 	Seconds int
 }
@@ -651,8 +755,15 @@ func (s *ogmiosSlotLength) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err == nil &&
 		wire.Milliseconds != nil {
 		millis := *wire.Milliseconds
-		if millis < 0 || millis/1000 > math.MaxInt32 {
+		if millis <= 0 || millis/1000 > math.MaxInt32 {
 			return fmt.Errorf("slot length out of range: %d ms", millis)
+		}
+		// GenesisParameters holds whole seconds; a length that is not one
+		// is rejected rather than truncated.
+		if millis%1000 != 0 {
+			return fmt.Errorf(
+				"slot length %d ms is not a whole number of seconds", millis,
+			)
 		}
 		s.Seconds = int(millis / 1000)
 		return nil
@@ -663,6 +774,9 @@ func (s *ogmiosSlotLength) UnmarshalJSON(data []byte) error {
 			`unrecognized slot length %s: want {"milliseconds":N} or N`,
 			data,
 		)
+	}
+	if seconds <= 0 {
+		return fmt.Errorf("slot length out of range: %d s", seconds)
 	}
 	s.Seconds = seconds
 	return nil
@@ -675,6 +789,11 @@ func (g *ogmiosGenesisConfig) toGenesisParams() (
 	systemStart, err := parseOgmiosStartTime(g.StartTime)
 	if err != nil {
 		return backend.GenesisParameters{}, err
+	}
+	if g.SlotLength.Seconds == 0 {
+		return backend.GenesisParameters{}, errors.New(
+			"genesis slot length is missing",
+		)
 	}
 
 	return backend.GenesisParameters{
@@ -769,6 +888,9 @@ func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, 
 	// Set script reference from kupo match data, verifying the script bytes
 	// against the script hash claimed by kupo.
 	if match.Script.Script != "" {
+		if match.ScriptHash == "" {
+			return common.Utxo{}, errors.New("kupo script is missing its hash")
+		}
 		ref, err := kupoScriptToScriptRef(match.Script, match.ScriptHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to parse script ref: %w", err)
@@ -1016,8 +1138,7 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 		return nil, fmt.Errorf("failed to parse script JSON: %w", err)
 	}
 	if raw.Cbor == "" {
-		// Native scripts may use "json" field instead of "cbor"; skip these for now.
-		return nil, nil
+		return nil, fmt.Errorf("missing script CBOR for %q", raw.Language)
 	}
 
 	scriptBytes, err := hex.DecodeString(raw.Cbor)

@@ -222,6 +222,17 @@ func TestKupoScriptToScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestMatchToUtxoRejectsScriptWithoutHash(t *testing.T) {
+	match := testMatch("", "")
+	match.Script = kugo.Script{
+		Language: kugo.ScriptLanguagePlutusV2,
+		Script:   "010203",
+	}
+	if _, err := matchToUtxo(t.Context(), match, testAddress(t), nil); err == nil {
+		t.Fatal("expected a script-bearing match without a hash to fail")
+	}
+}
+
 func TestKupoScriptToScriptRefPlutusV4(t *testing.T) {
 	scriptBytes := []byte{0x01, 0x02, 0x03}
 	script := kugo.Script{
@@ -250,6 +261,17 @@ func TestOgmiosScriptToScriptRefPlutusV4(t *testing.T) {
 	}
 	if got := ref.Script.RawScriptBytes(); !bytes.Equal(got, scriptBytes) {
 		t.Fatalf("script bytes = %x, want %x", got, scriptBytes)
+	}
+}
+
+func TestOgmiosScriptToScriptRefRejectsMissingCbor(t *testing.T) {
+	for _, raw := range []json.RawMessage{
+		json.RawMessage(`{"language":"native","json":{"clause":"all","from":[]}}`),
+		json.RawMessage(`{"language":"plutus:v2"}`),
+	} {
+		if ref, err := ogmiosScriptToScriptRef(raw); err == nil {
+			t.Fatalf("script %s decoded as %v without CBOR", raw, ref)
+		}
 	}
 }
 
@@ -1145,5 +1167,44 @@ func TestProtocolParamsRejectNegativeProtocolVersion(t *testing.T) {
 	}
 	if _, err := raw.toProtocolParams(); err == nil {
 		t.Fatal("expected an error for a negative protocol version")
+	}
+}
+
+// TestGenesisParamsRejectInvalidSlotLength keeps a slot length that
+// GenesisParameters cannot hold in whole seconds from being truncated, and a
+// missing one from becoming zero, matching the UTxO RPC backend.
+func TestGenesisParamsRejectInvalidSlotLength(t *testing.T) {
+	slotLengths := map[string]string{
+		"sub-second milliseconds": `{"milliseconds": 200}`,
+		"fractional seconds":      `{"milliseconds": 1500}`,
+		"zero milliseconds":       `{"milliseconds": 0}`,
+		"zero seconds":            `0`,
+		"negative seconds":        `-1`,
+		"missing":                 ``,
+	}
+	for name, slotLength := range slotLengths {
+		t.Run(name, func(t *testing.T) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(ogmiosV6ShelleyGenesisBody), &fields); err != nil {
+				t.Fatal(err)
+			}
+			if slotLength == "" {
+				delete(fields, "slotLength")
+			} else {
+				fields["slotLength"] = json.RawMessage(slotLength)
+			}
+			body, err := json.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var raw ogmiosGenesisConfig
+			if err := json.Unmarshal(body, &raw); err != nil {
+				return
+			}
+			if gp, err := raw.toGenesisParams(); err == nil {
+				t.Fatalf("slotLength %s accepted as %d seconds", slotLength, gp.SlotLength)
+			}
+		})
 	}
 }

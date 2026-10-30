@@ -20,10 +20,10 @@ import (
 
 func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 	ctx := NewUtxoRpcChainContext("http://localhost", 0, nil)
-	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef) {
+	if !backend.Supports(ctx, backend.CapabilityEvaluateTx|backend.CapabilityUtxoByRef|backend.CapabilityGenesisParams) {
 		t.Fatal("expected UTxO RPC supported capabilities")
 	}
-	if backend.Supports(ctx, backend.CapabilityGenesisParams|backend.CapabilityEvaluateTxAdditionalUtxos) {
+	if backend.Supports(ctx, backend.CapabilityEvaluateTxAdditionalUtxos) {
 		t.Fatal("UTxO RPC reported unavailable capabilities")
 	}
 
@@ -32,7 +32,6 @@ func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 		capability backend.Capability
 		call       func() error
 	}{
-		{"genesis", backend.CapabilityGenesisParams, func() error { _, err := ctx.GenesisParams(); return err }},
 		{"epoch", backend.CapabilityCurrentEpoch, func() error { _, err := ctx.CurrentEpoch(); return err }},
 		{"additional utxos", backend.CapabilityEvaluateTxAdditionalUtxos, func() error {
 			_, err := ctx.EvaluateTx(nil, []common.Utxo{{}})
@@ -49,6 +48,54 @@ func TestUtxoRpcCapabilitiesAndUnsupportedOperations(t *testing.T) {
 			var unsupported *backend.UnsupportedError
 			if !errors.As(err, &unsupported) || unsupported.Capability != test.capability {
 				t.Fatalf("unexpected unsupported error: %#v", err)
+			}
+		})
+	}
+}
+
+func TestRequiredFeeInt64(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value *cardano.BigInt
+		want  int64
+		valid bool
+	}{
+		{name: "missing"},
+		{name: "empty", value: &cardano.BigInt{}},
+		{name: "zero", value: &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 0}}},
+		{name: "negative", value: &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: -1}}},
+		{name: "overflow", value: &cardano.BigInt{BigInt: &cardano.BigInt_BigUInt{BigUInt: []byte{0x80, 0, 0, 0, 0, 0, 0, 0}}}},
+		{name: "valid", value: &cardano.BigInt{BigInt: &cardano.BigInt_Int{Int: 44}}, want: 44, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := requiredFeeInt64(tc.value, "fee")
+			if (err == nil) != tc.valid || (tc.valid && got != tc.want) {
+				t.Fatalf("requiredFeeInt64() = %d, %v; want %d, valid=%t", got, err, tc.want, tc.valid)
+			}
+		})
+	}
+}
+
+func TestRequiredExecutionPrices(t *testing.T) {
+	valid := &cardano.ExPrices{
+		Memory: &cardano.RationalNumber{Numerator: 577, Denominator: 10000},
+		Steps:  &cardano.RationalNumber{Numerator: 721, Denominator: 10000000},
+	}
+	for _, tc := range []struct {
+		name  string
+		value *cardano.ExPrices
+		valid bool
+	}{
+		{name: "missing"},
+		{name: "empty", value: &cardano.ExPrices{}},
+		{name: "zero denominator", value: &cardano.ExPrices{Memory: &cardano.RationalNumber{Numerator: 1}, Steps: valid.Steps}},
+		{name: "zero numerator", value: &cardano.ExPrices{Memory: valid.Memory, Steps: &cardano.RationalNumber{Denominator: 1}}},
+		{name: "valid", value: valid, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mem, step, err := requiredExecutionPrices(tc.value)
+			if (err == nil) != tc.valid || (tc.valid && (mem <= 0 || step <= 0)) {
+				t.Fatalf("requiredExecutionPrices() = %v, %v, %v; valid=%t", mem, step, err, tc.valid)
 			}
 		})
 	}

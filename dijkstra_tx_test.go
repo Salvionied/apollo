@@ -25,6 +25,11 @@ func dijkstraTestContext(t *testing.T, protocolMajor int) *fixed.FixedChainConte
 	if err != nil {
 		t.Fatal(err)
 	}
+	costModel := make([]int64, 297)
+	for i := range costModel {
+		costModel[i] = int64(i + 1)
+	}
+	pp.CostModels = map[string][]int64{"PlutusV3": costModel}
 	pp.ProtocolMajorVersion = protocolMajor
 	gp, err := base.GenesisParams()
 	if err != nil {
@@ -266,6 +271,40 @@ func TestCompleteDijkstraRefScriptRequiresTierParams(t *testing.T) {
 				t.Fatalf("Complete error = %v, want missing tier parameter error", err)
 			}
 		})
+	}
+}
+
+func TestReferenceScriptFeeRejectsExcessiveTierWork(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		size       int
+		stride     int
+		multiplier *big.Rat
+	}{
+		{name: "many tiers", size: 600, stride: 1, multiplier: big.NewRat(6, 5)},
+		{name: "large multiplier", size: 10, stride: 1, multiplier: new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(1024), nil))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pp := backend.ProtocolParameters{
+				MinFeeRefScriptCostPerByteRational:       big.NewRat(15, 1),
+				MinFeeReferenceScriptsRange:              tc.stride,
+				MinFeeReferenceScriptsMultiplierRational: tc.multiplier,
+			}
+			if _, err := referenceScriptFeeForSize(tc.size, pp); err == nil {
+				t.Fatal("expected an error before excessive reference-script fee work")
+			}
+		})
+	}
+}
+
+func TestCompleteDijkstraRejectsExcessiveTierWork(t *testing.T) {
+	_, err := dijkstraRefScriptBuilder(t, EraDijkstra, func(pp *backend.ProtocolParameters) {
+		pp.MinFeeReferenceScriptsRange = 1
+		pp.MinFeeReferenceScriptsMultiplierRational = big.NewRat(1_000_000_000_000_000_001, 1_000_000_000_000_000_000)
+		pp.MaximumReferenceScriptsSize = dijkstraRefScriptTestSize
+	}).Complete()
+	if err == nil || !strings.Contains(err.Error(), "reference-script fee") {
+		t.Fatalf("Complete() error = %v, want reference-script fee work limit", err)
 	}
 }
 

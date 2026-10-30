@@ -1,0 +1,72 @@
+{
+  "preamble": {
+    "title": "example/mint_policy",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "policy.mint",
+      "redeemer": {
+        "title": "action",
+        "purpose": "mint",
+        "schema": {
+          "$ref": "#/definitions/policy~1MintAction"
+        }
+      },
+      "parameters": [
+        {
+          "title": "issuer",
+          "purpose": "mint",
+          "schema": {
+            "dataType": "bytes",
+            "minLength": 28,
+            "maxLength": 28
+          }
+        }
+      ],
+      "compiledCode": "46010100200101"
+    }
+  ],
+  "definitions": {
+    "policy/MintAction": {
+      "title": "MintAction",
+      "anyOf": [
+        {
+          "title": "Bootstrap",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "MintCount",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "quantity",
+              "dataType": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          ]
+        },
+        {
+          "title": "BurnBatch",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "names",
+              "dataType": "list",
+              "uniqueItems": true,
+              "items": {
+                "dataType": "bytes"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

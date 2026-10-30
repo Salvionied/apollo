@@ -24,7 +24,7 @@ Helpers:
 | Capability | Blockfrost | Koios | Ogmios | Ogmios (no Kupo) | UTxO RPC | Fixed |
 |------------|:----------:|:-----:|:------:|:----------------:|:--------:|:-----:|
 | Protocol params | yes | yes | yes | yes | yes | yes |
-| Genesis params | yes | yes | yes | yes | no | yes |
+| Genesis params | yes | yes | yes | yes | yes | yes |
 | Current epoch | yes | yes | yes | yes | no | no |
 | Max tx fee | yes | yes | yes | yes | yes | yes |
 | Tip | yes | yes | yes | yes | yes | no |
@@ -35,7 +35,10 @@ Helpers:
 | UTxO by ref | yes | yes | yes | yes | yes | yes |
 | Script CBOR | yes | yes | yes | no | no | no |
 
-`backend/cache` forwards `CapabilitiesOf(inner)`.
+`backend/cache` forwards `CapabilitiesOf(inner)`. `backend/localeval` adds
+EvaluateTx and EvaluateTx additional UTxOs to `CapabilitiesOf(inner)` when
+`inner` can supply protocol parameters and a slot mapping; see
+[local evaluation](localeval.md).
 
 ## Additional UTxOs and chaining
 

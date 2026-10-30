@@ -2,6 +2,7 @@ package backendutil
 
 import (
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -15,6 +16,23 @@ func TestParseFractionValid(t *testing.T) {
 	}
 	if val != 0.5 {
 		t.Errorf("expected 0.5, got %f", val)
+	}
+}
+
+func TestParseRationalBoundsProviderNumbers(t *testing.T) {
+	for _, input := range []string{"1e4096", "1e-4096", "0x1p4096", "0e4096", strings.Repeat("1", 257)} {
+		t.Run(input[:min(len(input), 16)], func(t *testing.T) {
+			if _, err := ParseRational(input); err == nil {
+				t.Fatal("expected oversized rational to fail")
+			}
+		})
+	}
+	for _, input := range []string{"0.0000721", "1.2345e-10", "1/2", "1/0x1e", "0x1p-4"} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := ParseRational(input); err != nil {
+				t.Fatalf("ParseRational(%q): %v", input, err)
+			}
+		})
 	}
 }
 

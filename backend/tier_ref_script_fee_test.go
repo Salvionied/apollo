@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"math"
 	"math/big"
 	"testing"
 )
@@ -121,5 +122,46 @@ func TestProtocolParametersPreserveExactReferenceScriptRationals(t *testing.T) {
 	}
 	if got := pp.RefScriptSizeIncrement(); got != 7 {
 		t.Fatalf("RefScriptSizeIncrement() = %d, want 7", got)
+	}
+}
+
+func TestTierRefScriptFeeBoundsLargeTierCounts(t *testing.T) {
+	const size = 1_000_000
+	if got := TierRefScriptFeeRational(size, big.NewRat(1, 1), 1, big.NewRat(2, 1)); got != math.MaxInt64 {
+		t.Fatalf("growing fee = %d, want MaxInt64 sentinel", got)
+	}
+	if got := TierRefScriptFeeRational(size, big.NewRat(1, 2), 1, big.NewRat(1, 1)); got != size/2 {
+		t.Fatalf("constant price fee = %d, want %d", got, size/2)
+	}
+	if got := TierRefScriptFeeRational(size, big.NewRat(1, 1), 1, big.NewRat(1, 2)); got != 1 {
+		t.Fatalf("decreasing fee = %d, want 1", got)
+	}
+	if _, err := TierRefScriptFeeRationalChecked(size, big.NewRat(1, 1), 1, big.NewRat(1_000_001, 1_000_000)); err == nil {
+		t.Fatal("expected a work-limit error for a near-constant million-tier fee")
+	}
+}
+
+func TestTierRefScriptFeeDecreasingPriceStaysExact(t *testing.T) {
+	base := big.NewRat(1, 1)
+	multiplier := big.NewRat(1, 2)
+	for size := 1; size <= 100; size++ {
+		want := exactTierRefScriptFeeRational(size, base, 1, multiplier)
+		if got := TierRefScriptFeeRational(size, base, 1, multiplier); got != want {
+			t.Fatalf("size %d: fee = %d, want %d", size, got, want)
+		}
+	}
+}
+
+func TestTierRefScriptFeeLargeFiniteDecreasingPrice(t *testing.T) {
+	got, err := TierRefScriptFeeRationalChecked(600, big.NewRat(15, 1), 1, big.NewRat(99, 100))
+	if err != nil || got != 1496 {
+		t.Fatalf("600-tier decreasing fee = %d, %v; want 1496", got, err)
+	}
+	base := big.NewRat(15, 1)
+	multiplier := big.NewRat(99, 100)
+	want := exactTierRefScriptFeeRational(1201, base, 2, multiplier)
+	got, err = TierRefScriptFeeRationalChecked(1201, base, 2, multiplier)
+	if err != nil || got != want {
+		t.Fatalf("partial final tier fee = %d, %v; want %d", got, err, want)
 	}
 }

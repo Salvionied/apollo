@@ -76,6 +76,9 @@ type Apollo struct {
 	inputAddresses     []common.Address
 	tx                 *conway.ConwayTransaction
 	dijkstraTx         *dijkstra.DijkstraTransaction
+	loadedTx           bool
+	loadedBodyCBOR     []byte
+	loadedBodyErr      error
 	targetEra          TargetEra
 	datums             []common.Datum
 	requiredSigners    []common.Blake2b224
@@ -115,6 +118,7 @@ type Apollo struct {
 	usedUtxos                  map[string]bool
 	wallet                     Wallet
 	evaluationWitnessProviders []EvaluationWitnessProvider
+	allowSignedEvaluation      bool
 	certificates               []common.CertificateWrapper
 	// updatedPools marks the pool registration certificates added by
 	// UpdatePool, which re-register an already registered pool
@@ -230,12 +234,19 @@ func (a *Apollo) SetWallet(w Wallet) *Apollo {
 }
 
 // AddEvaluationWitnessProvider registers an optional source of witnesses for
-// preliminary transaction evaluation. Registered witnesses are never added to
-// the completed transaction.
+// preliminary transaction evaluation. It is used only after AllowSignedEvaluation.
 func (a *Apollo) AddEvaluationWitnessProvider(provider EvaluationWitnessProvider) *Apollo {
 	if provider != nil {
 		a.evaluationWitnessProviders = append(a.evaluationWitnessProviders, provider)
 	}
+	return a
+}
+
+// AllowSignedEvaluation permits sending spend-authorizing witnesses to the
+// configured evaluator. Use this only when the evaluator is trusted to receive
+// a transaction it may be able to submit, including one that consumes collateral.
+func (a *Apollo) AllowSignedEvaluation() *Apollo {
+	a.allowSignedEvaluation = true
 	return a
 }
 
@@ -1365,6 +1376,9 @@ func (a *Apollo) AddVerificationKeyWitness(witness common.VkeyWitness) (*Apollo,
 	if a.tx == nil && a.dijkstraTx == nil {
 		return a, errors.New("transaction not built - call Complete() first")
 	}
+	if err := a.validateTransactionBodyIntegrity(); err != nil {
+		return a, err
+	}
 	// A decoded transaction keeps its original CBOR, which the encoders prefer
 	// over the struct fields. Drop the transaction and witness-set copies so
 	// the new witness is encoded; the body copy is kept because it fixes the
@@ -1391,6 +1405,9 @@ func (a *Apollo) AddVerificationKeyWitness(witness common.VkeyWitness) (*Apollo,
 func (a *Apollo) SignWithSkey(skey []byte) (*Apollo, error) {
 	if a.tx == nil && a.dijkstraTx == nil {
 		return a, errors.New("transaction not built - call Complete() first")
+	}
+	if err := a.validateTransactionBodyIntegrity(); err != nil {
+		return a, err
 	}
 	if err := a.checkCurrentFeeLimit(); err != nil {
 		return a, err
@@ -1436,7 +1453,9 @@ func (a *Apollo) SetCollateralAmount(amount int64) *Apollo {
 
 // --- Transaction Loading & Utility Methods ---
 
-// LoadTxCbor loads a transaction from hex-encoded CBOR.
+// LoadTxCbor loads a transaction from hex-encoded CBOR. Its decoded body can
+// be inspected, but changing body fields after loading prevents signing or
+// serialization; the original body bytes define the transaction hash.
 func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	txBytes, err := hex.DecodeString(txCbor)
 	if err != nil {
@@ -1462,6 +1481,7 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 		a.tx = nil
 		a.dijkstraTx = &tx
 		a.targetEra = EraDijkstra
+		a.loadedBodyCBOR = bytes.Clone(tx.Body.Cbor())
 	} else {
 		var tx conway.ConwayTransaction
 		if _, err := cbor.DecodeExact(txBytes, &tx); err != nil {
@@ -1470,7 +1490,10 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 		a.tx = &tx
 		a.dijkstraTx = nil
 		a.targetEra = EraConway
+		a.loadedBodyCBOR = bytes.Clone(tx.Body.Cbor())
 	}
+	a.loadedTx = true
+	a.loadedBodyErr = nil
 	return a, nil
 }
 
@@ -1480,6 +1503,9 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 func (a *Apollo) Clone() *Apollo {
 	clone := &Apollo{
 		Context:                    a.Context,
+		loadedTx:                   a.loadedTx,
+		loadedBodyCBOR:             bytes.Clone(a.loadedBodyCBOR),
+		loadedBodyErr:              a.loadedBodyErr,
 		targetEra:                  a.targetEra,
 		requestContext:             a.requestContext,
 		isEstimateRequired:         a.isEstimateRequired,
@@ -1502,6 +1528,7 @@ func (a *Apollo) Clone() *Apollo {
 		bodySetTagPolicy:           a.bodySetTagPolicy,
 		wallet:                     a.wallet,
 		evaluationWitnessProviders: append([]EvaluationWitnessProvider(nil), a.evaluationWitnessProviders...),
+		allowSignedEvaluation:      a.allowSignedEvaluation,
 		err:                        a.err,
 		redeemers:                  make(map[string]redeemerEntry),
 		stakeRedeemers:             make(map[string]redeemerEntry),
@@ -1672,6 +1699,9 @@ func (a *Apollo) Clone() *Apollo {
 		clone.auxiliaryData = &auxData{metadata: clonedMeta}
 	}
 	if a.tx != nil {
+		if a.loadedTx && clone.loadedBodyErr == nil {
+			clone.loadedBodyErr = a.validateTransactionBodyIntegrity()
+		}
 		txBytes, err := cbor.Encode(a.tx)
 		if err != nil {
 			clone.setErrOnce(fmt.Errorf("clone transaction: encode CBOR: %w", err))
@@ -1685,6 +1715,9 @@ func (a *Apollo) Clone() *Apollo {
 		}
 	}
 	if a.dijkstraTx != nil {
+		if a.loadedTx && clone.loadedBodyErr == nil {
+			clone.loadedBodyErr = a.validateTransactionBodyIntegrity()
+		}
 		txBytes, err := cbor.Encode(a.dijkstraTx)
 		if err != nil {
 			clone.setErrOnce(fmt.Errorf("clone Dijkstra transaction: encode CBOR: %w", err))
@@ -2431,6 +2464,9 @@ func (a *Apollo) Sign() (*Apollo, error) {
 	if a.wallet == nil {
 		return a, errors.New("no wallet set")
 	}
+	if err := a.validateTransactionBodyIntegrity(); err != nil {
+		return a, err
+	}
 	if err := a.checkCurrentFeeLimit(); err != nil {
 		return a, err
 	}
@@ -2472,10 +2508,9 @@ func (a *Apollo) Sign() (*Apollo, error) {
 // support for a later era, a sibling accessor is added for it rather than this
 // one changing meaning.
 //
-// The returned transaction is constructed rather than decoded, so its Cbor() is
-// empty: gouroboros populates stored CBOR only when unmarshalling. Use
-// GetTxCbor for the encoding, which is produced fresh on each call and so
-// cannot go stale when Sign adds witnesses.
+// A transaction produced by Complete has no stored CBOR. A transaction loaded
+// with LoadTxCbor retains its original body bytes, and changing its decoded
+// body fields makes signing and encoding fail. Use GetTxCbor for the encoding.
 func (a *Apollo) GetTx() *conway.ConwayTransaction {
 	if a.targetEra == EraDijkstra {
 		return nil
@@ -2483,14 +2518,18 @@ func (a *Apollo) GetTx() *conway.ConwayTransaction {
 	return a.tx
 }
 
-// GetDijkstraTx returns the built Dijkstra transaction, or nil when the
-// builder targets Conway or has not completed construction.
+// GetDijkstraTx returns the built or loaded Dijkstra transaction, or nil when
+// the builder targets Conway or has not completed construction. Changing a
+// loaded transaction's decoded body fields makes signing and encoding fail.
 func (a *Apollo) GetDijkstraTx() *dijkstra.DijkstraTransaction {
 	return a.dijkstraTx
 }
 
 // GetTxCbor returns the CBOR-encoded transaction.
 func (a *Apollo) GetTxCbor() ([]byte, error) {
+	if err := a.validateTransactionBodyIntegrity(); err != nil {
+		return nil, err
+	}
 	if a.dijkstraTx != nil {
 		return cbor.Encode(a.dijkstraTx)
 	}
@@ -3102,12 +3141,12 @@ func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters)
 			refScriptSize,
 		)
 	}
-	return backend.TierRefScriptFeeRational(
+	return backend.TierRefScriptFeeRationalChecked(
 		refScriptSize,
 		refFeePerByte,
 		pp.RefScriptSizeIncrement(),
 		pp.RefScriptMultiplierRational(),
-	), nil
+	)
 }
 
 // totalReferenceScriptSize resolves the combined byte size of all reference
@@ -3197,15 +3236,14 @@ func (a *Apollo) estimateExecutionUnits(
 	}
 	ws := a.buildWitnessSet(inputs)
 
-	witnesses, err := a.evaluationWitnesses(&body)
-	if err != nil {
-		return nil, err
-	}
-	// An empty vkey witness set is encoded as witness-set map field 0 with an
-	// empty value. Recent gouroboros versions reject empty witness-set fields,
-	// so leave the optional field unset when evaluation needs no signatures.
-	if len(witnesses) > 0 {
-		ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+	if a.allowSignedEvaluation {
+		witnesses, witnessErr := a.evaluationWitnesses(&body)
+		if witnessErr != nil {
+			return nil, witnessErr
+		}
+		if len(witnesses) > 0 {
+			ws.VkeyWitnesses = cbor.NewSetType(witnesses, true)
+		}
 	}
 
 	prelimTx := conway.ConwayTransaction{
@@ -3288,6 +3326,12 @@ func (a *Apollo) estimateExecutionUnits(
 	maxMem, memErr := strconv.ParseInt(pp.MaxTxExMem, 10, 64)
 	maxSteps, stepsErr := strconv.ParseInt(pp.MaxTxExSteps, 10, 64)
 	for evalKey, evalUnits := range evalResult {
+		if evalUnits.Memory <= 0 || evalUnits.Steps <= 0 {
+			return nil, fmt.Errorf(
+				"EvaluateTx returned non-positive execution budget for redeemer %d:%d: memory=%d steps=%d",
+				evalKey.Tag, evalKey.Index, evalUnits.Memory, evalUnits.Steps,
+			)
+		}
 		bufferedUnits := common.ExUnits{
 			Memory: bufferExUnits(evalUnits.Memory, 1+ExMemoryBuffer),
 			Steps:  bufferExUnits(evalUnits.Steps, 1+ExStepBuffer),

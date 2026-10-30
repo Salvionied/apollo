@@ -58,6 +58,36 @@ func TestShelleyMetadataFromJSONNoSchemaSuccess(t *testing.T) {
 	requireBytes(t, findMetadataMapValue(t, metadataMap, []byte{0xaa}), []byte{0xbb})
 }
 
+func TestMetadataJSONRejectsExcessiveNesting(t *testing.T) {
+	deepNoSchema := `{"1":` + strings.Repeat("[", 513) + "0" + strings.Repeat("]", 513) + "}"
+	if _, err := ShelleyMetadataFromJSON([]byte(deepNoSchema)); err == nil {
+		t.Fatal("expected deeply nested no-schema metadata to fail")
+	}
+	maximumNoSchema := `{"1":` + strings.Repeat("[", 511) + `"[{}\"[]{}]"` + strings.Repeat("]", 511) + "}"
+	if _, err := ShelleyMetadataFromJSON([]byte(maximumNoSchema)); err != nil {
+		t.Fatalf("metadata at nesting limit with quoted brackets: %v", err)
+	}
+	deepDetailed := `{"1":` + strings.Repeat(`{"list":[`, 257) + `{"int":0}` + strings.Repeat(`]}`, 257) + `}`
+	if _, err := ShelleyMetadataFromJSONWithSchema([]byte(deepDetailed), MetadataJSONDetailedSchema); err == nil {
+		t.Fatal("expected deeply nested detailed metadata to fail")
+	}
+	maximumDetailed := `{"1":` + strings.Repeat(`{"list":[`, 255) + `{"string":"[{\"}]"}` + strings.Repeat(`]}`, 255) + `}`
+	if _, err := ShelleyMetadataFromJSONWithSchema([]byte(maximumDetailed), MetadataJSONDetailedSchema); err != nil {
+		t.Fatalf("detailed metadata at nesting limit with quoted brackets: %v", err)
+	}
+}
+
+func TestMetadataJSONRejectsOversizedInput(t *testing.T) {
+	input := `{"1":0}` + strings.Repeat(" ", 8<<20)
+	if _, err := ShelleyMetadataFromJSON([]byte(input)); err == nil {
+		t.Fatal("expected oversized metadata JSON to fail")
+	}
+	maximum := `{"1":0}` + strings.Repeat(" ", maxMetadataJSONBytes-len(`{"1":0}`))
+	if _, err := ShelleyMetadataFromJSON([]byte(maximum)); err != nil {
+		t.Fatalf("metadata at byte limit: %v", err)
+	}
+}
+
 func TestShelleyMetadataFromJSONNoSchemaMapOrderIsStable(t *testing.T) {
 	metadata, err := ShelleyMetadataFromJSON([]byte(`{"0":{"b":1,"0x02":2,"10":3,"a":4}}`))
 	if err != nil {
