@@ -26,6 +26,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/internal/scriptutil"
 )
 
 type contextRoundTripperFunc func(*http.Request) (*http.Response, error)
@@ -1271,7 +1272,7 @@ func TestBfScriptRefFromScriptLanguageDetection(t *testing.T) {
 
 func TestScriptRefFromHashDetectsPlutusV4(t *testing.T) {
 	script := common.PlutusV4Script([]byte{0x49, 0x48, 0x01, 0x00})
-	ref, err := scriptRefFromHash(script.Hash(), script)
+	ref, err := scriptutil.ScriptRefFromHash(script.Hash(), script)
 	if err != nil {
 		t.Fatal(err)
 	}

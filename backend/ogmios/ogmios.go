@@ -26,6 +26,7 @@ import (
 
 	"github.com/Salvionied/apollo/v2/backend"
 	"github.com/Salvionied/apollo/v2/internal/backendutil"
+	"github.com/Salvionied/apollo/v2/internal/scriptutil"
 )
 
 // OgmiosChainContext implements backend.ChainContext using Ogmios + Kupo.
@@ -456,7 +457,15 @@ func (o *OgmiosChainContext) ScriptCborContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.ScriptCbor(ctx, scriptHash)
+	scriptCbor, err := client.ScriptCbor(ctx, scriptHash)
+	if err != nil {
+		return nil, err
+	}
+	scriptCbor = bytes.Clone(scriptCbor)
+	if _, err := scriptutil.ScriptRefFromHash(scriptHash, scriptCbor); err != nil {
+		return nil, err
+	}
+	return scriptCbor, nil
 }
 
 // --- Ogmios response types and conversion ---
