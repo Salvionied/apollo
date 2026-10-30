@@ -144,6 +144,17 @@ func TestBearerTokenSentOnlyWhenSet(t *testing.T) {
 	}
 }
 
+func TestProviderIntegerRejectsLargeExponent(t *testing.T) {
+	if _, err := parseNonNegativeInt64("0e4096", "value"); err == nil {
+		t.Fatal("expected a large provider exponent to fail before integer conversion")
+	}
+	for _, input := range []string{"100", "1e2", "1.0e2"} {
+		if got, err := parseNonNegativeInt64(input, "value"); err != nil || got != 100 {
+			t.Fatalf("parseNonNegativeInt64(%q) = %d, %v; want 100", input, got, err)
+		}
+	}
+}
+
 func TestRequestRejectsCrossOriginPostRedirect(t *testing.T) {
 	sinkReceived := make(chan struct{}, 1)
 	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

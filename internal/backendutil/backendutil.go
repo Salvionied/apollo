@@ -41,6 +41,27 @@ func CloneProtocolParams(pp backend.ProtocolParameters) backend.ProtocolParamete
 // through floating point. Decimal and exponent forms accepted by JSON numbers
 // are supported by math/big.
 func ParseRational(s string) (*big.Rat, error) {
+	const maxInputBytes = 256
+	const maxExponent = 1024
+	if len(s) > maxInputBytes {
+		return nil, fmt.Errorf("rational number exceeds %d bytes", maxInputBytes)
+	}
+	if !strings.Contains(s, "/") {
+		mantissa := strings.TrimPrefix(strings.TrimPrefix(s, "+"), "-")
+		var exponentAt int
+		if strings.HasPrefix(mantissa, "0x") || strings.HasPrefix(mantissa, "0X") {
+			exponentAt = strings.LastIndexAny(s, "pP")
+		} else {
+			exponentAt = strings.LastIndexAny(s, "eEpP")
+		}
+		if exponentAt >= 0 {
+			exponentText := strings.ReplaceAll(s[exponentAt+1:], "_", "")
+			exponent, err := strconv.ParseInt(exponentText, 10, 32)
+			if err != nil || exponent < -maxExponent || exponent > maxExponent {
+				return nil, fmt.Errorf("rational exponent out of range: %q", s)
+			}
+		}
+	}
 	value, ok := new(big.Rat).SetString(s)
 	if !ok {
 		return nil, fmt.Errorf("invalid rational number %q", s)

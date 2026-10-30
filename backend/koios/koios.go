@@ -849,14 +849,8 @@ func (g *koiosGenesis) toGenesisParams() (backend.GenesisParameters, error) {
 // parseNonNegativeInt64 parses a provider integer, accepting the decimal and
 // exponent forms a JSON number may take as long as the value is integral.
 func parseNonNegativeInt64(s, name string) (int64, error) {
-	if v, err := strconv.ParseInt(s, 10, 64); err == nil {
-		if v < 0 {
-			return 0, fmt.Errorf("%s is negative: %d", name, v)
-		}
-		return v, nil
-	}
-	r, ok := new(big.Rat).SetString(s)
-	if !ok || !r.IsInt() {
+	r, err := backendutil.ParseRational(s)
+	if err != nil || !r.IsInt() {
 		return 0, fmt.Errorf("invalid %s: %q is not an integer", name, s)
 	}
 	if r.Sign() < 0 {
