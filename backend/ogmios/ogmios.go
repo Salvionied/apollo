@@ -66,14 +66,33 @@ type Config struct {
 	// KupoTimeout bounds each Kupo HTTP request. Zero leaves the Kupo client
 	// default in place.
 	KupoTimeout time.Duration
+	// OgmiosMaxIdleConns is how many idle Ogmios connections are kept open
+	// for reuse between queries. Zero uses DefaultOgmiosMaxIdleConns; a
+	// negative value turns reuse off, so every query dials a new connection.
+	OgmiosMaxIdleConns int
+	// OgmiosIdleTimeout is how long an idle Ogmios connection is kept before
+	// it is closed. Zero uses DefaultOgmiosIdleTimeout. Keep it below the
+	// idle timeout of any proxy or load balancer in front of Ogmios.
+	OgmiosIdleTimeout time.Duration
 }
+
+const (
+	// DefaultOgmiosMaxIdleConns is the number of idle Ogmios connections a
+	// context keeps for reuse when Config.OgmiosMaxIdleConns is zero.
+	DefaultOgmiosMaxIdleConns = 4
+	// DefaultOgmiosIdleTimeout is how long an idle Ogmios connection is kept
+	// when Config.OgmiosIdleTimeout is zero.
+	DefaultOgmiosIdleTimeout = 30 * time.Second
+)
 
 // NewOgmiosChainContext creates an Ogmios chain context from connection
 // settings, building the Ogmios and Kupo clients internally. An endpoint that
 // is empty, or is not a URL Apollo can reach the service at, is rejected here
 // rather than failing on the first query.
 func NewOgmiosChainContext(cfg Config) (*OgmiosChainContext, error) {
-	ogmiosClient, err := newOgmigoClient(cfg.OgmiosEndpoint)
+	ogmiosClient, err := newOgmigoClient(
+		cfg.OgmiosEndpoint, cfg.OgmiosMaxIdleConns, cfg.OgmiosIdleTimeout,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +197,18 @@ func (o *OgmiosChainContext) Capabilities() backend.CapabilitySet {
 		)
 	}
 	return capabilities
+}
+
+// CloseIdleConnections closes the Ogmios connections held open for reuse.
+// Call it when the context is no longer needed; idle connections otherwise
+// close on their own after Config.OgmiosIdleTimeout. The context stays
+// usable and dials again as needed. A context built from a custom
+// OgmiosClient passes the call on only if that client has a
+// CloseIdleConnections method.
+func (o *OgmiosChainContext) CloseIdleConnections() {
+	if closer, ok := o.ogmios.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
 }
 
 func (o *OgmiosChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
@@ -395,7 +426,14 @@ func (o *OgmiosChainContext) UtxoByRefContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.UtxoByRef(ctx, txHash, index)
+	utxo, err := client.UtxoByRef(ctx, txHash, index)
+	if err != nil {
+		return nil, err
+	}
+	if err := backend.ValidateUtxoRef(utxo, txHash, index); err != nil {
+		return nil, err
+	}
+	return utxo, nil
 }
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {
@@ -833,6 +871,9 @@ func matchToUtxo(ctx context.Context, match kugo.Match, address common.Address, 
 	// Set script reference from kupo match data, verifying the script bytes
 	// against the script hash claimed by kupo.
 	if match.Script.Script != "" {
+		if match.ScriptHash == "" {
+			return common.Utxo{}, errors.New("kupo script is missing its hash")
+		}
 		ref, err := kupoScriptToScriptRef(match.Script, match.ScriptHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to parse script ref: %w", err)
@@ -1080,8 +1121,7 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 		return nil, fmt.Errorf("failed to parse script JSON: %w", err)
 	}
 	if raw.Cbor == "" {
-		// Native scripts may use "json" field instead of "cbor"; skip these for now.
-		return nil, nil
+		return nil, fmt.Errorf("missing script CBOR for %q", raw.Language)
 	}
 
 	scriptBytes, err := hex.DecodeString(raw.Cbor)

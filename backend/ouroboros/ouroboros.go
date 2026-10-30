@@ -53,6 +53,10 @@ const (
 	DefaultSubmitTimeout = 30 * time.Second
 )
 
+// maxAddressQueryUtxos bounds the retained address-query result after the
+// node answers, before allocating and sorting the returned UTxO slice.
+const maxAddressQueryUtxos = 100_000
+
 // OuroborosChainContext implements backend.ChainContext by talking to a
 // cardano-node directly over the node-to-client mini-protocols.
 //
@@ -243,6 +247,7 @@ func (o *OuroborosChainContext) Utxos(address common.Address) ([]common.Utxo, er
 
 // UtxosContext returns the unspent outputs at an address. The node answers
 // by scanning its UTxO set, which takes noticeable time on mainnet.
+// Results containing more than 100,000 UTxOs are rejected.
 func (o *OuroborosChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
 	var result *localstatequery.UTxOsResult
 	err := o.session.query(ctx, func(c *localstatequery.Client) error {
@@ -255,6 +260,9 @@ func (o *OuroborosChainContext) UtxosContext(ctx context.Context, address common
 	}
 	if result == nil {
 		return nil, nil
+	}
+	if len(result.Results) > maxAddressQueryUtxos {
+		return nil, fmt.Errorf("address query UTxO count %d exceeds limit %d", len(result.Results), maxAddressQueryUtxos)
 	}
 	return utxosFromLedger(result.Results)
 }

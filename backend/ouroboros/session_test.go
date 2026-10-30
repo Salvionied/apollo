@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
+	"github.com/blinklabs-io/gouroboros/muxer"
 	"github.com/blinklabs-io/gouroboros/protocol"
 	pcommon "github.com/blinklabs-io/gouroboros/protocol/common"
 	"github.com/blinklabs-io/gouroboros/protocol/localstatequery"
@@ -132,17 +134,30 @@ func queryResult(t *testing.T, result any) []ouroboros_mock.ConversationEntry {
 			t.Fatal(err)
 		}
 	}
-	return []ouroboros_mock.ConversationEntry{
+	message, err := cbor.Encode(localstatequery.NewMsgResult(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := []ouroboros_mock.ConversationEntry{
 		ouroboros_mock.ConversationEntryInput{
 			ProtocolId:  localstatequery.ProtocolId,
 			MessageType: localstatequery.MessageTypeQuery,
 		},
-		ouroboros_mock.ConversationEntryOutput{
+	}
+	// The mock emits one muxer segment per output entry. Large results
+	// must be fragmented just as they are when a real node sends them.
+	for len(message) > 0 {
+		size := min(len(message), muxer.SegmentMaxPayloadLength)
+		fragment := &protocol.MessageBase{}
+		fragment.SetCbor(message[:size])
+		entries = append(entries, ouroboros_mock.ConversationEntryOutput{
 			ProtocolId: localstatequery.ProtocolId,
 			IsResponse: true,
-			Messages:   []protocol.Message{localstatequery.NewMsgResult(encoded)},
-		},
+			Messages:   []protocol.Message{fragment},
+		})
+		message = message[size:]
 	}
+	return entries
 }
 
 func conversation(parts ...[]ouroboros_mock.ConversationEntry) []ouroboros_mock.ConversationEntry {
@@ -495,5 +510,44 @@ func TestUtxoByRefOverTheWire(t *testing.T) {
 	}
 	if _, err := ctx.UtxoByRef(txId, 3); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("got %v, want a not-found error", err)
+	}
+}
+
+func TestUtxosAddressResultLimit(t *testing.T) {
+	const limit = 100_000
+	for _, count := range []int{limit, limit + 1} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			results := make(map[localstatequery.UtxoId]babbage.BabbageTransactionOutput, count)
+			output := *testOutput(t, 2_000_000)
+			for i := range count {
+				results[localstatequery.UtxoId{Idx: i}] = output
+			}
+			node, ctx := newMockNode(t, conversation(
+				handshake, acquire, queryResult(t, conwayEra),
+				queryResult(t, localstatequery.UTxOsResult{Results: results}), release,
+				tipExchange(t, 5),
+			))
+			addr, err := common.NewAddress(testAddress)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ctx.UtxosContext(t.Context(), addr)
+			if count > limit {
+				if err == nil || !strings.Contains(err.Error(), "UTxO count") {
+					t.Errorf("UtxosContext() error = %v, want UTxO count limit", err)
+				}
+				if len(got) != 0 {
+					t.Errorf("returned %d UTxOs after rejecting the query", len(got))
+				}
+			} else if err != nil || len(got) != count {
+				t.Fatalf("UtxosContext() returned %d UTxOs, %v; want %d, nil", len(got), err, count)
+			}
+			if _, err := ctx.Tip(); err != nil {
+				t.Fatal(err)
+			}
+			if node.dialCount() != 1 {
+				t.Fatal("completed address query discarded its connection")
+			}
+		})
 	}
 }

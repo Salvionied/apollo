@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/big"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,7 +73,7 @@ func NewBlockFrostChainContext(baseUrl string, networkId uint8, projectId string
 		baseUrl:   baseUrl,
 		projectId: projectId,
 		networkId: networkId,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		client:    &http.Client{Timeout: 30 * time.Second, CheckRedirect: backendutil.SameOriginRedirect},
 	}
 }
 
@@ -264,35 +263,37 @@ func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, e
 }
 
 func (b *BlockFrostChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
-	const maxPages = 1000
+	const maxPageItems = 1000
 	var allUtxos []common.Utxo
+	var references backendutil.UtxoReferenceSet
 	resolver := newScriptRefResolver(ctx, b)
 
-	for page := 1; page <= maxPages+1; page++ {
+	for page := uint64(1); ; page++ {
 		path := fmt.Sprintf("/addresses/%s/utxos?page=%d", address.String(), page)
 		data, err := b.requestContext(ctx, "GET", path, nil, "")
 		if err != nil {
 			return nil, err
 		}
 
-		var rawUtxos []bfAddressUTxO
-		if err := json.Unmarshal(data, &rawUtxos); err != nil {
+		rawUtxos, err := backendutil.DecodeLimitedArray[bfAddressUTxO](data, maxPageItems)
+		if err != nil {
 			return nil, err
 		}
 		if len(rawUtxos) == 0 {
 			return allUtxos, nil
-		}
-		if page > maxPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxPages)
 		}
 
 		utxos, err := b.hydrateUtxoPage(rawUtxos, address, resolver.resolve)
 		if err != nil {
 			return nil, err
 		}
+		for _, utxo := range utxos {
+			if err := references.Add(utxo); err != nil {
+				return nil, err
+			}
+		}
 		allUtxos = append(allUtxos, utxos...)
 	}
-	return allUtxos, nil
 }
 
 func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {
@@ -759,6 +760,9 @@ func (b *BlockFrostChainContext) UtxoByRefContext(
 			if err != nil {
 				return nil, err
 			}
+			if err := backend.ValidateUtxoRef(&utxo, txHash, index); err != nil {
+				return nil, err
+			}
 			return &utxo, nil
 		}
 	}
@@ -935,13 +939,8 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 		pp.MinFeeRefScriptCostPerByte, _ = price.Float64()
 	}
 
-	// Parse cost models from BlockFrost JSON.
-	// Prefer cost_models_raw (canonical integer arrays). Fall back to
-	// cost_models which may be either:
-	//   - array format:  {"PlutusV1": [205665, 812, ...]}
-	//   - keyed format:  {"PlutusV1": {"addInteger-cpu-arguments-intercept": 205665, ...}}
-	// Both formats use keys "PlutusV1" through "PlutusV4" which match the
-	// canonical form expected by ComputeScriptDataHash.
+	// Use only positional integer arrays for cost models. Named parameter
+	// maps do not reliably preserve the ledger's parameter order.
 	if len(p.CostModelsRaw) > 0 && string(p.CostModelsRaw) != "null" {
 		var rawModels map[string][]int64
 		if err := json.Unmarshal(p.CostModelsRaw, &rawModels); err != nil {
@@ -953,32 +952,10 @@ func (p *bfProtocolParams) toProtocolParams() (backend.ProtocolParameters, error
 	}
 	if pp.CostModels == nil && len(p.CostModels) > 0 {
 		var arrayModels map[string][]int64
-		if err := json.Unmarshal(p.CostModels, &arrayModels); err == nil {
-			pp.CostModels = arrayModels
-		} else {
-			// Fall back to keyed format (map[string]map[string]int64).
-			var keyedModels map[string]map[string]int64
-			if err := json.Unmarshal(p.CostModels, &keyedModels); err != nil {
-				return pp, fmt.Errorf("failed to parse cost models: %w", err)
-			}
-			pp.CostModels = make(map[string][]int64, len(keyedModels))
-			for lang, costs := range keyedModels {
-				// Sort parameter names alphabetically. The Cardano ledger
-				// serializes cost models as a flat list of integers whose
-				// positions correspond to alphabetically-sorted parameter
-				// names (see IntersectMBO/cardano-ledger#2902).
-				sortedKeys := make([]string, 0, len(costs))
-				for k := range costs {
-					sortedKeys = append(sortedKeys, k)
-				}
-				sort.Strings(sortedKeys)
-				values := make([]int64, 0, len(costs))
-				for _, k := range sortedKeys {
-					values = append(values, costs[k])
-				}
-				pp.CostModels[lang] = values
-			}
+		if err := json.Unmarshal(p.CostModels, &arrayModels); err != nil {
+			return pp, fmt.Errorf("failed to parse cost_models as integer arrays: %w", err)
 		}
+		pp.CostModels = arrayModels
 	}
 
 	return pp, nil
@@ -1190,7 +1167,7 @@ func (b *BlockFrostChainContext) hydrateUtxoWithScriptResolver(
 		return common.Utxo{}, fmt.Errorf("unexpected UTxO output type: %T", utxo.Output)
 	}
 	if len(raw.InlineDatum) > 0 && string(raw.InlineDatum) != "null" {
-		datumOpt, err := inlineDatumOptionFromBlockfrost(raw.InlineDatum)
+		datumOpt, err := inlineDatumOptionFromBlockfrost(raw.InlineDatum, raw.DataHash)
 		if err != nil {
 			return common.Utxo{}, fmt.Errorf("failed to decode inline datum: %w", err)
 		}
@@ -1259,7 +1236,7 @@ func (r *scriptRefResolver) resolve(hashHex string) (*common.ScriptRef, error) {
 // inline_datum field, which is a CBOR-encoded datum serialized as a hex string.
 // The original CBOR bytes are preserved exactly (no JSON decode/re-encode
 // round-trip) so the datum hash is not altered by a non-canonical re-encoding.
-func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTransactionOutputDatumOption, error) {
+func inlineDatumOptionFromBlockfrost(raw json.RawMessage, datumHash string) (*babbage.BabbageTransactionOutputDatumOption, error) {
 	var datumCborHex string
 	if err := json.Unmarshal(raw, &datumCborHex); err != nil {
 		return nil, fmt.Errorf("inline datum must be a CBOR hex string: %w", err)
@@ -1267,6 +1244,21 @@ func inlineDatumOptionFromBlockfrost(raw json.RawMessage) (*babbage.BabbageTrans
 	datumBytes, err := hex.DecodeString(datumCborHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid inline datum CBOR hex %q: %w", datumCborHex, err)
+	}
+	if datumHash == "" {
+		return nil, errors.New("inline datum is missing its data hash")
+	}
+	hashBytes, err := hex.DecodeString(datumHash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid data hash hex %q: %w", datumHash, err)
+	}
+	if len(hashBytes) != common.Blake2b256Size {
+		return nil, fmt.Errorf("invalid data hash length: expected %d bytes, got %d", common.Blake2b256Size, len(hashBytes))
+	}
+	var claimed common.Blake2b256
+	copy(claimed[:], hashBytes)
+	if computed := common.Blake2b256Hash(datumBytes); computed != claimed {
+		return nil, fmt.Errorf("inline datum hash mismatch: computed %s, provider claimed %s", computed, datumHash)
 	}
 	// Inline datum option: [1, #6.24(datum_cbor)]
 	cborBytes, err := cbor.Encode([]any{1, cbor.Tag{Number: 24, Content: datumBytes}})

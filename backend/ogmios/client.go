@@ -149,15 +149,44 @@ type ogmigoClient struct {
 var _ OgmiosClient = (*ogmigoClient)(nil)
 
 // newOgmigoClient builds the default OgmiosClient for an endpoint. It
-// performs no I/O; the connection is made per query.
-func newOgmigoClient(endpoint string) (*ogmigoClient, error) {
+// performs no I/O; connections are dialed by the first queries that need
+// them and up to maxIdle of them are kept for reuse, or none when maxIdle is
+// negative. Zero maxIdle and idleTimeout select the package defaults.
+func newOgmigoClient(
+	endpoint string,
+	maxIdle int,
+	idleTimeout time.Duration,
+) (*ogmigoClient, error) {
 	websocketURL, err := ogmiosWebsocketURL(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &ogmigoClient{
-		client: ogmigo.New(ogmigo.WithEndpoint(websocketURL)),
-	}, nil
+	if idleTimeout < 0 {
+		return nil, fmt.Errorf(
+			"invalid ogmios idle timeout %v: must not be negative",
+			idleTimeout,
+		)
+	}
+	if maxIdle == 0 {
+		maxIdle = DefaultOgmiosMaxIdleConns
+	}
+	if idleTimeout == 0 {
+		idleTimeout = DefaultOgmiosIdleTimeout
+	}
+	opts := []ogmigo.Option{ogmigo.WithEndpoint(websocketURL)}
+	if maxIdle > 0 {
+		opts = append(
+			opts,
+			ogmigo.WithConnectionPool(maxIdle),
+			ogmigo.WithPoolIdleTimeout(idleTimeout),
+		)
+	}
+	return &ogmigoClient{client: ogmigo.New(opts...)}, nil
+}
+
+// CloseIdleConnections closes the connections kept open for reuse.
+func (c *ogmigoClient) CloseIdleConnections() {
+	c.client.CloseIdleConnections()
 }
 
 func (c *ogmigoClient) ProtocolParameters(

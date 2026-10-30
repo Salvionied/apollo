@@ -1,0 +1,399 @@
+{
+  "preamble": {
+    "title": "example/governance",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "governance.guard",
+      "datum": {
+        "title": "proposal",
+        "purpose": "spend",
+        "schema": {
+          "$ref": "#/definitions/gov~1ProposalDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "purpose": "spend",
+        "schema": {
+          "$ref": "#/definitions/gov~1GovernanceRedeemer"
+        }
+      },
+      "compiledCode": "46010100200101"
+    }
+  ],
+  "definitions": {
+    "gov/Credential": {
+      "title": "Credential",
+      "anyOf": [
+        {
+          "title": "KeyCredential",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "hash",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            }
+          ]
+        },
+        {
+          "title": "ScriptCredential",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "hash",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            }
+          ]
+        }
+      ]
+    },
+    "gov/ActionId": {
+      "title": "ActionId",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "tx_id",
+          "dataType": "bytes",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        {
+          "title": "gov_action_idx",
+          "dataType": "integer",
+          "minimum": 0
+        }
+      ]
+    },
+    "Option<gov/ActionId>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/gov~1ActionId"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "gov/Anchor": {
+      "title": "Anchor",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "url",
+          "dataType": "bytes"
+        },
+        {
+          "title": "data_hash",
+          "dataType": "bytes",
+          "minLength": 32,
+          "maxLength": 32
+        }
+      ]
+    },
+    "Option<gov/Anchor>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/gov~1Anchor"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "gov/Quorum": {
+      "title": "Quorum",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "numerator",
+          "dataType": "integer"
+        },
+        {
+          "title": "denominator",
+          "dataType": "integer"
+        }
+      ]
+    },
+    "gov/GovAction": {
+      "title": "GovAction",
+      "anyOf": [
+        {
+          "title": "ParameterChange",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "previous",
+              "$ref": "#/definitions/Option<gov~1ActionId>"
+            },
+            {
+              "title": "MaxTxSize",
+              "dataType": "integer"
+            }
+          ]
+        },
+        {
+          "title": "HardForkInitiation",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "major",
+              "dataType": "integer"
+            },
+            {
+              "title": "minor",
+              "dataType": "integer"
+            }
+          ]
+        },
+        {
+          "title": "TreasuryWithdrawals",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "withdrawals",
+              "dataType": "map",
+              "keys": {
+                "dataType": "bytes",
+                "minLength": 28,
+                "maxLength": 28
+              },
+              "values": {
+                "dataType": "integer"
+              }
+            }
+          ]
+        },
+        {
+          "title": "NoConfidence",
+          "dataType": "constructor",
+          "index": 3,
+          "fields": [
+            {
+              "title": "previous",
+              "$ref": "#/definitions/Option<gov~1ActionId>"
+            }
+          ]
+        },
+        {
+          "title": "UpdateCommittee",
+          "dataType": "constructor",
+          "index": 4,
+          "fields": [
+            {
+              "title": "removed",
+              "dataType": "list",
+              "items": {
+                "$ref": "#/definitions/gov~1Credential"
+              }
+            },
+            {
+              "title": "added",
+              "dataType": "map",
+              "keys": {
+                "dataType": "bytes",
+                "minLength": 28,
+                "maxLength": 28
+              },
+              "values": {
+                "dataType": "integer"
+              }
+            },
+            {
+              "title": "quorum",
+              "$ref": "#/definitions/gov~1Quorum"
+            }
+          ]
+        },
+        {
+          "title": "NewConstitution",
+          "dataType": "constructor",
+          "index": 5,
+          "fields": [
+            {
+              "title": "constitution_hash",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            }
+          ]
+        },
+        {
+          "title": "InfoAction",
+          "dataType": "constructor",
+          "index": 6,
+          "fields": []
+        }
+      ]
+    },
+    "gov/ProposalDatum": {
+      "title": "ProposalDatum",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "previous_action",
+          "$ref": "#/definitions/Option<gov~1ActionId>"
+        },
+        {
+          "title": "action",
+          "$ref": "#/definitions/gov~1GovAction"
+        },
+        {
+          "title": "anchor",
+          "$ref": "#/definitions/gov~1Anchor"
+        }
+      ]
+    },
+    "gov/Voter": {
+      "title": "Voter",
+      "anyOf": [
+        {
+          "title": "CommitteeVoter",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/gov~1Credential"
+            }
+          ]
+        },
+        {
+          "title": "DRepVoter",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/gov~1Credential"
+            }
+          ]
+        },
+        {
+          "title": "StakePoolVoter",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "pool_key_hash",
+              "dataType": "bytes",
+              "minLength": 28,
+              "maxLength": 28
+            }
+          ]
+        }
+      ]
+    },
+    "gov/VoteDecision": {
+      "title": "VoteDecision",
+      "anyOf": [
+        {
+          "title": "VoteNo",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "VoteYes",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        },
+        {
+          "title": "VoteAbstain",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": []
+        }
+      ]
+    },
+    "gov/Ballot": {
+      "title": "Ballot",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "voter",
+          "$ref": "#/definitions/gov~1Voter"
+        },
+        {
+          "title": "action_id",
+          "$ref": "#/definitions/gov~1ActionId"
+        },
+        {
+          "title": "decision",
+          "$ref": "#/definitions/gov~1VoteDecision"
+        },
+        {
+          "title": "anchor",
+          "$ref": "#/definitions/Option<gov~1Anchor>"
+        }
+      ]
+    },
+    "gov/GovernanceRedeemer": {
+      "title": "GovernanceRedeemer",
+      "anyOf": [
+        {
+          "title": "CastSingle",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/gov~1Ballot"
+            }
+          ]
+        },
+        {
+          "title": "CastBatch",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "ballots",
+              "dataType": "list",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/gov~1Ballot"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

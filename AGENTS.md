@@ -75,6 +75,7 @@ replacements or substitute forks merely to make a build pass.
 | `backend/utxorpc/` | UTxO RPC adapter |
 | `backend/fixed/` | deterministic in-memory backend for tests |
 | `backend/cache/` | cached `ChainContext` wrapper |
+| `backend/localeval/` | in-process Plutus evaluation and a `ChainContext` wrapper that uses it |
 | `internal/backendutil/` | internal provider-response parsing helpers |
 | `internal/ogmiosutil/` | Ogmios v6 encoders and decoders shared by backends |
 | `plutusencoder/` | struct-tag-driven Plutus data marshaling |

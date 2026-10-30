@@ -79,6 +79,38 @@ func mintRedeemerUnits(memory, steps int64) map[common.RedeemerKey]common.ExUnit
 	}
 }
 
+func TestEstimateExecutionUnitsRejectsNonpositiveEvaluatorBudget(t *testing.T) {
+	tests := []struct {
+		name   string
+		memory int64
+		steps  int64
+	}{
+		{"zero memory", 0, 1_000},
+		{"zero steps", 1_000, 0},
+		{"negative memory", -1, 1_000},
+		{"negative steps", 1_000, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cc := &balancedEvalContext{
+				FixedChainContext: setupFixedContext(),
+				t:                 t,
+				resultFor: func(_ int, _ *conway.ConwayTransaction, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
+					return mintRedeemerUnits(tt.memory, tt.steps), nil
+				},
+			}
+			a := setupMintEvalBuilder(t, cc, 2_000_000, 1)
+			_, err := a.Complete()
+			if err == nil || !strings.Contains(err.Error(), "non-positive execution budget") {
+				t.Fatalf("Complete accepted evaluator budget memory=%d steps=%d: %v", tt.memory, tt.steps, err)
+			}
+			if a.GetTx() != nil {
+				t.Fatal("rejected evaluator budget left a completed transaction")
+			}
+		})
+	}
+}
+
 func setupMintEvalBuilder(t *testing.T, cc *balancedEvalContext, paymentLovelace int64, mintQty int64) *Apollo {
 	t.Helper()
 	addr := testAddress(t)

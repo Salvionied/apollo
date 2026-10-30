@@ -16,12 +16,25 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   socket. It serves every query except script lookup by hash and script
   evaluation, which the node does not offer, and reconnects after the node
   closes or the connection fails.
+- `backend/ogmios` reuses WebSocket connections between queries instead of
+  dialing one per query. `Config.OgmiosMaxIdleConns` (default 4, negative to
+  disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
+  `OgmiosChainContext.CloseIdleConnections` closes idle connections. This
+  requires ogmigo v6.2.2.
+- `backend/localeval`: in-process Plutus script evaluation. `Evaluate` runs
+  with no chain access, given the transaction, its resolved UTxOs, protocol
+  parameters and a `SlotConfig`. `NewLocalEvalChainContext` wraps any
+  `ChainContext` to report and serve `EvaluateTx` and
+  `EvaluateTxAdditionalUtxos` locally. Tests check its results against
+  cardano-cli's evaluator.
 - `backend/koios`: a Koios chain backend built on the current Koios v1 API,
   with `constants.KoiosBaseUrl*` for the public instances. It reports every
   capability, evaluates scripts through the Koios Ogmios proxy, and accepts
   an optional bearer token.
 - `ApplyParamsToScript` applies Plutus data parameters to a parameterized
-  Plutus V1, V2, or V3 script, such as an Aiken blueprint's `compiledCode`.
+  Plutus V1, V2, V3, or V4 script, such as an Aiken blueprint's `compiledCode`.
+- `PayToContractWithV4ReferenceScript` pays to a script address with an inline
+  datum and a Plutus V4 reference script.
 - `SetTransactionBodySetTagPolicy` supports a uniform untagged encoding for
   Conway body inputs, collateral, required signers, and reference inputs while
   preserving Apollo's historical mixed encoding as the default.
@@ -50,6 +63,22 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   output is deterministic, and duplicate encoded keys are rejected.
 - Custom `Marshaler` implementations are honored on slice elements, not just on
   whole fields.
+- `plutusType:"Either"`, `plutusType:"OutputDatum"`, and
+  `plutusType:"Interval"` encode PlutusTx `Either`, `OutputDatum`, and an
+  explicit `Interval`.
+- `plutusType:"Value"` encodes `plutusencoder.Value` as the Plutus ledger map
+  of policy id to asset map, with lovelace under the empty policy id and empty
+  asset name. `plutusType:"V4Value"` encodes the Plutus V4 `data.Value`
+  constructor (CBOR tag 1401), and decoding on either tag accepts both
+  `*data.Map` and `*data.Value`.
+- `plutusType:"Credential"`, `plutusType:"TxOutRef"`, and
+  `plutusType:"AssetClass"` encode a key or script credential, a transaction
+  output reference, and a policy-id/token-name pair.
+- `blueprint`: parse and validate CIP-57 `plutus.json` blueprints (`v1`
+  through `v4`), encode and decode datums, redeemers, and parameters (including
+  Plutus V4 `data.Value` and `"guard"` / `"vote"` / `"propose"` purposes), and
+  derive parameterized scripts, `ScriptRef`, spend and reward addresses, guard
+  credentials, and policy IDs for transactions.
 
 ### Fixed
 

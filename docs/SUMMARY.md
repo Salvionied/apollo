@@ -17,6 +17,7 @@
 * [Ouroboros (node-to-client)](backends/ouroboros.md)
 * [UTxO RPC](backends/utxorpc.md)
 * [Fixed and cache](backends/fixed_and_cache.md)
+* [Local evaluation](backends/localeval.md)
 
 ## Wallets and signing
 
@@ -46,6 +47,7 @@
 ## Plutus encoder
 
 * [Struct-tag encoding](plutusencoder/README.md)
+* [Plutus blueprint (CIP-57)](blueprint/README.md)
 
 ## Plutus V3
 

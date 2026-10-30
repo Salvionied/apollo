@@ -58,6 +58,10 @@ transaction with Plutus scripts needs execution units from elsewhere.
   scanning its UTxO set, which can take tens of seconds. `QueryTimeout`
   (default 3 minutes) bounds each query; the muxer's own read timeout is
   disabled so a long answer is not cut off.
+- **Address query limits.** Results with more than 100,000 UTxOs are
+  rejected after the node answers, before converting or sorting the result.
+  The gouroboros protocol reader also retains its default 16 MiB message
+  limit. An oversized query returns an error rather than a partial result.
 - **Protocol parameters** must come from the Conway era or later. Conway's
   reference-script size limit (200 KiB per transaction) is a ledger constant
   and is filled in; Dijkstra's reference-script limit, tier size and

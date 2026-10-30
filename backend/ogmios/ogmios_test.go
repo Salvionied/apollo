@@ -222,6 +222,17 @@ func TestKupoScriptToScriptRefVerifiesHash(t *testing.T) {
 	}
 }
 
+func TestMatchToUtxoRejectsScriptWithoutHash(t *testing.T) {
+	match := testMatch("", "")
+	match.Script = kugo.Script{
+		Language: kugo.ScriptLanguagePlutusV2,
+		Script:   "010203",
+	}
+	if _, err := matchToUtxo(t.Context(), match, testAddress(t), nil); err == nil {
+		t.Fatal("expected a script-bearing match without a hash to fail")
+	}
+}
+
 func TestKupoScriptToScriptRefPlutusV4(t *testing.T) {
 	scriptBytes := []byte{0x01, 0x02, 0x03}
 	script := kugo.Script{
@@ -250,6 +261,17 @@ func TestOgmiosScriptToScriptRefPlutusV4(t *testing.T) {
 	}
 	if got := ref.Script.RawScriptBytes(); !bytes.Equal(got, scriptBytes) {
 		t.Fatalf("script bytes = %x, want %x", got, scriptBytes)
+	}
+}
+
+func TestOgmiosScriptToScriptRefRejectsMissingCbor(t *testing.T) {
+	for _, raw := range []json.RawMessage{
+		json.RawMessage(`{"language":"native","json":{"clause":"all","from":[]}}`),
+		json.RawMessage(`{"language":"plutus:v2"}`),
+	} {
+		if ref, err := ogmiosScriptToScriptRef(raw); err == nil {
+			t.Fatalf("script %s decoded as %v without CBOR", raw, ref)
+		}
 	}
 }
 
