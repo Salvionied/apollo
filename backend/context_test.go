@@ -7,11 +7,31 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 )
 
 type trackingLegacyContext struct {
 	legacyChainContext
 	protocolCalls int
+}
+
+type mismatchedRefContext struct {
+	trackingContextChain
+	utxo common.Utxo
+}
+
+func (c *mismatchedRefContext) UtxoByRefContext(context.Context, common.Blake2b256, uint32) (*common.Utxo, error) {
+	return &c.utxo, nil
+}
+
+func TestUtxoByRefContextRejectsMismatchedResult(t *testing.T) {
+	var requested, returned common.Blake2b256
+	requested[0] = 1
+	returned[0] = 2
+	ctx := &mismatchedRefContext{utxo: common.Utxo{Id: shelley.ShelleyTransactionInput{TxId: returned, OutputIndex: 3}}}
+	if _, err := UtxoByRefContext(t.Context(), ctx, requested, 3); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
+	}
 }
 
 func (c *trackingLegacyContext) ProtocolParams() (ProtocolParameters, error) {

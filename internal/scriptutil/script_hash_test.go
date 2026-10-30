@@ -1,4 +1,4 @@
-package backendutil
+package scriptutil
 
 import (
 	"bytes"

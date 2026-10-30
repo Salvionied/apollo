@@ -14,12 +14,14 @@ import (
 )
 
 type evaluationTestWallet struct {
-	address common.Address
-	key     ed25519.PrivateKey
+	address   common.Address
+	key       ed25519.PrivateKey
+	signCalls int
 }
 
 func (w *evaluationTestWallet) Address() common.Address { return w.address }
 func (w *evaluationTestWallet) SignTxBody(hash common.Blake2b256) (common.VkeyWitness, error) {
+	w.signCalls++
 	return common.VkeyWitness{
 		Vkey:      w.key.Public().(ed25519.PublicKey),
 		Signature: ed25519.Sign(w.key, hash.Bytes()),
@@ -324,6 +326,47 @@ type captureEvalContext struct {
 	txCbor []byte
 }
 
+func TestEvaluationDraftOmitsWalletWitnessByDefault(t *testing.T) {
+	key := evaluationKey(52)
+	wallet := &evaluationTestWallet{address: testAddress(t), key: key}
+	context := &captureEvalContext{FixedChainContext: setupFixedContext()}
+	a := New(context).SetWallet(wallet).AddRequiredSigner(wallet.PubKeyHash())
+	if _, err := a.estimateExecutionUnits(nil, nil, 0); err == nil || !strings.Contains(err.Error(), "no results") {
+		t.Fatalf("expected evaluator result error after capture, got %v", err)
+	}
+	if wallet.signCalls != 0 {
+		t.Fatalf("wallet signed evaluation draft %d times", wallet.signCalls)
+	}
+	var tx conway.ConwayTransaction
+	if _, err := cbor.Decode(context.txCbor, &tx); err != nil {
+		t.Fatal(err)
+	}
+	if len(tx.WitnessSet.VkeyWitnesses.Items()) != 0 {
+		t.Fatal("evaluation draft contains a spend-authorizing witness")
+	}
+}
+
+func TestEvaluationDraftDoesNotAskWitnessProviderByDefault(t *testing.T) {
+	key := evaluationKey(53)
+	hash := common.Blake2b224Hash(key.Public().(ed25519.PublicKey))
+	context := &captureEvalContext{FixedChainContext: setupFixedContext()}
+	provider := &evaluationTestProvider{}
+	a := New(context).SetWallet(NewExternalWallet(testAddress(t))).AddRequiredSigner(hash).AddEvaluationWitnessProvider(provider)
+	if _, err := a.estimateExecutionUnits(nil, nil, 0); err == nil || !strings.Contains(err.Error(), "no results") {
+		t.Fatalf("expected evaluator result error after capture, got %v", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("witness provider called %d times", provider.calls)
+	}
+	var tx conway.ConwayTransaction
+	if _, err := cbor.Decode(context.txCbor, &tx); err != nil {
+		t.Fatal(err)
+	}
+	if len(tx.WitnessSet.VkeyWitnesses.Items()) != 0 {
+		t.Fatal("evaluation draft contains a provider witness")
+	}
+}
+
 func (c *captureEvalContext) EvaluateTx(txCbor []byte, _ []common.Utxo) (map[common.RedeemerKey]common.ExUnits, error) {
 	c.txCbor = append([]byte(nil), txCbor...)
 	return map[common.RedeemerKey]common.ExUnits{}, nil
@@ -334,7 +377,7 @@ func TestEvaluationWitnessesSignPostBalanceBody(t *testing.T) {
 	hash := common.Blake2b224Hash(key.Public().(ed25519.PublicKey))
 	context := &captureEvalContext{FixedChainContext: setupFixedContext()}
 	provider := signingEvaluationProvider{key: key}
-	a := New(context).SetWallet(NewExternalWallet(testAddress(t))).AddRequiredSigner(hash).AddEvaluationWitnessProvider(provider)
+	a := New(context).SetWallet(NewExternalWallet(testAddress(t))).AddRequiredSigner(hash).AddEvaluationWitnessProvider(provider).AllowSignedEvaluation()
 
 	if _, err := a.estimateExecutionUnits(nil, nil, 0); err == nil || !strings.Contains(err.Error(), "no results") {
 		t.Fatalf("expected evaluation result error after capture, got %v", err)
@@ -360,11 +403,14 @@ func TestEvaluationWitnessesSignPostBalanceBody(t *testing.T) {
 func TestCloneCopiesEvaluationProvidersWithoutAliasing(t *testing.T) {
 	first := &evaluationTestProvider{}
 	second := &evaluationTestProvider{}
-	original := New(setupFixedContext()).AddEvaluationWitnessProvider(first)
+	original := New(setupFixedContext()).AddEvaluationWitnessProvider(first).AllowSignedEvaluation()
 	clone := original.Clone()
 	clone.AddEvaluationWitnessProvider(second)
 
 	if len(original.evaluationWitnessProviders) != 1 || len(clone.evaluationWitnessProviders) != 2 {
 		t.Fatalf("provider slices aliased: original %d clone %d", len(original.evaluationWitnessProviders), len(clone.evaluationWitnessProviders))
+	}
+	if !clone.allowSignedEvaluation {
+		t.Fatal("clone lost signed evaluation opt-in")
 	}
 }
