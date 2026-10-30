@@ -476,3 +476,46 @@ func TestRoundTripOptionalMapDatum(t *testing.T) {
 		t.Errorf("expected 99, got %d", decoded.Value)
 	}
 }
+
+func TestBareMapRejectsConstructor(t *testing.T) {
+	type bareMap struct {
+		_     struct{} `plutusType:"Map"`
+		Value int64    `plutusType:"Int" plutusKey:"value"`
+	}
+	pd := data.NewConstr(7, data.NewMap([][2]data.PlutusData{{
+		data.NewByteString([]byte("value")), data.NewInteger(big.NewInt(42)),
+	}}))
+	var decoded bareMap
+	if err := UnmarshalPlutus(pd, &decoded); err == nil {
+		t.Fatal("expected constructor data to be rejected by bare Map schema")
+	}
+}
+
+func TestNativeMapRejectsDuplicateKeys(t *testing.T) {
+	type stringMap struct {
+		_      struct{}         `plutusType:"DefList" plutusConstr:"0"`
+		Values map[string]int64 `plutusType:"Map"`
+	}
+	type decodedCollisionMap struct {
+		_      struct{}                     `plutusType:"DefList" plutusConstr:"0"`
+		Values map[duplicateNativeKey]int64 `plutusType:"Map"`
+	}
+	for _, tc := range []struct {
+		name   string
+		target any
+		keys   [2]string
+	}{
+		{name: "identical encoded keys", target: &stringMap{}, keys: [2]string{"a", "a"}},
+		{name: "decoded key collision", target: &decodedCollisionMap{}, keys: [2]string{"a", "b"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pd := data.NewConstr(0, data.NewMap([][2]data.PlutusData{
+				{data.NewByteString([]byte(tc.keys[0])), data.NewInteger(big.NewInt(1))},
+				{data.NewByteString([]byte(tc.keys[1])), data.NewInteger(big.NewInt(2))},
+			}))
+			if err := UnmarshalPlutus(pd, tc.target); err == nil {
+				t.Fatal("expected duplicate native map key to be rejected")
+			}
+		})
+	}
+}

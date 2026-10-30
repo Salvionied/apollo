@@ -241,6 +241,13 @@ func marshalMapValueFields(elem reflect.Value, keyIdx int) (data.PlutusData, err
 		if f.Name == "_" || !f.IsExported() {
 			continue
 		}
+		info := cachedStructMeta(typ).fields[i]
+		if info.tagErr != nil {
+			return nil, info.tagErr
+		}
+		if info.ignore {
+			continue
+		}
 		pd, err := marshalField(elem.Field(i), f)
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", f.Name, err)
@@ -262,6 +269,13 @@ func extractMapKey(elem reflect.Value) (data.PlutusData, int, error) {
 		for j := 0; j < typ.NumField(); j++ {
 			f := typ.Field(j)
 			if f.Name == "_" || !f.IsExported() {
+				continue
+			}
+			info := cachedStructMeta(typ).fields[j]
+			if info.tagErr != nil {
+				return nil, -1, info.tagErr
+			}
+			if info.ignore {
 				continue
 			}
 			fv := elem.Field(j)
@@ -292,7 +306,10 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 	if !ok || plutusNil(mapData) {
 		// Could be a Constr wrapping a Map
 		if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) && len(constr.Fields) == 1 {
-			if hasExpectedConstr && !constrTagEqual(constr.Tag, expectedConstr) {
+			if !hasExpectedConstr {
+				return fmt.Errorf("expected bare Map, got Constr with tag %d", constr.Tag)
+			}
+			if !constrTagEqual(constr.Tag, expectedConstr) {
 				return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, constr.Tag)
 			}
 			mapData, ok = constr.Fields[0].(*data.Map)
@@ -406,10 +423,23 @@ func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflec
 	}
 
 	result := reflect.MakeMapWithSize(mapType, unmarshalPrealloc(len(mapData.Pairs)))
+	seenEncoded := make(map[string]struct{}, unmarshalPrealloc(len(mapData.Pairs)))
 	for i, pair := range mapData.Pairs {
+		encodedKey, err := data.Encode(pair[0])
+		if err != nil {
+			return fmt.Errorf("field %s pair %d key: %w", field.Name, i, err)
+		}
+		if _, exists := seenEncoded[string(encodedKey)]; exists {
+			return fmt.Errorf("field %s pair %d: duplicate encoded map key", field.Name, i)
+		}
+		seenEncoded[string(encodedKey)] = struct{}{}
+
 		key := reflect.New(mapType.Key()).Elem()
 		if err := unmarshalNativeMapKey(pair[0], key, field, cfg); err != nil {
 			return fmt.Errorf("field %s pair %d key: %w", field.Name, i, err)
+		}
+		if result.MapIndex(key).IsValid() {
+			return fmt.Errorf("field %s pair %d: duplicate decoded map key", field.Name, i)
 		}
 
 		value := reflect.New(mapType.Elem()).Elem()
@@ -531,6 +561,13 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value, cfg decodeCo
 		if f.Name == "_" || !f.IsExported() {
 			continue
 		}
+		info := cachedStructMeta(typ).fields[j]
+		if info.tagErr != nil {
+			return info.tagErr
+		}
+		if info.ignore {
+			continue
+		}
 		keyIdx = j
 		break
 	}
@@ -552,6 +589,13 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value, cfg decodeCo
 		}
 		f := typ.Field(j)
 		if f.Name == "_" || !f.IsExported() {
+			continue
+		}
+		info := cachedStructMeta(typ).fields[j]
+		if info.tagErr != nil {
+			return info.tagErr
+		}
+		if info.ignore {
 			continue
 		}
 		valueFieldIdxs = append(valueFieldIdxs, j)

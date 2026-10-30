@@ -123,7 +123,10 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type, 
 
 	switch v := pd.(type) {
 	case *data.Constr:
-		if hasExpectedConstr && !constrTagEqual(v.Tag, expectedConstr) {
+		if !hasExpectedConstr {
+			return fmt.Errorf("expected bare List, got Constr with tag %d", v.Tag)
+		}
+		if !constrTagEqual(v.Tag, expectedConstr) {
 			return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, v.Tag)
 		}
 		fields = v.Fields
