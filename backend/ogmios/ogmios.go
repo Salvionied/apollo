@@ -426,7 +426,14 @@ func (o *OgmiosChainContext) UtxoByRefContext(
 	if err != nil {
 		return nil, err
 	}
-	return client.UtxoByRef(ctx, txHash, index)
+	utxo, err := client.UtxoByRef(ctx, txHash, index)
+	if err != nil {
+		return nil, err
+	}
+	if err := backend.ValidateUtxoRef(utxo, txHash, index); err != nil {
+		return nil, err
+	}
+	return utxo, nil
 }
 
 func (o *OgmiosChainContext) ScriptCbor(scriptHash common.Blake2b224) ([]byte, error) {

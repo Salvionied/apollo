@@ -493,6 +493,29 @@ func TestUtxoByRefFillsMissingTxHashOnTxUtxosOutputs(t *testing.T) {
 	}
 }
 
+func TestUtxoByRefRejectsMismatchedResponse(t *testing.T) {
+	addr := testAddress(t)
+	var requested common.Blake2b256
+	requested[0] = 1
+	returned := requested
+	returned[0] = 2
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hash": hex.EncodeToString(returned.Bytes()),
+			"outputs": []map[string]any{{
+				"address":      addr.String(),
+				"amount":       []map[string]string{{"unit": "lovelace", "quantity": "2000000"}},
+				"output_index": 1,
+			}},
+		})
+	}))
+	t.Cleanup(server.Close)
+	ctx := NewBlockFrostChainContext(server.URL, 0, "")
+	if _, err := ctx.UtxoByRef(requested, 1); err == nil {
+		t.Fatal("expected mismatched reference to be rejected")
+	}
+}
+
 func TestEvaluateTxRejectsRedeemerIndexOverflow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/utils/txs/evaluate" {

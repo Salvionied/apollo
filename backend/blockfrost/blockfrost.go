@@ -759,6 +759,9 @@ func (b *BlockFrostChainContext) UtxoByRefContext(
 			if err != nil {
 				return nil, err
 			}
+			if err := backend.ValidateUtxoRef(&utxo, txHash, index); err != nil {
+				return nil, err
+			}
 			return &utxo, nil
 		}
 	}
