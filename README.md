@@ -82,8 +82,9 @@ Details, benchmarks, and the design note: [coin selection](docs/coin_selection/R
 
 ## Chain Backends and Evaluation
 
-Apollo does not embed a Plutus CEK machine. Script execution units come from
-the chain backend's `EvaluateTx`. Backends implement `ChainContext` and may
+Script execution units come from the chain backend's `EvaluateTx`, or from
+`backend/localeval`, which evaluates scripts in-process and can wrap any
+backend or run fully offline. Backends implement `ChainContext` and may
 report optional operations through `CapabilityReporter` — check
 `CapabilityEvaluateTxAdditionalUtxos` before relying on evaluator-supplied
 UTxOs for transaction chaining.
@@ -96,18 +97,21 @@ UTxOs for transaction chaining.
 | UTxO RPC | `backend/utxorpc` |
 | In-memory tests | `backend/fixed` |
 | TTL cache wrapper | `backend/cache` |
+| Local script evaluation | `backend/localeval` |
 
 See [backends](docs/backends/README.md) and
 [capabilities](docs/backends/capabilities.md).
 
 ## Evaluation Witnesses
 
-When a script transaction lists required signers, the evaluator needs valid
-signatures on the *preliminary* body. Apollo supplies those as
-evaluation-only witnesses: they are not kept in the unsigned transaction
-`Complete()` returns.
+Apollo sends unsigned preliminary transactions to the execution-unit evaluator
+by default. Some evaluators require signatures when a script transaction lists
+required signers. Call `AllowSignedEvaluation()` only with a trusted evaluator:
+it receives valid signatures on preliminary bodies and may be able to submit
+them. The witnesses are not kept in the unsigned transaction `Complete()` returns.
 
-`BursaWallet` provides its payment and stake witnesses automatically.
+When signed evaluation is enabled, `BursaWallet` provides its payment and
+stake witnesses automatically.
 Watch-only, hardware, and remote wallets register an
 `EvaluationWitnessProvider` instead of changing the `Wallet` interface:
 
@@ -122,7 +126,8 @@ func (remoteEvaluationSigner) EvaluationWitnesses(
     return nil, nil
 }
 
-builder.AddEvaluationWitnessProvider(remoteEvaluationSigner{})
+builder.AddEvaluationWitnessProvider(remoteEvaluationSigner{}).
+    AllowSignedEvaluation()
 ```
 
 Full behaviour: [evaluation witnesses](docs/wallets/evaluation_witnesses.md).

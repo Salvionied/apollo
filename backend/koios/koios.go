@@ -55,7 +55,6 @@ const (
 	// koiosPageSize is the Koios max-rows limit. A page shorter than this is
 	// the last one.
 	koiosPageSize = 1000
-	maxUtxoPages  = 1000
 
 	// ogmiosOverlappingAdditionalUtxo is the Ogmios v6 evaluateTransaction
 	// error returned when supplied additional UTxOs already exist on chain.
@@ -74,7 +73,7 @@ func NewKoiosChainContext(baseUrl string, networkId uint8, token string) *KoiosC
 		baseUrl:   strings.TrimRight(baseUrl, "/"),
 		token:     token,
 		networkId: networkId,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		client:    &http.Client{Timeout: 30 * time.Second, CheckRedirect: backendutil.SameOriginRedirect},
 	}
 }
 
@@ -160,7 +159,7 @@ func (k *KoiosChainContext) ProtocolParams() (backend.ProtocolParameters, error)
 func (k *KoiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
 	k.mu.Lock()
 	if k.cachedParams != nil && time.Since(k.paramsCacheAt) < cacheExpiry {
-		pp := cloneProtocolParams(*k.cachedParams)
+		pp := backendutil.CloneProtocolParams(*k.cachedParams)
 		k.mu.Unlock()
 		return pp, nil
 	}
@@ -189,31 +188,12 @@ func (k *KoiosChainContext) ProtocolParamsContext(ctx context.Context) (backend.
 		return backend.ProtocolParameters{}, err
 	}
 
-	cached := cloneProtocolParams(pp)
+	cached := backendutil.CloneProtocolParams(pp)
 	k.mu.Lock()
 	k.cachedParams = &cached
 	k.paramsCacheAt = time.Now()
 	k.mu.Unlock()
 	return pp, nil
-}
-
-// cloneProtocolParams deep-copies the reference fields of pp so callers cannot
-// mutate the cache.
-func cloneProtocolParams(pp backend.ProtocolParameters) backend.ProtocolParameters {
-	if pp.CostModels != nil {
-		models := make(map[string][]int64, len(pp.CostModels))
-		for language, costs := range pp.CostModels {
-			models[language] = append([]int64(nil), costs...)
-		}
-		pp.CostModels = models
-	}
-	if pp.MinFeeRefScriptCostPerByteRational != nil {
-		pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
-	}
-	if pp.MinFeeReferenceScriptsMultiplierRational != nil {
-		pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
-	}
-	return pp
 }
 
 func (k *KoiosChainContext) GenesisParams() (backend.GenesisParameters, error) {
@@ -324,9 +304,10 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 	}{Addresses: []string{addr}, Extended: true}
 
 	var utxos []common.Utxo
-	for page := range maxUtxoPages + 1 {
+	var references backendutil.UtxoReferenceSet
+	for offset := int64(0); ; offset += koiosPageSize {
 		query := url.Values{}
-		query.Set("offset", strconv.Itoa(page*koiosPageSize))
+		query.Set("offset", strconv.FormatInt(offset, 10))
 		query.Set("limit", strconv.Itoa(koiosPageSize))
 		// A stable order keeps offset pages from skipping or repeating rows.
 		query.Set("order", "tx_hash.asc,tx_index.asc")
@@ -334,15 +315,12 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 		if err != nil {
 			return nil, err
 		}
-		var rows []koiosUtxo
-		if err := json.Unmarshal(data, &rows); err != nil {
+		rows, err := backendutil.DecodeLimitedArray[koiosUtxo](data, koiosPageSize)
+		if err != nil {
 			return nil, fmt.Errorf("failed to parse koios address_utxos: %w", err)
 		}
 		if len(rows) == 0 {
 			return utxos, nil
-		}
-		if page == maxUtxoPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxUtxoPages)
 		}
 		for _, row := range rows {
 			if row.Address != addr {
@@ -355,13 +333,15 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse UTxO %s#%s: %w", row.TxHash, row.TxIndex, err)
 			}
+			if err := references.Add(utxo); err != nil {
+				return nil, err
+			}
 			utxos = append(utxos, utxo)
 		}
 		if len(rows) < koiosPageSize {
 			return utxos, nil
 		}
 	}
-	return utxos, nil
 }
 
 func (k *KoiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {

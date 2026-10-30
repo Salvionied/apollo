@@ -25,6 +25,11 @@ func dijkstraTestContext(t *testing.T, protocolMajor int) *fixed.FixedChainConte
 	if err != nil {
 		t.Fatal(err)
 	}
+	costModel := make([]int64, 297)
+	for i := range costModel {
+		costModel[i] = int64(i + 1)
+	}
+	pp.CostModels = map[string][]int64{"PlutusV3": costModel}
 	pp.ProtocolMajorVersion = protocolMajor
 	gp, err := base.GenesisParams()
 	if err != nil {

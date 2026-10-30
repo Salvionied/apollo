@@ -14,7 +14,28 @@ import (
 
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+
+	"github.com/Salvionied/apollo/v2/backend"
 )
+
+// CloneProtocolParams deep-copies the reference fields of pp, so a backend can
+// cache protocol parameters without callers mutating the cached value.
+func CloneProtocolParams(pp backend.ProtocolParameters) backend.ProtocolParameters {
+	if pp.CostModels != nil {
+		models := make(map[string][]int64, len(pp.CostModels))
+		for language, costs := range pp.CostModels {
+			models[language] = append([]int64(nil), costs...)
+		}
+		pp.CostModels = models
+	}
+	if pp.MinFeeRefScriptCostPerByteRational != nil {
+		pp.MinFeeRefScriptCostPerByteRational = new(big.Rat).Set(pp.MinFeeRefScriptCostPerByteRational)
+	}
+	if pp.MinFeeReferenceScriptsMultiplierRational != nil {
+		pp.MinFeeReferenceScriptsMultiplierRational = new(big.Rat).Set(pp.MinFeeReferenceScriptsMultiplierRational)
+	}
+	return pp
+}
 
 // ParseRational parses a provider-supplied rational number without passing it
 // through floating point. Decimal and exponent forms accepted by JSON numbers
