@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blinklabs-io/bursa/bip32"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	plutigoData "github.com/blinklabs-io/plutigo/data"
@@ -208,14 +207,17 @@ func TestCloneCopiesOwnedMutableStateAndSelector(t *testing.T) {
 }
 
 func TestNewKeyPairWalletCopiesPrivateKey(t *testing.T) {
-	key := make(bip32.XPrv, 96)
-	key[0] = 1
-	wallet, err := NewKeyPairWallet(testAddress(t), key)
+	key := testPaymentKey(t, 1)
+	wallet, err := NewKeyPairWallet(
+		keyPairTestAddress(t, key, common.AddressTypeKeyNone),
+		key,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	original := key[0]
 	key[0] = 99
-	if wallet.privateKey[0] != 1 {
+	if wallet.privateKey[0] != original {
 		t.Fatal("wallet private key aliases caller-owned memory")
 	}
 }

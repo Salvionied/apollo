@@ -142,6 +142,51 @@ func TestBearerTokenSentOnlyWhenSet(t *testing.T) {
 	}
 }
 
+func TestRequestRejectsCrossOriginPostRedirect(t *testing.T) {
+	sinkReceived := make(chan struct{}, 1)
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sinkReceived <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer sink.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", sink.URL+"/capture")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	ctx := NewKoiosChainContext(source.URL, 0, "secret-token")
+	if _, err := ctx.requestContext(context.Background(), http.MethodPost, "/submit", []byte("transaction-body"), "application/octet-stream"); err == nil {
+		t.Fatal("expected cross-origin redirect to fail")
+	}
+	select {
+	case <-sinkReceived:
+		t.Fatal("cross-origin destination received the transaction body")
+	default:
+	}
+}
+
+func TestRequestAllowsSameOriginRedirect(t *testing.T) {
+	var gotCredential string
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		gotCredential = r.Header.Get("Authorization")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer source.Close()
+
+	ctx := NewKoiosChainContext(source.URL, 0, "secret-token")
+	if _, err := ctx.requestContext(context.Background(), http.MethodGet, "/start", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if gotCredential != "Bearer secret-token" {
+		t.Fatalf("redirected request credential = %q", gotCredential)
+	}
+}
+
 func TestTipAndCurrentEpoch(t *testing.T) {
 	rs, server := newRecordingServer(t)
 	rs.handle(http.MethodGet, "/tip", http.StatusOK,

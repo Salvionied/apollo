@@ -74,7 +74,7 @@ func NewKoiosChainContext(baseUrl string, networkId uint8, token string) *KoiosC
 		baseUrl:   strings.TrimRight(baseUrl, "/"),
 		token:     token,
 		networkId: networkId,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		client:    &http.Client{Timeout: 30 * time.Second, CheckRedirect: backendutil.SameOriginRedirect},
 	}
 }
 
