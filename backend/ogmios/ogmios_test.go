@@ -264,6 +264,17 @@ func TestOgmiosScriptToScriptRefPlutusV4(t *testing.T) {
 	}
 }
 
+func TestOgmiosScriptToScriptRefRejectsMissingCbor(t *testing.T) {
+	for _, raw := range []json.RawMessage{
+		json.RawMessage(`{"language":"native","json":{"clause":"all","from":[]}}`),
+		json.RawMessage(`{"language":"plutus:v2"}`),
+	} {
+		if ref, err := ogmiosScriptToScriptRef(raw); err == nil {
+			t.Fatalf("script %s decoded as %v without CBOR", raw, ref)
+		}
+	}
+}
+
 func TestOgmiosCostModelKeyPlutusV4(t *testing.T) {
 	if got := ogmiosCostModelKey("plutus:v4"); got != "PlutusV4" {
 		t.Fatalf("cost model key = %q, want PlutusV4", got)

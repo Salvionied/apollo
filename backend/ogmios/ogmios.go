@@ -1121,8 +1121,7 @@ func ogmiosScriptToScriptRef(scriptJSON json.RawMessage) (*common.ScriptRef, err
 		return nil, fmt.Errorf("failed to parse script JSON: %w", err)
 	}
 	if raw.Cbor == "" {
-		// Native scripts may use "json" field instead of "cbor"; skip these for now.
-		return nil, nil
+		return nil, fmt.Errorf("missing script CBOR for %q", raw.Language)
 	}
 
 	scriptBytes, err := hex.DecodeString(raw.Cbor)
