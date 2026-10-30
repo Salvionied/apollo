@@ -27,6 +27,11 @@ particular `EvaluateTx`'s `additionalUtxos` argument
 Network ID is `1` for mainnet and `0` for testnets. There is no
 `constants.MAINNET` enum.
 
+Blockfrost, Koios, and UTxO RPC follow provider pagination until they have the
+complete address result. Repeated output references or pagination tokens are
+rejected instead of returning an incomplete or duplicated result. UTxO RPC
+also limits each individual response to 16 MiB.
+
 ## Which backend
 
 | Backend | Package | Typical use |

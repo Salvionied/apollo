@@ -10,8 +10,10 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -590,6 +592,46 @@ func TestUtxosPaginates(t *testing.T) {
 	}
 	if n := len(rs.recorded()); n != 2 {
 		t.Fatalf("made %d requests, want 2 (stop after a short page)", n)
+	}
+}
+
+func TestUtxosRejectsDuplicateReferences(t *testing.T) {
+	row := utxoRow(t, 0, nil)
+	rs, server := newRecordingServer(t)
+	rs.handle(http.MethodPost, "/address_utxos", http.StatusOK, mustJSON(t, []any{row, row}))
+	if _, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t)); err == nil {
+		t.Fatal("expected duplicate UTxO reference to fail")
+	}
+}
+
+func TestUtxosReturnsCompleteResultBeyondTenThousand(t *testing.T) {
+	const total = 10_001
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		count := min(koiosPageSize, total-offset)
+		rows := make([]map[string]any, count)
+		for i := range rows {
+			rows[i] = utxoRow(t, offset+i, nil)
+		}
+		_ = json.NewEncoder(w).Encode(rows)
+	}))
+	defer server.Close()
+
+	utxos, err := NewKoiosChainContext(server.URL, 0, "").Utxos(testAddress(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(utxos) != total {
+		t.Fatalf("UTxOs = %d, want %d", len(utxos), total)
+	}
+	if got := requests.Load(); got != 11 {
+		t.Fatalf("requests = %d, want 11", got)
 	}
 }
 

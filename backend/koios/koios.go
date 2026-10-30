@@ -55,7 +55,6 @@ const (
 	// koiosPageSize is the Koios max-rows limit. A page shorter than this is
 	// the last one.
 	koiosPageSize = 1000
-	maxUtxoPages  = 1000
 
 	// ogmiosOverlappingAdditionalUtxo is the Ogmios v6 evaluateTransaction
 	// error returned when supplied additional UTxOs already exist on chain.
@@ -305,9 +304,10 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 	}{Addresses: []string{addr}, Extended: true}
 
 	var utxos []common.Utxo
-	for page := range maxUtxoPages + 1 {
+	var references backendutil.UtxoReferenceSet
+	for offset := int64(0); ; offset += koiosPageSize {
 		query := url.Values{}
-		query.Set("offset", strconv.Itoa(page*koiosPageSize))
+		query.Set("offset", strconv.FormatInt(offset, 10))
 		query.Set("limit", strconv.Itoa(koiosPageSize))
 		// A stable order keeps offset pages from skipping or repeating rows.
 		query.Set("order", "tx_hash.asc,tx_index.asc")
@@ -315,15 +315,12 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 		if err != nil {
 			return nil, err
 		}
-		var rows []koiosUtxo
-		if err := json.Unmarshal(data, &rows); err != nil {
+		rows, err := backendutil.DecodeLimitedArray[koiosUtxo](data, koiosPageSize)
+		if err != nil {
 			return nil, fmt.Errorf("failed to parse koios address_utxos: %w", err)
 		}
 		if len(rows) == 0 {
 			return utxos, nil
-		}
-		if page == maxUtxoPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxUtxoPages)
 		}
 		for _, row := range rows {
 			if row.Address != addr {
@@ -336,13 +333,15 @@ func (k *KoiosChainContext) UtxosContext(ctx context.Context, address common.Add
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse UTxO %s#%s: %w", row.TxHash, row.TxIndex, err)
 			}
+			if err := references.Add(utxo); err != nil {
+				return nil, err
+			}
 			utxos = append(utxos, utxo)
 		}
 		if len(rows) < koiosPageSize {
 			return utxos, nil
 		}
 	}
-	return utxos, nil
 }
 
 func (k *KoiosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {

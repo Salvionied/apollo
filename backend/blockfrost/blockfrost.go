@@ -263,35 +263,37 @@ func (b *BlockFrostChainContext) Utxos(address common.Address) ([]common.Utxo, e
 }
 
 func (b *BlockFrostChainContext) UtxosContext(ctx context.Context, address common.Address) ([]common.Utxo, error) {
-	const maxPages = 1000
+	const maxPageItems = 1000
 	var allUtxos []common.Utxo
+	var references backendutil.UtxoReferenceSet
 	resolver := newScriptRefResolver(ctx, b)
 
-	for page := 1; page <= maxPages+1; page++ {
+	for page := uint64(1); ; page++ {
 		path := fmt.Sprintf("/addresses/%s/utxos?page=%d", address.String(), page)
 		data, err := b.requestContext(ctx, "GET", path, nil, "")
 		if err != nil {
 			return nil, err
 		}
 
-		var rawUtxos []bfAddressUTxO
-		if err := json.Unmarshal(data, &rawUtxos); err != nil {
+		rawUtxos, err := backendutil.DecodeLimitedArray[bfAddressUTxO](data, maxPageItems)
+		if err != nil {
 			return nil, err
 		}
 		if len(rawUtxos) == 0 {
 			return allUtxos, nil
-		}
-		if page > maxPages {
-			return nil, fmt.Errorf("UTxO pagination exceeded %d pages; results may be incomplete", maxPages)
 		}
 
 		utxos, err := b.hydrateUtxoPage(rawUtxos, address, resolver.resolve)
 		if err != nil {
 			return nil, err
 		}
+		for _, utxo := range utxos {
+			if err := references.Add(utxo); err != nil {
+				return nil, err
+			}
+		}
 		allUtxos = append(allUtxos, utxos...)
 	}
-	return allUtxos, nil
 }
 
 func (b *BlockFrostChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, error) {

@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -300,6 +302,59 @@ func TestUtxosHydratesDuplicateReferenceScriptsOnce(t *testing.T) {
 	}
 	if got := scriptRequests.Load(); got != 1 {
 		t.Fatalf("script requests = %d, want 1", got)
+	}
+}
+
+func TestUtxosRejectsDuplicateReferences(t *testing.T) {
+	addr := testAddress(t)
+	row := bfAddressUTxO{
+		TxHash: strings.Repeat("a", 64), OutputIndex: 0, Address: addr.String(),
+		Amount: []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "1" {
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]bfAddressUTxO{row, row})
+	}))
+	defer server.Close()
+	if _, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr); err == nil {
+		t.Fatal("expected duplicate UTxO reference to fail")
+	}
+}
+
+func TestUtxosReturnsAllProviderPages(t *testing.T) {
+	addr := testAddress(t)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		page, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if page > 1001 {
+			_ = json.NewEncoder(w).Encode([]bfAddressUTxO{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]bfAddressUTxO{{
+			TxHash: fmt.Sprintf("%064x", page), OutputIndex: 0,
+			Address: addr.String(),
+			Amount:  []bfAddressAmount{{Unit: "lovelace", Quantity: "1000000"}},
+		}})
+	}))
+	defer server.Close()
+
+	utxos, err := NewBlockFrostChainContext(server.URL, 0, "").Utxos(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(utxos) != 1001 {
+		t.Fatalf("UTxOs = %d, want 1001", len(utxos))
+	}
+	if got := requests.Load(); got != 1002 {
+		t.Fatalf("requests = %d, want 1002", got)
 	}
 }
 
