@@ -8,6 +8,7 @@ require (
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.2
 	github.com/blinklabs-io/bursa v0.21.0
 	github.com/blinklabs-io/gouroboros v0.215.0
+	github.com/blinklabs-io/ouroboros-mock v0.21.1
 	github.com/blinklabs-io/plutigo v0.9.11
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/gorilla/websocket v1.5.3
