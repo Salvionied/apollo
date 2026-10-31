@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net"
 	"reflect"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	gouroboros "github.com/blinklabs-io/gouroboros"
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
@@ -39,11 +41,20 @@ type mockNode struct {
 
 func newMockNode(t *testing.T, conversations ...[]ouroboros_mock.ConversationEntry) (*mockNode, *OuroborosChainContext) {
 	t.Helper()
+	return newMockNodeWithConfig(t, Config{}, conversations...)
+}
+
+// newMockNodeWithConfig is newMockNode with timeouts and other settings from
+// cfg. The network magic is always the mock's.
+func newMockNodeWithConfig(
+	t *testing.T,
+	cfg Config,
+	conversations ...[]ouroboros_mock.ConversationEntry,
+) (*mockNode, *OuroborosChainContext) {
+	t.Helper()
 	m := &mockNode{t: t, conversations: conversations}
-	ctx := newContext(m.dial, Config{
-		NetworkMagic: ouroboros_mock.MockNetworkMagic,
-		NetworkId:    0,
-	})
+	cfg.NetworkMagic = ouroboros_mock.MockNetworkMagic
+	ctx := newContext(m.dial, cfg)
 	t.Cleanup(func() {
 		// Let each conversation finish before closing: messages that need
 		// no reply, such as Release, may still be in flight.
@@ -230,10 +241,10 @@ func TestReconnectsAfterNodeClosesConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		ctx.session.mu.Lock()
-		defer ctx.session.mu.Unlock()
+		ctx.session.gate <- struct{}{}
+		defer func() { <-ctx.session.gate }()
 		select {
-		case <-ctx.session.broken:
+		case <-ctx.session.health.done:
 			return true
 		default:
 			return false
@@ -549,5 +560,213 @@ func TestUtxosAddressResultLimit(t *testing.T) {
 				t.Fatal("completed address query discarded its connection")
 			}
 		})
+	}
+}
+
+// TestHandshakeTimeoutUnblocksSilentPeer covers a peer that accepts the
+// socket but never answers the version proposal. The node-to-client
+// handshake has no timeout of its own, so without one a call with no
+// deadline, and Close behind it, would wait forever.
+func TestHandshakeTimeoutUnblocksSilentPeer(t *testing.T) {
+	var peers []net.Conn
+	var mu sync.Mutex
+	silent := func(context.Context) (net.Conn, error) {
+		client, server := net.Pipe()
+		go func() { _, _ = io.Copy(io.Discard, server) }()
+		mu.Lock()
+		peers = append(peers, server)
+		mu.Unlock()
+		return client, nil
+	}
+	ctx := newContext(silent, Config{
+		NetworkMagic:     ouroboros_mock.MockNetworkMagic,
+		HandshakeTimeout: 50 * time.Millisecond,
+	})
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, p := range peers {
+			_ = p.Close()
+		}
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ctx.Tip()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "handshake: no answer within 50ms") {
+			t.Fatalf("got %v, want a handshake timeout", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Tip() against a silent peer did not return")
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		_ = ctx.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return")
+	}
+}
+
+// TestHandshakeTimeoutStopsAfterHandshake checks that the handshake timeout
+// does not also cut off the connection once the handshake has finished.
+func TestHandshakeTimeoutStopsAfterHandshake(t *testing.T) {
+	node, ctx := newMockNodeWithConfig(t,
+		Config{HandshakeTimeout: 20 * time.Millisecond},
+		conversation(handshake, tipExchange(t, 5), tipExchange(t, 6)),
+	)
+	if _, err := ctx.Tip(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	got, err := ctx.Tip()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 6 {
+		t.Fatalf("Tip() = %d, want 6", got)
+	}
+	if n := node.dialCount(); n != 1 {
+		t.Fatalf("dialed %d times, want 1", n)
+	}
+}
+
+// TestQueuedCallGivesUpOnCancellation covers a call waiting behind a slow
+// operation: it returns when its own context ends, and it leaves the shared
+// connection alone.
+func TestQueuedCallGivesUpOnCancellation(t *testing.T) {
+	node, ctx := newMockNode(t, conversation(handshake, tipExchange(t, 5), tipExchange(t, 6)))
+	if _, err := ctx.Tip(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hold the turn as a slow address query would.
+	ctx.session.gate <- struct{}{}
+	callCtx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := ctx.TipContext(callCtx)
+	elapsed := time.Since(start)
+	<-ctx.session.gate
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("queued call took %v to give up", elapsed)
+	}
+
+	got, err := ctx.Tip()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 6 {
+		t.Fatalf("Tip() = %d, want 6", got)
+	}
+	if n := node.dialCount(); n != 1 {
+		t.Fatalf("dialed %d times, want 1: the queued call closed the connection", n)
+	}
+}
+
+// TestConnectionFailureCauseIsReported checks that a call failing because
+// its connection broke reports why the connection broke, not only that its
+// mini-protocol shut down.
+func TestConnectionFailureCauseIsReported(t *testing.T) {
+	stalledAcquire := ouroboros_mock.ConversationEntryInput{
+		ProtocolId:  localstatequery.ProtocolId,
+		MessageType: localstatequery.MessageTypeAcquireVolatileTip,
+	}
+
+	t.Run("node closes the socket", func(t *testing.T) {
+		_, ctx := newMockNode(t, conversation(handshake, []ouroboros_mock.ConversationEntry{
+			stalledAcquire,
+			ouroboros_mock.ConversationEntryClose{},
+		}))
+		_, err := ctx.Tip()
+		if !errors.Is(err, protocol.ErrProtocolShuttingDown) {
+			t.Fatalf("got %v, want an error wrapping ErrProtocolShuttingDown", err)
+		}
+		// gouroboros reports the closed socket unless it has already
+		// stopped the waiting protocol, which then looks idle; either way
+		// the error must say that the node closed the connection.
+		var closedErr *muxer.ConnectionClosedError
+		if !errors.As(err, &closedErr) && !errors.Is(err, errNodeClosedConnection) {
+			t.Fatalf("got %v, want the node closing the connection as the cause", err)
+		}
+	})
+
+	t.Run("query timeout", func(t *testing.T) {
+		_, ctx := newMockNodeWithConfig(t,
+			Config{QueryTimeout: 50 * time.Millisecond},
+			conversation(handshake, acquire, []ouroboros_mock.ConversationEntry{
+				ouroboros_mock.ConversationEntryInput{
+					ProtocolId:  localstatequery.ProtocolId,
+					MessageType: localstatequery.MessageTypeQuery,
+				},
+			}),
+		)
+		_, err := ctx.Tip()
+		if !errors.Is(err, protocol.ErrProtocolShuttingDown) || !strings.Contains(err.Error(), "connection failed: protocol error: ") ||
+			!strings.Contains(err.Error(), "timeout") {
+			t.Fatalf("got %v, want the query timeout behind the shutdown", err)
+		}
+	})
+}
+
+func TestSubmitOutcome(t *testing.T) {
+	submitErr := errors.New("submit failed")
+	releaseErr := errors.New("release failed")
+	if err := submitOutcome(nil, nil); err != nil {
+		t.Fatalf("accepted and released: got %v", err)
+	}
+	if err := submitOutcome(submitErr, releaseErr); !errors.Is(err, submitErr) || errors.Is(err, errReleaseAfterAccept) {
+		t.Fatalf("failed submission: got %v, want the submission error", err)
+	}
+	err := submitOutcome(nil, releaseErr)
+	if !errors.Is(err, errReleaseAfterAccept) || !errors.Is(err, releaseErr) {
+		t.Fatalf("accepted, release failed: got %v, want errReleaseAfterAccept wrapping the release error", err)
+	}
+}
+
+// TestReleaseAfterAcceptDiscardsConnection checks how run treats a
+// submission the node accepted on a connection whose release then failed:
+// the error stays recognisable, so SubmitTxContext can report the
+// transaction as submitted, and the connection is not reused.
+func TestReleaseAfterAcceptDiscardsConnection(t *testing.T) {
+	node, ctx := newMockNode(t,
+		conversation(handshake, tipExchange(t, 5)),
+		conversation(handshake, tipExchange(t, 6)),
+	)
+	if _, err := ctx.Tip(); err != nil {
+		t.Fatal(err)
+	}
+	// Let the node read the Release that Tip sent without waiting before
+	// the connection is dropped under it.
+	node.mu.Lock()
+	first := node.done[0]
+	node.mu.Unlock()
+	<-first
+	err := ctx.session.run(t.Context(), func(*gouroboros.Connection) error {
+		return submitOutcome(nil, errors.New("release failed"))
+	})
+	if !errors.Is(err, errReleaseAfterAccept) {
+		t.Fatalf("got %v, want errReleaseAfterAccept", err)
+	}
+	got, err := ctx.Tip()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 6 {
+		t.Fatalf("Tip() = %d, want 6 from a new connection", got)
+	}
+	if n := node.dialCount(); n != 2 {
+		t.Fatalf("dialed %d times, want 2", n)
 	}
 }

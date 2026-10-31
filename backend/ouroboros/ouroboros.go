@@ -34,6 +34,9 @@ type Config struct {
 	NetworkId uint8
 	// DialTimeout bounds opening the socket. Zero uses DefaultDialTimeout.
 	DialTimeout time.Duration
+	// HandshakeTimeout bounds the node-to-client handshake after the socket
+	// opens. Zero uses DefaultHandshakeTimeout.
+	HandshakeTimeout time.Duration
 	// QueryTimeout bounds each ledger-state query. Zero uses
 	// DefaultQueryTimeout. Querying UTxOs by address on mainnet can take
 	// tens of seconds; a context passed to a ...Context method can end any
@@ -47,6 +50,8 @@ type Config struct {
 const (
 	// DefaultDialTimeout applies when Config.DialTimeout is zero.
 	DefaultDialTimeout = 10 * time.Second
+	// DefaultHandshakeTimeout applies when Config.HandshakeTimeout is zero.
+	DefaultHandshakeTimeout = 10 * time.Second
 	// DefaultQueryTimeout applies when Config.QueryTimeout is zero.
 	DefaultQueryTimeout = 3 * time.Minute
 	// DefaultSubmitTimeout applies when Config.SubmitTimeout is zero.
@@ -88,9 +93,10 @@ func NewOuroborosChainContext(cfg Config) (*OuroborosChainContext, error) {
 		return nil, errors.New("network magic is required")
 	}
 	for name, d := range map[string]time.Duration{
-		"dial":   cfg.DialTimeout,
-		"query":  cfg.QueryTimeout,
-		"submit": cfg.SubmitTimeout,
+		"dial":      cfg.DialTimeout,
+		"handshake": cfg.HandshakeTimeout,
+		"query":     cfg.QueryTimeout,
+		"submit":    cfg.SubmitTimeout,
 	} {
 		if d < 0 {
 			return nil, fmt.Errorf("invalid %s timeout %v: must not be negative", name, d)
@@ -108,12 +114,13 @@ func NewOuroborosChainContext(cfg Config) (*OuroborosChainContext, error) {
 
 func newContext(dial dialFunc, cfg Config) *OuroborosChainContext {
 	return &OuroborosChainContext{
-		session: &session{
-			dial:          dial,
-			networkMagic:  cfg.NetworkMagic,
-			queryTimeout:  orDefault(cfg.QueryTimeout, DefaultQueryTimeout),
-			submitTimeout: orDefault(cfg.SubmitTimeout, DefaultSubmitTimeout),
-		},
+		session: newSession(
+			dial,
+			cfg.NetworkMagic,
+			orDefault(cfg.HandshakeTimeout, DefaultHandshakeTimeout),
+			orDefault(cfg.QueryTimeout, DefaultQueryTimeout),
+			orDefault(cfg.SubmitTimeout, DefaultSubmitTimeout),
+		),
 		networkId: cfg.NetworkId,
 	}
 }
@@ -271,6 +278,11 @@ func (o *OuroborosChainContext) SubmitTx(txCbor []byte) (common.Blake2b256, erro
 	return o.SubmitTxContext(context.Background(), txCbor)
 }
 
+// errReleaseAfterAccept marks a submission the node accepted on a connection
+// that then failed to release its ledger state. The connection is discarded,
+// but the transaction was submitted.
+var errReleaseAfterAccept = errors.New("release ledger state after the node accepted the transaction")
+
 // SubmitTxContext submits a transaction in the node's current era and
 // returns its id. A rejection by the node is returned as an error wrapping
 // localtxsubmission.TransactionRejectedError.
@@ -289,15 +301,30 @@ func (o *OuroborosChainContext) SubmitTxContext(ctx context.Context, txCbor []by
 		// and the submission on different mini-protocols at the same time,
 		// leaving their order on the wire to the muxer.
 		err := submitInCurrentEra(lsq, conn.LocalTxSubmission().Client, txCbor)
-		if releaseErr := lsq.Release(); err == nil && releaseErr != nil {
-			return fmt.Errorf("release ledger state: %w", releaseErr)
-		}
-		return err
+		return submitOutcome(err, lsq.Release())
 	})
-	if err != nil {
+	// run returns the context's error instead if the context ended, so an
+	// acceptance is reported only when the caller is still waiting for it.
+	if err != nil && !errors.Is(err, errReleaseAfterAccept) {
 		return common.Blake2b256{}, fmt.Errorf("submit transaction: %w", err)
 	}
 	return hash, nil
+}
+
+// submitOutcome combines a submission's result with releasing the ledger
+// state afterwards. Once the node has accepted the transaction, a release
+// failure only means the connection is unusable; it is marked with
+// errReleaseAfterAccept so run discards the connection and the caller still
+// learns the transaction was submitted.
+func submitOutcome(submitErr, releaseErr error) error {
+	switch {
+	case submitErr != nil:
+		return submitErr
+	case releaseErr != nil:
+		return fmt.Errorf("%w: %w", errReleaseAfterAccept, releaseErr)
+	default:
+		return nil
+	}
 }
 
 func submitInCurrentEra(lsq *localstatequery.Client, submit *localtxsubmission.Client, txCbor []byte) error {

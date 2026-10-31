@@ -53,7 +53,15 @@ transaction with Plutus scripts needs execution units from elsewhere.
   context reconnects on its next query.
 - **Cancellation.** The `...Context` methods close the connection when their
   context ends, which is how a blocked query is abandoned. The next call
-  reconnects.
+  reconnects. A call still waiting for its turn behind another operation
+  returns as soon as its context ends and leaves the connection alone.
+- **Timeouts.** `DialTimeout` (default 10 seconds) bounds opening the socket
+  and `HandshakeTimeout` (default 10 seconds) bounds the node-to-client
+  handshake after it, which has no timeout of its own. `SubmitTimeout`
+  (default 30 seconds) bounds waiting for the node's answer to a submission.
+- **Failures.** A call that fails because the connection broke reports the
+  connection's own error, such as a query timeout, after the mini-protocol's
+  "protocol is shutting down".
 - **Address queries are slow on mainnet.** The node answers `Utxos` by
   scanning its UTxO set, which can take tens of seconds. `QueryTimeout`
   (default 3 minutes) bounds each query; the muxer's own read timeout is
@@ -71,4 +79,6 @@ transaction with Plutus scripts needs execution units from elsewhere.
 - **Submission.** `SubmitTx` returns the transaction id computed from the
   body as submitted. A rejection wraps
   `localtxsubmission.TransactionRejectedError`, whose `Reason` decodes the
-  ledger's error; the connection stays open after a rejection.
+  ledger's error; the connection stays open after a rejection. If the node
+  accepts the transaction but releasing the ledger state afterwards fails,
+  `SubmitTx` still returns the id and the connection is replaced.
