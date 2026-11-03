@@ -11,6 +11,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
   reports `CapabilityGenesisParams`. A server that does not implement
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
+- `backend/ouroboros`: a chain backend that talks to a cardano-node directly
+  over the node-to-client mini-protocols, through its UNIX socket or a TCP
+  socket. It serves every query except script lookup by hash and script
+  evaluation, which the node does not offer, and reconnects after the node
+  closes or the connection fails.
 - `backend/ogmios` reuses WebSocket connections between queries instead of
   dialing one per query. `Config.OgmiosMaxIdleConns` (default 4, negative to
   disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
