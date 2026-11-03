@@ -77,6 +77,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `PayToContract`, `PayToContractWithReferenceScript`, and `AddGuard` store a
+  copy of the caller's datum. Changing that datum afterward leaves the stored
+  payment and guard redeemer unchanged.
 - `backend/ogmios` and `backend/utxorpc` cache protocol parameters for five
   minutes, as the Blockfrost and Koios backends already did; Ogmios caches
   genesis parameters too. Building one transaction reads them many times, and
