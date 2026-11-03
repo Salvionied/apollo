@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Salvionied/apollo/v2"
@@ -915,17 +916,29 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 	})
 
 	exUnits := common.ExUnits{Memory: 1000, Steps: 1000}
-	dijkstraBuilder, err := apollo.New(cc).
-		SetWallet(apollo.NewExternalWallet(walletAddr)).
-		SetTargetEra(apollo.EraDijkstra).
-		DisableExecutionUnitsEstimation().
-		AddGuard(bundle.Credential, bundle.Redeemer, &exUnits).
-		AddRequiredTopLevelGuard(bundle.Credential, datumVal).
-		AddReferenceInput(hex.EncodeToString(refTx[:]), 0)
-	if err != nil {
-		t.Fatal(err)
+	newGuardedBuilder := func(guardDatum *common.Datum) (*apollo.Apollo, error) {
+		builder, err := apollo.New(cc).
+			SetWallet(apollo.NewExternalWallet(walletAddr)).
+			SetTargetEra(apollo.EraDijkstra).
+			DisableExecutionUnitsEstimation().
+			AddGuard(bundle.Credential, bundle.Redeemer, &exUnits).
+			AddRequiredTopLevelGuard(bundle.Credential, guardDatum).
+			AddReferenceInput(hex.EncodeToString(refTx[:]), 0)
+		if err != nil {
+			return nil, err
+		}
+		return builder.Complete()
 	}
-	dijkstraBuilder, err = dijkstraBuilder.Complete()
+	// The ledger decodes datums with the reference Plutus Data decoder,
+	// which has no Value constructor in any era, so a datum carrying the V4
+	// Value is refused.
+	if _, err := newGuardedBuilder(datumVal); err == nil ||
+		!strings.Contains(err.Error(), "not representable as ledger Plutus data") {
+		t.Fatalf("Dijkstra guard Complete with a V4 Value datum: %v, want a ledger data error", err)
+	}
+	dijkstraBuilder, err := newGuardedBuilder(&common.Datum{
+		Data: data.NewConstr(0, data.NewInteger(big.NewInt(5))),
+	})
 	if err != nil {
 		t.Fatalf("Dijkstra guard Complete: %v", err)
 	}

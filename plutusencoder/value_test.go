@@ -104,7 +104,9 @@ func TestV4ValueTaggedRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wire, err := data.Decode(raw)
+	// data.Decode rejects tag 1401, as the reference decoder does;
+	// DecodeWithValue admits the V4 Value constructor where it is meant.
+	wire, err := data.DecodeWithValue(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
