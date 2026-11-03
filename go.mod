@@ -6,7 +6,7 @@ require (
 	connectrpc.com/connect v1.21.1
 	github.com/SundaeSwap-finance/kugo v1.3.2
 	github.com/SundaeSwap-finance/ogmigo/v6 v6.2.2
-	github.com/blinklabs-io/bursa v0.21.0
+	github.com/blinklabs-io/bursa v0.21.1
 	github.com/blinklabs-io/gouroboros v0.215.0
 	github.com/blinklabs-io/plutigo v0.9.11
 	github.com/btcsuite/btcd/btcutil v1.2.0
@@ -20,7 +20,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/aws/aws-sdk-go v1.55.6 // indirect
 	github.com/bits-and-blooms/bitset v1.25.0 // indirect
-	github.com/blinklabs-io/go-bip39 v0.2.0 // indirect
+	github.com/blinklabs-io/go-bip39 v0.2.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
