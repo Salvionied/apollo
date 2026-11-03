@@ -39,7 +39,7 @@ func buildWithMetadata(t *testing.T, metadata map[uint64]any) *Apollo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).

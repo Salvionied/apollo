@@ -494,7 +494,7 @@ func TestGovernanceFixtureMatchesGouroborosAndBuildsVoteTx(t *testing.T) {
 
 	// Build a transaction carrying the same vote through AddVote.
 	cc, walletAddr := newBlueprintTxContext(t)
-	txBuilder, err := apollo.New(cc).
+	txBuilder, err := apollo.New(cc).SetMaxFee(2_000_000).
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		SetTtl(50000000).
 		AddVote(ledgerVoter, ledgerAction, common.VotingProcedure{Vote: common.GovVoteYes}).
@@ -622,7 +622,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 	cc, walletAddr := newBlueprintTxContext(t)
 	scriptUtxo := makeScriptUtxo(t, spendAddr, datumPd, 5_000_000)
 	cc.AddUtxo(spendAddr, scriptUtxo)
-	builtSpend, err := apollo.New(cc).
+	builtSpend, err := apollo.New(cc).SetMaxFee(2_000_000).
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		DisableExecutionUnitsEstimation().
 		AttachScript(v3Spend).
@@ -658,7 +658,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	ccMint, walletAddr := newBlueprintTxContext(t)
-	builtMint, err := apollo.New(ccMint).
+	builtMint, err := apollo.New(ccMint).SetMaxFee(2_000_000).
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		DisableExecutionUnitsEstimation().
 		AttachScript(v3Mint).
@@ -689,7 +689,7 @@ func TestBlueprintBuildsSpendMintWithdrawAndParameterizedScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	ccWithdraw, walletAddr := newBlueprintTxContext(t)
-	builtWithdraw, err := apollo.New(ccWithdraw).
+	builtWithdraw, err := apollo.New(ccWithdraw).SetMaxFee(2_000_000).
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		DisableExecutionUnitsEstimation().
 		AttachScript(v3Withdraw).
@@ -915,7 +915,7 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 	})
 
 	exUnits := common.ExUnits{Memory: 1000, Steps: 1000}
-	dijkstraBuilder, err := apollo.New(cc).
+	dijkstraBuilder, err := apollo.New(cc).SetMaxFee(2_000_000).
 		SetWallet(apollo.NewExternalWallet(walletAddr)).
 		SetTargetEra(apollo.EraDijkstra).
 		DisableExecutionUnitsEstimation().

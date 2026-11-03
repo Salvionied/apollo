@@ -49,7 +49,7 @@ import "github.com/Salvionied/apollo/v2"
 | `PayToContractWithV1ReferenceScript(...)` | `PayToContractWithV1ReferenceScript(...)` or `PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)` |
 | `PayToContractWithV2ReferenceScript(...)` | `PayToContractWithV2ReferenceScript(...)` or `PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)` |
 | `PayToContractWithV3ReferenceScript(...)` | `PayToContractWithV3ReferenceScript(...)` or `PayToContractWithReferenceScript(addr, datum, lovelace, script, units...)` |
-| `CompleteExact(fee)` | `SetFee(fee)` then `Complete()` |
+| `CompleteExact(fee)` | `SetFee(fee)`, `SetMaxFee(fee)`, then `Complete()` |
 | `SetEstimateRequired()` | Automatic — set by `CollectFrom` and `Mint` with redeemers |
 | `ConsumeAssetsFromUtxo(utxo, payments...)` | `ConsumeUTxO(utxo, payments...)` |
 | `GetPaymentsLength()` | Removed — internal detail |
@@ -344,7 +344,7 @@ This pattern applies to all 8 staking/delegation operations:
 
 | Method | Reason |
 |--------|--------|
-| `CompleteExact(fee)` | Use `SetFee(fee)` then `Complete()` |
+| `CompleteExact(fee)` | Use `SetFee(fee)`, `SetMaxFee(fee)`, then `Complete()` |
 | `SetWalletAsChangeAddress()` | The wallet is the default change address unless `SetChangeAddress` is used |
 | `SetWalletFromKeypair(...)` | Incomplete implementation — build address manually |
 | `SetEstimateRequired()` | Internal — automatically set by `CollectFrom`/`Mint` |

@@ -14,7 +14,7 @@ func newGovernanceTestApollo(t *testing.T) *Apollo {
 	cc := setupFixedContext()
 	addr := testAddress(t)
 	addTestUtxo(cc, addr, 100_000_000, 0x90, 0)
-	return New(cc).SetWallet(NewExternalWallet(addr)).SetTtl(50000000)
+	return newTestApollo(cc).SetWallet(NewExternalWallet(addr)).SetTtl(50000000)
 }
 
 func TestSetCurrentTreasuryValue(t *testing.T) {
