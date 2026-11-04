@@ -150,7 +150,7 @@ func TestTransactionBodySetTagPolicySurvivesCompleteAndSigning(t *testing.T) {
 		common.AddressTypeKeyKey,
 		common.AddressNetworkMainnet,
 	)
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetTransactionBodySetTagPolicy(
 			TransactionBodySetTagPolicyUntagged,
 		).
@@ -216,7 +216,7 @@ func TestTransactionBodySetTagPolicySurvivesCompleteAndSigning(t *testing.T) {
 		t.Fatal("transaction-body policy changed vkey witness-set tagging")
 	}
 
-	datumBuilder := New(cc).SetTransactionBodySetTagPolicy(
+	datumBuilder := newTestApollo(cc).SetTransactionBodySetTagPolicy(
 		TransactionBodySetTagPolicyUntagged,
 	)
 	datumBuilder.datums = []common.Datum{{}}
@@ -231,14 +231,14 @@ func TestTransactionBodySetTagPolicySurvivesCompleteAndSigning(t *testing.T) {
 }
 
 func TestTransactionBodySetTagPolicyCloneAndValidation(t *testing.T) {
-	a := New(setupFixedContext()).SetTransactionBodySetTagPolicy(
+	a := newTestApollo(setupFixedContext()).SetTransactionBodySetTagPolicy(
 		TransactionBodySetTagPolicyUntagged,
 	)
 	if got := a.Clone().bodySetTagPolicy; got != TransactionBodySetTagPolicyUntagged {
 		t.Fatalf("cloned policy = %d, want untagged", got)
 	}
 
-	invalid := New(setupFixedContext()).SetTransactionBodySetTagPolicy(
+	invalid := newTestApollo(setupFixedContext()).SetTransactionBodySetTagPolicy(
 		TransactionBodySetTagPolicy(255),
 	)
 	_, err := invalid.Complete()

@@ -52,7 +52,7 @@ func buildWith(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cc).
+	return newTestApollo(cc).
 		SetCoinSelector(sel).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).

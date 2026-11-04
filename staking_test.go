@@ -554,7 +554,7 @@ func TestCompleteWithStakeRegistration(t *testing.T) {
 	addTestUtxo(cc, addr, 20_000_000, 0x01, 0)
 
 	w := NewExternalWallet(addr)
-	a := New(cc).SetWallet(w).SetTtl(50000000)
+	a := newTestApollo(cc).SetWallet(w).SetTtl(50000000)
 
 	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
 	if err != nil {

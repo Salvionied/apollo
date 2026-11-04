@@ -78,7 +78,7 @@ func buildWitnessDatumTx(
 	script := common.PlutusV2Script([]byte{0x01, 0x02})
 	unit := NewUnit(hex.EncodeToString(script.Hash().Bytes()), "746f6b656e", 1)
 
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddInput(inputUtxo).
 		AddCollateral(collateralUtxo).

@@ -43,7 +43,8 @@ Upgrading from v1? See the [migration guide](docs/v2_migration/MIGRATION.md).
 - HD wallets via bursa (mnemonic, optional passphrase, watch-only)
 - Fluent Conway transaction builder (`Complete` → `Sign` → `Submit`)
 - Automatic coin selection (MACS by default, pluggable)
-- Chain backends: Blockfrost, Koios, Ogmios/Kupo, UTxO RPC, plus `fixed` and cache
+- Chain backends: Blockfrost, Koios, Ogmios/Kupo, a local cardano-node over
+  node-to-client, UTxO RPC, plus `fixed` and cache
 - Plutus V1–V3 scripts, datums, redeemers, and reference inputs
 - Struct-tag Plutus encoding (`plutusencoder`)
 - Staking certificates, withdrawals, and CIP-1694 governance
@@ -94,6 +95,7 @@ UTxOs for transaction chaining.
 | Blockfrost | `backend/blockfrost` |
 | Koios | `backend/koios` |
 | Ogmios + Kupo | `backend/ogmios` |
+| cardano-node (node-to-client) | `backend/ouroboros` |
 | UTxO RPC | `backend/utxorpc` |
 | In-memory tests | `backend/fixed` |
 | TTL cache wrapper | `backend/cache` |
@@ -177,6 +179,7 @@ func main() {
     builder, err = builder.
         AddLoadedUTxOs(utxos...).
         PayToAddress(receiver, 1_000_000).
+        SetMaxFee(300_000).
         Complete()
     if err != nil {
         panic(err)
@@ -206,6 +209,7 @@ contract. To request a Dijkstra transaction, select the era before building:
 builder, err := apollo.New(chainContext).
     SetTargetEra(apollo.EraDijkstra).
     AddPayment(payment).
+    SetMaxFee(1_000_000).
     Complete()
 if err != nil {
     return err

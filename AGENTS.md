@@ -71,6 +71,7 @@ replacements or substitute forks merely to make a build pass.
 | `backend/blockfrost/` | Blockfrost adapter |
 | `backend/koios/` | Koios adapter |
 | `backend/ogmios/` | Ogmios and Kupo adapter |
+| `backend/ouroboros/` | node-to-client adapter for a local cardano-node |
 | `backend/utxorpc/` | UTxO RPC adapter |
 | `backend/fixed/` | deterministic in-memory backend for tests |
 | `backend/cache/` | cached `ChainContext` wrapper |

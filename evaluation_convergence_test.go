@@ -21,7 +21,7 @@ func buildTransfer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cc).
+	return newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).
@@ -146,7 +146,7 @@ func TestForceFeeStillBypassesEstimation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).

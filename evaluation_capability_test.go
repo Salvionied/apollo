@@ -77,7 +77,7 @@ func setupCapabilityMintBuilder(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cc).
+	return newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).
@@ -142,7 +142,7 @@ func TestPlutusSpendSucceedsWhenBackendRejectsAdditionalUtxos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
 		CollectFrom(scriptUtxo, redeemer, common.ExUnits{}).
@@ -255,7 +255,7 @@ func TestEvaluationSendsAdditionalUtxosForUnreportedContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		AddPayment(p).
 		SetTtl(50_000_000).

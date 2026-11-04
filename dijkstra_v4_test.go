@@ -91,7 +91,7 @@ func TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules(t *testing.T) {
 		CredType:   common.CredentialTypeScriptHash,
 		Credential: common.CredentialHash(scriptHash),
 	}
-	a, err := New(cc).
+	a, err := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		DisableExecutionUnitsEstimation().
@@ -144,7 +144,7 @@ func TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules(t *testing.T) {
 }
 
 func TestAttachScriptV4InDijkstraRequiresReferenceInput(t *testing.T) {
-	a := New(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).
+	a := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).
 		SetTargetEra(EraDijkstra).
 		AttachScript(plutusV4TestScript)
 	if _, err := a.Complete(); !errors.Is(err, ErrPlutusV4WitnessScript) {
