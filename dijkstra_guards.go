@@ -8,7 +8,24 @@ import (
 
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/dijkstra"
+	"github.com/blinklabs-io/plutigo/data"
 )
+
+// checkLedgerData reports whether the ledger can carry pd in a transaction.
+// The ledger decodes every datum and redeemer with the reference Plutus Data
+// decoder, whose Data has the constructors Constr, Map, List, I and B in every
+// era, Dijkstra included. Data that decoder rejects, such as the Plutus V4
+// Value constructor (CBOR tag 1401), makes the transaction undecodable.
+func checkLedgerData(pd data.PlutusData) error {
+	raw, err := data.Encode(pd)
+	if err != nil {
+		return fmt.Errorf("encode Plutus data: %w", err)
+	}
+	if _, err := data.Decode(raw); err != nil {
+		return fmt.Errorf("not representable as ledger Plutus data: %w", err)
+	}
+	return nil
+}
 
 // requiredTopLevelGuard is one entry of Dijkstra transaction body field 24.
 type requiredTopLevelGuard struct {
@@ -104,6 +121,10 @@ func (a *Apollo) AddRequiredTopLevelGuard(cred common.Credential, datum *common.
 	}
 	if datum != nil {
 		if err := datumTreeError(datum.Data); err != nil {
+			a.setErrOnce(fmt.Errorf("required top-level guard datum: %w", err))
+			return a
+		}
+		if err := checkLedgerData(datum.Data); err != nil {
 			a.setErrOnce(fmt.Errorf("required top-level guard datum: %w", err))
 			return a
 		}
