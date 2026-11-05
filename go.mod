@@ -9,7 +9,7 @@ require (
 	github.com/blinklabs-io/bursa v0.21.1
 	github.com/blinklabs-io/gouroboros v0.215.0
 	github.com/blinklabs-io/ouroboros-mock v0.21.1
-	github.com/blinklabs-io/plutigo v0.11.2
+	github.com/blinklabs-io/plutigo v0.11.3
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/utxorpc/go-codegen v0.19.2
