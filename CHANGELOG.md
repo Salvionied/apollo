@@ -13,9 +13,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
 - `backend/ouroboros`: a chain backend that talks to a cardano-node directly
   over the node-to-client mini-protocols, through its UNIX socket or a TCP
-  socket. It serves every query except script lookup by hash and script
-  evaluation, which the node does not offer, and reconnects after the node
-  closes or the connection fails.
+  socket. It serves every query except script lookup by hash, which the node
+  does not offer, and reconnects after the node closes or the connection
+  fails. `EvaluateTx` runs scripts in-process with `backend/localeval`, and
+  protocol and genesis parameters are cached for five minutes.
 - `backend/ogmios` reuses WebSocket connections between queries instead of
   dialing one per query. `Config.OgmiosMaxIdleConns` (default 4, negative to
   disable) and `Config.OgmiosIdleTimeout` (default 30 seconds) tune it, and
@@ -130,6 +131,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version path; the `constants.BlockfrostBaseUrl*` values already do.
   Trailing slashes are still removed.
 - gouroboros 0.192.2 to 0.193.1.
+- gouroboros 0.215.0 to 0.218.1. Dijkstra witness sets now carry Plutus V4
+  scripts in key 8, as the Dijkstra CDDL and cardano-ledger define them.
+  `AttachScript` accepts a Plutus V4 script for a Dijkstra build and places it
+  there, the script data hash includes the `PlutusV4` cost model for it, and
+  blueprint `PrepareGuard` returns a V4 validator as `WitnessScript`. A
+  Conway build still gets `ErrPlutusV4RequiresDijkstra`.
+
+### Deprecated
+
+- `ErrPlutusV4WitnessScript` is no longer returned, since a Dijkstra
+  transaction can attach Plutus V4 scripts.
 
 ### Removed
 

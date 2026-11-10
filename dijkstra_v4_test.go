@@ -20,9 +20,17 @@ var plutusV4TestScript = common.PlutusV4Script{0x04, 0x05, 0x06, 0x07}
 
 // TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules builds a Dijkstra
 // transaction that spends a V4-locked UTxO and is guarded by the same V4
-// script, supplied through a reference input, then checks it against the
-// gouroboros Dijkstra witness, cost-model, script-integrity, and fee rules.
+// script, then checks it against the gouroboros Dijkstra witness,
+// cost-model, script-integrity, and fee rules. The script is supplied
+// through a reference input in one case and in witness-set key 8 in the
+// other.
 func TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules(t *testing.T) {
+	t.Run("reference input", func(t *testing.T) { testDijkstraPlutusV4SpendAndGuard(t, false) })
+	t.Run("witness set", func(t *testing.T) { testDijkstraPlutusV4SpendAndGuard(t, true) })
+}
+
+func testDijkstraPlutusV4SpendAndGuard(t *testing.T, attach bool) {
+	t.Helper()
 	costModel := make([]int64, 300)
 	for i := range costModel {
 		costModel[i] = int64(i + 7)
@@ -91,24 +99,34 @@ func TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules(t *testing.T) {
 		CredType:   common.CredentialTypeScriptHash,
 		Credential: common.CredentialHash(scriptHash),
 	}
-	a, err := newTestApollo(cc).
+	a := newTestApollo(cc).
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		DisableExecutionUnitsEstimation().
 		AddPayment(payment).
 		CollectFrom(locked, *guardRedeemer(), exUnits).
-		AddGuard(scriptCred, guardRedeemer(), &exUnits).
-		AddReferenceInput(hex.EncodeToString(refTxHash.Bytes()), 0)
-	if err != nil {
-		t.Fatal(err)
+		AddGuard(scriptCred, guardRedeemer(), &exUnits)
+	if attach {
+		a = a.AttachScript(plutusV4TestScript)
+	} else {
+		if a, err = a.AddReferenceInput(hex.EncodeToString(refTxHash.Bytes()), 0); err != nil {
+			t.Fatal(err)
+		}
 	}
 	a, err = a.Complete()
 	if err != nil {
 		t.Fatal(err)
 	}
 	tx := decodeCompletedDijkstraTx(t, a)
-	if len(tx.WitnessSet.PlutusV4Scripts()) != 0 {
-		t.Fatal("a V4 script must not be placed in the witness set")
+	wantWitnessScripts := 0
+	if attach {
+		wantWitnessScripts = 1
+	}
+	if got := len(tx.WitnessSet.PlutusV4Scripts()); got != wantWitnessScripts {
+		t.Fatalf("witness set carries %d V4 scripts, want %d", got, wantWitnessScripts)
+	}
+	if attach && len(tx.Body.ReferenceInputs()) != 0 {
+		t.Fatal("an attached V4 script must not need a reference input")
 	}
 	if _, ok := tx.WitnessSet.WsRedeemers.Redeemers[common.RedeemerKey{Tag: common.RedeemerTagGuarding, Index: 0}]; !ok {
 		t.Fatal("missing V4 guarding redeemer")
@@ -143,11 +161,17 @@ func TestDijkstraPlutusV4SpendAndGuardSatisfyLedgerRules(t *testing.T) {
 	}
 }
 
-func TestAttachScriptV4InDijkstraRequiresReferenceInput(t *testing.T) {
+// TestAttachScriptV4ThenConwayFails covers a build that attaches a V4
+// script for Dijkstra and then switches the target era back to Conway.
+func TestAttachScriptV4ThenConwayFails(t *testing.T) {
 	a := newTestApollo(dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)).
+		SetWallet(NewExternalWallet(testAddress(t))).
 		SetTargetEra(EraDijkstra).
 		AttachScript(plutusV4TestScript)
-	if _, err := a.Complete(); !errors.Is(err, ErrPlutusV4WitnessScript) {
-		t.Fatalf("Complete error = %v, want %v", err, ErrPlutusV4WitnessScript)
+	if a.err != nil || len(a.v4scripts) != 1 {
+		t.Fatalf("attaching a V4 script for Dijkstra: scripts %d, err %v", len(a.v4scripts), a.err)
+	}
+	if _, err := a.SetTargetEra(EraConway).Complete(); !errors.Is(err, ErrPlutusV4RequiresDijkstra) {
+		t.Fatalf("Complete error = %v, want %v", err, ErrPlutusV4RequiresDijkstra)
 	}
 }

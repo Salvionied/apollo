@@ -124,9 +124,10 @@ tx, err := apollo.New(cc).
 
 ### Dijkstra Plutus V4 guard with `PrepareGuard`
 
-`PrepareGuard(redeemer)` bundles the guard `Credential`, `ScriptRef`, optional
-`WitnessScript` (nil for Plutus V4 so it cannot be attached as a witness), and
-encoded `"guard"` redeemer:
+`PrepareGuard(redeemer)` bundles the guard `Credential`, `ScriptRef`,
+`WitnessScript`, and encoded `"guard"` redeemer. Supply the script by
+attaching `WitnessScript` or by adding a published `ScriptRef` as a reference
+input:
 
 ```go
 guardScript, err := bp.Script("guard.observe")

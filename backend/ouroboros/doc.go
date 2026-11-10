@@ -3,6 +3,7 @@
 // UNIX socket or a TCP socket that exposes it. Ledger queries use
 // LocalStateQuery and submissions use LocalTxSubmission, through gouroboros.
 //
-// The node offers no script lookup by hash and no script evaluator, so the
-// context reports neither CapabilityScriptCbor nor CapabilityEvaluateTx.
+// The node offers no script lookup by hash, so the context does not report
+// CapabilityScriptCbor. It offers no script evaluator either, so EvaluateTx
+// runs scripts in-process with backend/localeval.
 package ouroboros
