@@ -31,10 +31,10 @@ type AppliedScript struct {
 	HashHex string
 }
 
-// GuardBundle holds the credential, reference script, optional witness script,
-// and redeemer needed to guard a transaction with a blueprint validator. For a
-// Plutus V4 validator, WitnessScript is nil because Dijkstra requires V4
-// scripts to be supplied as reference scripts.
+// GuardBundle holds the credential, reference script, witness script, and
+// redeemer needed to guard a transaction with a blueprint validator. Supply
+// the script either by attaching WitnessScript or by publishing ScriptRef and
+// adding it as a reference input.
 type GuardBundle struct {
 	Credential    common.Credential
 	ScriptRef     *common.ScriptRef
@@ -300,12 +300,10 @@ func (vs *ValidatorScript) GuardCredential() (common.Credential, error) {
 	return vs.Credential()
 }
 
-// PrepareGuard returns the GuardBundle (Credential, ScriptRef, optional
-// WitnessScript, and Redeemer) for guarding a transaction with this validator.
-// When redeemerValue is non-nil, it is encoded against the validator's "guard"
-// redeemer schema; pass a *common.Datum directly if already encoded. For
-// Plutus V4 validators, WitnessScript is nil because V4 scripts must be
-// supplied via reference inputs.
+// PrepareGuard returns the GuardBundle (Credential, ScriptRef, WitnessScript,
+// and Redeemer) for guarding a transaction with this validator. When
+// redeemerValue is non-nil, it is encoded against the validator's "guard"
+// redeemer schema; pass a *common.Datum directly if already encoded.
 func (vs *ValidatorScript) PrepareGuard(redeemerValue any) (*GuardBundle, error) {
 	cred, err := vs.GuardCredential()
 	if err != nil {
@@ -318,10 +316,6 @@ func (vs *ValidatorScript) PrepareGuard(redeemerValue any) (*GuardBundle, error)
 	sc, err := vs.Script()
 	if err != nil {
 		return nil, err
-	}
-	var witness common.Script
-	if vs.version != "v4" {
-		witness = sc
 	}
 	var redeemer *common.Datum
 	switch r := redeemerValue.(type) {
@@ -341,7 +335,7 @@ func (vs *ValidatorScript) PrepareGuard(redeemerValue any) (*GuardBundle, error)
 	return &GuardBundle{
 		Credential:    cred,
 		ScriptRef:     ref,
-		WitnessScript: witness,
+		WitnessScript: sc,
 		Redeemer:      redeemer,
 	}, nil
 }

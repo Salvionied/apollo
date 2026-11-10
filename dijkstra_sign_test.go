@@ -109,7 +109,10 @@ func TestLoadedDijkstraBodyMutationIsRejected(t *testing.T) {
 	}
 }
 
-func TestLoadedDijkstraInvalidWitnessReturnsError(t *testing.T) {
+// TestLoadedDijkstraV4WitnessRoundTrips adds a Plutus V4 script to a loaded,
+// signed Dijkstra transaction's witness set, which key 8 carries, and checks
+// that it survives encoding and decoding.
+func TestLoadedDijkstraV4WitnessRoundTrips(t *testing.T) {
 	txCbor, err := completedDijkstraPayment(t).GetTxCbor()
 	if err != nil {
 		t.Fatal(err)
@@ -122,11 +125,20 @@ func TestLoadedDijkstraInvalidWitnessReturnsError(t *testing.T) {
 	if _, err := loaded.SignWithSkey(seed); err != nil {
 		t.Fatal(err)
 	}
+	script := common.PlutusV4Script{0x01}
 	loaded.GetDijkstraTx().WitnessSet.WsPlutusV4Scripts = cbor.NewSetType(
-		[]common.PlutusV4Script{{0x01}}, true,
+		[]common.PlutusV4Script{script}, true,
 	)
-	if _, err := loaded.GetTxCbor(); err == nil || !strings.Contains(err.Error(), "Plutus V4") {
-		t.Fatalf("expected an encoding error for the invalid witness set, got %v", err)
+	encoded, err := loaded.GetTxCbor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := dijkstra.NewDijkstraTransactionFromCbor(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded.WitnessSet.PlutusV4Scripts(); len(got) != 1 || !bytes.Equal(got[0], script) {
+		t.Fatalf("decoded V4 witness scripts = %x, want [%x]", got, script)
 	}
 }
 
@@ -174,17 +186,22 @@ func TestLoadTxCborRejectsMalformedDijkstraTransaction(t *testing.T) {
 	if _, err := cbor.Decode(txCbor, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	// A Dijkstra witness set must not carry Plutus V4 scripts (field 8).
-	v4Witness, err := cbor.Encode(map[uint]any{8: []any{[]byte{0x01}}})
-	if err != nil {
-		t.Fatal(err)
+	// Witness-set key 8 holds a non-empty set of distinct Plutus V4 scripts.
+	withWitnessSet := func(ws map[uint]any) []byte {
+		t.Helper()
+		encoded, err := cbor.Encode(ws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return dijkstraEnvelope(envelope[0], encoded, envelope[2])
 	}
-	withV4Witness := dijkstraEnvelope(envelope[0], v4Witness, envelope[2])
 
 	tests := map[string][]byte{
-		"truncated":         txCbor[:len(txCbor)-1],
-		"trailing bytes":    append(append([]byte(nil), txCbor...), 0x00),
-		"v4 witness script": withV4Witness,
+		"truncated":                   txCbor[:len(txCbor)-1],
+		"trailing bytes":              append(append([]byte(nil), txCbor...), 0x00),
+		"empty v4 witness scripts":    withWitnessSet(map[uint]any{8: []any{}}),
+		"duplicate v4 witness script": withWitnessSet(map[uint]any{8: []any{[]byte{0x01}, []byte{0x01}}}),
+		"non-bytes v4 witness script": withWitnessSet(map[uint]any{8: []any{uint64(1)}}),
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -61,9 +61,12 @@ const (
 // transaction, while the builder targets Conway.
 var ErrPlutusV4RequiresDijkstra = errors.New("plutus V4 requires the Dijkstra target era; call SetTargetEra(EraDijkstra)")
 
-// ErrPlutusV4WitnessScript reports an attempt to place a Plutus V4 script in
-// the witness set. The Dijkstra ledger accepts V4 scripts only as reference
-// scripts.
+// ErrPlutusV4WitnessScript reported an attempt to place a Plutus V4 script in
+// the witness set.
+//
+// Deprecated: the Dijkstra witness set carries Plutus V4 scripts in key 8,
+// so AttachScript accepts them for a Dijkstra build and this error is no
+// longer returned.
 var ErrPlutusV4WitnessScript = errors.New("plutus V4 scripts must be supplied through a reference input, not the witness set")
 
 // Apollo is the main transaction builder.
@@ -86,6 +89,7 @@ type Apollo struct {
 	v1scripts          []common.PlutusV1Script
 	v2scripts          []common.PlutusV2Script
 	v3scripts          []common.PlutusV3Script
+	v4scripts          []common.PlutusV4Script
 	redeemers          map[string]redeemerEntry // keyed by UTxO ref string
 	stakeRedeemers     map[string]redeemerEntry
 	mintRedeemers      map[string]redeemerEntry
@@ -530,22 +534,17 @@ func (a *Apollo) Mint(unit Unit, redeemer *common.Datum, exUnits *common.ExUnits
 }
 
 // AttachScript attaches a script to the witness set, deduplicating by hash.
-// It accepts NativeScript and PlutusV1Script through PlutusV3Script. A Plutus
-// V4 script causes Complete to return ErrPlutusV4RequiresDijkstra for a Conway
-// build and ErrPlutusV4WitnessScript for a Dijkstra build, which must supply
-// it through a reference input instead.
+// It accepts NativeScript and PlutusV1Script through PlutusV4Script. A Plutus
+// V4 script needs the Dijkstra target era, set with SetTargetEra before
+// attaching it; otherwise Complete returns ErrPlutusV4RequiresDijkstra.
 func (a *Apollo) AttachScript(script common.Script) *Apollo {
 	scriptType, err := scriptRefType(script)
 	if err != nil {
 		a.setErrOnce(err)
 		return a
 	}
-	if scriptType == common.ScriptRefTypePlutusV4 {
-		if a.targetEra == EraDijkstra {
-			a.setErrOnce(ErrPlutusV4WitnessScript)
-		} else {
-			a.setErrOnce(ErrPlutusV4RequiresDijkstra)
-		}
+	if scriptType == common.ScriptRefTypePlutusV4 && a.targetEra != EraDijkstra {
+		a.setErrOnce(ErrPlutusV4RequiresDijkstra)
 		return a
 	}
 	hash := script.Hash().String()
@@ -566,6 +565,10 @@ func (a *Apollo) AttachScript(script common.Script) *Apollo {
 		a.v3scripts = append(a.v3scripts, s)
 	case *common.PlutusV3Script:
 		a.v3scripts = append(a.v3scripts, *s)
+	case common.PlutusV4Script:
+		a.v4scripts = append(a.v4scripts, s)
+	case *common.PlutusV4Script:
+		a.v4scripts = append(a.v4scripts, *s)
 	case common.NativeScript:
 		a.nativescripts = append(a.nativescripts, s)
 	case *common.NativeScript:
@@ -1637,6 +1640,9 @@ func (a *Apollo) Clone() *Apollo {
 	for _, script := range a.v3scripts {
 		clone.v3scripts = append(clone.v3scripts, slices.Clone(script))
 	}
+	for _, script := range a.v4scripts {
+		clone.v4scripts = append(clone.v4scripts, slices.Clone(script))
+	}
 	clone.mint = append(clone.mint, a.mint...)
 	clone.collaterals = cloneUtxos(a.collaterals, clone, "collateral")
 	clone.referenceInputs = append(clone.referenceInputs, a.referenceInputs...)
@@ -2082,6 +2088,11 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 	if a.wallet == nil {
 		return a, errors.New("wallet is required to complete transaction")
+	}
+	// SetTargetEra may have switched back to Conway after a V4 script was
+	// attached.
+	if len(a.v4scripts) > 0 && a.targetEra != EraDijkstra {
+		return a, ErrPlutusV4RequiresDijkstra
 	}
 	if a.targetEra == EraDijkstra {
 		pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
@@ -3876,6 +3887,9 @@ func (a *Apollo) usedScriptCostModels(
 	if len(a.v3scripts) > 0 {
 		used["PlutusV3"] = struct{}{}
 	}
+	if len(a.v4scripts) > 0 {
+		used["PlutusV4"] = struct{}{}
+	}
 	for _, utxo := range inputs {
 		if err := addScriptLanguage(used, utxo.Output.ScriptRef(), a.targetEra == EraDijkstra); err != nil {
 			return nil, err
@@ -4152,7 +4166,7 @@ func (a *Apollo) getChangeAddress() common.Address {
 // hasScripts returns true if the transaction involves script execution
 // (attached scripts or redeemers from reference scripts).
 func (a *Apollo) hasScripts() bool {
-	return len(a.v1scripts) > 0 || len(a.v2scripts) > 0 || len(a.v3scripts) > 0 ||
+	return len(a.v1scripts) > 0 || len(a.v2scripts) > 0 || len(a.v3scripts) > 0 || len(a.v4scripts) > 0 ||
 		len(a.redeemers) > 0 || len(a.mintRedeemers) > 0 || len(a.stakeRedeemers) > 0 ||
 		len(a.guardRedeemers) > 0
 }

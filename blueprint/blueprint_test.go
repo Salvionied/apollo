@@ -860,8 +860,8 @@ func TestBlueprintDijkstraV4GuardAndDeveloperHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bundle.WitnessScript != nil {
-		t.Fatal("Plutus V4 GuardBundle must leave WitnessScript nil")
+	if _, ok := bundle.WitnessScript.(common.PlutusV4Script); !ok {
+		t.Fatalf("Plutus V4 GuardBundle WitnessScript = %T, want common.PlutusV4Script", bundle.WitnessScript)
 	}
 	var decodedGuardRedeemer int64
 	if err := v4Bp.DecodeRedeemerValue("guard.observe", "guard", bundle.Redeemer, &decodedGuardRedeemer); err != nil {

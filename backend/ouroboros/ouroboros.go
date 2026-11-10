@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	gouroboros "github.com/blinklabs-io/gouroboros"
@@ -16,6 +17,8 @@ import (
 	"github.com/blinklabs-io/gouroboros/protocol/localtxsubmission"
 
 	"github.com/Salvionied/apollo/v2/backend"
+	"github.com/Salvionied/apollo/v2/backend/localeval"
+	"github.com/Salvionied/apollo/v2/internal/backendutil"
 )
 
 // Config holds the settings for a node-to-client connection.
@@ -65,12 +68,25 @@ const maxAddressQueryUtxos = 100_000
 // OuroborosChainContext implements backend.ChainContext by talking to a
 // cardano-node directly over the node-to-client mini-protocols.
 //
-// The node has no query for a script by hash and no script evaluator, so the
-// context reports neither CapabilityScriptCbor nor CapabilityEvaluateTx.
+// The node has no query for a script by hash, so the context does not report
+// CapabilityScriptCbor. It has no script evaluator either: EvaluateTx runs
+// the scripts in-process with backend/localeval, reading parameters and
+// inputs from the node.
 type OuroborosChainContext struct {
 	session   *session
 	networkId uint8
+	evaluator *localeval.LocalEvalChainContext
+
+	mu             sync.Mutex
+	cachedParams   *backend.ProtocolParameters
+	cachedGenesis  *backend.GenesisParameters
+	paramsCacheAt  time.Time
+	genesisCacheAt time.Time
 }
+
+// cacheExpiry is how long protocol and genesis parameters are reused before
+// the node is queried again. Building one transaction reads them many times.
+const cacheExpiry = 5 * time.Minute
 
 var (
 	_ backend.ContextChainContext = (*OuroborosChainContext)(nil)
@@ -113,7 +129,7 @@ func NewOuroborosChainContext(cfg Config) (*OuroborosChainContext, error) {
 }
 
 func newContext(dial dialFunc, cfg Config) *OuroborosChainContext {
-	return &OuroborosChainContext{
+	o := &OuroborosChainContext{
 		session: newSession(
 			dial,
 			cfg.NetworkMagic,
@@ -123,6 +139,10 @@ func newContext(dial dialFunc, cfg Config) *OuroborosChainContext {
 		),
 		networkId: cfg.NetworkId,
 	}
+	// The evaluator reads protocol parameters, genesis parameters and
+	// UtxoByRef through o, never EvaluateTx, so it cannot recurse.
+	o.evaluator = localeval.NewLocalEvalChainContext(o)
+	return o
 }
 
 func orDefault(d, def time.Duration) time.Duration {
@@ -139,21 +159,27 @@ func (o *OuroborosChainContext) Close() error {
 	return nil
 }
 
-// Capabilities reports everything except script lookup by hash and
-// transaction evaluation, which node-to-client does not offer.
+// Capabilities reports everything except script lookup by hash, which
+// node-to-client does not offer.
 func (o *OuroborosChainContext) Capabilities() backend.CapabilitySet {
-	return backend.CapabilitySet(backend.AllCapabilities) &^ backend.CapabilitySet(
-		backend.CapabilityScriptCbor|
-			backend.CapabilityEvaluateTx|
-			backend.CapabilityEvaluateTxAdditionalUtxos,
-	)
+	return backend.CapabilitySet(backend.AllCapabilities) &^ backend.CapabilitySet(backend.CapabilityScriptCbor)
 }
 
 func (o *OuroborosChainContext) ProtocolParams() (backend.ProtocolParameters, error) {
 	return o.ProtocolParamsContext(context.Background())
 }
 
+// ProtocolParamsContext returns the node's current protocol parameters,
+// reusing them for up to five minutes.
 func (o *OuroborosChainContext) ProtocolParamsContext(ctx context.Context) (backend.ProtocolParameters, error) {
+	o.mu.Lock()
+	if o.cachedParams != nil && time.Since(o.paramsCacheAt) < cacheExpiry {
+		pp := backendutil.CloneProtocolParams(*o.cachedParams)
+		o.mu.Unlock()
+		return pp, nil
+	}
+	o.mu.Unlock()
+
 	var params common.ProtocolParameters
 	err := o.session.query(ctx, func(c *localstatequery.Client) error {
 		var err error
@@ -163,14 +189,34 @@ func (o *OuroborosChainContext) ProtocolParamsContext(ctx context.Context) (back
 	if err != nil {
 		return backend.ProtocolParameters{}, fmt.Errorf("query protocol parameters: %w", err)
 	}
-	return protocolParamsFromLedger(params)
+	pp, err := protocolParamsFromLedger(params)
+	if err != nil {
+		return backend.ProtocolParameters{}, err
+	}
+
+	cached := backendutil.CloneProtocolParams(pp)
+	o.mu.Lock()
+	o.cachedParams = &cached
+	o.paramsCacheAt = time.Now()
+	o.mu.Unlock()
+	return pp, nil
 }
 
 func (o *OuroborosChainContext) GenesisParams() (backend.GenesisParameters, error) {
 	return o.GenesisParamsContext(context.Background())
 }
 
+// GenesisParamsContext returns the node's Shelley genesis parameters,
+// reusing them for up to five minutes.
 func (o *OuroborosChainContext) GenesisParamsContext(ctx context.Context) (backend.GenesisParameters, error) {
+	o.mu.Lock()
+	if o.cachedGenesis != nil && time.Since(o.genesisCacheAt) < cacheExpiry {
+		gp := *o.cachedGenesis
+		o.mu.Unlock()
+		return gp, nil
+	}
+	o.mu.Unlock()
+
 	var genesis *localstatequery.GenesisConfigResult
 	err := o.session.query(ctx, func(c *localstatequery.Client) error {
 		var err error
@@ -180,7 +226,16 @@ func (o *OuroborosChainContext) GenesisParamsContext(ctx context.Context) (backe
 	if err != nil {
 		return backend.GenesisParameters{}, fmt.Errorf("query genesis configuration: %w", err)
 	}
-	return genesisParamsFromLedger(genesis)
+	gp, err := genesisParamsFromLedger(genesis)
+	if err != nil {
+		return backend.GenesisParameters{}, err
+	}
+
+	o.mu.Lock()
+	o.cachedGenesis = &gp
+	o.genesisCacheAt = time.Now()
+	o.mu.Unlock()
+	return gp, nil
 }
 
 func (o *OuroborosChainContext) NetworkId() uint8 {
@@ -347,15 +402,18 @@ func (o *OuroborosChainContext) EvaluateTx(txCbor []byte, additionalUtxos []comm
 	return o.EvaluateTxContext(context.Background(), txCbor, additionalUtxos)
 }
 
+// EvaluateTxContext runs txCbor's scripts in-process with backend/localeval.
+// Inputs resolve from additionalUtxos first and the node second. The slot
+// mapping is the public network's for mainnet, preprod and preview; for any
+// other network it starts at slot 0 at the genesis system start. Wrap the
+// context with localeval.NewLocalEvalChainContext and localeval.WithSlotConfig
+// for a network whose mapping differs.
 func (o *OuroborosChainContext) EvaluateTxContext(
 	ctx context.Context,
-	_ []byte,
-	_ []common.Utxo,
+	txCbor []byte,
+	additionalUtxos []common.Utxo,
 ) (map[common.RedeemerKey]common.ExUnits, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return nil, backend.NewUnsupportedError("node-to-client", backend.CapabilityEvaluateTx)
+	return o.evaluator.EvaluateTxContext(ctx, txCbor, additionalUtxos)
 }
 
 func (o *OuroborosChainContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {

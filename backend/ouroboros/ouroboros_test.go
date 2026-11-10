@@ -65,14 +65,8 @@ func TestDialsConfiguredSocket(t *testing.T) {
 func TestCapabilitiesExcludeWhatTheNodeCannotServe(t *testing.T) {
 	ctx := newContext(nil, Config{NetworkMagic: 1})
 	caps := ctx.Capabilities()
-	for _, missing := range []backend.Capability{
-		backend.CapabilityScriptCbor,
-		backend.CapabilityEvaluateTx,
-		backend.CapabilityEvaluateTxAdditionalUtxos,
-	} {
-		if caps.Has(missing) {
-			t.Errorf("reports %v", missing)
-		}
+	if caps.Has(backend.CapabilityScriptCbor) {
+		t.Errorf("reports %v", backend.CapabilityScriptCbor)
 	}
 	for _, present := range []backend.Capability{
 		backend.CapabilityProtocolParams,
@@ -82,15 +76,14 @@ func TestCapabilitiesExcludeWhatTheNodeCannotServe(t *testing.T) {
 		backend.CapabilityUtxos,
 		backend.CapabilitySubmitTx,
 		backend.CapabilityUtxoByRef,
+		backend.CapabilityEvaluateTx,
+		backend.CapabilityEvaluateTxAdditionalUtxos,
 	} {
 		if !caps.Has(present) {
 			t.Errorf("does not report %v", present)
 		}
 	}
 
-	if _, err := ctx.EvaluateTx(nil, nil); !errors.Is(err, backend.ErrUnsupported) {
-		t.Errorf("EvaluateTx error = %v, want ErrUnsupported", err)
-	}
 	if _, err := ctx.ScriptCbor(common.Blake2b224{}); !errors.Is(err, backend.ErrUnsupported) {
 		t.Errorf("ScriptCbor error = %v, want ErrUnsupported", err)
 	}

@@ -24,11 +24,17 @@ performs no I/O; the first query opens the connection.
 
 ## Capabilities
 
-The context reports every capability except `CapabilityScriptCbor`,
-`CapabilityEvaluateTx` and `CapabilityEvaluateTxAdditionalUtxos`. The node has
-no query for a script by hash and no script evaluator, so `ScriptCbor` and
-`EvaluateTx` return errors matching `backend.ErrUnsupported`. Building a
-transaction with Plutus scripts needs execution units from elsewhere.
+The context reports every capability except `CapabilityScriptCbor`. The node
+has no query for a script by hash, so `ScriptCbor` returns an error matching
+`backend.ErrUnsupported`.
+
+The node has no script evaluator either. `EvaluateTx` runs the scripts
+in-process with [`backend/localeval`](localeval.md), reading the protocol
+parameters, the genesis parameters and any input not in the additional UTxOs
+from the node. The slot mapping is the public network's for mainnet, preprod
+and preview. For any other network it starts at slot 0 at the genesis system
+start; wrap the context with `localeval.NewLocalEvalChainContext` and
+`localeval.WithSlotConfig` if your network's mapping differs.
 
 | Method | Node-to-client source |
 |--------|-----------------------|
@@ -40,6 +46,7 @@ transaction with Plutus scripts needs execution units from elsewhere.
 | `UtxoByRef` | LocalStateQuery UTxO by transaction input |
 | `SubmitTx` | LocalTxSubmission, in the node's current era |
 | `MaxTxFee` | computed from the protocol parameters |
+| `EvaluateTx` | evaluated in-process with `backend/localeval` |
 
 ## Behaviour worth knowing
 
@@ -70,6 +77,10 @@ transaction with Plutus scripts needs execution units from elsewhere.
   rejected after the node answers, before converting or sorting the result.
   The gouroboros protocol reader also retains its default 16 MiB message
   limit. An oversized query returns an error rather than a partial result.
+- **Parameter cache.** Protocol and genesis parameters are reused for five
+  minutes, so the repeated reads made while building a transaction do not
+  each become a node query. Reuse one context across transactions to benefit
+  from it.
 - **Protocol parameters** must come from the Conway era or later. Conway's
   reference-script size limit (200 KiB per transaction) is a ledger constant
   and is filled in; Dijkstra's reference-script limit, tier size and

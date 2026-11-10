@@ -30,8 +30,8 @@ Helpers:
 | Tip | yes | yes | yes | yes | yes | yes | no |
 | UTxOs by address | yes | yes | yes | no | yes | yes | yes |
 | Submit | yes | yes | yes | yes | yes | yes | no |
-| EvaluateTx | yes | yes | yes | yes | no | yes | no |
-| EvaluateTx additional UTxOs | yes | yes | yes | yes | no | **no** | no |
+| EvaluateTx | yes | yes | yes | yes | yes | yes | no |
+| EvaluateTx additional UTxOs | yes | yes | yes | yes | yes | **no** | no |
 | UTxO by ref | yes | yes | yes | yes | yes | yes | yes |
 | Script CBOR | yes | yes | yes | no | no | no | no |
 

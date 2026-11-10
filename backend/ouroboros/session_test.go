@@ -19,6 +19,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger/common"
 	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
+	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	"github.com/blinklabs-io/gouroboros/muxer"
 	"github.com/blinklabs-io/gouroboros/protocol"
 	pcommon "github.com/blinklabs-io/gouroboros/protocol/common"
@@ -768,5 +769,78 @@ func TestReleaseAfterAcceptDiscardsConnection(t *testing.T) {
 	}
 	if n := node.dialCount(); n != 2 {
 		t.Fatalf("dialed %d times, want 2", n)
+	}
+}
+
+func paramsExchange(t *testing.T) []ouroboros_mock.ConversationEntry {
+	return conversation(acquire, queryResult(t, conwayEra), queryResult(t, []conway.ConwayProtocolParameters{wireConwayParams()}), release)
+}
+
+func genesisExchange(t *testing.T) []ouroboros_mock.ConversationEntry {
+	return conversation(acquire, queryResult(t, conwayEra), queryResult(t, []localstatequery.GenesisConfigResult{*mainnetGenesis()}), release)
+}
+
+// TestParametersAreCached checks that protocol and genesis parameters are
+// queried once and then reused, and that a caller changing a returned value
+// does not change what later callers get. The mock node fails the test if
+// the context queries it more than once for each.
+func TestParametersAreCached(t *testing.T) {
+	_, ctx := newMockNode(t, conversation(handshake, paramsExchange(t), genesisExchange(t)))
+	first, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.CostModels["PlutusV3"][0] = -1
+	second, err := ctx.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.CostModels["PlutusV3"][0] == -1 {
+		t.Fatal("changing returned protocol parameters changed the cache")
+	}
+	if _, err := ctx.MaxTxFee(); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		gp, err := ctx.GenesisParams()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gp.NetworkMagic != 764824073 {
+			t.Fatalf("NetworkMagic = %d, want mainnet's", gp.NetworkMagic)
+		}
+	}
+}
+
+// TestEvaluateTxRunsLocally checks that EvaluateTx evaluates in-process,
+// reading only parameters from the node, and reuses them on the next call.
+func TestEvaluateTxRunsLocally(t *testing.T) {
+	var txId common.Blake2b256
+	txId[0] = 0x0e
+	input, err := shelley.NewShelleyTransactionInput(hex.EncodeToString(txId.Bytes()), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spent := common.Utxo{Id: input, Output: testOutput(t, 2_000_000)}
+	// [{0: [[txId, 0]], 1: [], 2: 200000}, {}, true, null]
+	txCbor, err := cbor.Encode([]any{
+		map[uint]any{0: []any{[]any{txId.Bytes(), 0}}, 1: []any{}, 2: uint64(200_000)},
+		map[uint]any{},
+		true,
+		nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, ctx := newMockNode(t, conversation(handshake, paramsExchange(t), genesisExchange(t)))
+	for range 2 {
+		got, err := ctx.EvaluateTx(txCbor, []common.Utxo{spent})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("EvaluateTx() = %v, want no redeemers", got)
+		}
 	}
 }
