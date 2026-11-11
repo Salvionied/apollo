@@ -107,9 +107,10 @@ keep the fixed Conway defaults.
 ## Not yet implemented
 
 Nested transactions (CIP-118) are out of scope. Native-asset withdrawals and
-whitelist-adjustment certificates are not implemented: gouroboros v0.213.7,
-Apollo's canonical ledger dependency, has no wire types for either, and Apollo
-does not define its own Dijkstra encodings.
+whitelist-adjustment certificates are not implemented: gouroboros, Apollo's
+canonical ledger dependency, has no wire types for either (its Dijkstra
+withdrawals carry only lovelace, and its certificates end at the Conway DRep
+update), and Apollo does not define its own Dijkstra encodings.
 
 See [transaction construction](../../apollo.go) and the
 [Dijkstra transaction tests](../../dijkstra_tx_test.go) for the current API
