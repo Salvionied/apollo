@@ -222,10 +222,9 @@ Dijkstra selection requires protocol major version 12 or newer. Use
 Dijkstra build. Current Dijkstra support includes the transaction envelope,
 direct account deposits, account balance intervals, guards (including Plutus
 guard scripts), Dijkstra governance proposals, and Dijkstra reference-script
-pricing. Plutus V4 scripts are supplied through reference inputs; they cannot
-be included in the witness set. Nested transactions (CIP-118) and CIP-159
-Phase 2 native-asset withdrawals and whitelist certificates are not yet
-supported. See [Dijkstra transactions](docs/dijkstra/README.md).
+pricing. Plutus V4 scripts can be attached to the witness set or supplied
+through reference inputs. Nested transactions (CIP-118) are not yet supported.
+See [Dijkstra transactions](docs/dijkstra/README.md).
 
 Conway transactions support CIP-1694 governance. You can:
 
