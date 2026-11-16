@@ -526,7 +526,12 @@ func TestUtxoByRefOverTheWire(t *testing.T) {
 }
 
 func TestUtxosAddressResultLimit(t *testing.T) {
-	const limit = 100_000
+	if maxAddressQueryUtxos != 100_000 {
+		t.Fatalf("maxAddressQueryUtxos = %d, want the documented 100,000", maxAddressQueryUtxos)
+	}
+	const limit = 100
+	defer func(prev int) { maxAddressQueryUtxos = prev }(maxAddressQueryUtxos)
+	maxAddressQueryUtxos = limit
 	for _, count := range []int{limit, limit + 1} {
 		t.Run(strconv.Itoa(count), func(t *testing.T) {
 			results := make(map[localstatequery.UtxoId]babbage.BabbageTransactionOutput, count)
