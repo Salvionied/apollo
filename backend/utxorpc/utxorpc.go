@@ -689,10 +689,6 @@ func validateEraSummaries(eras []*cardano.EraSummary) error {
 	return nil
 }
 
-// epochAtSlot finds the single era with start.slot <= slot < end.slot (an
-// absent end is open-ended) and returns start.epoch plus the whole epochs
-// elapsed since. Entries are not assumed ordered; if zero or several eras
-// contain the slot the summary is ambiguous and is rejected.
 // isByronEra reports whether era is a Byron era. Shelley introduced protocol
 // major version 2, so a lower version identifies Byron even when the server
 // leaves the era unnamed.
@@ -704,6 +700,10 @@ func isByronEra(era *cardano.EraSummary) bool {
 	return version != nil && version.GetMajor() < 2
 }
 
+// epochAtSlot finds the single era with start.slot <= slot < end.slot (an
+// absent end is open-ended) and returns start.epoch plus the whole epochs
+// elapsed since. Entries are not assumed ordered; if zero or several eras
+// contain the slot the summary is ambiguous and is rejected.
 func epochAtSlot(eras []*cardano.EraSummary, slot, epochLength uint64) (uint64, error) {
 	if epochLength == 0 {
 		return 0, errors.New("epoch length is zero")
