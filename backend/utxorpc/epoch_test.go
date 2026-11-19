@@ -287,6 +287,23 @@ func TestCurrentEpochFailureNotCached(t *testing.T) {
 	}
 }
 
+// Overlapping eras pass validateEraSummaries and are only rejected once the
+// tip is located, so the rejection has to drop the cached summary as well.
+func TestCurrentEpochUnusableSummaryNotCached(t *testing.T) {
+	t.Parallel()
+	server, ctx := newQueryServer(t, epochReplies(5000,
+		&cardano.EraSummary{Name: "a", Start: boundary(0, 0)},
+		&cardano.EraSummary{Name: "b", Start: boundary(1000, 1)},
+	))
+	if _, err := ctx.CurrentEpoch(); err == nil {
+		t.Fatal("expected error for overlapping eras")
+	}
+	server.setReply("ReadEraSummary", eraReply(&cardano.EraSummary{Name: "shelley", Start: boundary(0, 0)}))
+	if got, err := ctx.CurrentEpoch(); err != nil || got != 0 {
+		t.Fatalf("CurrentEpoch() = %d, %v, want 0", got, err)
+	}
+}
+
 func TestCurrentEpochHonoursCancelledContext(t *testing.T) {
 	t.Parallel()
 	server, ctx := newQueryServer(t, epochReplies(16588800, mainnetLikeEras()...))

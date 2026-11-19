@@ -593,7 +593,17 @@ func (u *UtxoRpcChainContext) CurrentEpochContext(ctx context.Context) (uint64, 
 	if err != nil {
 		return 0, err
 	}
-	return epochAtSlot(eras, tip, epochLength)
+	epoch, err := epochAtSlot(eras, tip, epochLength)
+	if err != nil {
+		// Some malformations (overlapping eras, a gap at the tip) only show
+		// once the tip is located, after the summary was cached; drop it so
+		// the next call fetches a fresh one.
+		u.cacheMu.Lock()
+		u.cachedEras = nil
+		u.cacheMu.Unlock()
+		return 0, err
+	}
+	return epoch, nil
 }
 
 // eraSummaryContext reads the era summaries with ReadEraSummary. The summary
@@ -654,7 +664,8 @@ func (u *UtxoRpcChainContext) eraSummaryContext(ctx context.Context) ([]*cardano
 }
 
 // validateEraSummaries rejects a summary no epoch can be computed from. It is
-// checked before caching so a malformed reply is never reused.
+// checked before caching; faults that depend on the tip are caught by
+// epochAtSlot, whose caller then drops the cached summary.
 func validateEraSummaries(eras []*cardano.EraSummary) error {
 	if len(eras) == 0 {
 		return errors.New("era summary has no eras")
