@@ -86,6 +86,61 @@ func TestCurrentEpochComputesFromEraSummary(t *testing.T) {
 	}
 }
 
+// The full era tables a server returns for the public networks: every era
+// from Byron on, each closed one ending where the next starts. On preview,
+// which opens in Alonzo, Byron through Mary are empty eras at slot 0.
+func TestCurrentEpochPublicNetworkEraTables(t *testing.T) {
+	t.Parallel()
+	mainnet := []*cardano.EraSummary{
+		{Name: "byron", Start: boundary(0, 0), End: boundary(4492800, 208)},
+		{Name: "shelley", Start: boundary(4492800, 208), End: boundary(16588800, 236)},
+		{Name: "allegra", Start: boundary(16588800, 236), End: boundary(23068800, 251)},
+		{Name: "mary", Start: boundary(23068800, 251), End: boundary(39916800, 290)},
+		{Name: "alonzo", Start: boundary(39916800, 290), End: boundary(72316800, 365)},
+		{Name: "babbage", Start: boundary(72316800, 365), End: boundary(133660800, 507)},
+		{Name: "conway", Start: boundary(133660800, 507)},
+	}
+	preview := []*cardano.EraSummary{
+		{Name: "byron", Start: boundary(0, 0), End: boundary(0, 0)},
+		{Name: "shelley", Start: boundary(0, 0), End: boundary(0, 0)},
+		{Name: "allegra", Start: boundary(0, 0), End: boundary(0, 0)},
+		{Name: "mary", Start: boundary(0, 0), End: boundary(0, 0)},
+		{Name: "alonzo", Start: boundary(0, 0), End: boundary(259200, 3)},
+		{Name: "babbage", Start: boundary(259200, 3), End: boundary(55814400, 646)},
+		{Name: "conway", Start: boundary(55814400, 646)},
+	}
+	tests := []struct {
+		name        string
+		eras        []*cardano.EraSummary
+		epochLength uint32
+		tip         uint64
+		want        uint64
+	}{
+		{"mainnet conway", mainnet, 432000, 133660800 + 10*432000 + 5, 517},
+		{"mainnet babbage", mainnet, 432000, 133660800 - 1, 506},
+		{"preview conway", preview, 86400, 55814400 + 5*86400 + 1, 651},
+		{"preview babbage", preview, 86400, 259200, 3},
+		{"preview first slot", preview, 86400, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			replies := epochReplies(tt.tip, tt.eras...)
+			g := testGenesis()
+			g.EpochLength = tt.epochLength
+			replies["ReadGenesis"] = genesisReply(g)
+			_, ctx := newQueryServer(t, replies)
+			got, err := ctx.CurrentEpoch()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("CurrentEpoch() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCurrentEpochFallsBackToV1Alpha(t *testing.T) {
 	t.Parallel()
 	alphaEras := &alphacardano.EraSummaries{}
@@ -154,8 +209,9 @@ func TestCurrentEpochRejectsMalformedSummary(t *testing.T) {
 		{"closed era not a whole number of epochs", 5000, []*cardano.EraSummary{
 			{Name: "shelley", Start: boundary(0, 0), End: boundary(432005, 1)},
 		}, 0},
-		{"end not after start", 5000, []*cardano.EraSummary{
-			{Name: "shelley", Start: boundary(5000, 0), End: boundary(5000, 0)},
+		{"end before start", 5000, []*cardano.EraSummary{
+			{Name: "shelley", Start: boundary(5000, 0), End: boundary(4000, 0)},
+			{Name: "conway", Start: boundary(0, 0)},
 		}, 0},
 		{"overlapping eras", 5000, []*cardano.EraSummary{
 			{Name: "a", Start: boundary(0, 0)},

@@ -663,9 +663,12 @@ func validateEraSummaries(eras []*cardano.EraSummary) error {
 		if era.GetStart() == nil {
 			return fmt.Errorf("era %q has no start boundary", era.GetName())
 		}
-		if end := era.GetEnd(); end != nil && end.GetSlot() <= era.GetStart().GetSlot() {
+		// An era may be empty: a network that forks past the early eras at
+		// genesis lists them with end equal to start, and no slot falls in
+		// them.
+		if end := era.GetEnd(); end != nil && end.GetSlot() < era.GetStart().GetSlot() {
 			return fmt.Errorf(
-				"era %q ends at slot %d, not after its start at slot %d",
+				"era %q ends at slot %d, before its start at slot %d",
 				era.GetName(), end.GetSlot(), era.GetStart().GetSlot(),
 			)
 		}
