@@ -29,6 +29,20 @@ func mainnetLikeEras() []*cardano.EraSummary {
 	}
 }
 
+func protocolMajor(major uint32) *cardano.PParams {
+	return &cardano.PParams{ProtocolVersion: &cardano.ProtocolVersion{Major: major}}
+}
+
+func TestCurrentEpochUnnamedShelleyEraByProtocolVersion(t *testing.T) {
+	t.Parallel()
+	_, ctx := newQueryServer(t, epochReplies(432000*3+7,
+		&cardano.EraSummary{Start: boundary(0, 0), ProtocolParams: protocolMajor(2)},
+	))
+	if got, err := ctx.CurrentEpoch(); err != nil || got != 3 {
+		t.Fatalf("CurrentEpoch() = %d, %v, want 3", got, err)
+	}
+}
+
 func eraReply(eras ...*cardano.EraSummary) queryReply {
 	return queryReply{msg: &query.ReadEraSummaryResponse{
 		Summary: &query.ReadEraSummaryResponse_Cardano{
@@ -202,6 +216,9 @@ func TestCurrentEpochRejectsMalformedSummary(t *testing.T) {
 		{"tip in byron era", 5000, []*cardano.EraSummary{
 			{Name: "Byron", Start: boundary(0, 0), End: boundary(432000, 1)},
 			{Name: "shelley", Start: boundary(432000, 1)},
+		}, 0},
+		{"tip in unnamed byron era", 5000, []*cardano.EraSummary{
+			{Start: boundary(0, 0), ProtocolParams: protocolMajor(1)},
 		}, 0},
 		{"closed era disagrees with epoch length", 5000, []*cardano.EraSummary{
 			{Name: "shelley", Start: boundary(0, 0), End: boundary(10000, 1)},

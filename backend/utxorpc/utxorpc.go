@@ -571,7 +571,9 @@ func (u *UtxoRpcChainContext) CurrentEpoch() (uint64, error) {
 // error matching backend.ErrUnsupported.
 //
 // The genesis epoch length is the Shelley-era length, so a tip inside a Byron
-// era, which has a different one, is rejected rather than miscomputed.
+// era, which has a different one, is rejected rather than miscomputed. A
+// Byron era is recognised by its name or by a protocol major version below 2
+// in its parameters; an open era that carries neither cannot be told apart.
 func (u *UtxoRpcChainContext) CurrentEpochContext(ctx context.Context) (uint64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -691,6 +693,17 @@ func validateEraSummaries(eras []*cardano.EraSummary) error {
 // absent end is open-ended) and returns start.epoch plus the whole epochs
 // elapsed since. Entries are not assumed ordered; if zero or several eras
 // contain the slot the summary is ambiguous and is rejected.
+// isByronEra reports whether era is a Byron era. Shelley introduced protocol
+// major version 2, so a lower version identifies Byron even when the server
+// leaves the era unnamed.
+func isByronEra(era *cardano.EraSummary) bool {
+	if strings.EqualFold(era.GetName(), "byron") {
+		return true
+	}
+	version := era.GetProtocolParams().GetProtocolVersion()
+	return version != nil && version.GetMajor() < 2
+}
+
 func epochAtSlot(eras []*cardano.EraSummary, slot, epochLength uint64) (uint64, error) {
 	if epochLength == 0 {
 		return 0, errors.New("epoch length is zero")
@@ -711,8 +724,8 @@ func epochAtSlot(eras []*cardano.EraSummary, slot, epochLength uint64) (uint64, 
 	if match == nil {
 		return 0, fmt.Errorf("no era in the summary contains tip slot %d", slot)
 	}
-	if strings.EqualFold(match.GetName(), "byron") {
-		return 0, fmt.Errorf("tip slot %d is in the %s era, whose epoch length differs from genesis", slot, match.GetName())
+	if isByronEra(match) {
+		return 0, fmt.Errorf("tip slot %d is in Byron era %q, whose epoch length differs from genesis", slot, match.GetName())
 	}
 	start, end := match.GetStart(), match.GetEnd()
 	if end != nil {
