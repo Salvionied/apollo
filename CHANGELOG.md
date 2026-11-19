@@ -11,6 +11,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
   reports `CapabilityGenesisParams`. A server that does not implement
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
+- `backend/utxorpc` computes the current epoch from `ReadEraSummary`, the tip,
+  and the genesis epoch length, and now reports `CapabilityCurrentEpoch`. A
+  server that does not implement `ReadEraSummary` returns an error matching
+  `backend.ErrUnsupported`.
 - `backend/ouroboros`: a chain backend that talks to a cardano-node directly
   over the node-to-client mini-protocols, through its UNIX socket or a TCP
   socket. It serves every query except script lookup by hash, which the node
