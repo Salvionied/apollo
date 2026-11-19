@@ -38,5 +38,6 @@ builder = builder.AttachScript(policy)
 `before` scripts. It rejects a malformed key hash, a missing slot or atLeast
 count, an atLeast count larger than its script list, and nesting deeper than
 64 levels. Empty script lists and a zero atLeast count are valid ledger
-scripts and are accepted. The `NewNativeScript*` helpers build the same
-scripts in code.
+scripts and are accepted. Child lists longer than 23 scripts are encoded
+indefinite-length, as the ledger and cardano-cli encode them, so the policy
+ID matches the one cardano-cli reports.

@@ -77,6 +77,44 @@ func TestNativeScriptFromJSONForms(t *testing.T) {
 	}
 }
 
+// The ledger frames a child list longer than 23 as an indefinite-length
+// array, so the policy ID of such a script depends on that framing. Wanted
+// hashes are from cardano-cli 11.0.0.0 `hash script`; key hashes are i+1 as
+// 28-byte big-endian hex.
+func TestNativeScriptFromJSONLongChildListsMatchCardanoCli(t *testing.T) {
+	sigs := func(n, offset int) string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf(`{"type":"sig","keyHash":"%056x"}`, i+offset+1)
+		}
+		return strings.Join(out, ",")
+	}
+	tests := []struct {
+		name, json, want string
+	}{
+		{"all of 23", `{"type":"all","scripts":[` + sigs(23, 0) + `]}`,
+			"9da1f6c87b4d562498db5ae7088f84ef849626308ea60f6066fb8a8f"},
+		{"all of 24", `{"type":"all","scripts":[` + sigs(24, 0) + `]}`,
+			"29798b4edbc1d8cc390fcc023ec99cd3db58bde4e79ce97600c363a4"},
+		{"nested any of 25 and atLeast of 24", `{"type":"all","scripts":[` +
+			`{"type":"any","scripts":[` + sigs(25, 100) + `]},` +
+			`{"type":"atLeast","required":2,"scripts":[` + sigs(24, 200) + `]},` +
+			`{"type":"before","slot":5}]}`,
+			"bced127df655fe60af33f3a03288d54ac44948f6d5cddd01b7d9b327"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script, err := NativeScriptFromJSON([]byte(tt.json))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := script.Hash().String(); got != tt.want {
+				t.Fatalf("Hash() = %s, want %s (cbor %x)", got, tt.want, script.Cbor())
+			}
+		})
+	}
+}
+
 func TestNativeScriptFromJSONRejectsBadInput(t *testing.T) {
 	tests := map[string]string{
 		"invalid json":      `{"type":`,

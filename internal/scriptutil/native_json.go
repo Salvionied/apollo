@@ -51,7 +51,7 @@ func (s *nativeScriptJSON) toCBORValue(depth int) ([]any, error) {
 	if depth > maxNativeScriptDepth {
 		return nil, fmt.Errorf("nesting exceeds %d levels", maxNativeScriptDepth)
 	}
-	children := func() ([]any, error) {
+	children := func() (any, error) {
 		out := make([]any, 0, len(s.Scripts))
 		for i := range s.Scripts {
 			child, err := s.Scripts[i].toCBORValue(depth + 1)
@@ -59,6 +59,12 @@ func (s *nativeScriptJSON) toCBORValue(depth int) ([]any, error) {
 				return nil, err
 			}
 			out = append(out, child)
+		}
+		// cardano-binary frames a list longer than 23 as indefinite-length,
+		// and the script hash covers that framing, so a definite-length list
+		// would give a different policy ID than the ledger.
+		if len(out) > 23 {
+			return cbor.IndefLengthList(out), nil
 		}
 		return out, nil
 	}
