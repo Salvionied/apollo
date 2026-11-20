@@ -68,18 +68,20 @@ largest lovelace first.
 
 `RandomImproveSelector` implements the Random-Improve algorithm from
 [CIP-0002](https://cips.cardano.org/cip/CIP-0002). It covers the target by
-taking UTxOs in a pseudo-random order, then adds further UTxOs that bring the
-selection closer to an ideal of twice the target, so the change output is
-roughly the size of the payment. The order comes from `Seed`: the same seed,
-pool, and target always select the same inputs.
+taking UTxOs in a pseudo-random order, drops any cover input that a later
+pick made redundant, then adds ADA-only UTxOs that bring the lovelace total
+closer to an ideal of twice the target, so the change output is roughly the
+size of the payment. The order comes from `Seed`: the same seed, pool, and
+target always select the same inputs.
 
 It is an adaptation, not a CIP-0002 reference implementation:
 
 - It selects for the transaction's aggregate target, not for each output.
-- An improvement may not take lovelace or any targeted asset above twice its
-  target; CIP-0002 allows up to three times.
-- The improve phase never adds a UTxO carrying an asset the target does not
-  ask for.
+- An improvement may not take lovelace above twice the target; CIP-0002
+  allows up to three times.
+- Improvement adds only ADA-only UTxOs. Surplus native assets become change
+  that needs its own min-UTxO lovelace, so adding token UTxOs could make a
+  payment the cover alone pays for impossible to balance.
 
 `RandomImproveThenLargestFirstSelector` follows the Cardano Wallet strategy:
 it runs Random-Improve and, only when that reports `ErrInsufficientUtxos`,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"math/rand"
 	"sort"
@@ -21,14 +22,16 @@ const (
 
 // RandomImproveSelector implements the Random-Improve algorithm from
 // CIP-0002, adapted to Apollo's aggregate CoinSelector interface. It first
-// covers the target by taking UTxOs in random order, then adds further UTxOs
-// that move the selection closer to an ideal of twice the target.
+// covers the target by taking UTxOs in random order, drops any cover input a
+// later pick made redundant, then adds ADA-only UTxOs that bring the lovelace
+// total closer to an ideal of twice the target.
 //
-// It differs from CIP-0002 in two ways: it selects for the aggregate target
-// rather than for each output, and an improvement may not take any targeted
-// asset class above twice its target, where CIP-0002 allows up to three
-// times. During improvement it never adds a UTxO carrying an asset the target
-// does not ask for.
+// It differs from CIP-0002 in three ways: it selects for the aggregate
+// target rather than for each output; improvement may not take lovelace above
+// twice the target, where CIP-0002 allows three times; and improvement only
+// adds ADA-only UTxOs. Native-asset change needs its own min-UTxO lovelace, so
+// an improvement that leaves surplus tokens can make a payment the cover alone
+// pays for impossible to balance.
 //
 // The order is pseudo-random but deterministic: the same Seed, pool, and
 // target always produce the same selection, as CoinSelector requires.
@@ -63,17 +66,22 @@ func (s *RandomImproveSelector) Select(
 	if err := validateUtxos(available); err != nil {
 		return nil, fmt.Errorf("invalid coin-selection input: %w", err)
 	}
-	cands, err := randomImproveCandidates(ctx, available)
+	targets := randomImproveTargets(target)
+	cands, err := randomImproveCandidates(ctx, available, targets)
 	if err != nil {
 		return nil, err
 	}
 
-	coverOrder := randomImproveShuffle(cands, s.Seed^randomImproveCoverSalt)
+	// Only lovelace and the targeted assets decide coverage, so the running
+	// total tracks just those instead of accumulating whole asset maps.
+	acc := randomImproveTotal{amounts: make([]*big.Int, len(targets))}
+	for k := range acc.amounts {
+		acc.amounts[k] = new(big.Int)
+	}
 	selected := make([]bool, len(cands))
-	var result []common.Utxo
-	total := Value{}
-	for i, idx := range coverOrder {
-		if total.GreaterOrEqual(target) {
+	var picks []int
+	for i, idx := range randomImproveShuffle(len(cands), s.Seed^randomImproveCoverSalt) {
+		if acc.covers(target.Coin, targets) {
 			break
 		}
 		if i%selectionCancelStride == 0 {
@@ -81,55 +89,66 @@ func (s *RandomImproveSelector) Select(
 				return nil, err
 			}
 		}
-		cand := cands[idx]
-		total, err = total.Add(cand.value)
-		if err != nil {
+		cand := &cands[idx]
+		if cand.coin > math.MaxUint64-acc.coin {
 			return nil, fmt.Errorf(
-				"selection value overflow after adding UTxO %s: %w",
-				cand.ref, err,
+				"selection value overflow after adding UTxO %s",
+				cand.ref,
 			)
 		}
+		acc.add(cand)
 		selected[idx] = true
-		result = append(result, cand.utxo)
+		picks = append(picks, idx)
 	}
-	if !total.GreaterOrEqual(target) {
+	if !acc.covers(target.Coin, targets) {
 		return nil, ErrInsufficientUtxos
 	}
 
-	ideal, err := target.Add(target)
-	if err != nil {
-		// A target above half the uint64 range has no representable ideal.
-		// The cover is still valid, so skip the optional improvement rather
-		// than fail a satisfiable request.
-		return result, nil
-	}
-	improveOrder := randomImproveShuffle(cands, s.Seed^randomImproveImproveSalt)
-	for i, idx := range improveOrder {
+	// A random cover can take a small input before a large one that covers
+	// on its own. Dropping it matters most for token UTxOs: surplus tokens
+	// become change that needs min-UTxO lovelace the wallet may not have.
+	kept := picks[:0]
+	for i, idx := range picks {
 		if i%selectionCancelStride == 0 {
 			if err := selectionInterrupted(ctx); err != nil {
 				return nil, err
 			}
 		}
-		cand := cands[idx]
-		if selected[idx] || randomImproveHasUntargetedAssets(cand.value, target) {
+		if acc.coversWithout(&cands[idx], target.Coin, targets) {
+			acc.sub(&cands[idx])
+			selected[idx] = false
 			continue
 		}
-		next, err := total.Add(cand.value)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"selection value overflow after adding UTxO %s: %w",
-				cand.ref, err,
-			)
+		kept = append(kept, idx)
+	}
+	picks = kept
+
+	// A target above half the uint64 range has no representable ideal; the
+	// cover is still valid, so improvement is skipped.
+	if target.Coin <= math.MaxUint64/2 {
+		ideal := target.Coin * 2
+		for i, idx := range randomImproveShuffle(len(cands), s.Seed^randomImproveImproveSalt) {
+			if i%selectionCancelStride == 0 {
+				if err := selectionInterrupted(ctx); err != nil {
+					return nil, err
+				}
+			}
+			cand := &cands[idx]
+			// Within the ideal, every added lovelace moves the total closer
+			// to it, so the CIP-0002 distance test reduces to this bound.
+			if selected[idx] || !cand.adaOnly || cand.coin == 0 ||
+				cand.coin > ideal-acc.coin {
+				continue
+			}
+			acc.coin += cand.coin
+			selected[idx] = true
+			picks = append(picks, idx)
 		}
-		if !randomImproveWithinIdeal(next, ideal) ||
-			randomImproveDistance(next, ideal).Cmp(
-				randomImproveDistance(total, ideal),
-			) >= 0 {
-			continue
-		}
-		total = next
-		selected[idx] = true
-		result = append(result, cand.utxo)
+	}
+
+	result := make([]common.Utxo, 0, len(picks))
+	for _, idx := range picks {
+		result = append(result, cands[idx].utxo)
 	}
 	return result, nil
 }
@@ -189,10 +208,45 @@ func (s *RandomImproveThenLargestFirstSelector) Select(
 	return selected, nil
 }
 
+type randomImproveAsset struct {
+	policy common.Blake2b224
+	name   []byte
+	qty    *big.Int
+}
+
+// randomImproveTargets lists the target's positive asset quantities in
+// policy and name order.
+func randomImproveTargets(target Value) []randomImproveAsset {
+	if target.Assets == nil {
+		return nil
+	}
+	var out []randomImproveAsset
+	for _, policy := range target.Assets.Policies() {
+		for _, name := range target.Assets.Assets(policy) {
+			qty := target.Assets.Asset(policy, name)
+			if qty == nil || qty.Sign() <= 0 {
+				continue
+			}
+			out = append(out, randomImproveAsset{policy: policy, name: name, qty: qty})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if c := bytes.Compare(out[i].policy.Bytes(), out[j].policy.Bytes()); c != 0 {
+			return c < 0
+		}
+		return bytes.Compare(out[i].name, out[j].name) < 0
+	})
+	return out
+}
+
 type randomImproveCandidate struct {
-	utxo  common.Utxo
-	ref   string
-	value Value
+	utxo common.Utxo
+	ref  string
+	coin uint64
+	// amounts holds the UTxO's quantity of each targeted asset, indexed
+	// like the targets; nil when it holds none of them.
+	amounts []*big.Int
+	adaOnly bool
 }
 
 // randomImproveCandidates returns the pool sorted by ref, so the shuffle
@@ -200,6 +254,7 @@ type randomImproveCandidate struct {
 func randomImproveCandidates(
 	ctx context.Context,
 	available []common.Utxo,
+	targets []randomImproveAsset,
 ) ([]randomImproveCandidate, error) {
 	cands := make([]randomImproveCandidate, 0, len(available))
 	for i := range available {
@@ -215,14 +270,26 @@ func randomImproveCandidates(
 				utxoRef(available[i]),
 			)
 		}
-		cands = append(cands, randomImproveCandidate{
-			utxo: available[i],
-			ref:  utxoRef(available[i]),
-			value: NewValue(
-				amt.Uint64(),
-				CloneMultiAsset(available[i].Output.Assets()),
-			),
-		})
+		assets := available[i].Output.Assets()
+		cand := randomImproveCandidate{
+			utxo:    available[i],
+			ref:     utxoRef(available[i]),
+			coin:    amt.Uint64(),
+			adaOnly: assets == nil || MultiAssetIsEmpty(assets),
+		}
+		if !cand.adaOnly {
+			for k, t := range targets {
+				qty := assets.Asset(t.policy, t.name)
+				if qty == nil || qty.Sign() <= 0 {
+					continue
+				}
+				if cand.amounts == nil {
+					cand.amounts = make([]*big.Int, len(targets))
+				}
+				cand.amounts[k] = qty
+			}
+		}
+		cands = append(cands, cand)
 	}
 	sort.Slice(cands, func(i, j int) bool {
 		return cands[i].ref < cands[j].ref
@@ -230,103 +297,77 @@ func randomImproveCandidates(
 	return cands, nil
 }
 
-// randomImproveShuffle returns a permutation of the candidate indexes. A
-// math/rand Source with a fixed seed yields the same sequence on every
-// platform and Go release, which keeps the selection reproducible.
-func randomImproveShuffle(cands []randomImproveCandidate, seed int64) []int {
-	order := make([]int, len(cands))
-	for i := range order {
-		order[i] = i
-	}
-	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // deterministic ordering, not a secret
-	rng.Shuffle(len(order), func(i, j int) {
-		order[i], order[j] = order[j], order[i]
-	})
-	return order
+// randomImproveTotal is the selection's lovelace and targeted-asset total.
+// Its big.Ints are private to one Select call, so they are updated in place.
+type randomImproveTotal struct {
+	coin    uint64
+	amounts []*big.Int
 }
 
-func randomImproveHasUntargetedAssets(value Value, target Value) bool {
-	if value.Assets == nil {
-		return false
-	}
-	for _, policy := range value.Assets.Policies() {
-		for _, name := range value.Assets.Assets(policy) {
-			qty := value.Assets.Asset(policy, name)
-			if qty == nil || qty.Sign() <= 0 {
-				continue
-			}
-			if target.Assets == nil {
-				return true
-			}
-			targetQty := target.Assets.Asset(policy, name)
-			if targetQty == nil || targetQty.Sign() <= 0 {
-				return true
-			}
+// add assumes the caller has checked coin overflow.
+func (t *randomImproveTotal) add(c *randomImproveCandidate) {
+	t.coin += c.coin
+	for k, qty := range c.amounts {
+		if qty != nil {
+			t.amounts[k].Add(t.amounts[k], qty)
 		}
 	}
-	return false
 }
 
-func randomImproveWithinIdeal(value Value, ideal Value) bool {
-	if value.Coin > ideal.Coin {
+func (t *randomImproveTotal) sub(c *randomImproveCandidate) {
+	t.coin -= c.coin
+	for k, qty := range c.amounts {
+		if qty != nil {
+			t.amounts[k].Sub(t.amounts[k], qty)
+		}
+	}
+}
+
+func (t *randomImproveTotal) covers(coin uint64, targets []randomImproveAsset) bool {
+	if t.coin < coin {
 		return false
 	}
-	if ideal.Assets == nil || value.Assets == nil {
-		return true
-	}
-	for _, policy := range ideal.Assets.Policies() {
-		for _, name := range ideal.Assets.Assets(policy) {
-			idealQty := ideal.Assets.Asset(policy, name)
-			if idealQty == nil || idealQty.Sign() <= 0 {
-				continue
-			}
-			valueQty := value.Assets.Asset(policy, name)
-			if valueQty != nil && valueQty.Cmp(idealQty) > 0 {
-				return false
-			}
+	for k, target := range targets {
+		if t.amounts[k].Cmp(target.qty) < 0 {
+			return false
 		}
 	}
 	return true
 }
 
-// randomImproveDistance sums the absolute difference from ideal over lovelace
-// and every targeted asset. Assets are visited in sorted order so the big.Int
-// arithmetic is the same on every run.
-func randomImproveDistance(value Value, ideal Value) *big.Int {
-	dist := new(big.Int).SetUint64(absDiffUint64(value.Coin, ideal.Coin))
-	if ideal.Assets == nil {
-		return dist
+// coversWithout reports whether the total still covers the target once c,
+// which is part of it, is removed.
+func (t *randomImproveTotal) coversWithout(
+	c *randomImproveCandidate,
+	coin uint64,
+	targets []randomImproveAsset,
+) bool {
+	if t.coin-c.coin < coin {
+		return false
 	}
-	policies := ideal.Assets.Policies()
-	sort.Slice(policies, func(i, j int) bool {
-		return bytes.Compare(policies[i].Bytes(), policies[j].Bytes()) < 0
-	})
-	for _, policy := range policies {
-		names := ideal.Assets.Assets(policy)
-		sort.Slice(names, func(i, j int) bool {
-			return bytes.Compare(names[i], names[j]) < 0
-		})
-		for _, name := range names {
-			idealQty := ideal.Assets.Asset(policy, name)
-			if idealQty == nil || idealQty.Sign() <= 0 {
-				continue
-			}
-			valueQty := big.NewInt(0)
-			if value.Assets != nil {
-				if qty := value.Assets.Asset(policy, name); qty != nil {
-					valueQty = qty
-				}
-			}
-			diff := new(big.Int).Sub(idealQty, valueQty)
-			dist.Add(dist, diff.Abs(diff))
+	var rest big.Int
+	for k, qty := range c.amounts {
+		if qty == nil {
+			continue
+		}
+		if rest.Sub(t.amounts[k], qty).Cmp(targets[k].qty) < 0 {
+			return false
 		}
 	}
-	return dist
+	return true
 }
 
-func absDiffUint64(a, b uint64) uint64 {
-	if a > b {
-		return a - b
+// randomImproveShuffle returns a permutation of 0..n-1. A math/rand Source
+// with a fixed seed yields the same sequence on every platform and Go
+// release, which keeps the selection reproducible.
+func randomImproveShuffle(n int, seed int64) []int {
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
 	}
-	return b - a
+	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // deterministic ordering, not a secret
+	rng.Shuffle(n, func(i, j int) {
+		order[i], order[j] = order[j], order[i]
+	})
+	return order
 }

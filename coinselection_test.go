@@ -526,11 +526,15 @@ func TestRandomImproveSelectorDoesNotImprovePastDoubleTarget(t *testing.T) {
 	}
 }
 
-func TestRandomImproveSelectorImprovesTargetAssets(t *testing.T) {
+// TestRandomImproveSelectorImprovesOnlyWithAdaOnlyUtxos pins that improvement
+// adds ADA-only UTxOs and never a UTxO carrying a targeted asset, whose
+// surplus tokens would need their own min-UTxO change.
+func TestRandomImproveSelectorImprovesOnlyWithAdaOnlyUtxos(t *testing.T) {
 	first := makeSelectorUtxo(t, 0x01, 0, 2_000_000, makeTestAssets(0xAA, "tokenA", 10))
 	pool := []common.Utxo{
 		first,
 		makeSelectorUtxo(t, 0x02, 0, 1_000_000, makeTestAssets(0xAA, "tokenA", 5)),
+		makeSelectorUtxo(t, 0x03, 0, 1_000_000, nil),
 	}
 	target := NewValue(2_000_000, makeTestAssets(0xAA, "tokenA", 10))
 	var policy common.Blake2b224
@@ -538,19 +542,37 @@ func TestRandomImproveSelectorImprovesTargetAssets(t *testing.T) {
 	for _, selected := range improvedSelections(t, pool, first, target) {
 		got := sumSelected(t, selected)
 		if got.Coin != 3_000_000 {
-			t.Fatalf("expected improved coin total of 3 ADA, got %d lovelace", got.Coin)
+			t.Fatalf("expected the ADA-only UTxO added, got %d lovelace", got.Coin)
 		}
 		qty := got.Assets.Asset(policy, []byte("tokenA"))
-		if qty == nil || qty.Cmp(big.NewInt(15)) != 0 {
-			t.Fatalf("expected improved token total of 15, got %v", qty)
+		if qty == nil || qty.Cmp(big.NewInt(10)) != 0 {
+			t.Fatalf("expected no surplus tokens, got %v", qty)
 		}
 	}
 }
 
-// TestRandomImproveSelectorSkipsUntargetedAssetsWhenImproving pins that the
-// improve phase never adds a UTxO carrying an asset the target does not ask
-// for. The ADA-only UTxO covers the target alone, so the token UTxO can only
-// be selected by the cover phase, ahead of it.
+// TestRandomImproveSelectorDropsRedundantCoverInputs pins that a cover input
+// made redundant by a later pick is dropped, whichever order the cover took.
+func TestRandomImproveSelectorDropsRedundantCoverInputs(t *testing.T) {
+	large := makeSelectorUtxo(t, 0x02, 0, 1_500_000, makeTestAssets(0xAA, "tokenA", 1))
+	pool := []common.Utxo{
+		makeSelectorUtxo(t, 0x01, 0, 500_000, makeTestAssets(0xAA, "tokenA", 1)),
+		large,
+	}
+	target := NewValue(1_000_000, makeTestAssets(0xAA, "tokenA", 1))
+	for seed := int64(0); seed < 32; seed++ {
+		selected, err := (&RandomImproveSelector{Seed: seed}).Select(
+			t.Context(), pool, target,
+		)
+		if err != nil {
+			t.Fatalf("Select(seed %d) failed: %v", seed, err)
+		}
+		if len(selected) != 1 || utxoRef(selected[0]) != utxoRef(large) {
+			t.Fatalf("seed %d: expected only the covering UTxO, got %d", seed, len(selected))
+		}
+	}
+}
+
 func TestRandomImproveSelectorSkipsUntargetedAssetsWhenImproving(t *testing.T) {
 	ada := makeSelectorUtxo(t, 0x01, 0, 10_000_000, nil)
 	pool := []common.Utxo{
@@ -739,6 +761,44 @@ func TestRandomImproveThenLargestFirstSelectorFallsBackOnlyOnInsufficiency(t *te
 			}
 			if fallback.called {
 				t.Fatal("fallback ran for an error that is not insufficiency")
+			}
+		})
+	}
+}
+
+// TestSelectorsBuildMultiAssetPaymentWithoutTokenChange pins that a selector
+// does not take a second token UTxO the payment does not need: its token
+// change would need min-UTxO lovelace the pool cannot supply, so Complete
+// could not balance a payment the covering UTxO alone pays for.
+func TestSelectorsBuildMultiAssetPaymentWithoutTokenChange(t *testing.T) {
+	selectors := contextSelectors()
+	for seed := int64(1); seed < 8; seed++ {
+		selectors = append(selectors, &RandomImproveSelector{Seed: seed})
+	}
+	policyHex := "aa" + strings.Repeat("00", 27)
+	for i, selector := range selectors {
+		t.Run(fmt.Sprintf("%d-%s", i, selector.Name()), func(t *testing.T) {
+			cc := setupFixedContext()
+			addr := testAddress(t)
+			var small, large common.Blake2b256
+			small[0], large[0] = 0x01, 0x02
+			cc.AddUtxo(addr, makeAssetTestUtxo(t, small, 0, 500_000, makeTestAssets(0xAA, "tokenA", 1)))
+			cc.AddUtxo(addr, makeAssetTestUtxo(t, large, 0, 1_500_000, makeTestAssets(0xAA, "tokenA", 1)))
+			p, err := NewPayment(
+				validTestAddrBech32,
+				1_000_000,
+				[]Unit{NewUnit(policyHex, "746f6b656e41", 1)},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a := newTestApollo(cc).
+				SetWallet(NewExternalWallet(addr)).
+				AddPayment(p).
+				SetTtl(50000000).
+				SetCoinSelector(selector)
+			if _, err := a.Complete(); err != nil {
+				t.Fatalf("Complete failed: %v", err)
 			}
 		})
 	}
