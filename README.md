@@ -68,7 +68,7 @@ Three selectors ship in-tree:
 - **Largest-First**: the v1 greedy behaviour — ADA-only UTxOs first, largest
   lovelace first. Use it when you need the old input set.
 - **Random-Improve**: the CIP-0002 algorithm adapted to Apollo's aggregate
-  target, with a seeded, reproducible order.
+  target, with a seeded, reproducible order and an input limit.
   `RandomImproveThenLargestFirstSelector` falls back to Largest-First when it
   cannot cover the target.
 
@@ -77,7 +77,7 @@ builder := apollo.New(chainContext) // MACS with dust sweeping
 
 builder = builder.SetCoinSelector(&apollo.LargestFirstSelector{})
 
-builder = builder.SetCoinSelector(&apollo.RandomImproveSelector{Seed: 42})
+builder = builder.SetCoinSelector(apollo.NewRandomImproveSelector())
 builder = builder.SetCoinSelector(apollo.NewRandomImproveThenLargestFirstSelector())
 
 builder = builder.SetCoinSelector(&apollo.MACSSelector{

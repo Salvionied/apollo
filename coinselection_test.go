@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -301,7 +303,7 @@ func contextSelectors() []CoinSelector {
 		&LargestFirstSelector{},
 		&MACSSelector{},
 		NewMACSSelector(),
-		NewRandomImproveSelector(),
+		&RandomImproveSelector{},
 		NewRandomImproveThenLargestFirstSelector(),
 	}
 }
@@ -831,5 +833,222 @@ func TestSelectorsBuildMultiAssetPaymentWithoutTokenChange(t *testing.T) {
 				t.Fatalf("Complete failed: %v", err)
 			}
 		})
+	}
+}
+
+// TestRandomImproveSelectorPrefersUtxosWithoutUntargetedAssets pins that a
+// plain ADA payment skips an NFT UTxO that covers the target alone, whose NFT
+// change would be below min-UTxO, when an ADA-only UTxO too large to add
+// during improvement covers it cleanly.
+func TestRandomImproveSelectorPrefersUtxosWithoutUntargetedAssets(t *testing.T) {
+	nft := makeSelectorUtxo(t, 0x01, 0, 2_500_000, makeTestAssets(0xBB, "nft", 1))
+	pool := []common.Utxo{nft, makeSelectorUtxo(t, 0x02, 0, 3_000_000, nil)}
+	for seed := int64(0); seed < 32; seed++ {
+		selected, err := (&RandomImproveSelector{Seed: seed}).Select(
+			t.Context(), pool, NewSimpleValue(2_200_000),
+		)
+		if err != nil {
+			t.Fatalf("Select(seed %d) failed: %v", seed, err)
+		}
+		for _, u := range selected {
+			if utxoRef(u) == utxoRef(nft) {
+				t.Fatalf("seed %d: took the NFT UTxO although ADA-only UTxOs cover the target", seed)
+			}
+		}
+	}
+}
+
+// TestRandomImproveSelectorFallsBackToUntargetedAssets pins that UTxOs with
+// untargeted assets are still used when nothing else covers the target.
+func TestRandomImproveSelectorFallsBackToUntargetedAssets(t *testing.T) {
+	pool := []common.Utxo{
+		makeSelectorUtxo(t, 0x01, 0, 2_500_000, makeTestAssets(0xBB, "nft", 1)),
+		makeSelectorUtxo(t, 0x02, 0, 1_000_000, nil),
+	}
+	selected, err := NewRandomImproveSelector().Select(
+		t.Context(), pool, NewSimpleValue(3_000_000),
+	)
+	if err != nil {
+		t.Fatalf("Select failed: %v", err)
+	}
+	if len(selected) != 2 {
+		t.Fatalf("expected both UTxOs, got %d", len(selected))
+	}
+}
+
+// TestRandomImproveSelectorPrunesTokenInputsFirst pins that pruning drops a
+// redundant token UTxO before an ADA-only one: dropping the ADA-only UTxO
+// first would leave two token UTxOs and a surplus token in change.
+func TestRandomImproveSelectorPrunesTokenInputsFirst(t *testing.T) {
+	pool := []common.Utxo{
+		makeSelectorUtxo(t, 0x01, 0, 1_000_000, nil),
+		makeSelectorUtxo(t, 0x02, 0, 500_000, makeTestAssets(0xAA, "tokenA", 1)),
+		makeSelectorUtxo(t, 0x03, 0, 1_500_000, makeTestAssets(0xAA, "tokenA", 1)),
+	}
+	target := NewValue(2_000_000, makeTestAssets(0xAA, "tokenA", 1))
+	var policy common.Blake2b224
+	policy[0] = 0xAA
+	for seed := int64(0); seed < 64; seed++ {
+		selected, err := (&RandomImproveSelector{Seed: seed}).Select(
+			t.Context(), pool, target,
+		)
+		if err != nil {
+			t.Fatalf("Select(seed %d) failed: %v", seed, err)
+		}
+		qty := sumSelected(t, selected).Assets.Asset(policy, []byte("tokenA"))
+		if qty == nil || qty.Cmp(big.NewInt(1)) != 0 {
+			t.Fatalf("seed %d: selected %v tokenA, want exactly 1", seed, qty)
+		}
+	}
+}
+
+// TestRandomImproveSelectorNoOverflowFromRedundantInput pins that a huge
+// UTxO picked before the one that covers alone is pruned, not reported as an
+// overflow of their sum.
+func TestRandomImproveSelectorNoOverflowFromRedundantInput(t *testing.T) {
+	covering := makeSelectorUtxo(t, 0x02, 0, 10_000_000, makeTestAssets(0xAA, "tokenA", 1))
+	pool := []common.Utxo{
+		makeSelectorUtxo(t, 0x01, 0, ^uint64(0)-1, nil),
+		covering,
+	}
+	target := NewValue(5_000_000, makeTestAssets(0xAA, "tokenA", 1))
+	for seed := int64(0); seed < 32; seed++ {
+		selected, err := (&RandomImproveSelector{Seed: seed}).Select(
+			t.Context(), pool, target,
+		)
+		if err != nil {
+			t.Fatalf("Select(seed %d) failed: %v", seed, err)
+		}
+		if len(selected) != 1 || utxoRef(selected[0]) != utxoRef(covering) {
+			t.Fatalf("seed %d: expected only the covering UTxO, got %d", seed, len(selected))
+		}
+	}
+}
+
+func TestRandomImproveSelectorMaxInputs(t *testing.T) {
+	t.Run("ImproveStopsAtLimit", func(t *testing.T) {
+		// Without a limit, improvement would add all ten 0.1 ADA UTxOs.
+		pool := []common.Utxo{makeSelectorUtxo(t, 0x01, 0, 10_000_000, nil)}
+		for i := byte(2); i <= 11; i++ {
+			pool = append(pool, makeSelectorUtxo(t, i, 0, 100_000, nil))
+		}
+		filled := false
+		for seed := int64(0); seed < 32; seed++ {
+			selected, err := (&RandomImproveSelector{Seed: seed, MaxInputs: 3}).Select(
+				t.Context(), pool, NewSimpleValue(6_000_000),
+			)
+			if errors.Is(err, ErrInsufficientUtxos) {
+				continue // the random cover took too much dust first
+			}
+			if err != nil {
+				t.Fatalf("Select(seed %d) failed: %v", seed, err)
+			}
+			if len(selected) > 3 {
+				t.Fatalf("seed %d: selected %d inputs, limit 3", seed, len(selected))
+			}
+			filled = filled || len(selected) == 3
+		}
+		if !filled {
+			t.Fatal("no seed improved up to the limit")
+		}
+	})
+	t.Run("CoverOverLimitIsInsufficient", func(t *testing.T) {
+		pool := []common.Utxo{
+			makeSelectorUtxo(t, 0x01, 0, 1_000_000, nil),
+			makeSelectorUtxo(t, 0x02, 0, 1_000_000, nil),
+			makeSelectorUtxo(t, 0x03, 0, 1_000_000, nil),
+		}
+		_, err := (&RandomImproveSelector{MaxInputs: 1}).Select(
+			t.Context(), pool, NewSimpleValue(2_000_000),
+		)
+		if !errors.Is(err, ErrInsufficientUtxos) {
+			t.Fatalf("Select() error = %v, want ErrInsufficientUtxos", err)
+		}
+		selected, err := (&RandomImproveThenLargestFirstSelector{
+			RandomImprove: &RandomImproveSelector{MaxInputs: 1},
+		}).Select(t.Context(), pool, NewSimpleValue(2_000_000))
+		if err != nil {
+			t.Fatalf("fallback Select failed: %v", err)
+		}
+		if len(selected) != 2 {
+			t.Fatalf("expected Largest-First's 2 inputs, got %d", len(selected))
+		}
+	})
+	t.Run("ConstructorSetsDefault", func(t *testing.T) {
+		if got := NewRandomImproveSelector().MaxInputs; got != DefaultRandomImproveMaxInputs {
+			t.Fatalf("MaxInputs = %d, want %d", got, DefaultRandomImproveMaxInputs)
+		}
+	})
+}
+
+// TestRandomImproveShuffleUsesFull64BitSeed pins that seeds equal modulo
+// 2^31-1, which math/rand v1 collapses into one sequence, shuffle
+// differently.
+func TestRandomImproveShuffleUsesFull64BitSeed(t *testing.T) {
+	const mod = int64(1)<<31 - 1
+	for seed := int64(1); seed <= 8; seed++ {
+		a, err := randomImproveShuffle(t.Context(), 32, seed, randomImproveCoverSalt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := randomImproveShuffle(t.Context(), 32, seed+mod, randomImproveCoverSalt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(a, b) {
+			return
+		}
+	}
+	t.Fatal("seeds congruent modulo 2^31-1 shuffled identically")
+}
+
+func TestRandomImproveShuffleObservesContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := randomImproveShuffle(ctx, 1_000, 0, randomImproveCoverSalt); !errors.Is(err, context.Canceled) {
+		t.Fatalf("randomImproveShuffle() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestRandomImproveSelectorsTolerateNil(t *testing.T) {
+	pool := []common.Utxo{makeSelectorUtxo(t, 0x01, 0, 10_000_000, nil)}
+	selectors := []CoinSelector{
+		(*RandomImproveSelector)(nil),
+		(*RandomImproveThenLargestFirstSelector)(nil),
+		&RandomImproveThenLargestFirstSelector{
+			RandomImprove: (*RandomImproveSelector)(nil),
+			Fallback:      (*MACSSelector)(nil),
+		},
+		&RandomImproveThenLargestFirstSelector{
+			RandomImprove: stubSelector{err: ErrInsufficientUtxos},
+			Fallback:      (*MACSSelector)(nil),
+		},
+	}
+	for i, selector := range selectors {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			selected, err := selector.Select(t.Context(), pool, NewSimpleValue(1_000_000))
+			if err != nil {
+				t.Fatalf("Select failed: %v", err)
+			}
+			if len(selected) != 1 {
+				t.Fatalf("expected 1 input, got %d", len(selected))
+			}
+		})
+	}
+}
+
+// TestRandomImproveThenLargestFirstSelectorReportsFallbackCause pins that a
+// fallback failing for another reason is not reported as insufficiency.
+func TestRandomImproveThenLargestFirstSelectorReportsFallbackCause(t *testing.T) {
+	selector := &RandomImproveThenLargestFirstSelector{
+		RandomImprove: stubSelector{err: ErrInsufficientUtxos},
+		Fallback:      stubSelector{err: context.Canceled},
+	}
+	_, err := selector.Select(t.Context(), nil, NewSimpleValue(1))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Select() error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, ErrInsufficientUtxos) {
+		t.Fatalf("Select() error = %v matches ErrInsufficientUtxos", err)
 	}
 }

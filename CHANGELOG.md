@@ -9,7 +9,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `RandomImproveSelector`, an adaptation of the CIP-0002 Random-Improve coin
-  selection with a seeded, reproducible order, and
+  selection with a seeded, reproducible order and a `MaxInputs` limit
+  (`DefaultRandomImproveMaxInputs` from `NewRandomImproveSelector`), and
   `RandomImproveThenLargestFirstSelector`, which falls back to Largest-First
   when Random-Improve cannot cover the target. MACS remains the default.
 - `ErrInsufficientUtxos`. Every in-tree selector returns an error matching it
