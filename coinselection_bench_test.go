@@ -156,7 +156,12 @@ func benchScenarios(tb testing.TB) []benchScenario {
 }
 
 func BenchmarkCoinSelection(b *testing.B) {
-	selectors := []CoinSelector{&LargestFirstSelector{}, &MACSSelector{}}
+	selectors := []CoinSelector{
+		&LargestFirstSelector{},
+		NewRandomImproveSelector(),
+		NewRandomImproveThenLargestFirstSelector(),
+		&MACSSelector{},
+	}
 	for _, sc := range benchScenarios(b) {
 		for _, sel := range selectors {
 			b.Run(sc.name+"/"+sel.Name(), func(b *testing.B) {
@@ -188,7 +193,12 @@ func BenchmarkCoinSelection(b *testing.B) {
 // with the pool. It is the shape that made selection quadratic while every
 // pick rescanned the pool, so it is the one to watch for regressions.
 func BenchmarkCoinSelectionFullSweep(b *testing.B) {
-	selectors := []CoinSelector{&LargestFirstSelector{}, &MACSSelector{}}
+	selectors := []CoinSelector{
+		&LargestFirstSelector{},
+		NewRandomImproveSelector(),
+		NewRandomImproveThenLargestFirstSelector(),
+		&MACSSelector{},
+	}
 	for _, n := range []int{500, 1000, 2000, 4000} {
 		pool, target := sweepSelectionPool(b, n)
 		for _, sel := range selectors {
@@ -222,6 +232,8 @@ func TestCoinSelectionComparison(t *testing.T) {
 		sel   CoinSelector
 	}{
 		{"largest-first", &LargestFirstSelector{}},
+		{"random-improve", NewRandomImproveSelector()},
+		{"random-improve-largest-first", NewRandomImproveThenLargestFirstSelector()},
 		{"macs-pure", &MACSSelector{}},
 		{"macs-sweep", NewMACSSelector()},
 	}

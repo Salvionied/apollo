@@ -8,6 +8,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `RandomImproveSelector`, an adaptation of the CIP-0002 Random-Improve coin
+  selection with a seeded, reproducible order, and
+  `RandomImproveThenLargestFirstSelector`, which falls back to Largest-First
+  when Random-Improve cannot cover the target. MACS remains the default.
+- `ErrInsufficientUtxos`. Every in-tree selector returns an error matching it
+  when the pool cannot cover the target; the message is unchanged.
 - `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
   reports `CapabilityGenesisParams`. A server that does not implement
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.

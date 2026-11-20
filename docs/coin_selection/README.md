@@ -49,6 +49,10 @@ builder := apollo.New(ctx).SetMaxFee(1_000_000)
 // v1 greedy behaviour
 builder = builder.SetCoinSelector(&apollo.LargestFirstSelector{})
 
+// Random-Improve, alone or falling back to Largest-First
+builder = builder.SetCoinSelector(&apollo.RandomImproveSelector{Seed: 42})
+builder = builder.SetCoinSelector(apollo.NewRandomImproveThenLargestFirstSelector())
+
 // MACS without sweeping, or custom limits
 builder = builder.SetCoinSelector(&apollo.MACSSelector{})
 builder = builder.SetCoinSelector(&apollo.MACSSelector{
@@ -59,6 +63,32 @@ builder = builder.SetCoinSelector(&apollo.MACSSelector{
 
 `LargestFirstSelector` consumes ADA-only UTxOs before asset-carrying ones,
 largest lovelace first.
+
+## Random-Improve
+
+`RandomImproveSelector` implements the Random-Improve algorithm from
+[CIP-0002](https://cips.cardano.org/cip/CIP-0002). It covers the target by
+taking UTxOs in a pseudo-random order, then adds further UTxOs that bring the
+selection closer to an ideal of twice the target, so the change output is
+roughly the size of the payment. The order comes from `Seed`: the same seed,
+pool, and target always select the same inputs.
+
+It is an adaptation, not a CIP-0002 reference implementation:
+
+- It selects for the transaction's aggregate target, not for each output.
+- An improvement may not take lovelace or any targeted asset above twice its
+  target; CIP-0002 allows up to three times.
+- The improve phase never adds a UTxO carrying an asset the target does not
+  ask for.
+
+`RandomImproveThenLargestFirstSelector` follows the Cardano Wallet strategy:
+it runs Random-Improve and, only when that reports `ErrInsufficientUtxos`,
+runs `LargestFirstSelector`. Malformed input, overflow, and cancellation are
+returned without a fallback. Its `RandomImprove` and `Fallback` fields replace
+either step.
+
+Every in-tree selector returns an error matching `ErrInsufficientUtxos` when
+the pool cannot cover the target.
 
 ## Implicit inputs
 
