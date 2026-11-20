@@ -19,3 +19,25 @@ handed back the signed mint value. That is a silent behaviour change; see
 
 v1 `AddMint` / `MintAssetsWithRedeemer` collapsed into `Mint`. Script versions
 are auto-detected by `AttachScript`.
+
+## Native script policies from JSON
+
+A native policy script written in the cardano-cli simple-script JSON form can
+be parsed directly; its hash is the policy ID:
+
+```go
+policy, err := apollo.NativeScriptFromJSON(policyJSON)
+if err != nil {
+    return err
+}
+policyIdHex := policy.Hash().String()
+builder = builder.AttachScript(policy)
+```
+
+`NativeScriptFromJSON` accepts `sig`, `all`, `any`, `atLeast`, `after`, and
+`before` scripts. It rejects a malformed key hash, a missing slot or atLeast
+count, an atLeast count larger than its script list, and nesting deeper than
+64 levels. Empty script lists and a zero atLeast count are valid ledger
+scripts and are accepted. Child lists longer than 23 scripts are encoded
+indefinite-length, as the ledger and cardano-cli encode them, so the policy
+ID matches the one cardano-cli reports.

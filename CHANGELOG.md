@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `NativeScriptFromJSON` parses a native script from the cardano-cli
+  simple-script JSON form (`sig`, `all`, `any`, `atLeast`, `after`, `before`).
+  It is the parser the Koios backend already used for reference scripts, which
+  still verifies the result against the hash Koios reports.
 - `backend/utxorpc` serves genesis parameters through `ReadGenesis` and now
   reports `CapabilityGenesisParams`. A server that does not implement
   `ReadGenesis` returns an error matching `backend.ErrUnsupported`, as before.
