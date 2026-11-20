@@ -133,6 +133,11 @@ func (s *RandomImproveSelector) Select(
 					return nil, err
 				}
 			}
+			// The cover alone can exceed the ideal; stopping here also keeps
+			// ideal-acc.coin below from wrapping around.
+			if acc.coin >= ideal {
+				break
+			}
 			cand := &cands[idx]
 			// Within the ideal, every added lovelace moves the total closer
 			// to it, so the CIP-0002 distance test reduces to this bound.

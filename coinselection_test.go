@@ -551,6 +551,36 @@ func TestRandomImproveSelectorImprovesOnlyWithAdaOnlyUtxos(t *testing.T) {
 	}
 }
 
+// TestRandomImproveSelectorSkipsImproveWhenCoverExceedsIdeal pins that a
+// cover already above twice the target adds nothing: the remaining room to
+// the ideal is negative, not a wrapped-around uint64.
+func TestRandomImproveSelectorSkipsImproveWhenCoverExceedsIdeal(t *testing.T) {
+	large := makeSelectorUtxo(t, 0x01, 0, 5_000_000, nil)
+	pool := []common.Utxo{large}
+	for i := byte(2); i <= 5; i++ {
+		pool = append(pool, makeSelectorUtxo(t, i, 0, 1_000_000, nil))
+	}
+	covered := false
+	for seed := int64(0); seed < 64; seed++ {
+		selected, err := (&RandomImproveSelector{Seed: seed}).Select(
+			t.Context(), pool, NewSimpleValue(1_000_000),
+		)
+		if err != nil {
+			t.Fatalf("Select(seed %d) failed: %v", seed, err)
+		}
+		if utxoRef(selected[0]) != utxoRef(large) {
+			continue
+		}
+		covered = true
+		if len(selected) != 1 {
+			t.Fatalf("seed %d: improved past the ideal with %d inputs", seed, len(selected))
+		}
+	}
+	if !covered {
+		t.Fatal("no seed covered with the 5 ADA UTxO first")
+	}
+}
+
 // TestRandomImproveSelectorDropsRedundantCoverInputs pins that a cover input
 // made redundant by a later pick is dropped, whichever order the cover took.
 func TestRandomImproveSelectorDropsRedundantCoverInputs(t *testing.T) {
