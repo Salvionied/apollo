@@ -1,6 +1,6 @@
 module github.com/Salvionied/apollo/v2
 
-go 1.26.10
+go 1.26.11
 
 require (
 	connectrpc.com/connect v1.21.1
@@ -9,7 +9,7 @@ require (
 	github.com/blinklabs-io/bursa v0.21.1
 	github.com/blinklabs-io/gouroboros v0.218.1
 	github.com/blinklabs-io/ouroboros-mock v0.21.2
-	github.com/blinklabs-io/plutigo v0.11.4
+	github.com/blinklabs-io/plutigo v0.12.2
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/utxorpc/go-codegen v0.19.2
