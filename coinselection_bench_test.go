@@ -195,7 +195,7 @@ func BenchmarkCoinSelection(b *testing.B) {
 func BenchmarkCoinSelectionFullSweep(b *testing.B) {
 	selectors := []CoinSelector{
 		&LargestFirstSelector{},
-		NewRandomImproveSelector(),
+		&RandomImproveSelector{},
 		NewRandomImproveThenLargestFirstSelector(),
 		&MACSSelector{},
 	}
