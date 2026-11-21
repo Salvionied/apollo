@@ -35,9 +35,13 @@ builder = builder.AttachScript(policy)
 ```
 
 `NativeScriptFromJSON` accepts `sig`, `all`, `any`, `atLeast`, `after`, and
-`before` scripts. It rejects a malformed key hash, a missing slot or atLeast
-count, an atLeast count larger than its script list, and nesting deeper than
-64 levels. Empty script lists and a zero atLeast count are valid ledger
-scripts and are accepted. Child lists longer than 23 scripts are encoded
+`before` scripts. It rejects a malformed or missing key hash, a missing slot
+or atLeast count, a missing or null script list, an atLeast count larger than
+its script list, more than 64 levels of scripts nested below the top-level
+script, trailing data, unknown fields, and fields that do not belong to the
+script's type (such as `slot` on a `sig` script or `required` on an `all`
+script), since dropping them would change what the policy authorizes. Fields
+set to null are ignored. Explicitly empty script lists and a zero atLeast
+count are valid ledger scripts and are accepted. Child lists longer than 23 scripts are encoded
 indefinite-length, as the ledger and cardano-cli encode them, so the policy
 ID matches the one cardano-cli reports.
