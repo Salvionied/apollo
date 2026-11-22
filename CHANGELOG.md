@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `NativeScriptFromJSON` parses a native script from the cardano-cli
+  simple-script JSON form (`sig`, `all`, `any`, `atLeast`, `after`, `before`).
+  It is the parser the Koios backend already used for reference scripts, which
+  still verifies the result against the hash Koios reports.
 - `RandomImproveSelector`, an adaptation of the CIP-0002 Random-Improve coin
   selection with a seeded, reproducible order and a `MaxInputs` limit
   (`DefaultRandomImproveMaxInputs` from `NewRandomImproveSelector`), and
