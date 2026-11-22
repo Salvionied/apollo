@@ -3,6 +3,7 @@ package utxorpc
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,56 +206,49 @@ func TestCurrentEpochRejectsMalformedSummary(t *testing.T) {
 		return &cardano.EraSummary{Name: "shelley", Start: boundary(1000, 5)}
 	}
 	tests := []struct {
-		name  string
-		tip   uint64
-		eras  []*cardano.EraSummary
-		epoch uint32
+		name    string
+		tip     uint64
+		eras    []*cardano.EraSummary
+		wantErr string
 	}{
-		{"no eras", 5000, nil, 0},
-		{"tip before first era", 999, []*cardano.EraSummary{shelley()}, 0},
-		{"nil start", 5000, []*cardano.EraSummary{{Name: "shelley"}}, 0},
+		{"no eras", 5000, nil, "era summary has no eras"},
+		{"tip before first era", 999, []*cardano.EraSummary{shelley()}, "no era in the summary contains tip slot 999"},
+		{"nil start", 5000, []*cardano.EraSummary{{Name: "shelley"}}, `era "shelley" has no start boundary`},
 		{"tip in byron era", 5000, []*cardano.EraSummary{
 			{Name: "Byron", Start: boundary(0, 0), End: boundary(432000, 1)},
 			{Name: "shelley", Start: boundary(432000, 1)},
-		}, 0},
+		}, `tip slot 5000 is in Byron era "Byron"`},
 		{"tip in unnamed byron era", 5000, []*cardano.EraSummary{
 			{Start: boundary(0, 0), ProtocolParams: protocolMajor(1)},
-		}, 0},
+		}, `tip slot 5000 is in Byron era ""`},
 		{"closed era disagrees with epoch length", 5000, []*cardano.EraSummary{
 			{Name: "shelley", Start: boundary(0, 0), End: boundary(10000, 1)},
-		}, 0},
+		}, `era "shelley" spans 10000 slots over 1 epochs, inconsistent with epoch length 432000`},
 		{"closed era not a whole number of epochs", 5000, []*cardano.EraSummary{
 			{Name: "shelley", Start: boundary(0, 0), End: boundary(432005, 1)},
-		}, 0},
+		}, `era "shelley" spans 432005 slots over 1 epochs, inconsistent with epoch length 432000`},
 		{"end before start", 5000, []*cardano.EraSummary{
 			{Name: "shelley", Start: boundary(5000, 0), End: boundary(4000, 0)},
 			{Name: "conway", Start: boundary(0, 0)},
-		}, 0},
+		}, `era "shelley" ends at slot 4000, before its start at slot 5000`},
 		{"overlapping eras", 5000, []*cardano.EraSummary{
 			{Name: "a", Start: boundary(0, 0)},
 			{Name: "b", Start: boundary(1000, 1)},
-		}, 0},
+		}, `eras "a" and "b" both contain slot 5000`},
 		{"gap before tip", 5000, []*cardano.EraSummary{
 			{Name: "a", Start: boundary(0, 0), End: boundary(1000, 0)},
-		}, 0},
-		{"zero epoch length", 5000, []*cardano.EraSummary{shelley()}, 1},
+		}, "no era in the summary contains tip slot 5000"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			replies := epochReplies(tt.tip, tt.eras...)
-			if tt.epoch == 1 {
-				g := testGenesis()
-				g.EpochLength = 0
-				replies["ReadGenesis"] = genesisReply(g)
-			}
-			_, ctx := newQueryServer(t, replies)
+			_, ctx := newQueryServer(t, epochReplies(tt.tip, tt.eras...))
 			got, err := ctx.CurrentEpoch()
 			if err == nil {
-				t.Fatalf("CurrentEpoch() = %d, want error", got)
+				t.Fatalf("CurrentEpoch() = %d, want error %q", got, tt.wantErr)
 			}
-			if errors.Is(err, backend.ErrUnsupported) {
-				t.Fatalf("malformed summary reported as unsupported: %v", err)
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("CurrentEpoch() error = %v, want %q", err, tt.wantErr)
 			}
 		})
 	}
@@ -264,10 +258,39 @@ func TestCurrentEpochRejectsMalformedSummary(t *testing.T) {
 		replies := epochReplies(5000)
 		replies["ReadEraSummary"] = queryReply{msg: &query.ReadEraSummaryResponse{}}
 		_, ctx := newQueryServer(t, replies)
-		if got, err := ctx.CurrentEpoch(); err == nil {
-			t.Fatalf("CurrentEpoch() = %d, want error", got)
+		const want = "no cardano era summary in response"
+		if got, err := ctx.CurrentEpoch(); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("CurrentEpoch() = %d, %v, want error %q", got, err, want)
 		}
 	})
+}
+
+// GenesisParamsContext already rejects a zero epoch length, so epochAtSlot's
+// own guard against dividing by zero is only reachable directly.
+func TestEpochAtSlotRejectsZeroEpochLength(t *testing.T) {
+	t.Parallel()
+	_, err := epochAtSlot(mainnetLikeEras(), 16588800, 0)
+	if err == nil || !strings.Contains(err.Error(), "epoch length is zero") {
+		t.Fatalf("epochAtSlot() error = %v, want epoch length is zero", err)
+	}
+}
+
+// A zero genesis epoch length is reported by the genesis query, before any
+// era summary is read.
+func TestCurrentEpochZeroGenesisEpochLength(t *testing.T) {
+	t.Parallel()
+	replies := epochReplies(5000, mainnetLikeEras()...)
+	g := testGenesis()
+	g.EpochLength = 0
+	replies["ReadGenesis"] = genesisReply(g)
+	server, ctx := newQueryServer(t, replies)
+	_, err := ctx.CurrentEpoch()
+	if err == nil || !strings.Contains(err.Error(), "genesis epoch length is missing") {
+		t.Fatalf("CurrentEpoch() error = %v, want genesis epoch length is missing", err)
+	}
+	if n := server.callCount("ReadEraSummary"); n != 0 {
+		t.Fatalf("ReadEraSummary called %d times, want 0", n)
+	}
 }
 
 func TestCurrentEpochEraSummaryCached(t *testing.T) {
