@@ -2,8 +2,11 @@ package apollo
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
+	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/cbor"
@@ -380,6 +383,26 @@ func TestBuildReportScriptCollateralAndRedeemer(t *testing.T) {
 	if !report.Balance.Mint.HasAssets() || report.Balance.Burn.HasAssets() {
 		t.Errorf("Mint = %+v Burn = %+v, want a mint and no burn", report.Balance.Mint, report.Balance.Burn)
 	}
+
+	// The returned report's assets and collateral return are copies too.
+	report.Balance.Mint.Assets.Add(report.Balance.Mint.Assets)
+	report.Collateral.Return.Value.Coin = 1
+	again := explain(t, a)
+	if again.Balance.Mint.Assets.Asset(mintPolicyID(t, policy), []byte("token")).Cmp(big.NewInt(1)) != 0 {
+		t.Error("changing a returned report's assets changed the builder's report")
+	}
+	if again.Collateral.Return.Value.Coin == 1 {
+		t.Error("changing a returned report's collateral return changed the builder's report")
+	}
+}
+
+func mintPolicyID(t *testing.T, policy string) common.Blake2b224 {
+	t.Helper()
+	raw, err := hex.DecodeString(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return common.NewBlake2b224(raw)
 }
 
 func TestBuildReportReferenceScriptFee(t *testing.T) {
@@ -427,6 +450,57 @@ func TestBuildReportReferenceScriptFee(t *testing.T) {
 	}
 	if len(report.Scripts.ReferenceInputRefs) != 1 || report.Scripts.ReferenceInputRefs[0] != hashHex+"#0" {
 		t.Errorf("ReferenceInputRefs = %v", report.Scripts.ReferenceInputRefs)
+	}
+}
+
+// assembledFailsContext fails reference-input lookups once the builder has
+// assembled its transaction, as when a reference UTxO is spent after Complete
+// priced it.
+type assembledFailsContext struct {
+	*fixed.FixedChainContext
+	builder *Apollo
+}
+
+func (c *assembledFailsContext) UtxoByRef(txHash common.Blake2b256, index uint32) (*common.Utxo, error) {
+	if c.builder.tx != nil {
+		return nil, errors.New("reference input spent")
+	}
+	return c.FixedChainContext.UtxoByRef(txHash, index)
+}
+
+func TestBuildReportDoesNotQueryReferenceInputsAgain(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+	var refTxHash common.Blake2b256
+	refTxHash[0] = 0xee
+	cc.AddUtxoByRef(common.Utxo{
+		Id: shelley.ShelleyTransactionInput{TxId: refTxHash, OutputIndex: 0},
+		Output: &babbage.BabbageTransactionOutput{
+			OutputAddress: addr,
+			OutputAmount:  mary.MaryTransactionOutputValue{Amount: 2_000_000},
+			TxOutScriptRef: &common.ScriptRef{
+				Type:   common.ScriptRefTypePlutusV2,
+				Script: common.PlutusV2Script(bytes.Repeat([]byte{0x42}, 1_000)),
+			},
+		},
+	})
+	ctx := &assembledFailsContext{FixedChainContext: cc}
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := newTestApollo(ctx).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000).
+		AddReferenceInput(hex.EncodeToString(refTxHash.Bytes()), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.builder = a
+	if _, err := a.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	if got := explain(t, a).Fees.ReferenceScriptBytes; got != 1_000 {
+		t.Errorf("ReferenceScriptBytes = %d, want 1000", got)
 	}
 }
 
@@ -605,6 +679,18 @@ func TestBuildReportGuardRedeemerAndPlutusV4(t *testing.T) {
 		r.Source != credentialKey(guardScriptCredential()) {
 		t.Errorf("redeemer = %+v, want guarding 1 for %s", r, credentialKey(guardScriptCredential()))
 	}
+	built := a.dijkstraTx.Body.TxGuards.Credentials
+	if len(report.Scripts.Guards) != len(built) || len(built) != 2 {
+		t.Fatalf("Guards = %v, transaction has %d guards, want 2", report.Scripts.Guards, len(built))
+	}
+	for i, credential := range built {
+		if report.Scripts.Guards[i] != credentialKey(credential) {
+			t.Errorf("guard %d = %s, transaction has %s", i, report.Scripts.Guards[i], credentialKey(credential))
+		}
+	}
+	if report.Scripts.Guards[1] != r.Source {
+		t.Errorf("guard 1 = %s, want the guarding redeemer's source %s", report.Scripts.Guards[1], r.Source)
+	}
 }
 
 func TestBuildReportDijkstraProposalDeposit(t *testing.T) {
@@ -628,13 +714,198 @@ func TestBuildReportDijkstraProposalDeposit(t *testing.T) {
 		SetWallet(NewExternalWallet(addr)).
 		SetTargetEra(EraDijkstra).
 		AddDijkstraProposal(proposal).
+		AddTreasuryDonation(500_000).
 		Complete()
 	if err != nil {
 		t.Fatal(err)
 	}
 	report := explain(t, a)
-	if report.Balance.ProposalDeposit != 2_000_000 || report.Balance.GovernanceRequired.Coin != 2_000_000 {
-		t.Errorf("ProposalDeposit = %d, GovernanceRequired = %d, want 2000000 each",
-			report.Balance.ProposalDeposit, report.Balance.GovernanceRequired.Coin)
+	if report.Balance.ProposalDeposit != 2_000_000 || report.Balance.TreasuryDonation != 500_000 ||
+		report.Balance.GovernanceRequired.Coin != 2_500_000 {
+		t.Errorf("ProposalDeposit = %d, TreasuryDonation = %d, GovernanceRequired = %d, want 2000000, 500000, 2500000",
+			report.Balance.ProposalDeposit, report.Balance.TreasuryDonation, report.Balance.GovernanceRequired.Coin)
+	}
+}
+
+func TestExplainReportsBuildReportFailure(t *testing.T) {
+	var nilBuilder *Apollo
+	if _, err := nilBuilder.Explain(); err == nil {
+		t.Fatal("expected Explain on a nil builder to fail")
+	}
+
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000).Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("report failed")
+	a.buildReportErr = cause
+	if _, err := a.Explain(); !errors.Is(err, cause) {
+		t.Fatalf("Explain error = %v, want it to wrap %v", err, cause)
+	}
+}
+
+// nilNameSelector is a typed-nil coin selector whose methods dereference
+// their receiver.
+type nilNameSelector struct{ name string }
+
+func (s *nilNameSelector) Name() string { return s.name }
+
+func (s *nilNameSelector) Select(context.Context, []common.Utxo, Value) ([]common.Utxo, error) {
+	return nil, errors.New(s.name)
+}
+
+func TestBuildReportTypedNilCoinSelector(t *testing.T) {
+	// The pinned input covers the payment and its change, so selection never
+	// calls the selector, and only the report would.
+	addr := testAddress(t)
+	a, err := newTestApollo(setupFixedContext()).
+		SetWallet(NewExternalWallet(addr)).
+		SetCoinSelector((*nilNameSelector)(nil)).
+		AddInput(benchUtxo(addr, 1, 10_000_000, nil)).
+		PayToAddress(addr, 2_000_000).
+		SetTtl(50_000_000).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := explain(t, a).CoinSelector; got != defaultCoinSelector.Name() {
+		t.Errorf("CoinSelector = %q, want the default %q", got, defaultCoinSelector.Name())
+	}
+}
+
+func TestBuildReportForcedAndSetFee(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  func(*Apollo) *Apollo
+	}{
+		{"ForceFee", func(a *Apollo) *Apollo { return a.ForceFee(300_000) }},
+		{"SetFee", func(a *Apollo) *Apollo { return a.SetFee(300_000) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cc := setupFixedContext()
+			addr := testAddress(t)
+			addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+			p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := tc.set(newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).
+				SetFeePadding(1_000).SetTtl(50000000)).Complete()
+			if err != nil {
+				t.Fatal(err)
+			}
+			report := explain(t, a)
+			assertReportMatchesTx(t, a, report)
+			if !report.Fees.Forced || report.Fees.SizeFee != 0 || report.Fees.Requested != 301_000 {
+				t.Errorf("Fees = %+v, want forced, no size fee, requested 301000", report.Fees)
+			}
+		})
+	}
+}
+
+func TestBuildReportBurn(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	policy := strings.Repeat("aa", 28)
+	policyID := mintPolicyID(t, policy)
+	assets := common.NewMultiAsset[common.MultiAssetTypeOutput](
+		map[common.Blake2b224]map[cbor.ByteString]common.MultiAssetTypeOutput{
+			policyID: {cbor.NewByteString([]byte("tok")): big.NewInt(5)},
+		})
+	var txHash common.Blake2b256
+	txHash[0] = 0x01
+	cc.AddUtxo(addr, makeAssetTestUtxo(t, txHash, 0, 10_000_000, &assets))
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).AddPayment(p).SetTtl(50000000).
+		Mint(NewUnit(policy, "746f6b", -2), nil, nil).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := explain(t, a)
+	assertReportMatchesTx(t, a, report)
+	if got := report.Balance.Burn.Assets.Asset(policyID, []byte("tok")); got == nil || got.Cmp(big.NewInt(2)) != 0 {
+		t.Errorf("Burn = %v, want 2", got)
+	}
+	if got := report.Balance.Mint.Assets.Asset(policyID, []byte("tok")); got == nil || got.Cmp(big.NewInt(-2)) != 0 {
+		t.Errorf("Mint = %v, want -2", got)
+	}
+	if got := report.Inputs.SelectionTarget.Assets.Asset(policyID, []byte("tok")); got == nil || got.Cmp(big.NewInt(2)) != 0 {
+		t.Errorf("SelectionTarget assets = %v, want the 2 burned tokens", got)
+	}
+}
+
+func TestBuildReportCertificateDepositAndRefund(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+	cred := common.Credential{CredType: common.CredentialTypeAddrKeyHash, Credential: addr.StakeKeyHash()}
+
+	register, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).SetTtl(50000000).RegisterStake(&cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := register.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	report := explain(t, register)
+	assertReportMatchesTx(t, register, report)
+	if report.Balance.CertificateDeposit != 2_000_000 || report.Balance.CertificateRefund.Coin != 0 {
+		t.Errorf("CertificateDeposit = %d, CertificateRefund = %d, want 2000000 and 0",
+			report.Balance.CertificateDeposit, report.Balance.CertificateRefund.Coin)
+	}
+
+	deregister, err := newTestApollo(cc).SetWallet(NewExternalWallet(addr)).SetTtl(50000000).DeregisterStake(&cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deregister.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	report = explain(t, deregister)
+	assertReportMatchesTx(t, deregister, report)
+	if report.Balance.CertificateDeposit != 0 || report.Balance.CertificateRefund.Coin != 2_000_000 {
+		t.Errorf("CertificateDeposit = %d, CertificateRefund = %d, want 0 and 2000000",
+			report.Balance.CertificateDeposit, report.Balance.CertificateRefund.Coin)
+	}
+}
+
+func TestBuildReportCollateralOverlap(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 20_000_000, 0x01, 0)
+	datum := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := newTestApollo(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
+		DisableExecutionUnitsEstimation().
+		Mint(NewUnit("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "746f6b656e", 1),
+			&datum, &common.ExUnits{Memory: 1, Steps: 1}).
+		AddPayment(p).
+		SetTtl(50000000).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := explain(t, a)
+	assertReportMatchesTx(t, a, report)
+	if len(report.Collateral.Inputs) != 1 || report.Collateral.OverlapRef != report.Collateral.Inputs[0].Ref ||
+		report.Collateral.OverlapRef != report.Inputs.Final[0].Ref {
+		t.Errorf("OverlapRef = %q, collateral %v, inputs %v, want the single UTxO in both",
+			report.Collateral.OverlapRef, report.Collateral.Inputs, report.Inputs.Final)
 	}
 }

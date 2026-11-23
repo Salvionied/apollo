@@ -157,8 +157,10 @@ type CollateralReport struct {
 	// Required is the collateral the fee requires. It is zero when the
 	// transaction has no collateral.
 	Required int64
-	Total    int64
-	Return   *TxOutputReport
+	// Total is the transaction body's total_collateral, or zero when the body
+	// omits it, as it does for collateral added without SetCollateralAmount.
+	Total  int64
+	Return *TxOutputReport
 	// AutoSelected reports that the builder chose the collateral.
 	AutoSelected bool
 	// OverlapRef is an auto-selected collateral UTxO also spent as an input,
@@ -187,6 +189,10 @@ type ScriptReport struct {
 	ReferenceInputRefs []string
 	ScriptHashes       []string
 	RequiredSignerKeys []string
+	// Guards is the Dijkstra guard list (body field 14) when the builder added
+	// guards, with each credential as "type:hash", the form a guarding
+	// redeemer's Source uses. It is empty otherwise.
+	Guards []string
 }
 
 // buildReportInputs holds the values Complete used, so the report describes
@@ -198,6 +204,8 @@ type buildReportInputs struct {
 	outputs             []babbage.BabbageTransactionOutput
 	selection           coinSelection
 	inputs              []common.Utxo
+	refScriptBytes      int
+	refScriptErr        error
 	totalInput          Value
 	totalRequired       Value
 	governanceRequired  Value
@@ -216,6 +224,9 @@ type buildReportInputs struct {
 // with LoadTxCbor has no report, since the decisions that built it are not
 // recorded in its CBOR.
 func (a *Apollo) Explain() (*BuildReport, error) {
+	if a == nil {
+		return nil, errors.New("builder is nil")
+	}
 	if a.buildReportErr != nil {
 		return nil, fmt.Errorf("build report unavailable: %w", a.buildReportErr)
 	}
@@ -249,13 +260,17 @@ func (a *Apollo) newBuildReport(in buildReportInputs) (*BuildReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Balancing appends at most a change output to the payment outputs, so
+	// the payment reports are reused rather than recomputed.
 	changeIndex := -1
+	final := cloneTxOutputReports(base)
 	if len(in.outputs) > len(in.baseOutputs) {
 		changeIndex = len(in.baseOutputs)
-	}
-	final, err := outputReports(in.outputs, changeIndex, in.requested, coinsPerUtxoByte)
-	if err != nil {
-		return nil, err
+		changeReport, err := outputReport(changeIndex, in.outputs[changeIndex], true, 0, coinsPerUtxoByte)
+		if err != nil {
+			return nil, err
+		}
+		final = append(final, changeReport)
 	}
 	var change Value
 	if changeIndex >= 0 {
@@ -276,10 +291,10 @@ func (a *Apollo) newBuildReport(in buildReportInputs) (*BuildReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	refScriptBytes, err := a.totalReferenceScriptSize(in.inputs)
-	if err != nil {
-		return nil, err
+	if in.refScriptErr != nil {
+		return nil, in.refScriptErr
 	}
+	refScriptBytes := in.refScriptBytes
 	refScriptFee, err := a.eraReferenceScriptFee(refScriptBytes, in.pp)
 	if err != nil {
 		return nil, err
@@ -391,12 +406,29 @@ func (a *Apollo) newBuildReport(in buildReportInputs) (*BuildReport, error) {
 			ReferenceInputRefs: referenceInputRefs(a),
 			ScriptHashes:       append([]string(nil), a.scriptHashes...),
 			RequiredSignerKeys: requiredSignerKeys(a.requiredSigners),
+			Guards:             a.guardReports(),
 		},
 	}, nil
 }
 
+// guardReports lists the guards of the built Dijkstra body.
+func (a *Apollo) guardReports() []string {
+	if a.dijkstraTx == nil || a.dijkstraTx.Body.TxGuards == nil {
+		return nil
+	}
+	credentials := a.dijkstraTx.Body.TxGuards.Credentials
+	if len(credentials) == 0 {
+		return nil
+	}
+	guards := make([]string, len(credentials))
+	for i, credential := range credentials {
+		guards[i] = credentialKey(credential)
+	}
+	return guards
+}
+
 func (a *Apollo) coinSelectorName() string {
-	if a.coinSelector != nil {
+	if !isNilCoinSelector(a.coinSelector) {
 		return a.coinSelector.Name()
 	}
 	return defaultCoinSelector.Name()
@@ -576,6 +608,7 @@ func (r *BuildReport) clone() *BuildReport {
 	}
 	cp.Redeemers = append([]RedeemerReport(nil), r.Redeemers...)
 	cp.Scripts.ReferenceInputRefs = append([]string(nil), r.Scripts.ReferenceInputRefs...)
+	cp.Scripts.Guards = append([]string(nil), r.Scripts.Guards...)
 	cp.Scripts.ScriptHashes = append([]string(nil), r.Scripts.ScriptHashes...)
 	cp.Scripts.RequiredSignerKeys = append([]string(nil), r.Scripts.RequiredSignerKeys...)
 	return &cp

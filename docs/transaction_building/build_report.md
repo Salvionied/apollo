@@ -42,13 +42,16 @@ not fail `Complete()`; `Explain()` returns that failure instead.
   mint and burn, certificate deposits and refunds, Conway and Dijkstra
   proposal deposits, the treasury donation, and direct deposits.
 - **Collateral**: the collateral inputs, the collateral the fee requires, the
-  total collateral, the collateral return, and whether the builder chose the
-  collateral.
+  body's total collateral (zero when the body omits it, as it does for
+  collateral added without `SetCollateralAmount`), the collateral return, and
+  whether the builder chose the collateral.
 - **Redeemers**: each redeemer's tag, index, and execution units, with what the
   index points at: the spent UTxO, the minting policy, the reward address, or
   the guard credential.
 - **Scripts**: attached script counts by language, datums, reference input
-  refs, script hashes, and required signer key hashes.
+  refs, script hashes, required signer key hashes, and, for a Dijkstra
+  transaction with guards, the guard credentials in the form a guarding
+  redeemer's source uses.
 
 `TxSize` is the size of the transaction before signatures are added.
 
@@ -59,5 +62,5 @@ calls. `Clone()` copies the report too.
 
 A transaction loaded with `LoadTxCbor` has no report, because the decisions
 that built it are not recorded in its CBOR, and `Explain()` returns an error.
-`Explain()` never queries the backend; every value is captured during
-`Complete()`.
+Neither `Explain()` nor the report it returns queries the backend; every value
+is captured from what `Complete()` already resolved.

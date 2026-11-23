@@ -2366,11 +2366,18 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	baseOutputs := make([]babbage.BabbageTransactionOutput, len(outputs))
 	copy(baseOutputs, outputs)
 
+	// Neither the inputs nor the reference inputs change below, so their
+	// reference scripts are resolved once. A forced fee does not price them,
+	// so the error only fails the build when the fee is estimated.
+	refScriptBytes, refScriptErr := a.totalReferenceScriptSize(allInputUtxos)
 	var fee int64
 	if a.forceFee {
 		fee = a.Fee
 	} else {
-		fee, err = a.estimateFee(allInputUtxos, outputs)
+		if refScriptErr != nil {
+			return a, fmt.Errorf("fee estimation failed: %w", refScriptErr)
+		}
+		fee, err = a.estimateFeeWithReferenceScripts(allInputUtxos, outputs, refScriptBytes)
 		if err != nil {
 			return a, fmt.Errorf("fee estimation failed: %w", err)
 		}
@@ -2474,7 +2481,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		shape := string(bodyBytes)
 		nextFee := requestedFee
 		if !a.forceFee && a.Fee == 0 {
-			nextFee, err = a.estimateFee(allInputUtxos, outputs)
+			nextFee, err = a.estimateFeeWithReferenceScripts(allInputUtxos, outputs, refScriptBytes)
 			if err != nil {
 				return a, fmt.Errorf("fee re-estimation failed: %w", err)
 			}
@@ -2578,6 +2585,8 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		outputs:             outputs,
 		selection:           selection,
 		inputs:              allInputUtxos,
+		refScriptBytes:      refScriptBytes,
+		refScriptErr:        refScriptErr,
 		totalInput:          totalInput,
 		totalRequired:       totalRequired,
 		governanceRequired:  governanceRequired,
@@ -3170,6 +3179,21 @@ func (a *Apollo) estimatedWitnessCount(inputs []common.Utxo) int {
 }
 
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
+	refScriptSize, err := a.totalReferenceScriptSize(inputs)
+	if err != nil {
+		return 0, err
+	}
+	return a.estimateFeeWithReferenceScripts(inputs, outputs, refScriptSize)
+}
+
+// estimateFeeWithReferenceScripts is estimateFee for inputs whose reference
+// scripts total refScriptSize bytes, so a caller that already resolved them
+// does not query the backend again.
+func (a *Apollo) estimateFeeWithReferenceScripts(
+	inputs []common.Utxo,
+	outputs []babbage.BabbageTransactionOutput,
+	refScriptSize int,
+) (int64, error) {
 	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
@@ -3251,8 +3275,10 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 		fee += exUnitFee
 	}
 
-	// Add the Conway tiered reference-script fee.
-	refScriptFee, err := a.referenceScriptFeeWithParams(inputs, pp)
+	// Add the Conway tiered reference-script fee. The ledger charges it for
+	// scripts on spending and reference inputs whether or not the transaction
+	// executes them; omitting it produces FeeTooSmallUTxO.
+	refScriptFee, err := a.eraReferenceScriptFee(refScriptSize, pp)
 	if err != nil {
 		return 0, err
 	}
@@ -3273,21 +3299,6 @@ func (a *Apollo) referenceScriptFee(inputs []common.Utxo) (int64, error) {
 		return 0, nil
 	}
 	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
-	if err != nil {
-		return 0, err
-	}
-	return a.eraReferenceScriptFee(refScriptSize, pp)
-}
-
-// referenceScriptFeeWithParams computes the Conway tiered reference-script fee.
-// Scripts attached (via script_ref) to the outputs of the transaction's spending
-// inputs AND reference inputs are priced per byte on a growing tier (native
-// scripts included, not only Plutus). The ledger counts the union of regular and
-// reference inputs regardless of whether the transaction executes scripts, so
-// omitting it produces FeeTooSmallUTxO. The fee is naturally zero when no
-// referenced UTxO carries a script.
-func (a *Apollo) referenceScriptFeeWithParams(inputs []common.Utxo, pp backend.ProtocolParameters) (int64, error) {
-	refScriptSize, err := a.totalReferenceScriptSize(inputs)
 	if err != nil {
 		return 0, err
 	}
