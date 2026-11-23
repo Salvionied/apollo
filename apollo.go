@@ -83,6 +83,10 @@ type Apollo struct {
 	loadedTx           bool
 	loadedBodyCBOR     []byte
 	loadedBodyErr      error
+	// buildReport describes the transaction Complete built; buildReportErr
+	// records why it could not be produced. Neither affects construction.
+	buildReport        *BuildReport
+	buildReportErr     error
 	targetEra          TargetEra
 	datums             []common.Datum
 	requiredSigners    []common.Blake2b224
@@ -1527,6 +1531,8 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	}
 	a.loadedTx = true
 	a.loadedBodyErr = nil
+	a.buildReport = nil
+	a.buildReportErr = nil
 	return a, nil
 }
 
@@ -1539,6 +1545,8 @@ func (a *Apollo) Clone() *Apollo {
 		loadedTx:                   a.loadedTx,
 		loadedBodyCBOR:             bytes.Clone(a.loadedBodyCBOR),
 		loadedBodyErr:              a.loadedBodyErr,
+		buildReport:                a.buildReport.clone(),
+		buildReportErr:             a.buildReportErr,
 		targetEra:                  a.targetEra,
 		requestContext:             a.requestContext,
 		isEstimateRequired:         a.isEstimateRequired,
@@ -2123,7 +2131,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	// Build outputs from payments
-	outputs, err := a.buildOutputs()
+	outputs, requestedValues, err := a.buildOutputs()
 	if err != nil {
 		return a, err
 	}
@@ -2298,8 +2306,10 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	var selectedUtxos []common.Utxo
+	var selectionTarget Value
 	for attempt := 0; ; attempt++ {
-		selectionTarget, targetErr := buildSelectionTarget(reserve)
+		var targetErr error
+		selectionTarget, targetErr = buildSelectionTarget(reserve)
 		if targetErr != nil {
 			return a, targetErr
 		}
@@ -2561,6 +2571,27 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		return a, err
 	}
 
+	a.buildReport, a.buildReportErr = a.newBuildReport(buildReportInputs{
+		pp:                  pp,
+		requested:           requestedValues,
+		baseOutputs:         baseOutputs,
+		outputs:             outputs,
+		selectedUtxos:       selectedUtxos,
+		inputs:              allInputUtxos,
+		selectionTarget:     selectionTarget,
+		totalInput:          totalInput,
+		totalRequired:       totalRequired,
+		governanceRequired:  governanceRequired,
+		refundValue:         refundValue,
+		stakeDeposit:        stakeDeposit,
+		poolDeposit:         poolDeposit,
+		prelimFee:           prelimFee,
+		refScriptFeeReserve: refScriptFeeReserve,
+		selectionReserve:    reserve,
+		requestedFee:        requestedFee,
+		fee:                 fee,
+	})
+
 	return a, nil
 }
 
@@ -2721,8 +2752,11 @@ func (a *Apollo) loadUtxos() error {
 	return nil
 }
 
-func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
+// buildOutputs returns the payment outputs, raised to the minimum UTxO, and
+// the value each payment requested before that adjustment.
+func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, []Value, error) {
 	outputs := make([]babbage.BabbageTransactionOutput, 0, len(a.payments))
+	requestedValues := make([]Value, 0, len(a.payments))
 	var totalIncrease uint64
 	for i, original := range a.payments {
 		var payment PaymentI
@@ -2733,40 +2767,41 @@ func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 			var err error
 			payment, err = cloner.ClonePayment()
 			if err != nil {
-				return nil, fmt.Errorf("clone payment %d: %w", i, err)
+				return nil, nil, fmt.Errorf("clone payment %d: %w", i, err)
 			}
 			if isNilPayment(payment) {
-				return nil, fmt.Errorf("clone payment %d: returned nil", i)
+				return nil, nil, fmt.Errorf("clone payment %d: returned nil", i)
 			}
 		} else {
-			return nil, fmt.Errorf("payment %d of type %T must implement PaymentCloner", i, original)
+			return nil, nil, fmt.Errorf("payment %d of type %T must implement PaymentCloner", i, original)
 		}
 		requested, err := payment.ToValue()
 		if err != nil {
-			return nil, fmt.Errorf("payment %d requested value: %w", i, err)
+			return nil, nil, fmt.Errorf("payment %d requested value: %w", i, err)
 		}
 		if err := payment.EnsureMinUTXO(backend.BindContext(a.requestContext, a.Context)); err != nil {
-			return nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
+			return nil, nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
 		}
 		txOut, err := payment.ToTxOut()
 		if err != nil {
-			return nil, fmt.Errorf("failed to build payment output: %w", err)
+			return nil, nil, fmt.Errorf("failed to build payment output: %w", err)
 		}
 		babbageOut, err := babbageOutputOf(txOut)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		actual := babbageOut.OutputAmount.Amount
 		if actual > requested.Coin {
 			increase := actual - requested.Coin
 			if increase > a.maxPaymentIncrease-totalIncrease {
-				return nil, fmt.Errorf("payment %d requires %d lovelace (requested %d), exceeding approved minimum-UTxO increase of %d lovelace", i, actual, requested.Coin, a.maxPaymentIncrease)
+				return nil, nil, fmt.Errorf("payment %d requires %d lovelace (requested %d), exceeding approved minimum-UTxO increase of %d lovelace", i, actual, requested.Coin, a.maxPaymentIncrease)
 			}
 			totalIncrease += increase
 		}
 		outputs = append(outputs, *babbageOut)
+		requestedValues = append(requestedValues, requested)
 	}
-	return outputs, nil
+	return outputs, requestedValues, nil
 }
 
 func (a *Apollo) checkFeeLimit(fee int64) error {
@@ -3197,13 +3232,11 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 			totalMem += rv.ExUnits.Memory
 			totalSteps += rv.ExUnits.Steps
 		}
-		exUnitFeeFloat := math.Ceil(float64(pp.PriceMem)*float64(totalMem) + float64(pp.PriceStep)*float64(totalSteps))
-		// Out-of-range float-to-int conversion is implementation-defined; reject
-		// rather than sign a transaction with a corrupted fee. NaN fails this check too.
-		if !(exUnitFeeFloat >= 0 && exUnitFeeFloat < float64(math.MaxInt64)) {
-			return 0, errors.New("execution unit fee out of range")
+		exUnitFee, exErr := executionUnitFee(pp, totalMem, totalSteps)
+		if exErr != nil {
+			return 0, exErr
 		}
-		fee += int64(exUnitFeeFloat)
+		fee += exUnitFee
 	}
 
 	// Add the Conway tiered reference-script fee.
@@ -3270,6 +3303,20 @@ func (a *Apollo) eraReferenceScriptFee(refScriptSize int, pp backend.ProtocolPar
 		}
 	}
 	return referenceScriptFeeForSize(refScriptSize, pp)
+}
+
+// executionUnitFee prices execution units: ceil(priceMem * mem + priceStep * steps).
+func executionUnitFee(pp backend.ProtocolParameters, mem, steps int64) (int64, error) {
+	if mem == 0 && steps == 0 {
+		return 0, nil
+	}
+	fee := math.Ceil(float64(pp.PriceMem)*float64(mem) + float64(pp.PriceStep)*float64(steps))
+	// Out-of-range float-to-int conversion is implementation-defined; reject
+	// rather than sign a transaction with a corrupted fee. NaN fails this check too.
+	if !(fee >= 0 && fee < float64(math.MaxInt64)) {
+		return 0, errors.New("execution unit fee out of range")
+	}
+	return int64(fee), nil
 }
 
 func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters) (int64, error) {
@@ -4369,6 +4416,18 @@ func (a *Apollo) selectCoinsAllowingCollateralOverlap(
 	return nil, err
 }
 
+// collateralRequirement returns ceil(fee * collateralPercent / 100), or zero
+// when either is not positive.
+func collateralRequirement(fee int64, collateralPercent int) (int64, error) {
+	if collateralPercent <= 0 || fee <= 0 {
+		return 0, nil
+	}
+	if fee > (math.MaxInt64-99)/int64(collateralPercent) {
+		return 0, fmt.Errorf("collateral sizing overflows: fee=%d collateralPercent=%d", fee, collateralPercent)
+	}
+	return (fee*int64(collateralPercent) + 99) / 100, nil
+}
+
 // finalizeCollateral sizes and validates the total collateral and the
 // collateral-return output against the final transaction fee. The ledger
 // requires
@@ -4403,14 +4462,10 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to get protocol params for collateral sizing: %w", err)
 	}
-	if pp.CollateralPercent <= 0 || fee <= 0 {
-		return nil
+	required, err := collateralRequirement(fee, pp.CollateralPercent)
+	if err != nil {
+		return err
 	}
-	if fee > (math.MaxInt64-99)/int64(pp.CollateralPercent) {
-		return fmt.Errorf("collateral sizing overflows: fee=%d collateralPercent=%d", fee, pp.CollateralPercent)
-	}
-	// Ceil division: ceil(fee * percent / 100).
-	required := (fee*int64(pp.CollateralPercent) + 99) / 100
 	if required <= 0 {
 		return nil
 	}

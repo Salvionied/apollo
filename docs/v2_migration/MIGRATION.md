@@ -645,5 +645,6 @@ documentation and exported declarations are the authoritative complete API.
 - `Submit() (Blake2b256, error)`
 - `GetTx() *ConwayTransaction`
 - `GetTxCbor() ([]byte, error)`
+- `Explain() (*BuildReport, error)`
 - `LoadTxCbor(hex) (*Apollo, error)`
 - `Clone() *Apollo`
