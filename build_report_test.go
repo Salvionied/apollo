@@ -9,9 +9,12 @@ import (
 	"github.com/blinklabs-io/gouroboros/cbor"
 	"github.com/blinklabs-io/gouroboros/ledger/babbage"
 	"github.com/blinklabs-io/gouroboros/ledger/common"
+	"github.com/blinklabs-io/gouroboros/ledger/dijkstra"
 	"github.com/blinklabs-io/gouroboros/ledger/mary"
 	"github.com/blinklabs-io/gouroboros/ledger/shelley"
 	plutigoData "github.com/blinklabs-io/plutigo/data"
+
+	"github.com/Salvionied/apollo/v2/backend/fixed"
 )
 
 func explain(t *testing.T, a *Apollo) *BuildReport {
@@ -352,6 +355,10 @@ func TestBuildReportScriptCollateralAndRedeemer(t *testing.T) {
 	if len(report.Collateral.Inputs) != 1 || !report.Collateral.AutoSelected {
 		t.Fatalf("Collateral = %+v, want one auto-selected input", report.Collateral)
 	}
+	// The reserved collateral is not available to coin selection.
+	if report.Inputs.AvailableUtxoCount != 1 {
+		t.Errorf("AvailableUtxoCount = %d, want 1 once collateral is reserved", report.Inputs.AvailableUtxoCount)
+	}
 	if want, _ := collateralRequirement(report.Fees.Final, 150); report.Collateral.Required != want {
 		t.Errorf("collateral Required = %d, want %d", report.Collateral.Required, want)
 	}
@@ -473,5 +480,161 @@ func TestBuildReportDijkstra(t *testing.T) {
 	}
 	if report.Fees.ReferenceScriptBytes != dijkstraRefScriptTestSize || report.Fees.ReferenceScriptFee == 0 {
 		t.Errorf("reference scripts = %d bytes, fee %d", report.Fees.ReferenceScriptBytes, report.Fees.ReferenceScriptFee)
+	}
+}
+
+// Pinned inputs that cover the payment but leave change too small to emit
+// make selection raise its target to fund a change output; the report must
+// show the raised target that drew in the extra input.
+func TestBuildReportSelectionTargetIncludesChangeFunding(t *testing.T) {
+	addr := testAddress(t)
+	pinned := benchUtxo(addr, 1, 2_300_000, nil)
+	funding := benchUtxo(addr, 2, 30_000_000, nil)
+	a := completePinned(t, pinned, []common.Utxo{funding}, 2_000_000)
+
+	report := explain(t, a)
+	assertReportMatchesTx(t, a, report)
+	if len(report.Inputs.Selected) != 1 || report.Inputs.Selected[0].Ref != utxoRef(funding) {
+		t.Fatalf("Selected = %+v, want the funding UTxO", report.Inputs.Selected)
+	}
+	if report.Inputs.SelectionTarget.Coin <= 2_300_000 {
+		t.Errorf("SelectionTarget = %d, which the pinned 2300000 already covers; want the raised target",
+			report.Inputs.SelectionTarget.Coin)
+	}
+}
+
+func TestBuildReportSpendAndRewardRedeemers(t *testing.T) {
+	cc := setupFixedContext()
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 30_000_000, 0x41, 0)
+	addTestUtxo(cc, addr, 20_000_000, 0x43, 0)
+	var scriptHash common.Blake2b256
+	scriptHash[0] = 0x42
+	scriptUtxo := makeTestUtxo(t, scriptHash, 0, 10_000_000)
+	reward := stakeAddressFor(t, addr)
+
+	redeemer := common.Datum{Data: plutigoData.NewInteger(big.NewInt(1))}
+	spendUnits := common.ExUnits{Memory: 1_000, Steps: 2_000}
+	rewardUnits := common.ExUnits{Memory: 3_000, Steps: 4_000}
+	p, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := newTestApollo(cc).
+		SetWallet(NewExternalWallet(addr)).
+		AttachScript(common.PlutusV2Script([]byte{0x01, 0x02})).
+		DisableExecutionUnitsEstimation().
+		CollectFrom(scriptUtxo, redeemer, spendUnits).
+		AddWithdrawal(reward, 1_000_000, &redeemer, &rewardUnits).
+		AddPayment(p).
+		SetTtl(50_000_000).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report := explain(t, a)
+	assertReportMatchesTx(t, a, report)
+	want := map[common.RedeemerTag]RedeemerReport{
+		common.RedeemerTagSpend:  {Source: utxoRef(scriptUtxo), ExUnits: spendUnits},
+		common.RedeemerTagReward: {Index: 0, Source: reward.String(), ExUnits: rewardUnits},
+	}
+	if len(report.Redeemers) != len(want) {
+		t.Fatalf("Redeemers = %+v, want spend and reward", report.Redeemers)
+	}
+	for _, r := range report.Redeemers {
+		w, ok := want[r.Tag]
+		if !ok || r.Source != w.Source || r.ExUnits != w.ExUnits {
+			t.Errorf("redeemer = %+v, want %+v", r, w)
+		}
+		if r.Tag == common.RedeemerTagSpend && report.Inputs.Final[r.Index].Ref != utxoRef(scriptUtxo) {
+			t.Errorf("spend redeemer index %d points at %s", r.Index, report.Inputs.Final[r.Index].Ref)
+		}
+	}
+	total := common.ExUnits{Memory: 4_000, Steps: 6_000}
+	if report.Fees.ExecutionUnits != total {
+		t.Errorf("ExecutionUnits = %+v, want %+v", report.Fees.ExecutionUnits, total)
+	}
+}
+
+func TestBuildReportGuardRedeemerAndPlutusV4(t *testing.T) {
+	base := dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)
+	pp, err := base.ProtocolParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gp, err := base.GenesisParams()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pp.CostModels["PlutusV4"] = pp.CostModels["PlutusV3"]
+	cc := fixed.NewFixedChainContext(pp, gp, base.NetworkId())
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 20_000_000, 0x01, 0)
+	addTestUtxo(cc, addr, 20_000_000, 0x02, 0)
+	payment, err := NewPayment(validTestAddrBech32, 2_000_000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signer := guardKeyCredential(0x11)
+	exUnits := common.ExUnits{Memory: 1000, Steps: 2000}
+	a, err := newTestApollo(cc).
+		SetWallet(NewExternalWallet(addr)).
+		SetTargetEra(EraDijkstra).
+		AddPayment(payment).
+		DisableExecutionUnitsEstimation().
+		AttachScript(guardTestScript).
+		AttachScript(common.PlutusV4Script([]byte{0x04, 0x05})).
+		AddRequiredSigner(signer.Credential).
+		AddGuard(guardScriptCredential(), guardRedeemer(), &exUnits).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report := explain(t, a)
+	if report.Scripts.PlutusV3 != 1 || report.Scripts.PlutusV4 != 1 {
+		t.Errorf("Scripts = %+v, want one PlutusV3 and one PlutusV4 script", report.Scripts)
+	}
+	if len(report.Redeemers) != 1 {
+		t.Fatalf("Redeemers = %+v, want one guarding redeemer", report.Redeemers)
+	}
+	r := report.Redeemers[0]
+	if r.Tag != common.RedeemerTagGuarding || r.Index != 1 || r.ExUnits != exUnits ||
+		r.Source != credentialKey(guardScriptCredential()) {
+		t.Errorf("redeemer = %+v, want guarding 1 for %s", r, credentialKey(guardScriptCredential()))
+	}
+}
+
+func TestBuildReportDijkstraProposalDeposit(t *testing.T) {
+	cc := dijkstraTestContext(t, dijkstra.MinProtocolVersionDijkstra)
+	addr := testAddress(t)
+	addTestUtxo(cc, addr, 10_000_000, 0x01, 0)
+	account, err := withdrawalRewardAddress(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal := dijkstra.DijkstraProposalProcedure{
+		PPDeposit:       2_000_000,
+		PPRewardAccount: account,
+		PPGovAction: dijkstra.DijkstraGovAction{
+			Type:   uint(common.GovActionTypeInfo),
+			Action: &common.InfoGovAction{Type: uint(common.GovActionTypeInfo)},
+		},
+		PPAnchor: common.GovAnchor{Url: "https://example.com/info"},
+	}
+	a, err := newTestApollo(cc).
+		SetWallet(NewExternalWallet(addr)).
+		SetTargetEra(EraDijkstra).
+		AddDijkstraProposal(proposal).
+		Complete()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := explain(t, a)
+	if report.Balance.ProposalDeposit != 2_000_000 || report.Balance.GovernanceRequired.Coin != 2_000_000 {
+		t.Errorf("ProposalDeposit = %d, GovernanceRequired = %d, want 2000000 each",
+			report.Balance.ProposalDeposit, report.Balance.GovernanceRequired.Coin)
 	}
 }

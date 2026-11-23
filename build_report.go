@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"sort"
 	"strconv"
 
@@ -39,7 +38,8 @@ type BuildReport struct {
 // InputReport describes how the transaction inputs were chosen.
 type InputReport struct {
 	InputAddresses []string
-	// AvailableUtxoCount is the number of UTxOs coin selection could draw on.
+	// AvailableUtxoCount is the number of UTxOs coin selection could draw
+	// on: loaded UTxOs not already spent as inputs or reserved as collateral.
 	AvailableUtxoCount int
 	// Preselected are the inputs added explicitly, and Selected the ones coin
 	// selection added. Final is every input in transaction order.
@@ -47,7 +47,8 @@ type InputReport struct {
 	Selected    []UtxoReport
 	Final       []UtxoReport
 	// SelectionTarget is the value coin selection last had to cover,
-	// including the fee reserve and any tokens being burned.
+	// including the fee reserve, any tokens being burned, and any raise to
+	// fund a change output that pinned inputs alone would leave too small.
 	SelectionTarget Value
 }
 
@@ -144,9 +145,10 @@ type BalanceReport struct {
 	// GovernanceRequired is the value proposal deposits and the treasury
 	// donation take.
 	GovernanceRequired Value
-	ProposalDeposit    uint64
-	TreasuryDonation   uint64
-	DirectDeposit      uint64
+	// ProposalDeposit is the deposit of every Conway and Dijkstra proposal.
+	ProposalDeposit  uint64
+	TreasuryDonation uint64
+	DirectDeposit    uint64
 }
 
 // CollateralReport describes the collateral inputs and return.
@@ -194,9 +196,8 @@ type buildReportInputs struct {
 	requested           []Value
 	baseOutputs         []babbage.BabbageTransactionOutput
 	outputs             []babbage.BabbageTransactionOutput
-	selectedUtxos       []common.Utxo
+	selection           coinSelection
 	inputs              []common.Utxo
-	selectionTarget     Value
 	totalInput          Value
 	totalRequired       Value
 	governanceRequired  Value
@@ -327,11 +328,11 @@ func (a *Apollo) newBuildReport(in buildReportInputs) (*BuildReport, error) {
 		CoinSelector: a.coinSelectorName(),
 		Inputs: InputReport{
 			InputAddresses:     addressStrings(a.inputAddresses),
-			AvailableUtxoCount: len(a.utxos),
+			AvailableUtxoCount: in.selection.available,
 			Preselected:        utxoReports(a.preselectedUtxos),
-			Selected:           utxoReports(in.selectedUtxos),
+			Selected:           utxoReports(in.selection.utxos),
 			Final:              utxoReports(in.inputs),
-			SelectionTarget:    in.selectionTarget.Clone(),
+			SelectionTarget:    in.selection.target.Clone(),
 		},
 		Outputs: OutputReport{
 			Requested:   cloneValues(in.requested),
@@ -367,8 +368,8 @@ func (a *Apollo) newBuildReport(in buildReportInputs) (*BuildReport, error) {
 			CertificateDeposit: max(depositAdjustment, 0),
 			CertificateRefund:  in.refundValue.Clone(),
 			GovernanceRequired: in.governanceRequired.Clone(),
-			ProposalDeposit:    a.proposalDepositTotal(),
-			TreasuryDonation:   uint64(a.treasuryDonation), //nolint:gosec // AddTreasuryDonation keeps it non-negative
+			ProposalDeposit:    in.governanceRequired.Coin - uint64(a.treasuryDonation), //nolint:gosec // AddTreasuryDonation keeps it non-negative
+			TreasuryDonation:   uint64(a.treasuryDonation),                              //nolint:gosec // AddTreasuryDonation keeps it non-negative
 			DirectDeposit:      directDeposit,
 		},
 		Collateral: CollateralReport{
@@ -531,18 +532,6 @@ func requiredSignerKeys(signers []common.Blake2b224) []string {
 		keys[i] = hex.EncodeToString(signer.Bytes())
 	}
 	return keys
-}
-
-func (a *Apollo) proposalDepositTotal() uint64 {
-	var total uint64
-	for _, proposal := range a.proposalProcedures {
-		deposit := proposal.Deposit()
-		if math.MaxUint64-total < deposit {
-			return math.MaxUint64
-		}
-		total += deposit
-	}
-	return total
 }
 
 func cloneValues(values []Value) []Value {

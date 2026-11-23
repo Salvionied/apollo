@@ -2306,21 +2306,21 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	var selectedUtxos []common.Utxo
-	var selectionTarget Value
+	var selection coinSelection
 	for attempt := 0; ; attempt++ {
-		var targetErr error
-		selectionTarget, targetErr = buildSelectionTarget(reserve)
+		selectionTarget, targetErr := buildSelectionTarget(reserve)
 		if targetErr != nil {
 			return a, targetErr
 		}
 		preSelectionState := a.snapshotSelectionState()
-		selectedUtxos, err = a.selectCoinsAllowingCollateralOverlap(
+		selection, err = a.selectCoinsAllowingCollateralOverlap(
 			selectionTarget,
 			totalInput,
 		)
 		if err != nil {
 			return a, fmt.Errorf("coin selection failed: %w", err)
 		}
+		selectedUtxos = selection.utxos
 		if reserve >= prelimFee || attempt+1 >= maxSelectionAttempts {
 			break
 		}
@@ -2576,9 +2576,8 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		requested:           requestedValues,
 		baseOutputs:         baseOutputs,
 		outputs:             outputs,
-		selectedUtxos:       selectedUtxos,
+		selection:           selection,
 		inputs:              allInputUtxos,
-		selectionTarget:     selectionTarget,
 		totalInput:          totalInput,
 		totalRequired:       totalRequired,
 		governanceRequired:  governanceRequired,
@@ -2898,7 +2897,19 @@ func pickSingleInput(available []common.Utxo) (common.Utxo, error) {
 	return sorted[0], nil
 }
 
-func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error) {
+// coinSelection is the result of selectCoins: the inputs it added, the value
+// they had to cover, and the size of the pool it drew from.
+type coinSelection struct {
+	utxos []common.Utxo
+	// target is the value the inputs cover, including any raise to fund a
+	// change output for pinned inputs.
+	target Value
+	// available is the number of UTxOs selection could draw on, which
+	// excludes inputs already used and reserved collateral.
+	available int
+}
+
+func (a *Apollo) selectCoins(required, currentInput Value) (coinSelection, error) {
 	// Withdrawals, mints, and certificate deposit refunds are implicit inputs
 	// in the balance equation, so currentInput can already cover the target
 	// with no UTxO being spent at all. The ledger still requires a non-empty
@@ -2908,20 +2919,21 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	// otherwise selection must contribute one even though no value is needed.
 	covered := currentInput.GreaterOrEqual(required)
 	topUp := false
+	requested := required
 	if covered && len(a.preselectedUtxos) > 0 {
 		// Pinned inputs that cover the target can still leave change too small
 		// to emit, which balancing then folds into the fee. While the pool can
 		// fund a change output, select for the shortfall instead.
 		changeMinimum, err := a.unemittableChangeMinimum(required, currentInput)
 		if err != nil {
-			return nil, err
+			return coinSelection{}, err
 		}
 		if changeMinimum == 0 {
-			return nil, nil
+			return coinSelection{target: required, available: a.unusedUtxoCount()}, nil
 		}
 		required, err = required.Add(NewSimpleValue(changeMinimum))
 		if err != nil {
-			return nil, fmt.Errorf("selection target overflow: %w", err)
+			return coinSelection{}, fmt.Errorf("selection target overflow: %w", err)
 		}
 		covered, topUp = false, true
 	}
@@ -2943,7 +2955,7 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	available := make([]common.Utxo, 0, len(a.utxos))
 	for _, utxo := range a.utxos {
 		if err := validateUtxo(utxo); err != nil {
-			return nil, fmt.Errorf("available UTxO is invalid: %w", err)
+			return coinSelection{}, fmt.Errorf("available UTxO is invalid: %w", err)
 		}
 		if !a.isUsed(utxoRef(utxo)) {
 			available = append(available, utxo)
@@ -2958,7 +2970,7 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 		// to, and pick deterministically so construction stays reproducible.
 		pick, pickErr := pickSingleInput(available)
 		if pickErr != nil {
-			return nil, pickErr
+			return coinSelection{}, pickErr
 		}
 		selected = []common.Utxo{pick}
 	} else {
@@ -2976,9 +2988,9 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			if topUp {
 				// Nothing left to fund the change; the pinned inputs still
 				// cover the payment and the remainder becomes fee.
-				return nil, nil
+				return coinSelection{target: requested, available: len(available)}, nil
 			}
-			return nil, selErr
+			return coinSelection{}, selErr
 		}
 	}
 	availableByRef := make(map[string]common.Utxo, len(available))
@@ -2989,32 +3001,32 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	seen := make(map[string]struct{}, len(selected))
 	for _, utxo := range selected {
 		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
-			return nil, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
+			return coinSelection{}, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
 		}
 		ref := utxoRef(utxo)
 		availableUtxo, ok := availableByRef[ref]
 		if !ok {
-			return nil, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
+			return coinSelection{}, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
 		}
 		if _, ok := seen[ref]; ok {
-			return nil, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
+			return coinSelection{}, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
 		}
 		seen[ref] = struct{}{}
 		canonical = append(canonical, availableUtxo)
 	}
 	selectedValue, err := a.sumUtxoValues(canonical)
 	if err != nil {
-		return nil, fmt.Errorf("coin selector returned invalid selection: %w", err)
+		return coinSelection{}, fmt.Errorf("coin selector returned invalid selection: %w", err)
 	}
 	if !selectedValue.GreaterOrEqual(remaining) {
-		return nil, errors.New("coin selector returned a selection that does not cover the target")
+		return coinSelection{}, errors.New("coin selector returned a selection that does not cover the target")
 	}
 
 	// Commit to usedUtxos only on success
 	for _, utxo := range canonical {
 		a.markUsed(utxoRef(utxo))
 	}
-	return canonical, nil
+	return coinSelection{utxos: canonical, target: required, available: len(available)}, nil
 }
 
 // unemittableChangeMinimum reports the min-UTxO of the change left after
@@ -4400,7 +4412,7 @@ func (a *Apollo) restoreSelectionState(s selectionState) {
 // state.
 func (a *Apollo) selectCoinsAllowingCollateralOverlap(
 	target, totalInput Value,
-) ([]common.Utxo, error) {
+) (coinSelection, error) {
 	selected, err := a.selectCoins(target, totalInput)
 	if err == nil {
 		return selected, nil
@@ -4411,9 +4423,20 @@ func (a *Apollo) selectCoinsAllowingCollateralOverlap(
 			return selected, nil
 		}
 		a.restoreCollateralReservation()
-		return nil, retryErr
+		return coinSelection{}, retryErr
 	}
-	return nil, err
+	return coinSelection{}, err
+}
+
+// unusedUtxoCount returns the number of loaded UTxOs not yet used or reserved.
+func (a *Apollo) unusedUtxoCount() int {
+	n := 0
+	for _, utxo := range a.utxos {
+		if !a.isUsed(utxoRef(utxo)) {
+			n++
+		}
+	}
+	return n
 }
 
 // collateralRequirement returns ceil(fee * collateralPercent / 100), or zero

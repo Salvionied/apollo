@@ -24,8 +24,10 @@ not fail `Complete()`; `Explain()` returns that failure instead.
 ## Contents
 
 - **Inputs**: preselected inputs, the inputs coin selection added, the final
-  inputs in transaction order, the number of UTxOs selection could draw on,
-  and the value selection last had to cover.
+  inputs in transaction order, the number of UTxOs selection could draw on
+  (excluding reserved collateral), and the value selection last had to cover,
+  including any raise to fund a change output that preselected inputs would
+  otherwise leave too small to emit.
 - **Outputs**: each payment's requested value, the payment outputs after the
   minimum-UTxO adjustment, and the final outputs. Each output records its
   minimum lovelace and the lovelace the builder added to meet it.
@@ -37,8 +39,8 @@ not fail `Complete()`; `Explain()` returns that failure instead.
   The report also records reference-script bytes, total execution units, and
   the fee reserves coin selection used.
 - **Balance**: total input, required, and output values, change, withdrawals,
-  mint and burn, certificate deposits and refunds, proposal deposits, the
-  treasury donation, and direct deposits.
+  mint and burn, certificate deposits and refunds, Conway and Dijkstra
+  proposal deposits, the treasury donation, and direct deposits.
 - **Collateral**: the collateral inputs, the collateral the fee requires, the
   total collateral, the collateral return, and whether the builder chose the
   collateral.
