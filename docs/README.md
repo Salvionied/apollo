@@ -22,6 +22,9 @@ The module path is `github.com/Salvionied/apollo/v2`. Apollo v2 requires Go
 ## Build transactions
 
 - **[Builder overview](transaction_building/README.md)**
+- **[Build reports](transaction_building/build_report.md)** — what `Explain()`
+  reports about the inputs, outputs, fee, collateral, and redeemers
+  `Complete()` chose.
 - **[Wallets and signing](wallets/README.md)**
 - **[Coin selection (MACS)](coin_selection/README.md)**
 - **[Fees and collateral](fees_and_collateral/README.md)**

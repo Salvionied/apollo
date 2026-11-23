@@ -83,6 +83,10 @@ type Apollo struct {
 	loadedTx           bool
 	loadedBodyCBOR     []byte
 	loadedBodyErr      error
+	// buildReport describes the transaction Complete built; buildReportErr
+	// records why it could not be produced. Neither affects construction.
+	buildReport        *BuildReport
+	buildReportErr     error
 	targetEra          TargetEra
 	datums             []common.Datum
 	requiredSigners    []common.Blake2b224
@@ -1527,6 +1531,8 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 	}
 	a.loadedTx = true
 	a.loadedBodyErr = nil
+	a.buildReport = nil
+	a.buildReportErr = nil
 	return a, nil
 }
 
@@ -1539,6 +1545,8 @@ func (a *Apollo) Clone() *Apollo {
 		loadedTx:                   a.loadedTx,
 		loadedBodyCBOR:             bytes.Clone(a.loadedBodyCBOR),
 		loadedBodyErr:              a.loadedBodyErr,
+		buildReport:                a.buildReport.clone(),
+		buildReportErr:             a.buildReportErr,
 		targetEra:                  a.targetEra,
 		requestContext:             a.requestContext,
 		isEstimateRequired:         a.isEstimateRequired,
@@ -2123,7 +2131,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	// Build outputs from payments
-	outputs, err := a.buildOutputs()
+	outputs, requestedValues, err := a.buildOutputs()
 	if err != nil {
 		return a, err
 	}
@@ -2298,19 +2306,21 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	}
 
 	var selectedUtxos []common.Utxo
+	var selection coinSelection
 	for attempt := 0; ; attempt++ {
 		selectionTarget, targetErr := buildSelectionTarget(reserve)
 		if targetErr != nil {
 			return a, targetErr
 		}
 		preSelectionState := a.snapshotSelectionState()
-		selectedUtxos, err = a.selectCoinsAllowingCollateralOverlap(
+		selection, err = a.selectCoinsAllowingCollateralOverlap(
 			selectionTarget,
 			totalInput,
 		)
 		if err != nil {
 			return a, fmt.Errorf("coin selection failed: %w", err)
 		}
+		selectedUtxos = selection.utxos
 		if reserve >= prelimFee || attempt+1 >= maxSelectionAttempts {
 			break
 		}
@@ -2356,11 +2366,18 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	baseOutputs := make([]babbage.BabbageTransactionOutput, len(outputs))
 	copy(baseOutputs, outputs)
 
+	// Neither the inputs nor the reference inputs change below, so their
+	// reference scripts are resolved once. A forced fee does not price them,
+	// so the error only fails the build when the fee is estimated.
+	refScriptBytes, refScriptErr := a.totalReferenceScriptSize(allInputUtxos)
 	var fee int64
 	if a.forceFee {
 		fee = a.Fee
 	} else {
-		fee, err = a.estimateFee(allInputUtxos, outputs)
+		if refScriptErr != nil {
+			return a, fmt.Errorf("fee estimation failed: %w", refScriptErr)
+		}
+		fee, err = a.estimateFeeWithReferenceScripts(allInputUtxos, outputs, refScriptBytes)
 		if err != nil {
 			return a, fmt.Errorf("fee estimation failed: %w", err)
 		}
@@ -2464,7 +2481,7 @@ func (a *Apollo) Complete() (*Apollo, error) {
 		shape := string(bodyBytes)
 		nextFee := requestedFee
 		if !a.forceFee && a.Fee == 0 {
-			nextFee, err = a.estimateFee(allInputUtxos, outputs)
+			nextFee, err = a.estimateFeeWithReferenceScripts(allInputUtxos, outputs, refScriptBytes)
 			if err != nil {
 				return a, fmt.Errorf("fee re-estimation failed: %w", err)
 			}
@@ -2560,6 +2577,28 @@ func (a *Apollo) Complete() (*Apollo, error) {
 	if err := validateOutputValueSizes(a.tx.Body.TxOutputs, pp); err != nil {
 		return a, err
 	}
+
+	a.buildReport, a.buildReportErr = a.newBuildReport(buildReportInputs{
+		pp:                  pp,
+		requested:           requestedValues,
+		baseOutputs:         baseOutputs,
+		outputs:             outputs,
+		selection:           selection,
+		inputs:              allInputUtxos,
+		refScriptBytes:      refScriptBytes,
+		refScriptErr:        refScriptErr,
+		totalInput:          totalInput,
+		totalRequired:       totalRequired,
+		governanceRequired:  governanceRequired,
+		refundValue:         refundValue,
+		stakeDeposit:        stakeDeposit,
+		poolDeposit:         poolDeposit,
+		prelimFee:           prelimFee,
+		refScriptFeeReserve: refScriptFeeReserve,
+		selectionReserve:    reserve,
+		requestedFee:        requestedFee,
+		fee:                 fee,
+	})
 
 	return a, nil
 }
@@ -2721,8 +2760,11 @@ func (a *Apollo) loadUtxos() error {
 	return nil
 }
 
-func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
+// buildOutputs returns the payment outputs, raised to the minimum UTxO, and
+// the value each payment requested before that adjustment.
+func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, []Value, error) {
 	outputs := make([]babbage.BabbageTransactionOutput, 0, len(a.payments))
+	requestedValues := make([]Value, 0, len(a.payments))
 	var totalIncrease uint64
 	for i, original := range a.payments {
 		var payment PaymentI
@@ -2733,40 +2775,41 @@ func (a *Apollo) buildOutputs() ([]babbage.BabbageTransactionOutput, error) {
 			var err error
 			payment, err = cloner.ClonePayment()
 			if err != nil {
-				return nil, fmt.Errorf("clone payment %d: %w", i, err)
+				return nil, nil, fmt.Errorf("clone payment %d: %w", i, err)
 			}
 			if isNilPayment(payment) {
-				return nil, fmt.Errorf("clone payment %d: returned nil", i)
+				return nil, nil, fmt.Errorf("clone payment %d: returned nil", i)
 			}
 		} else {
-			return nil, fmt.Errorf("payment %d of type %T must implement PaymentCloner", i, original)
+			return nil, nil, fmt.Errorf("payment %d of type %T must implement PaymentCloner", i, original)
 		}
 		requested, err := payment.ToValue()
 		if err != nil {
-			return nil, fmt.Errorf("payment %d requested value: %w", i, err)
+			return nil, nil, fmt.Errorf("payment %d requested value: %w", i, err)
 		}
 		if err := payment.EnsureMinUTXO(backend.BindContext(a.requestContext, a.Context)); err != nil {
-			return nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
+			return nil, nil, fmt.Errorf("failed to ensure min UTxO: %w", err)
 		}
 		txOut, err := payment.ToTxOut()
 		if err != nil {
-			return nil, fmt.Errorf("failed to build payment output: %w", err)
+			return nil, nil, fmt.Errorf("failed to build payment output: %w", err)
 		}
 		babbageOut, err := babbageOutputOf(txOut)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		actual := babbageOut.OutputAmount.Amount
 		if actual > requested.Coin {
 			increase := actual - requested.Coin
 			if increase > a.maxPaymentIncrease-totalIncrease {
-				return nil, fmt.Errorf("payment %d requires %d lovelace (requested %d), exceeding approved minimum-UTxO increase of %d lovelace", i, actual, requested.Coin, a.maxPaymentIncrease)
+				return nil, nil, fmt.Errorf("payment %d requires %d lovelace (requested %d), exceeding approved minimum-UTxO increase of %d lovelace", i, actual, requested.Coin, a.maxPaymentIncrease)
 			}
 			totalIncrease += increase
 		}
 		outputs = append(outputs, *babbageOut)
+		requestedValues = append(requestedValues, requested)
 	}
-	return outputs, nil
+	return outputs, requestedValues, nil
 }
 
 func (a *Apollo) checkFeeLimit(fee int64) error {
@@ -2863,7 +2906,19 @@ func pickSingleInput(available []common.Utxo) (common.Utxo, error) {
 	return sorted[0], nil
 }
 
-func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error) {
+// coinSelection is the result of selectCoins: the inputs it added, the value
+// they had to cover, and the size of the pool it drew from.
+type coinSelection struct {
+	utxos []common.Utxo
+	// target is the value the inputs cover, including any raise to fund a
+	// change output for pinned inputs.
+	target Value
+	// available is the number of UTxOs selection could draw on, which
+	// excludes inputs already used and reserved collateral.
+	available int
+}
+
+func (a *Apollo) selectCoins(required, currentInput Value) (coinSelection, error) {
 	// Withdrawals, mints, and certificate deposit refunds are implicit inputs
 	// in the balance equation, so currentInput can already cover the target
 	// with no UTxO being spent at all. The ledger still requires a non-empty
@@ -2873,20 +2928,21 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	// otherwise selection must contribute one even though no value is needed.
 	covered := currentInput.GreaterOrEqual(required)
 	topUp := false
+	requested := required
 	if covered && len(a.preselectedUtxos) > 0 {
 		// Pinned inputs that cover the target can still leave change too small
 		// to emit, which balancing then folds into the fee. While the pool can
 		// fund a change output, select for the shortfall instead.
 		changeMinimum, err := a.unemittableChangeMinimum(required, currentInput)
 		if err != nil {
-			return nil, err
+			return coinSelection{}, err
 		}
 		if changeMinimum == 0 {
-			return nil, nil
+			return coinSelection{target: required, available: a.unusedUtxoCount()}, nil
 		}
 		required, err = required.Add(NewSimpleValue(changeMinimum))
 		if err != nil {
-			return nil, fmt.Errorf("selection target overflow: %w", err)
+			return coinSelection{}, fmt.Errorf("selection target overflow: %w", err)
 		}
 		covered, topUp = false, true
 	}
@@ -2908,7 +2964,7 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	available := make([]common.Utxo, 0, len(a.utxos))
 	for _, utxo := range a.utxos {
 		if err := validateUtxo(utxo); err != nil {
-			return nil, fmt.Errorf("available UTxO is invalid: %w", err)
+			return coinSelection{}, fmt.Errorf("available UTxO is invalid: %w", err)
 		}
 		if !a.isUsed(utxoRef(utxo)) {
 			available = append(available, utxo)
@@ -2923,7 +2979,7 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 		// to, and pick deterministically so construction stays reproducible.
 		pick, pickErr := pickSingleInput(available)
 		if pickErr != nil {
-			return nil, pickErr
+			return coinSelection{}, pickErr
 		}
 		selected = []common.Utxo{pick}
 	} else {
@@ -2941,9 +2997,9 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 			if topUp {
 				// Nothing left to fund the change; the pinned inputs still
 				// cover the payment and the remainder becomes fee.
-				return nil, nil
+				return coinSelection{target: requested, available: len(available)}, nil
 			}
-			return nil, selErr
+			return coinSelection{}, selErr
 		}
 	}
 	availableByRef := make(map[string]common.Utxo, len(available))
@@ -2954,32 +3010,32 @@ func (a *Apollo) selectCoins(required, currentInput Value) ([]common.Utxo, error
 	seen := make(map[string]struct{}, len(selected))
 	for _, utxo := range selected {
 		if err := backend.ValidateAdditionalUtxo(utxo); err != nil {
-			return nil, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
+			return coinSelection{}, fmt.Errorf("coin selector returned invalid UTxO: %w", err)
 		}
 		ref := utxoRef(utxo)
 		availableUtxo, ok := availableByRef[ref]
 		if !ok {
-			return nil, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
+			return coinSelection{}, fmt.Errorf("coin selector returned unavailable UTxO %s", ref)
 		}
 		if _, ok := seen[ref]; ok {
-			return nil, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
+			return coinSelection{}, fmt.Errorf("coin selector returned duplicate UTxO %s", ref)
 		}
 		seen[ref] = struct{}{}
 		canonical = append(canonical, availableUtxo)
 	}
 	selectedValue, err := a.sumUtxoValues(canonical)
 	if err != nil {
-		return nil, fmt.Errorf("coin selector returned invalid selection: %w", err)
+		return coinSelection{}, fmt.Errorf("coin selector returned invalid selection: %w", err)
 	}
 	if !selectedValue.GreaterOrEqual(remaining) {
-		return nil, errors.New("coin selector returned a selection that does not cover the target")
+		return coinSelection{}, errors.New("coin selector returned a selection that does not cover the target")
 	}
 
 	// Commit to usedUtxos only on success
 	for _, utxo := range canonical {
 		a.markUsed(utxoRef(utxo))
 	}
-	return canonical, nil
+	return coinSelection{utxos: canonical, target: required, available: len(available)}, nil
 }
 
 // unemittableChangeMinimum reports the min-UTxO of the change left after
@@ -3123,6 +3179,21 @@ func (a *Apollo) estimatedWitnessCount(inputs []common.Utxo) int {
 }
 
 func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTransactionOutput) (int64, error) {
+	refScriptSize, err := a.totalReferenceScriptSize(inputs)
+	if err != nil {
+		return 0, err
+	}
+	return a.estimateFeeWithReferenceScripts(inputs, outputs, refScriptSize)
+}
+
+// estimateFeeWithReferenceScripts is estimateFee for inputs whose reference
+// scripts total refScriptSize bytes, so a caller that already resolved them
+// does not query the backend again.
+func (a *Apollo) estimateFeeWithReferenceScripts(
+	inputs []common.Utxo,
+	outputs []babbage.BabbageTransactionOutput,
+	refScriptSize int,
+) (int64, error) {
 	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
 	if err != nil {
 		return 0, err
@@ -3197,17 +3268,17 @@ func (a *Apollo) estimateFee(inputs []common.Utxo, outputs []babbage.BabbageTran
 			totalMem += rv.ExUnits.Memory
 			totalSteps += rv.ExUnits.Steps
 		}
-		exUnitFeeFloat := math.Ceil(float64(pp.PriceMem)*float64(totalMem) + float64(pp.PriceStep)*float64(totalSteps))
-		// Out-of-range float-to-int conversion is implementation-defined; reject
-		// rather than sign a transaction with a corrupted fee. NaN fails this check too.
-		if !(exUnitFeeFloat >= 0 && exUnitFeeFloat < float64(math.MaxInt64)) {
-			return 0, errors.New("execution unit fee out of range")
+		exUnitFee, exErr := executionUnitFee(pp, totalMem, totalSteps)
+		if exErr != nil {
+			return 0, exErr
 		}
-		fee += int64(exUnitFeeFloat)
+		fee += exUnitFee
 	}
 
-	// Add the Conway tiered reference-script fee.
-	refScriptFee, err := a.referenceScriptFeeWithParams(inputs, pp)
+	// Add the Conway tiered reference-script fee. The ledger charges it for
+	// scripts on spending and reference inputs whether or not the transaction
+	// executes them; omitting it produces FeeTooSmallUTxO.
+	refScriptFee, err := a.eraReferenceScriptFee(refScriptSize, pp)
 	if err != nil {
 		return 0, err
 	}
@@ -3228,21 +3299,6 @@ func (a *Apollo) referenceScriptFee(inputs []common.Utxo) (int64, error) {
 		return 0, nil
 	}
 	pp, err := backend.ProtocolParamsContext(a.requestContext, a.Context)
-	if err != nil {
-		return 0, err
-	}
-	return a.eraReferenceScriptFee(refScriptSize, pp)
-}
-
-// referenceScriptFeeWithParams computes the Conway tiered reference-script fee.
-// Scripts attached (via script_ref) to the outputs of the transaction's spending
-// inputs AND reference inputs are priced per byte on a growing tier (native
-// scripts included, not only Plutus). The ledger counts the union of regular and
-// reference inputs regardless of whether the transaction executes scripts, so
-// omitting it produces FeeTooSmallUTxO. The fee is naturally zero when no
-// referenced UTxO carries a script.
-func (a *Apollo) referenceScriptFeeWithParams(inputs []common.Utxo, pp backend.ProtocolParameters) (int64, error) {
-	refScriptSize, err := a.totalReferenceScriptSize(inputs)
 	if err != nil {
 		return 0, err
 	}
@@ -3270,6 +3326,20 @@ func (a *Apollo) eraReferenceScriptFee(refScriptSize int, pp backend.ProtocolPar
 		}
 	}
 	return referenceScriptFeeForSize(refScriptSize, pp)
+}
+
+// executionUnitFee prices execution units: ceil(priceMem * mem + priceStep * steps).
+func executionUnitFee(pp backend.ProtocolParameters, mem, steps int64) (int64, error) {
+	if mem == 0 && steps == 0 {
+		return 0, nil
+	}
+	fee := math.Ceil(float64(pp.PriceMem)*float64(mem) + float64(pp.PriceStep)*float64(steps))
+	// Out-of-range float-to-int conversion is implementation-defined; reject
+	// rather than sign a transaction with a corrupted fee. NaN fails this check too.
+	if !(fee >= 0 && fee < float64(math.MaxInt64)) {
+		return 0, errors.New("execution unit fee out of range")
+	}
+	return int64(fee), nil
 }
 
 func referenceScriptFeeForSize(refScriptSize int, pp backend.ProtocolParameters) (int64, error) {
@@ -4353,7 +4423,7 @@ func (a *Apollo) restoreSelectionState(s selectionState) {
 // state.
 func (a *Apollo) selectCoinsAllowingCollateralOverlap(
 	target, totalInput Value,
-) ([]common.Utxo, error) {
+) (coinSelection, error) {
 	selected, err := a.selectCoins(target, totalInput)
 	if err == nil {
 		return selected, nil
@@ -4364,9 +4434,32 @@ func (a *Apollo) selectCoinsAllowingCollateralOverlap(
 			return selected, nil
 		}
 		a.restoreCollateralReservation()
-		return nil, retryErr
+		return coinSelection{}, retryErr
 	}
-	return nil, err
+	return coinSelection{}, err
+}
+
+// unusedUtxoCount returns the number of loaded UTxOs not yet used or reserved.
+func (a *Apollo) unusedUtxoCount() int {
+	n := 0
+	for _, utxo := range a.utxos {
+		if !a.isUsed(utxoRef(utxo)) {
+			n++
+		}
+	}
+	return n
+}
+
+// collateralRequirement returns ceil(fee * collateralPercent / 100), or zero
+// when either is not positive.
+func collateralRequirement(fee int64, collateralPercent int) (int64, error) {
+	if collateralPercent <= 0 || fee <= 0 {
+		return 0, nil
+	}
+	if fee > (math.MaxInt64-99)/int64(collateralPercent) {
+		return 0, fmt.Errorf("collateral sizing overflows: fee=%d collateralPercent=%d", fee, collateralPercent)
+	}
+	return (fee*int64(collateralPercent) + 99) / 100, nil
 }
 
 // finalizeCollateral sizes and validates the total collateral and the
@@ -4403,14 +4496,10 @@ func (a *Apollo) finalizeCollateral(fee int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to get protocol params for collateral sizing: %w", err)
 	}
-	if pp.CollateralPercent <= 0 || fee <= 0 {
-		return nil
+	required, err := collateralRequirement(fee, pp.CollateralPercent)
+	if err != nil {
+		return err
 	}
-	if fee > (math.MaxInt64-99)/int64(pp.CollateralPercent) {
-		return fmt.Errorf("collateral sizing overflows: fee=%d collateralPercent=%d", fee, pp.CollateralPercent)
-	}
-	// Ceil division: ceil(fee * percent / 100).
-	required := (fee*int64(pp.CollateralPercent) + 99) / 100
 	if required <= 0 {
 		return nil
 	}

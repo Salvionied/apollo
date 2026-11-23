@@ -31,6 +31,7 @@
 * [Mint and burn](transaction_building/mint_and_burn.md)
 * [Metadata](transaction_building/metadata.md)
 * [Complete, sign, and submit](transaction_building/complete_sign_submit.md)
+* [Build reports](transaction_building/build_report.md)
 
 ## Dijkstra
 

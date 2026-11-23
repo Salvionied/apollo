@@ -8,6 +8,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Explain` returns a `BuildReport` for the transaction `Complete` built: its
+  preselected, selected, and final inputs, requested and minimum-UTxO-adjusted
+  outputs, change, fee components including change absorbed into the fee,
+  balance components, collateral, and redeemer mappings. Building the report
+  does not change construction.
 - `NativeScriptFromJSON` parses a native script from the cardano-cli
   simple-script JSON form (`sig`, `all`, `any`, `atLeast`, `after`, `before`).
   It is the parser the Koios backend already used for reference scripts, which
