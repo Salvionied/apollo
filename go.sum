@@ -11,8 +11,8 @@ github.com/aws/aws-sdk-go v1.55.6 h1:cSg4pvZ3m8dgYcgqB97MrcdjUmZ1BeMYKUxMMB89IPk
 github.com/aws/aws-sdk-go v1.55.6/go.mod h1:eRwEWoyTWFMVYVQzKMNHWP5/RV4xIUGMQfXQHfHkpNU=
 github.com/bits-and-blooms/bitset v1.25.0 h1:0Ro0qF4abCkM6SqWPVj29sFhAbMPAZpaDD7xhJ10beM=
 github.com/bits-and-blooms/bitset v1.25.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
-github.com/blinklabs-io/bursa v0.21.1 h1:GIjeP5Urix3yVUJu64tN9xq6BsnRjcua9mk3EE4YKzo=
-github.com/blinklabs-io/bursa v0.21.1/go.mod h1:AW6rpzJ+FuJhjPThVyZZtDU2ht1F4GzIIl6+eF8M0/A=
+github.com/blinklabs-io/bursa v0.26.0 h1:m8WhtIybwTri0HpHuy8FgC3MJqWLvO9t1zE1TZGOvZM=
+github.com/blinklabs-io/bursa v0.26.0/go.mod h1:bi/uzsC+XOlOTZ4iFHqmJEcz6LpMpuYZEmPpl7HrVbg=
 github.com/blinklabs-io/go-bip39 v0.2.1 h1:kE44ZAhBJ75ITHFpKT+LS+Sg4iXwo2xENRdW+y2/sLo=
 github.com/blinklabs-io/go-bip39 v0.2.1/go.mod h1:QvidBC8rXEWuylfpTNA2WbbeIDJmYvq9D6xdjFmK/Io=
 github.com/blinklabs-io/gouroboros v0.220.4 h1:SP/7/2x03kCU0bjKpQmbqKwlKO1rAgQnnnka0NW5zmY=
