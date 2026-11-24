@@ -59,7 +59,7 @@ func TestCredentialMatchesGouroboros(t *testing.T) {
 			t.Fatalf("kind %d: %v", kind, err)
 		}
 		outer := pd.(*data.Constr)
-		got, err := data.Encode(outer.Fields[0])
+		got, err := data.Encode(outer.Fields()[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,7 +101,7 @@ func TestTxOutRefMatchesShelleyInputShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	outer := pd.(*data.Constr)
-	gotRef, err := data.Encode(outer.Fields[1])
+	gotRef, err := data.Encode(outer.Fields()[1])
 	if err != nil {
 		t.Fatal(err)
 	}

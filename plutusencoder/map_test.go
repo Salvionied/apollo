@@ -23,36 +23,36 @@ func TestMarshalMapDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Map, got %T", pd)
 	}
-	if len(mapData.Pairs) != 2 {
-		t.Fatalf("expected 2 pairs, got %d", len(mapData.Pairs))
+	if mapData.Len() != 2 {
+		t.Fatalf("expected 2 pairs, got %d", mapData.Len())
 	}
 
 	// Verify map keys and values
-	key0, ok := mapData.Pairs[0][0].(*data.ByteString)
+	key0, ok := mapData.Pairs()[0][0].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString key at index 0, got %T", mapData.Pairs[0][0])
+		t.Fatalf("expected ByteString key at index 0, got %T", mapData.Pairs()[0][0])
 	}
 	if string(key0.Inner) != "name" {
 		t.Errorf("expected key 'name', got '%s'", string(key0.Inner))
 	}
-	val0, ok := mapData.Pairs[0][1].(*data.ByteString)
+	val0, ok := mapData.Pairs()[0][1].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString value at index 0, got %T", mapData.Pairs[0][1])
+		t.Fatalf("expected ByteString value at index 0, got %T", mapData.Pairs()[0][1])
 	}
 	if string(val0.Inner) != "test" {
 		t.Errorf("expected value 'test', got '%s'", string(val0.Inner))
 	}
 
-	key1, ok := mapData.Pairs[1][0].(*data.ByteString)
+	key1, ok := mapData.Pairs()[1][0].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString key at index 1, got %T", mapData.Pairs[1][0])
+		t.Fatalf("expected ByteString key at index 1, got %T", mapData.Pairs()[1][0])
 	}
 	if string(key1.Inner) != "value" {
 		t.Errorf("expected key 'value', got '%s'", string(key1.Inner))
 	}
-	val1, ok := mapData.Pairs[1][1].(*data.Integer)
+	val1, ok := mapData.Pairs()[1][1].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer value at index 1, got %T", mapData.Pairs[1][1])
+		t.Fatalf("expected Integer value at index 1, got %T", mapData.Pairs()[1][1])
 	}
 	if val1.Inner.Int64() != 99 {
 		t.Errorf("expected value 99, got %d", val1.Inner.Int64())

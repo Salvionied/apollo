@@ -25,23 +25,23 @@ func TestMarshalSimpleDatum(t *testing.T) {
 	if !constrTagEqual(constr.Tag, 0) {
 		t.Errorf("expected tag 0, got %d", constr.Tag)
 	}
-	if len(constr.Fields) != 2 {
-		t.Fatalf("expected 2 fields, got %d", len(constr.Fields))
+	if constr.NumFields() != 2 {
+		t.Fatalf("expected 2 fields, got %d", constr.NumFields())
 	}
 
 	// Check Amount field
-	intField, ok := constr.Fields[0].(*data.Integer)
+	intField, ok := constr.Fields()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	if intField.Inner.Int64() != 42 {
 		t.Errorf("expected 42, got %d", intField.Inner.Int64())
 	}
 
 	// Check Name field
-	bsField, ok := constr.Fields[1].(*data.ByteString)
+	bsField, ok := constr.Fields()[1].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString, got %T", constr.Fields[1])
+		t.Fatalf("expected ByteString, got %T", constr.Fields()[1])
 	}
 	if string(bsField.Inner) != "hello" {
 		t.Errorf("expected 'hello', got '%s'", string(bsField.Inner))
@@ -152,9 +152,9 @@ func TestMarshalUintField(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	intField, ok := constr.Fields[0].(*data.Integer)
+	intField, ok := constr.Fields()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	if intField.Inner.Uint64() != 42 {
 		t.Errorf("expected 42, got %d", intField.Inner.Uint64())
@@ -259,8 +259,8 @@ func TestMarshalIndefVsDefEncoding(t *testing.T) {
 	}
 
 	// Fields must be the same.
-	if len(defConstr.Fields) != len(indefConstr.Fields) {
-		t.Fatalf("field count mismatch: def=%d indef=%d", len(defConstr.Fields), len(indefConstr.Fields))
+	if defConstr.NumFields() != indefConstr.NumFields() {
+		t.Fatalf("field count mismatch: def=%d indef=%d", defConstr.NumFields(), indefConstr.NumFields())
 	}
 
 	// The CBOR encoding must differ due to the indef flag.

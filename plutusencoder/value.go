@@ -101,11 +101,11 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 		return Value{}, fmt.Errorf("expected Plutus Value map or V4 Value, got %T", pd)
 	}
 
-	assets := make(map[common.Blake2b224]map[cbor.ByteString]uint64, len(outer.Pairs))
+	assets := make(map[common.Blake2b224]map[cbor.ByteString]uint64, outer.Len())
 	seenAda := false
 	var lovelace uint64
 
-	for _, pair := range outer.Pairs {
+	for _, pair := range outer.Pairs() {
 		policyBytes, ok := pair[0].(*data.ByteString)
 		if !ok || plutusNil(policyBytes) {
 			return Value{}, fmt.Errorf("expected byte string policy id, got %T", pair[0])
@@ -120,17 +120,17 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 				return Value{}, errors.New("duplicate lovelace policy in Plutus Value")
 			}
 			seenAda = true
-			if len(innerMap.Pairs) == 0 {
+			if innerMap.Len() == 0 {
 				continue
 			}
-			if len(innerMap.Pairs) != 1 {
+			if innerMap.Len() != 1 {
 				return Value{}, errors.New("lovelace policy must contain one entry")
 			}
-			nameBytes, ok := innerMap.Pairs[0][0].(*data.ByteString)
+			nameBytes, ok := innerMap.Pairs()[0][0].(*data.ByteString)
 			if !ok || plutusNil(nameBytes) || len(nameBytes.Inner) != 0 {
 				return Value{}, errors.New("lovelace asset name must be empty")
 			}
-			qty, err := valueQuantity(innerMap.Pairs[0][1])
+			qty, err := valueQuantity(innerMap.Pairs()[0][1])
 			if err != nil {
 				return Value{}, err
 			}
@@ -146,8 +146,8 @@ func unmarshalPlutusValue(pd data.PlutusData) (Value, error) {
 			return Value{}, errors.New("duplicate policy id in Plutus Value")
 		}
 
-		policyAssets := make(map[cbor.ByteString]uint64, len(innerMap.Pairs))
-		for _, item := range innerMap.Pairs {
+		policyAssets := make(map[cbor.ByteString]uint64, innerMap.Len())
+		for _, item := range innerMap.Pairs() {
 			nameBytes, ok := item[0].(*data.ByteString)
 			if !ok || plutusNil(nameBytes) || len(nameBytes.Inner) > valueMaxTokenNameSize {
 				return Value{}, fmt.Errorf("expected token name up to %d bytes", valueMaxTokenNameSize)

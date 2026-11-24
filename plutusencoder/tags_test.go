@@ -68,7 +68,7 @@ func TestMarshalEmptyContainerTagStillDefaultsToIndefList(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected List, got %T", pd)
 	}
-	if len(list.Items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(list.Items))
+	if list.Len() != 1 {
+		t.Fatalf("expected 1 item, got %d", list.Len())
 	}
 }

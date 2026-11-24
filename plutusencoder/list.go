@@ -129,12 +129,12 @@ func unmarshalFromList(pd data.PlutusData, val reflect.Value, typ reflect.Type, 
 		if !constrTagEqual(v.Tag, expectedConstr) {
 			return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, v.Tag)
 		}
-		fields = v.Fields
+		fields = v.Fields()
 	case *data.List:
 		if hasExpectedConstr {
 			return fmt.Errorf("expected Constr with tag %d, got List", expectedConstr)
 		}
-		fields = v.Items
+		fields = v.Items()
 	default:
 		return fmt.Errorf("expected Constr or List, got %T", pd)
 	}
@@ -201,7 +201,7 @@ func unmarshalSliceOrNested(pd data.PlutusData, fieldVal reflect.Value, field re
 		if !ok || plutusNil(list) {
 			return fmt.Errorf("expected List for slice field %s, got %T", field.Name, pd)
 		}
-		items := list.Items
+		items := list.Items()
 
 		elemType := fieldVal.Type().Elem()
 		result := reflect.MakeSlice(fieldVal.Type(), 0, unmarshalPrealloc(len(items)))

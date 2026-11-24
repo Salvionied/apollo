@@ -47,13 +47,13 @@ func TestRoundTripCustomMarshalerSliceElements(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	list, ok := constr.Fields[0].(*data.List)
+	list, ok := constr.Fields()[0].(*data.List)
 	if !ok {
-		t.Fatalf("expected quantity list, got %T", constr.Fields[0])
+		t.Fatalf("expected quantity list, got %T", constr.Fields()[0])
 	}
-	first, ok := list.Items[0].(*data.Integer)
+	first, ok := list.Items()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected custom integer, got %T", list.Items[0])
+		t.Fatalf("expected custom integer, got %T", list.Items()[0])
 	}
 	if first.Inner.Int64() != 101 {
 		t.Fatalf("expected custom marshaler to add offset 100, got %d", first.Inner.Int64())

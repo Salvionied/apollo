@@ -18,12 +18,12 @@ func TestMarshalBoolDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	if len(constr.Fields) != 1 {
-		t.Fatalf("expected 1 field, got %d", len(constr.Fields))
+	if constr.NumFields() != 1 {
+		t.Fatalf("expected 1 field, got %d", constr.NumFields())
 	}
-	boolConstr, ok := constr.Fields[0].(*data.Constr)
+	boolConstr, ok := constr.Fields()[0].(*data.Constr)
 	if !ok {
-		t.Fatalf("expected Constr for bool, got %T", constr.Fields[0])
+		t.Fatalf("expected Constr for bool, got %T", constr.Fields()[0])
 	}
 	if !constrTagEqual(boolConstr.Tag, 1) {
 		t.Errorf("expected tag 1 for true, got %d", boolConstr.Tag)
@@ -41,9 +41,9 @@ func TestMarshalBoolFalse(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	boolConstr, ok := constr.Fields[0].(*data.Constr)
+	boolConstr, ok := constr.Fields()[0].(*data.Constr)
 	if !ok {
-		t.Fatalf("expected Constr for bool field, got %T", constr.Fields[0])
+		t.Fatalf("expected Constr for bool field, got %T", constr.Fields()[0])
 	}
 	if !constrTagEqual(boolConstr.Tag, 0) {
 		t.Errorf("expected tag 0 for false, got %d", boolConstr.Tag)
@@ -62,9 +62,9 @@ func TestMarshalBigIntDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	intField, ok := constr.Fields[0].(*data.Integer)
+	intField, ok := constr.Fields()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	if intField.Inner.Cmp(bigVal) != 0 {
 		t.Errorf("expected %s, got %s", bigVal.String(), intField.Inner.String())
@@ -82,9 +82,9 @@ func TestMarshalHexDatum(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	bsField, ok := constr.Fields[0].(*data.ByteString)
+	bsField, ok := constr.Fields()[0].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString, got %T", constr.Fields[0])
+		t.Fatalf("expected ByteString, got %T", constr.Fields()[0])
 	}
 	if len(bsField.Inner) != 4 {
 		t.Fatalf("expected 4 bytes, got %d", len(bsField.Inner))
@@ -171,9 +171,9 @@ func TestMarshalBigIntNil(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	intField, ok := constr.Fields[0].(*data.Integer)
+	intField, ok := constr.Fields()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	if intField.Inner.Int64() != 0 {
 		t.Errorf("expected 0 for nil BigInt, got %d", intField.Inner.Int64())
@@ -194,9 +194,9 @@ func TestRoundTripNegativeBigInt(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Constr, got %T", pd)
 	}
-	intField, ok := constr.Fields[0].(*data.Integer)
+	intField, ok := constr.Fields()[0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	if intField.Inner.Sign() >= 0 {
 		t.Errorf("expected negative value, got %s", intField.Inner.String())
@@ -240,9 +240,9 @@ func TestRoundTripEmptyBoolConstructors(t *testing.T) {
 			t.Fatal(err)
 		}
 		constr := pd.(*data.Constr)
-		boolConstr := constr.Fields[0].(*data.Constr)
-		if len(boolConstr.Fields) != 0 {
-			t.Fatalf("expected empty Bool Constr, got %d fields", len(boolConstr.Fields))
+		boolConstr := constr.Fields()[0].(*data.Constr)
+		if boolConstr.NumFields() != 0 {
+			t.Fatalf("expected empty Bool Constr, got %d fields", boolConstr.NumFields())
 		}
 		var decoded BoolDatum
 		if err := UnmarshalPlutus(pd, &decoded); err != nil {

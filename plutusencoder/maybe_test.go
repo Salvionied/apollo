@@ -40,12 +40,12 @@ func TestMaybeNothingAndJust(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr := pd.(*data.Constr)
-	if len(constr.Fields) != 3 {
-		t.Fatalf("expected 3 fields, got %d", len(constr.Fields))
+	if constr.NumFields() != 3 {
+		t.Fatalf("expected 3 fields, got %d", constr.NumFields())
 	}
-	for i, field := range constr.Fields {
+	for i, field := range constr.Fields() {
 		got, ok := field.(*data.Constr)
-		if !ok || !constrTagEqual(got.Tag, 0) || len(got.Fields) != 1 {
+		if !ok || !constrTagEqual(got.Tag, 0) || got.NumFields() != 1 {
 			t.Fatalf("field %d: expected Just, got %#v", i, field)
 		}
 	}
@@ -67,9 +67,9 @@ func TestMaybeNothingAndJust(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr = pd.(*data.Constr)
-	for i, field := range constr.Fields {
+	for i, field := range constr.Fields() {
 		got, ok := field.(*data.Constr)
-		if !ok || !constrTagEqual(got.Tag, 1) || len(got.Fields) != 0 {
+		if !ok || !constrTagEqual(got.Tag, 1) || got.NumFields() != 0 {
 			t.Fatalf("field %d: expected Nothing, got %#v", i, field)
 		}
 	}
@@ -121,11 +121,11 @@ func TestMaybeAddressCoversShelleyForms(t *testing.T) {
 			t.Fatalf("type %d: marshal: %v", addr.Type(), err)
 		}
 		outer := pd.(*data.Constr)
-		just, ok := outer.Fields[1].(*data.Constr)
-		if !ok || !constrTagEqual(just.Tag, 0) || len(just.Fields) != 1 {
-			t.Fatalf("type %d: expected Just Address, got %#v", addr.Type(), outer.Fields[1])
+		just, ok := outer.Fields()[1].(*data.Constr)
+		if !ok || !constrTagEqual(just.Tag, 0) || just.NumFields() != 1 {
+			t.Fatalf("type %d: expected Just Address, got %#v", addr.Type(), outer.Fields()[1])
 		}
-		got, err := data.Encode(just.Fields[0])
+		got, err := data.Encode(just.Fields()[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -209,9 +209,9 @@ func TestMaybeCustomCodecs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, field := range pd.(*data.Constr).Fields {
+	for i, field := range pd.(*data.Constr).Fields() {
 		just := field.(*data.Constr)
-		integer := just.Fields[0].(*data.Integer)
+		integer := just.Fields()[0].(*data.Integer)
 		if integer.Inner.Cmp(big.NewInt(101)) != 0 {
 			t.Fatalf("field %d encoded %s, want 101", i, integer.Inner)
 		}
@@ -237,8 +237,8 @@ func TestMaybeBigInt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		just := pd.(*data.Constr).Fields[0].(*data.Constr)
-		if !constrTagEqual(just.Tag, 0) || just.Fields[0].(*data.Integer).Inner.Cmp(want) != 0 {
+		just := pd.(*data.Constr).Fields()[0].(*data.Constr)
+		if !constrTagEqual(just.Tag, 0) || just.Fields()[0].(*data.Integer).Inner.Cmp(want) != 0 {
 			t.Fatalf("Just %s encoded as %#v", want, just)
 		}
 		var decoded maybeBigDatum
@@ -253,8 +253,8 @@ func TestMaybeBigInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nothing := pd.(*data.Constr).Fields[0].(*data.Constr)
-	if !constrTagEqual(nothing.Tag, 1) || len(nothing.Fields) != 0 {
+	nothing := pd.(*data.Constr).Fields()[0].(*data.Constr)
+	if !constrTagEqual(nothing.Tag, 1) || nothing.NumFields() != 0 {
 		t.Fatalf("nil *big.Int: %#v", nothing)
 	}
 }
@@ -277,9 +277,9 @@ func TestMaybeScalarsIncludeZeroAndEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range pd.(*data.Constr).Fields {
+	for _, field := range pd.(*data.Constr).Fields() {
 		just := field.(*data.Constr)
-		if !constrTagEqual(just.Tag, 0) || len(just.Fields) != 1 {
+		if !constrTagEqual(just.Tag, 0) || just.NumFields() != 1 {
 			t.Fatalf("zero scalar was not Just: %#v", field)
 		}
 	}

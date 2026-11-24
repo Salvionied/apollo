@@ -51,8 +51,8 @@ func TestIgnoreListField(t *testing.T) {
 	if !constrTagEqual(constr.Tag, 1) {
 		t.Fatalf("expected tag 1, got %d", constr.Tag)
 	}
-	if len(constr.Fields) != 2 {
-		t.Fatalf("ignored field consumed a wire slot: expected 2 fields, got %d", len(constr.Fields))
+	if constr.NumFields() != 2 {
+		t.Fatalf("ignored field consumed a wire slot: expected 2 fields, got %d", constr.NumFields())
 	}
 
 	var decoded ignoreListDatum
@@ -85,10 +85,10 @@ func TestIgnoreMapField(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Map, got %T", pd)
 	}
-	if len(mapData.Pairs) != 2 {
-		t.Fatalf("ignored field became a map key: expected 2 pairs, got %d", len(mapData.Pairs))
+	if mapData.Len() != 2 {
+		t.Fatalf("ignored field became a map key: expected 2 pairs, got %d", mapData.Len())
 	}
-	for i, pair := range mapData.Pairs {
+	for i, pair := range mapData.Pairs() {
 		key, ok := pair[0].(*data.ByteString)
 		if !ok {
 			t.Fatalf("pair %d key: expected ByteString, got %T", i, pair[0])
@@ -156,20 +156,20 @@ func TestIgnoreFieldsInSliceMapEntries(t *testing.T) {
 				t.Fatal(err)
 			}
 			constr, ok := pd.(*data.Constr)
-			if !ok || len(constr.Fields) != 1 {
+			if !ok || constr.NumFields() != 1 {
 				t.Fatalf("expected constructor with Map, got %T", pd)
 			}
-			mapData, ok := constr.Fields[0].(*data.Map)
-			if !ok || len(mapData.Pairs) != 1 {
-				t.Fatalf("expected one Map entry, got %T", constr.Fields[0])
+			mapData, ok := constr.Fields()[0].(*data.Map)
+			if !ok || mapData.Len() != 1 {
+				t.Fatalf("expected one Map entry, got %T", constr.Fields()[0])
 			}
-			key, ok := mapData.Pairs[0][0].(*data.ByteString)
+			key, ok := mapData.Pairs()[0][0].(*data.ByteString)
 			if !ok || string(key.Inner) != "name" {
-				t.Fatalf("Map key = %v, want name", mapData.Pairs[0][0])
+				t.Fatalf("Map key = %v, want name", mapData.Pairs()[0][0])
 			}
-			value, ok := mapData.Pairs[0][1].(*data.Integer)
+			value, ok := mapData.Pairs()[0][1].(*data.Integer)
 			if !ok || value.Inner.Int64() != 42 {
-				t.Fatalf("Map value = %v, want 42", mapData.Pairs[0][1])
+				t.Fatalf("Map value = %v, want 42", mapData.Pairs()[0][1])
 			}
 			switch tc.name {
 			case "before key":

@@ -135,20 +135,20 @@ func scriptDataJSON(t *testing.T, d data.PlutusData) any {
 	t.Helper()
 	switch v := d.(type) {
 	case *data.Constr:
-		fields := make([]any, 0, len(v.Fields))
-		for _, f := range v.Fields {
+		fields := make([]any, 0, v.NumFields())
+		for _, f := range v.Fields() {
 			fields = append(fields, scriptDataJSON(t, f))
 		}
 		return map[string]any{"constructor": v.Tag, "fields": fields}
 	case *data.Map:
-		pairs := make([]any, 0, len(v.Pairs))
-		for _, pair := range v.Pairs {
+		pairs := make([]any, 0, v.Len())
+		for _, pair := range v.Pairs() {
 			pairs = append(pairs, map[string]any{"k": scriptDataJSON(t, pair[0]), "v": scriptDataJSON(t, pair[1])})
 		}
 		return map[string]any{"map": pairs}
 	case *data.List:
-		items := make([]any, 0, len(v.Items))
-		for _, item := range v.Items {
+		items := make([]any, 0, v.Len())
+		for _, item := range v.Items() {
 			items = append(items, scriptDataJSON(t, item))
 		}
 		return map[string]any{"list": items}

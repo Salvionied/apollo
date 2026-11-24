@@ -232,11 +232,11 @@ func TestAssetMapAndTupleStayDistinct(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr := pd.(*data.Constr)
-	if _, ok := constr.Fields[0].(*data.Map); !ok {
-		t.Fatalf("field 0 must be a Plutus Map, got %T", constr.Fields[0])
+	if _, ok := constr.Fields()[0].(*data.Map); !ok {
+		t.Fatalf("field 0 must be a Plutus Map, got %T", constr.Fields()[0])
 	}
-	if _, ok := constr.Fields[1].(*data.List); !ok {
-		t.Fatalf("field 1 must be a Plutus List tuple, got %T", constr.Fields[1])
+	if _, ok := constr.Fields()[1].(*data.List); !ok {
+		t.Fatalf("field 1 must be a Plutus List tuple, got %T", constr.Fields()[1])
 	}
 
 	var decoded vaultDatum
@@ -247,7 +247,7 @@ func TestAssetMapAndTupleStayDistinct(t *testing.T) {
 		t.Fatalf("unexpected decoded vault: %+v", decoded)
 	}
 
-	swapped := data.NewConstr(0, constr.Fields[1], constr.Fields[0])
+	swapped := data.NewConstr(0, constr.Fields()[1], constr.Fields()[0])
 	if err := bp.DecodeDatum("vault.spend", swapped, &decoded); err == nil {
 		t.Fatal("expected swapped map and tuple encodings to fail")
 	}
@@ -466,7 +466,7 @@ func TestGovernanceFixtureMatchesGouroborosAndBuildsVoteTx(t *testing.T) {
 		if err != nil {
 			t.Fatalf("action %d encode: %v", idx, err)
 		}
-		if pd.(*data.Constr).Fields[1].(*data.Constr).Tag.Cmp(big.NewInt(int64(idx))) != 0 {
+		if pd.(*data.Constr).Fields()[1].(*data.Constr).Tag.Cmp(big.NewInt(int64(idx))) != 0 {
 			t.Fatalf("action %d encoded with wrong constructor tag", idx)
 		}
 		var out govProposalDatum

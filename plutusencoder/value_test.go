@@ -49,7 +49,7 @@ func TestValueAdaOnlyNativeOnlyAndCombined(t *testing.T) {
 		t.Fatal(err)
 	}
 	outer := pd.(*data.Constr)
-	gotNative, err := data.Encode(outer.Fields[0])
+	gotNative, err := data.Encode(outer.Fields()[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +97,8 @@ func TestV4ValueTaggedRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	outer := pd.(*data.Constr)
-	if _, ok := outer.Fields[0].(*data.Value); !ok {
-		t.Fatalf("expected *data.Value (CBOR tag 1401), got %T", outer.Fields[0])
+	if _, ok := outer.Fields()[0].(*data.Value); !ok {
+		t.Fatalf("expected *data.Value (CBOR tag 1401), got %T", outer.Fields()[0])
 	}
 	raw, err := data.Encode(pd)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestValueZeroQuantityIsKeptOnDecodeAndDroppedOnEncode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded.(*data.Constr).Fields[0].(*data.Map).Pairs) != 0 {
+	if encoded.(*data.Constr).Fields()[0].(*data.Map).Len() != 0 {
 		t.Fatal("encoding a zero lovelace quantity must omit it")
 	}
 
@@ -201,7 +201,7 @@ func TestValueZeroQuantityIsKeptOnDecodeAndDroppedOnEncode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded.(*data.Constr).Fields[0].(*data.Map).Pairs) != 0 {
+	if encoded.(*data.Constr).Fields()[0].(*data.Map).Len() != 0 {
 		t.Fatal("encoding a zero asset quantity must omit it")
 	}
 }
@@ -221,7 +221,7 @@ func TestValueLenientMapBecomesCanonical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pairs := encoded.(*data.Constr).Fields[0].(*data.Map).Pairs
+	pairs := encoded.(*data.Constr).Fields()[0].(*data.Map).Pairs()
 	if len(pairs) != 2 || !bytes.Equal(pairs[0][0].(*data.ByteString).Inner, low) {
 		t.Fatal("re-encode did not sort policy ids")
 	}
@@ -237,7 +237,7 @@ func TestValueLenientMapBecomesCanonical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded.(*data.Constr).Fields[0].(*data.Map).Pairs) != 0 {
+	if encoded.(*data.Constr).Fields()[0].(*data.Map).Len() != 0 {
 		t.Fatal("re-encode kept an empty token map")
 	}
 }
@@ -265,7 +265,7 @@ func TestValueRejectsLongTokenNameAndGoldenHex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := data.Encode(pd.(*data.Constr).Fields[0])
+	raw, err := data.Encode(pd.(*data.Constr).Fields()[0])
 	if err != nil {
 		t.Fatal(err)
 	}

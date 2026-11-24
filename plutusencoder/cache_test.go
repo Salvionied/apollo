@@ -72,12 +72,12 @@ func TestFirstBlankFieldWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || !constrTagEqual(constr.Tag, 1) || len(constr.Fields) != 1 {
+	if !ok || !constrTagEqual(constr.Tag, 1) || constr.NumFields() != 1 {
 		t.Fatalf("expected constructor 1 with one field, got %#v", pd)
 	}
-	integer, ok := constr.Fields[0].(*data.Integer)
+	integer, ok := constr.Fields()[0].(*data.Integer)
 	if !ok || integer.Inner == nil || integer.Inner.Int64() != 5 {
-		t.Fatalf("expected integer 5, got %#v", constr.Fields[0])
+		t.Fatalf("expected integer 5, got %#v", constr.Fields()[0])
 	}
 }
 
