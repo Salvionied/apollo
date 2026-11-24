@@ -28,12 +28,12 @@ func TestMapOmitEmptyValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Map, got %T", pd)
 	}
-	if len(mapData.Pairs) != 1 {
-		t.Fatalf("expected only the required name key, got %d pairs", len(mapData.Pairs))
+	if mapData.Len() != 1 {
+		t.Fatalf("expected only the required name key, got %d pairs", mapData.Len())
 	}
-	key, ok := mapData.Pairs[0][0].(*data.ByteString)
+	key, ok := mapData.Pairs()[0][0].(*data.ByteString)
 	if !ok {
-		t.Fatalf("expected ByteString key, got %T", mapData.Pairs[0][0])
+		t.Fatalf("expected ByteString key, got %T", mapData.Pairs()[0][0])
 	}
 	if string(key.Inner) != "name" {
 		t.Fatalf("expected only name key, got %q", string(key.Inner))
@@ -66,8 +66,8 @@ func TestMapOmitEmptyKeepsNonZeroValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Map, got %T", pd)
 	}
-	if len(mapData.Pairs) != 6 {
-		t.Fatalf("expected all 6 keys, got %d", len(mapData.Pairs))
+	if mapData.Len() != 6 {
+		t.Fatalf("expected all 6 keys, got %d", mapData.Len())
 	}
 
 	var decoded omitMapDatum
@@ -91,7 +91,7 @@ func TestListOmitEmptyDropsTrailingZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || len(constr.Fields) != 1 {
+	if !ok || constr.NumFields() != 1 {
 		t.Fatalf("expected one field, got %#v", pd)
 	}
 
@@ -111,7 +111,7 @@ func TestListOmitEmptyKeepsTrailingValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || len(constr.Fields) != 2 {
+	if !ok || constr.NumFields() != 2 {
 		t.Fatalf("expected two fields, got %#v", pd)
 	}
 	var decoded trailingOmitList
@@ -146,7 +146,7 @@ func TestIndefListOmitEmptyDropsTrailingZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || len(constr.Fields) != 1 {
+	if !ok || constr.NumFields() != 1 {
 		t.Fatalf("expected one field, got %#v", pd)
 	}
 	var decoded trailing
@@ -169,7 +169,7 @@ func TestListWithoutOmitEmptyKeepsZeroFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || len(constr.Fields) != 2 {
+	if !ok || constr.NumFields() != 2 {
 		t.Fatalf("zero fields must stay on the wire, got %#v", pd)
 	}
 	var decoded required
@@ -204,7 +204,7 @@ func TestMaybeOmitEmptyKeepsJustZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pd.(*data.Constr).Fields) != 2 {
+	if pd.(*data.Constr).NumFields() != 2 {
 		t.Fatalf("Just 0 was dropped: %#v", pd)
 	}
 	var decoded last
@@ -224,7 +224,7 @@ func TestMaybeOmitEmptyKeepsJustZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pd.(*data.Constr).Fields) != 2 {
+	if pd.(*data.Constr).NumFields() != 2 {
 		t.Fatalf("Just 0 before a required field was treated as a hole: %#v", pd)
 	}
 }
@@ -246,8 +246,8 @@ func TestOmitEmptyHonorsPointerIsZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pd.(*data.Constr).Fields) != 2 {
-		t.Fatalf("expected name and Just 0, got %d fields", len(pd.(*data.Constr).Fields))
+	if pd.(*data.Constr).NumFields() != 2 {
+		t.Fatalf("expected name and Just 0, got %d fields", pd.(*data.Constr).NumFields())
 	}
 }
 
@@ -316,8 +316,8 @@ func TestReusedListAndMapClearMissingFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	mapData := pd.(*data.Map)
-	if len(mapData.Pairs) != 1 {
-		t.Fatalf("nil Maybe was encoded, pairs %d", len(mapData.Pairs))
+	if mapData.Len() != 1 {
+		t.Fatalf("nil Maybe was encoded, pairs %d", mapData.Len())
 	}
 	mappedDecoded := mapped{Amount: 7, Flag: &flag}
 	if err := UnmarshalPlutus(pd, &mappedDecoded); err != nil {

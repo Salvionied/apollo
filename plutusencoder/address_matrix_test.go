@@ -173,31 +173,31 @@ func marshalCarrier(t *testing.T, addr common.Address, carrier int) (data.Plutus
 		if err != nil {
 			t.Fatal(err)
 		}
-		return pd, pd.(*data.Constr).Fields[0]
+		return pd, pd.(*data.Constr).Fields()[0]
 	case 1:
 		pd, err := MarshalPlutus(&addrMaybe{A: &addr})
 		if err != nil {
 			t.Fatal(err)
 		}
-		just := pd.(*data.Constr).Fields[0].(*data.Constr)
-		if !constrTagEqual(just.Tag, 0) || len(just.Fields) != 1 {
+		just := pd.(*data.Constr).Fields()[0].(*data.Constr)
+		if !constrTagEqual(just.Tag, 0) || just.NumFields() != 1 {
 			t.Fatalf("Maybe address: expected Just, got %#v", just)
 		}
-		return pd, just.Fields[0]
+		return pd, just.Fields()[0]
 	case 2:
 		pd, err := MarshalPlutus(&addrList{Items: []addrItem{{A: addr}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		list := pd.(*data.Constr).Fields[0].(*data.List)
-		item := list.Items[0].(*data.Constr)
-		return pd, item.Fields[0]
+		list := pd.(*data.Constr).Fields()[0].(*data.List)
+		item := list.Items()[0].(*data.Constr)
+		return pd, item.Fields()[0]
 	case 3:
 		pd, err := MarshalPlutus(&addrMap{A: addr})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return pd, pd.(*data.Map).Pairs[0][1]
+		return pd, pd.(*data.Map).Pairs()[0][1]
 	default:
 		t.Fatalf("carrier %d", carrier)
 		return nil, nil

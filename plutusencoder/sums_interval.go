@@ -84,7 +84,7 @@ func unmarshalEither(pd data.PlutusData, fieldVal reflect.Value, cfg decodeConfi
 		return err
 	}
 	constr, ok := pd.(*data.Constr)
-	if !ok || constr == nil || len(constr.Fields) != 1 {
+	if !ok || constr == nil || constr.NumFields() != 1 {
 		return unexpectedConstr("Either constructor with 1 field", pd)
 	}
 	leftField := fieldVal.Field(leftIdx)
@@ -95,14 +95,14 @@ func unmarshalEither(pd data.PlutusData, fieldVal reflect.Value, cfg decodeConfi
 	switch {
 	case constrTagEqual(constr.Tag, 0):
 		ptr := reflect.New(leftField.Type().Elem())
-		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(leftIdx), cfg); err != nil {
+		if err := unmarshalSumElement(constr.Fields()[0], ptr.Elem(), fieldVal.Type().Field(leftIdx), cfg); err != nil {
 			return err
 		}
 		leftField.Set(ptr)
 		return nil
 	case constrTagEqual(constr.Tag, 1):
 		ptr := reflect.New(rightField.Type().Elem())
-		if err := unmarshalSumElement(constr.Fields[0], ptr.Elem(), fieldVal.Type().Field(rightIdx), cfg); err != nil {
+		if err := unmarshalSumElement(constr.Fields()[0], ptr.Elem(), fieldVal.Type().Field(rightIdx), cfg); err != nil {
 			return err
 		}
 		rightField.Set(ptr)
@@ -227,24 +227,24 @@ func unmarshalOutputDatum(pd data.PlutusData) (OutputDatum, error) {
 	}
 	switch {
 	case constrTagEqual(constr.Tag, 0):
-		if len(constr.Fields) != 0 {
+		if constr.NumFields() != 0 {
 			return OutputDatum{}, unexpectedConstr("OutputDatum constructor 0 with no fields", pd)
 		}
 		return OutputDatum{}, nil
 	case constrTagEqual(constr.Tag, 1):
-		if len(constr.Fields) != 1 {
+		if constr.NumFields() != 1 {
 			return OutputDatum{}, unexpectedConstr("datum-hash OutputDatum constructor 1 with 1 field", pd)
 		}
-		raw, ok := constr.Fields[0].(*data.ByteString)
+		raw, ok := constr.Fields()[0].(*data.ByteString)
 		if !ok || plutusNil(raw) || len(raw.Inner) != common.Blake2b256Size {
 			return OutputDatum{}, fmt.Errorf("expected %d-byte datum hash", common.Blake2b256Size)
 		}
 		return OutputDatum{Hash: append([]byte(nil), raw.Inner...)}, nil
 	case constrTagEqual(constr.Tag, 2):
-		if len(constr.Fields) != 1 || plutusNil(constr.Fields[0]) {
+		if constr.NumFields() != 1 || plutusNil(constr.Fields()[0]) {
 			return OutputDatum{}, unexpectedConstr("inline OutputDatum constructor 2 with 1 field", pd)
 		}
-		return OutputDatum{Inline: constr.Fields[0]}, nil
+		return OutputDatum{Inline: constr.Fields()[0]}, nil
 	default:
 		return OutputDatum{}, unexpectedConstr("OutputDatum constructor 0, 1, or 2", pd)
 	}
@@ -283,14 +283,14 @@ func marshalIntervalBound(b IntervalBound) (data.PlutusData, error) {
 
 func unmarshalInterval(pd data.PlutusData) (Interval, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || constr.NumFields() != 2 {
 		return Interval{}, unexpectedConstr("Interval constructor 0 with 2 fields", pd)
 	}
-	lower, err := unmarshalIntervalBound(constr.Fields[0])
+	lower, err := unmarshalIntervalBound(constr.Fields()[0])
 	if err != nil {
 		return Interval{}, fmt.Errorf("lower bound: %w", err)
 	}
-	upper, err := unmarshalIntervalBound(constr.Fields[1])
+	upper, err := unmarshalIntervalBound(constr.Fields()[1])
 	if err != nil {
 		return Interval{}, fmt.Errorf("upper bound: %w", err)
 	}
@@ -299,20 +299,20 @@ func unmarshalInterval(pd data.PlutusData) (Interval, error) {
 
 func unmarshalIntervalBound(pd data.PlutusData) (IntervalBound, error) {
 	bound, ok := pd.(*data.Constr)
-	if !ok || bound == nil || !constrTagEqual(bound.Tag, 0) || len(bound.Fields) != 2 {
+	if !ok || bound == nil || !constrTagEqual(bound.Tag, 0) || bound.NumFields() != 2 {
 		return IntervalBound{}, unexpectedConstr("interval bound constructor 0 with 2 fields", pd)
 	}
-	ext, ok := bound.Fields[0].(*data.Constr)
+	ext, ok := bound.Fields()[0].(*data.Constr)
 	if !ok || ext == nil {
-		return IntervalBound{}, unexpectedConstr("Extended constructor", bound.Fields[0])
+		return IntervalBound{}, unexpectedConstr("Extended constructor", bound.Fields()[0])
 	}
 
 	var result IntervalBound
 	switch {
-	case constrTagEqual(ext.Tag, 0) && len(ext.Fields) == 0:
+	case constrTagEqual(ext.Tag, 0) && ext.NumFields() == 0:
 		result.Kind = BoundNegInf
-	case constrTagEqual(ext.Tag, 1) && len(ext.Fields) == 1:
-		integer, ok := ext.Fields[0].(*data.Integer)
+	case constrTagEqual(ext.Tag, 1) && ext.NumFields() == 1:
+		integer, ok := ext.Fields()[0].(*data.Integer)
 		if !ok || plutusNil(integer) || integer.Inner == nil {
 			return IntervalBound{}, errors.New("expected int64 finite bound")
 		}
@@ -321,15 +321,15 @@ func unmarshalIntervalBound(pd data.PlutusData) (IntervalBound, error) {
 		}
 		result.Kind = BoundFinite
 		result.Value = integer.Inner.Int64()
-	case constrTagEqual(ext.Tag, 2) && len(ext.Fields) == 0:
+	case constrTagEqual(ext.Tag, 2) && ext.NumFields() == 0:
 		result.Kind = BoundPosInf
 	default:
 		return IntervalBound{}, unexpectedConstr("Extended NegInf (0), Finite (1), or PosInf (2)", ext)
 	}
 
-	closure, ok := bound.Fields[1].(*data.Constr)
-	if !ok || plutusNil(closure) || len(closure.Fields) != 0 {
-		return IntervalBound{}, unexpectedConstr("closure Bool constructor with no fields", bound.Fields[1])
+	closure, ok := bound.Fields()[1].(*data.Constr)
+	if !ok || plutusNil(closure) || closure.NumFields() != 0 {
+		return IntervalBound{}, unexpectedConstr("closure Bool constructor with no fields", bound.Fields()[1])
 	}
 	switch {
 	case constrTagEqual(closure.Tag, 0):
@@ -353,5 +353,5 @@ func unexpectedConstr(expected string, pd data.PlutusData) error {
 	if !ok || constr == nil {
 		return fmt.Errorf("expected %s, got %T", expected, pd)
 	}
-	return fmt.Errorf("expected %s, got tag %s with %d fields", expected, constr.Tag, len(constr.Fields))
+	return fmt.Errorf("expected %s, got tag %s with %d fields", expected, constr.Tag, constr.NumFields())
 }

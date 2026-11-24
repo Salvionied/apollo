@@ -59,7 +59,7 @@ func TestAddressRoundTrip(t *testing.T) {
 			t.Fatalf("type %d: marshal: %v", addr.Type(), err)
 		}
 		constr := pd.(*data.Constr)
-		got, err := data.Encode(constr.Fields[0])
+		got, err := data.Encode(constr.Fields()[0])
 		if err != nil {
 			t.Fatal(err)
 		}

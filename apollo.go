@@ -1495,12 +1495,14 @@ func (a *Apollo) LoadTxCbor(txCbor string) (*Apollo, error) {
 		return a, fmt.Errorf("invalid hex: %w", err)
 	}
 	txType, err := ledger.DetermineTransactionType(txBytes)
-	isDijkstra := txType == ledger.TxTypeDijkstra
-	if err != nil {
+	isDijkstra := err == nil && txType == ledger.TxTypeDijkstra
+	if !isDijkstra {
 		// An otherwise Conway-shaped Dijkstra transaction may have no
 		// Dijkstra-only body fields, so ledger inference cannot distinguish it
-		// from pre-Dijkstra eras. Its three-component envelope is still
-		// unambiguous for the Conway-only formats Apollo loads.
+		// from pre-Dijkstra eras: it may fail, or report an Alonzo-family era
+		// whose decoder accepts an envelope without is_valid. Apollo loads only
+		// Conway transactions, which always carry is_valid, and Dijkstra ones,
+		// so a three-component envelope identifies Dijkstra.
 		var envelope []cbor.RawMessage
 		if _, decodeErr := cbor.Decode(txBytes, &envelope); decodeErr == nil && len(envelope) == 3 {
 			isDijkstra = true
@@ -1829,17 +1831,17 @@ func checkDatumTree(pd data.PlutusData, depth int) error {
 	}
 	switch node := pd.(type) {
 	case *data.List:
-		return checkDatumItems(node.Items, depth)
+		return checkDatumItems(node.Items(), depth)
 	case data.List:
-		return checkDatumItems(node.Items, depth)
+		return checkDatumItems(node.Items(), depth)
 	case *data.Constr:
-		return checkDatumItems(node.Fields, depth)
+		return checkDatumItems(node.Fields(), depth)
 	case data.Constr:
-		return checkDatumItems(node.Fields, depth)
+		return checkDatumItems(node.Fields(), depth)
 	case *data.Map:
-		return checkDatumPairs(node.Pairs, depth)
+		return checkDatumPairs(node.Pairs(), depth)
 	case data.Map:
-		return checkDatumPairs(node.Pairs, depth)
+		return checkDatumPairs(node.Pairs(), depth)
 	case *data.Value:
 		return checkDatumValue(node.Inner, depth)
 	case data.Value:

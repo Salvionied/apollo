@@ -41,10 +41,10 @@ func TestEitherOutputDatumAndIntervalRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	outer := pd.(*data.Constr)
-	if !constrTagEqual(outer.Fields[0].(*data.Constr).Tag, 0) {
+	if !constrTagEqual(outer.Fields()[0].(*data.Constr).Tag, 0) {
 		t.Fatal("expected Left as constructor 0")
 	}
-	if !constrTagEqual(outer.Fields[1].(*data.Constr).Tag, 1) {
+	if !constrTagEqual(outer.Fields()[1].(*data.Constr).Tag, 1) {
 		t.Fatal("expected datum hash as constructor 1")
 	}
 
@@ -96,7 +96,7 @@ func TestEitherOutputDatumAndIntervalRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !constrTagEqual(pd.(*data.Constr).Fields[1].(*data.Constr).Tag, 0) {
+	if !constrTagEqual(pd.(*data.Constr).Fields()[1].(*data.Constr).Tag, 0) {
 		t.Fatal("expected empty OutputDatum as constructor 0")
 	}
 }
@@ -239,7 +239,7 @@ func TestEitherBigIntValues(t *testing.T) {
 			if !constrTagEqual(either.Tag, 0) {
 				t.Fatal("expected set Left *big.Int as constructor 0")
 			}
-			if _, isList := either.Fields[0].(*data.List); isList {
+			if _, isList := either.Fields()[0].(*data.List); isList {
 				t.Fatal("big.Int encoded as an empty list")
 			}
 			if constrInteger(t, either).Cmp(value) != 0 {
@@ -400,9 +400,9 @@ func TestEitherTaggedFieldUsesFieldCodec(t *testing.T) {
 		t.Fatal(err)
 	}
 	either := nestedConstr(t, pd)
-	bs, ok := either.Fields[0].(*data.ByteString)
+	bs, ok := either.Fields()[0].(*data.ByteString)
 	if !ok || len(bs.Inner) != 1 || bs.Inner[0] != 0xff {
-		t.Fatalf("tagged HexString encoded as %v", either.Fields)
+		t.Fatalf("tagged HexString encoded as %v", either.Fields())
 	}
 
 	var decoded hexDatum
@@ -477,8 +477,8 @@ func TestOutputDatumConstructorsRoundTrip(t *testing.T) {
 			}
 			switch tt.tag {
 			case 0:
-				if len(got.Fields) != 0 || decoded.Datum.Inline != nil || len(decoded.Datum.Hash) != 0 {
-					t.Fatalf("unexpected none datum: wire=%v decoded=%+v", got.Fields, decoded.Datum)
+				if got.NumFields() != 0 || decoded.Datum.Inline != nil || len(decoded.Datum.Hash) != 0 {
+					t.Fatalf("unexpected none datum: wire=%v decoded=%+v", got.Fields(), decoded.Datum)
 				}
 			case 1:
 				if decoded.Datum.Inline != nil || !bytes.Equal(decoded.Datum.Hash, hash) {
@@ -632,24 +632,24 @@ func TestIntervalBoundRoundTrip(t *testing.T) {
 func nestedConstr(t *testing.T, pd data.PlutusData) *data.Constr {
 	t.Helper()
 	outer, ok := pd.(*data.Constr)
-	if !ok || len(outer.Fields) != 1 {
+	if !ok || outer.NumFields() != 1 {
 		t.Fatalf("expected 1-field constructor, got %T", pd)
 	}
-	inner, ok := outer.Fields[0].(*data.Constr)
+	inner, ok := outer.Fields()[0].(*data.Constr)
 	if !ok {
-		t.Fatalf("expected nested constructor, got %T", outer.Fields[0])
+		t.Fatalf("expected nested constructor, got %T", outer.Fields()[0])
 	}
 	return inner
 }
 
 func constrInteger(t *testing.T, constr *data.Constr) *big.Int {
 	t.Helper()
-	if len(constr.Fields) != 1 {
-		t.Fatalf("expected 1 field, got %d", len(constr.Fields))
+	if constr.NumFields() != 1 {
+		t.Fatalf("expected 1 field, got %d", constr.NumFields())
 	}
-	integer, ok := constr.Fields[0].(*data.Integer)
+	integer, ok := constr.Fields()[0].(*data.Integer)
 	if !ok || integer.Inner == nil {
-		t.Fatalf("expected Integer, got %T", constr.Fields[0])
+		t.Fatalf("expected Integer, got %T", constr.Fields()[0])
 	}
 	return integer.Inner
 }

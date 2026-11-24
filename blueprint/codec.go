@@ -60,19 +60,19 @@ func checkOpaquePlutus(pd data.PlutusData, loc string, depth int) error {
 	}
 	switch v := pd.(type) {
 	case *data.List:
-		for i, item := range v.Items {
+		for i, item := range v.Items() {
 			if err := checkOpaquePlutus(item, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 				return err
 			}
 		}
 	case *data.Constr:
-		for i, field := range v.Fields {
+		for i, field := range v.Fields() {
 			if err := checkOpaquePlutus(field, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 				return err
 			}
 		}
 	case *data.Map:
-		for i, pair := range v.Pairs {
+		for i, pair := range v.Pairs() {
 			if err := checkOpaquePlutus(pair[0], fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 				return err
 			}
@@ -412,17 +412,17 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if !ok {
 			return fmt.Errorf("%s: expected List, got %T", loc, pd)
 		}
-		if err := checkCountBounds(s.MinItems, s.MaxItems, len(list.Items), loc); err != nil {
+		if err := checkCountBounds(s.MinItems, s.MaxItems, list.Len(), loc); err != nil {
 			return err
 		}
-		if s.Items.Tuple != nil && len(list.Items) != len(s.Items.Tuple) {
-			return fmt.Errorf("%s: tuple expects %d elements, got %d", loc, len(s.Items.Tuple), len(list.Items))
+		if s.Items.Tuple != nil && list.Len() != len(s.Items.Tuple) {
+			return fmt.Errorf("%s: tuple expects %d elements, got %d", loc, len(s.Items.Tuple), list.Len())
 		}
 		var seen map[string]struct{}
 		if s.UniqueItems {
-			seen = make(map[string]struct{}, containerCap(len(list.Items)))
+			seen = make(map[string]struct{}, containerCap(list.Len()))
 		}
-		for i, item := range list.Items {
+		for i, item := range list.Items() {
 			elemSchema := s.Items.Single
 			if s.Items.Tuple != nil {
 				elemSchema = s.Items.Tuple[i]
@@ -446,10 +446,10 @@ func (bp *Blueprint) validatePlutusData(s *Schema, pd data.PlutusData, loc strin
 		if !ok {
 			return fmt.Errorf("%s: expected Map, got %T", loc, pd)
 		}
-		if err := checkCountBounds(s.MinItems, s.MaxItems, len(m.Pairs), loc); err != nil {
+		if err := checkCountBounds(s.MinItems, s.MaxItems, m.Len(), loc); err != nil {
 			return err
 		}
-		for i, pair := range m.Pairs {
+		for i, pair := range m.Pairs() {
 			if err := bp.validatePlutusData(s.Keys, pair[0], fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 				return err
 			}
@@ -479,11 +479,11 @@ func (bp *Blueprint) validatePlutusConstructor(s *Schema, constr *data.Constr, l
 	if constr.Tag == nil || !constr.Tag.IsUint64() || constr.Tag.Uint64() != *s.Index {
 		return fmt.Errorf("%s: constructor index %v does not match schema index %d", loc, constr.Tag, *s.Index)
 	}
-	if len(constr.Fields) != len(s.Fields) {
-		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, len(constr.Fields), len(s.Fields))
+	if constr.NumFields() != len(s.Fields) {
+		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, constr.NumFields(), len(s.Fields))
 	}
 	for i, fieldSchema := range s.Fields {
-		if err := bp.validatePlutusData(fieldSchema, constr.Fields[i], fmt.Sprintf("%s.%s", loc, fieldLabel(fieldSchema, i)), depth+1); err != nil {
+		if err := bp.validatePlutusData(fieldSchema, constr.Fields()[i], fmt.Sprintf("%s.%s", loc, fieldLabel(fieldSchema, i)), depth+1); err != nil {
 			return err
 		}
 	}
@@ -1142,13 +1142,13 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 	if !ok {
 		return fmt.Errorf("%s: expected List, got %T", loc, pd)
 	}
-	n := len(list.Items)
+	n := list.Len()
 	if err := checkCountBounds(s.MinItems, s.MaxItems, n, loc); err != nil {
 		return err
 	}
 	if s.UniqueItems {
 		seen := make(map[string]struct{}, containerCap(n))
-		for i, item := range list.Items {
+		for i, item := range list.Items() {
 			fresh, err := rememberPlutus(seen, item)
 			if err != nil {
 				return err
@@ -1169,7 +1169,7 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 				return fmt.Errorf("%s: tuple expects %d fields, struct has %d", loc, len(s.Items.Tuple), len(fields))
 			}
 			for i, f := range fields {
-				if err := bp.decodeValue(s.Items.Tuple[i], list.Items[i], f.val, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
+				if err := bp.decodeValue(s.Items.Tuple[i], list.Items()[i], f.val, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 					return err
 				}
 			}
@@ -1188,7 +1188,7 @@ func (bp *Blueprint) decodeList(s *Schema, pd data.PlutusData, dst reflect.Value
 			elemSchema = s.Items.Tuple[i]
 		}
 		elem := reflect.New(elemType).Elem()
-		if err := bp.decodeValue(elemSchema, list.Items[i], elem, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
+		if err := bp.decodeValue(elemSchema, list.Items()[i], elem, fmt.Sprintf("%s[%d]", loc, i), depth+1); err != nil {
 			return err
 		}
 		slice = reflect.Append(slice, elem)
@@ -1205,13 +1205,13 @@ func (bp *Blueprint) decodeMap(s *Schema, pd data.PlutusData, dst reflect.Value,
 	if dst.Kind() != reflect.Map {
 		return fmt.Errorf("%s: expected Go map target, got %s", loc, dst.Type())
 	}
-	n := len(m.Pairs)
+	n := m.Len()
 	if err := checkCountBounds(s.MinItems, s.MaxItems, n, loc); err != nil {
 		return err
 	}
 
 	out := reflect.MakeMapWithSize(dst.Type(), containerCap(n))
-	for i, pair := range m.Pairs {
+	for i, pair := range m.Pairs() {
 		kVal := reflect.New(dst.Type().Key()).Elem()
 		if err := bp.decodeValue(s.Keys, pair[0], kVal, fmt.Sprintf("%s[%d]/key", loc, i), depth+1); err != nil {
 			return err
@@ -1234,14 +1234,14 @@ func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflec
 	if constr.Tag == nil || !constr.Tag.IsUint64() || constr.Tag.Uint64() != *s.Index {
 		return fmt.Errorf("%s: constructor index %v does not match schema index %d", loc, constr.Tag, *s.Index)
 	}
-	if len(constr.Fields) != len(s.Fields) {
-		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, len(constr.Fields), len(s.Fields))
+	if constr.NumFields() != len(s.Fields) {
+		return fmt.Errorf("%s: constructor has %d fields, schema expects %d", loc, constr.NumFields(), len(s.Fields))
 	}
 	if len(s.Fields) == 0 {
 		return nil
 	}
 	if len(s.Fields) == 1 && shouldUnwrapSingleField(s.Fields[0], dst.Type()) {
-		return bp.decodeValue(s.Fields[0], constr.Fields[0], dst, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)), depth+1)
+		return bp.decodeValue(s.Fields[0], constr.Fields()[0], dst, fmt.Sprintf("%s.%s", loc, fieldLabel(s.Fields[0], 0)), depth+1)
 	}
 	if dst.Kind() != reflect.Struct {
 		return fmt.Errorf("%s: expected struct target for constructor, got %s", loc, dst.Type())
@@ -1255,7 +1255,7 @@ func (bp *Blueprint) decodeConstructor(s *Schema, pd data.PlutusData, dst reflec
 		if schemaField.Title != "" && !fieldMatchesTitle(goField.meta, schemaField.Title) {
 			return fmt.Errorf("%s: field %d is %q in Go struct but %q in blueprint schema", loc, i, goField.meta.Name, schemaField.Title)
 		}
-		if err := bp.decodeValue(schemaField, constr.Fields[i], goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i)), depth+1); err != nil {
+		if err := bp.decodeValue(schemaField, constr.Fields()[i], goField.val, fmt.Sprintf("%s.%s", loc, fieldLabel(schemaField, i)), depth+1); err != nil {
 			return err
 		}
 	}
@@ -1272,7 +1272,7 @@ func (bp *Blueprint) decodeAnyOf(s *Schema, pd data.PlutusData, dst reflect.Valu
 	}
 	tag := constr.Tag.Uint64()
 	if isBooleanAnyOf(s.AnyOf) && dst.Kind() == reflect.Bool {
-		if len(constr.Fields) != 0 || (tag != 0 && tag != 1) {
+		if constr.NumFields() != 0 || (tag != 0 && tag != 1) {
 			return fmt.Errorf("%s: invalid Bool constructor %d", loc, tag)
 		}
 		dst.SetBool(tag == 1)

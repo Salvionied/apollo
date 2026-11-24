@@ -305,19 +305,19 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 	mapData, ok := pd.(*data.Map)
 	if !ok || plutusNil(mapData) {
 		// Could be a Constr wrapping a Map
-		if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) && len(constr.Fields) == 1 {
+		if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) && constr.NumFields() == 1 {
 			if !hasExpectedConstr {
 				return fmt.Errorf("expected bare Map, got Constr with tag %d", constr.Tag)
 			}
 			if !constrTagEqual(constr.Tag, expectedConstr) {
 				return fmt.Errorf("expected Constr tag %d, got %d", expectedConstr, constr.Tag)
 			}
-			mapData, ok = constr.Fields[0].(*data.Map)
+			mapData, ok = constr.Fields()[0].(*data.Map)
 			if !ok || plutusNil(mapData) {
-				return fmt.Errorf("expected Map in Constr, got %T", constr.Fields[0])
+				return fmt.Errorf("expected Map in Constr, got %T", constr.Fields()[0])
 			}
 		} else if constr, ok := pd.(*data.Constr); ok && !plutusNil(constr) {
-			return fmt.Errorf("expected Constr with 1 field wrapping a Map, got Constr with %d fields", len(constr.Fields))
+			return fmt.Errorf("expected Constr with 1 field wrapping a Map, got Constr with %d fields", constr.NumFields())
 		} else {
 			return fmt.Errorf("expected Map, got %T", pd)
 		}
@@ -328,8 +328,8 @@ func unmarshalFromMap(pd data.PlutusData, val reflect.Value, typ reflect.Type, c
 	// Build a lookup from key name to PlutusData. Keys must be ByteStrings
 	// (the only key type produced by marshalMap) and must be unique. Anything
 	// else is rejected so that untrusted datums cannot shadow or hide keys.
-	keyMap := make(map[string]data.PlutusData, len(mapData.Pairs))
-	for i, pair := range mapData.Pairs {
+	keyMap := make(map[string]data.PlutusData, mapData.Len())
+	for i, pair := range mapData.Pairs() {
 		bs, ok := pair[0].(*data.ByteString)
 		if !ok || plutusNil(bs) {
 			return fmt.Errorf("map pair %d: expected ByteString key, got %T", i, pair[0])
@@ -388,8 +388,8 @@ func unmarshalSliceAsMap(pd data.PlutusData, fieldVal reflect.Value, field refle
 		}
 
 		elemType := fieldVal.Type().Elem()
-		result := reflect.MakeSlice(fieldVal.Type(), len(mapData.Pairs), len(mapData.Pairs))
-		for i, pair := range mapData.Pairs {
+		result := reflect.MakeSlice(fieldVal.Type(), mapData.Len(), mapData.Len())
+		for i, pair := range mapData.Pairs() {
 			var elem reflect.Value
 			if elemType.Kind() == reflect.Pointer {
 				elem = reflect.New(elemType.Elem()).Elem()
@@ -422,9 +422,9 @@ func unmarshalNativeMap(pd data.PlutusData, fieldVal reflect.Value, field reflec
 		return fmt.Errorf("field %s: unsupported native map key type %s", field.Name, mapType.Key())
 	}
 
-	result := reflect.MakeMapWithSize(mapType, unmarshalPrealloc(len(mapData.Pairs)))
-	seenEncoded := make(map[string]struct{}, unmarshalPrealloc(len(mapData.Pairs)))
-	for i, pair := range mapData.Pairs {
+	result := reflect.MakeMapWithSize(mapType, unmarshalPrealloc(mapData.Len()))
+	seenEncoded := make(map[string]struct{}, unmarshalPrealloc(mapData.Len()))
+	for i, pair := range mapData.Pairs() {
 		encodedKey, err := data.Encode(pair[0])
 		if err != nil {
 			return fmt.Errorf("field %s pair %d key: %w", field.Name, i, err)
@@ -612,7 +612,7 @@ func unmarshalMapEntry(pair [2]data.PlutusData, elem reflect.Value, cfg decodeCo
 	if !ok || plutusNil(list) {
 		return fmt.Errorf("expected List for multi-field map value, got %T", pair[1])
 	}
-	items := list.Items
+	items := list.Items()
 	if len(items) < len(valueFieldIdxs) {
 		return fmt.Errorf("map value has %d items but struct expects %d non-key fields", len(items), len(valueFieldIdxs))
 	}

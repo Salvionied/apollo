@@ -44,10 +44,10 @@ func marshalCredential(cred common.Credential) (data.PlutusData, error) {
 
 func unmarshalCredential(pd data.PlutusData) (common.Credential, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || constr == nil || len(constr.Fields) != 1 || (!constrTagEqual(constr.Tag, 0) && !constrTagEqual(constr.Tag, 1)) {
+	if !ok || constr == nil || constr.NumFields() != 1 || (!constrTagEqual(constr.Tag, 0) && !constrTagEqual(constr.Tag, 1)) {
 		return common.Credential{}, wrongConstrShape("credential constructor 0 or 1 with 1 field", pd)
 	}
-	raw, ok := constr.Fields[0].(*data.ByteString)
+	raw, ok := constr.Fields()[0].(*data.ByteString)
 	if !ok || plutusNil(raw) || len(raw.Inner) != common.Blake2b224Size {
 		return common.Credential{}, fmt.Errorf("expected %d-byte credential hash", common.Blake2b224Size)
 	}
@@ -81,14 +81,14 @@ func marshalTxOutRef(ref TxOutRef) (data.PlutusData, error) {
 
 func unmarshalTxOutRef(pd data.PlutusData) (TxOutRef, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || constr.NumFields() != 2 {
 		return TxOutRef{}, wrongConstrShape("TxOutRef constructor 0 with 2 fields", pd)
 	}
-	rawId, ok := constr.Fields[0].(*data.ByteString)
+	rawId, ok := constr.Fields()[0].(*data.ByteString)
 	if !ok || plutusNil(rawId) || len(rawId.Inner) != common.Blake2b256Size {
 		return TxOutRef{}, fmt.Errorf("expected %d-byte transaction id", common.Blake2b256Size)
 	}
-	idxInt, ok := constr.Fields[1].(*data.Integer)
+	idxInt, ok := constr.Fields()[1].(*data.Integer)
 	if !ok || plutusNil(idxInt) || idxInt.Inner == nil || idxInt.Inner.Sign() < 0 || !idxInt.Inner.IsUint64() {
 		return TxOutRef{}, errors.New("expected unsigned output index")
 	}
@@ -123,14 +123,14 @@ func marshalAssetClass(asset AssetClass) (data.PlutusData, error) {
 
 func unmarshalAssetClass(pd data.PlutusData) (AssetClass, error) {
 	constr, ok := pd.(*data.Constr)
-	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || len(constr.Fields) != 2 {
+	if !ok || constr == nil || !constrTagEqual(constr.Tag, 0) || constr.NumFields() != 2 {
 		return AssetClass{}, wrongConstrShape("AssetClass constructor 0 with 2 fields", pd)
 	}
-	policy, ok := constr.Fields[0].(*data.ByteString)
+	policy, ok := constr.Fields()[0].(*data.ByteString)
 	if !ok || plutusNil(policy) || (len(policy.Inner) != 0 && len(policy.Inner) != common.Blake2b224Size) {
 		return AssetClass{}, fmt.Errorf("expected empty or %d-byte policy id", common.Blake2b224Size)
 	}
-	token, ok := constr.Fields[1].(*data.ByteString)
+	token, ok := constr.Fields()[1].(*data.ByteString)
 	if !ok || plutusNil(token) || len(token.Inner) > maxTokenNameSize {
 		return AssetClass{}, fmt.Errorf("expected token name of at most %d bytes", maxTokenNameSize)
 	}
@@ -151,5 +151,5 @@ func wrongConstrShape(expect string, pd data.PlutusData) error {
 	if !ok || constr == nil {
 		return fmt.Errorf("expected %s, got %T", expect, pd)
 	}
-	return fmt.Errorf("expected %s, got constructor %s with %d fields", expect, constr.Tag, len(constr.Fields))
+	return fmt.Errorf("expected %s, got constructor %s with %d fields", expect, constr.Tag, constr.NumFields())
 }
